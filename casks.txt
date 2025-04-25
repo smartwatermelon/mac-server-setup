@@ -15,6 +15,7 @@ font-inconsolata
 garmin-express
 google-chrome
 google-drive
+hiddenbar
 hot
 knockknock
 lulu
