@@ -116,8 +116,7 @@ echo "$(date +"%Y-%m-%d %H:%M:%S") - Starting pre-setup validation" >> "$MAIN_LO
 
 # Check internet connection
 info "Checking internet connection..."
-ping -c 3 google.com > /dev/null 2>&1
-if [ $? -eq 0 ]; then
+if ping -c 3 google.com > /dev/null 2>&1; then
     success "Internet connection is available"
     echo "$(date +"%Y-%m-%d %H:%M:%S") - Internet connection available" >> "$MAIN_LOG"
 else
@@ -134,7 +133,7 @@ echo "$(date +"%Y-%m-%d %H:%M:%S") - Available disk space: $AVAILABLE_SPACE" >> 
 
 # Convert to bytes for comparison (assuming GB)
 AVAILABLE_GB=$(df / | awk 'NR==2 {print $4}')
-if [ $AVAILABLE_GB -lt 10485760 ]; then  # 10GB in KB
+if [ "$AVAILABLE_GB" -lt 10485760 ]; then  # 10GB in KB
     warning "Less than 10GB of free space available. This may not be sufficient."
     echo "$(date +"%Y-%m-%d %H:%M:%S") - Low disk space warning" >> "$MAIN_LOG"
     read -p "Continue anyway? (y/n) " -n 1 -r
@@ -159,7 +158,7 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 
 # Check if user has admin privileges
-if groups $(whoami) | grep -q admin; then
+if groups "$(whoami)" | grep -q admin; then
     success "User has admin privileges"
     echo "$(date +"%Y-%m-%d %H:%M:%S") - User has admin privileges" >> "$MAIN_LOG"
 else
@@ -186,9 +185,9 @@ mkdir -p "$BACKUP_DIR"
 
 info "Creating backup of system configuration..."
 # Backup hostname
-sudo scutil --get ComputerName > "$BACKUP_DIR/ComputerName.txt" 2>/dev/null
-sudo scutil --get HostName > "$BACKUP_DIR/HostName.txt" 2>/dev/null
-sudo scutil --get LocalHostName > "$BACKUP_DIR/LocalHostName.txt" 2>/dev/null
+scutil --get ComputerName > "$BACKUP_DIR/ComputerName.txt" 2>/dev/null
+scutil --get HostName > "$BACKUP_DIR/HostName.txt" 2>/dev/null
+scutil --get LocalHostName > "$BACKUP_DIR/LocalHostName.txt" 2>/dev/null
 
 # Backup SSH configuration
 if [ -f "/etc/ssh/sshd_config" ]; then
@@ -196,8 +195,8 @@ if [ -f "/etc/ssh/sshd_config" ]; then
 fi
 
 # Backup firewall settings
-sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate > "$BACKUP_DIR/firewall_state.txt" 2>/dev/null
-sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode > "$BACKUP_DIR/firewall_stealth.txt" 2>/dev/null
+/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate > "$BACKUP_DIR/firewall_state.txt" 2>/dev/null
+/usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode > "$BACKUP_DIR/firewall_stealth.txt" 2>/dev/null
 
 # Backup network settings
 networksetup -listallnetworkservices > "$BACKUP_DIR/network_services.txt" 2>/dev/null
@@ -319,7 +318,7 @@ MOUNT_COUNT=$(get_config '.nas.mounts | length')
 MOUNTED_COUNT=0
 TOTAL_MOUNTS=0
 
-for i in $(seq 0 $(($MOUNT_COUNT - 1))); do
+for i in $(seq 0 $((MOUNT_COUNT - 1))); do
     NAME=$(get_config ".nas.mounts[$i].name")
     MOUNT_POINT=$(get_config ".nas.mounts[$i].mount_point")
     
