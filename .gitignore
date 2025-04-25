@@ -1,0 +1,73 @@
+# Mac specific files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+# Thumbnails
+._*
+
+# Files that might appear on external disks
+.Spotlight-V100
+.Trashes
+
+# Sensitive or environment-specific information
+*.key
+*.pem
+*.crt
+*.key.pub
+*.env
+.ssh/
+
+# Log files
+logs/
+*.log
+*.log.*
+
+# Backup files
+backups/
+*.bak
+*.old
+*~
+
+# Temporary files
+tmp/
+*.tmp
+*.swp
+*.swo
+
+# Editor files
+.idea/
+.vscode/
+*.sublime-*
+
+# Node related
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Python related
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+
+# Local configuration
+local_config.yaml
+user_settings.yaml
+
+# Compiled files
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+
+# System output files
+/var/folders/*
+
+# Homebrew bundle files
+Brewfile.lock.json
