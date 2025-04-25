@@ -22,6 +22,7 @@ success() {
 
 # Function for warning messages
 warning() {
+    # shellcheck disable=SC2317
     echo -e "${YELLOW}! $1${NC}"
 }
 
@@ -165,11 +166,11 @@ EOL
             log "Generating SSH key pair for $OPERATOR_USER"
             
             # Create .ssh directory with proper permissions
-            sudo -u $OPERATOR_USER mkdir -p "/Users/$OPERATOR_USER/.ssh"
-            sudo -u $OPERATOR_USER chmod 700 "/Users/$OPERATOR_USER/.ssh"
+            sudo -u "$OPERATOR_USER" mkdir -p "/Users/$OPERATOR_USER/.ssh"
+            sudo -u "$OPERATOR_USER" chmod 700 "/Users/$OPERATOR_USER/.ssh"
             
             # Generate the key pair
-            sudo -u $OPERATOR_USER ssh-keygen -t rsa -b 4096 -f "/Users/$OPERATOR_USER/.ssh/id_rsa" -N ""
+            sudo -u "$OPERATOR_USER" ssh-keygen -t rsa -b 4096 -f "/Users/$OPERATOR_USER/.ssh/id_rsa" -N ""
             check_success "SSH key pair generated for $OPERATOR_USER" "Failed to generate SSH key pair for $OPERATOR_USER"
         else
             success "SSH key pair already exists for $OPERATOR_USER"
@@ -196,7 +197,7 @@ if [ "$REMOTE_MGMT_ENABLED" = "true" ]; then
     sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
         -activate -configure -access -on \
         -clientopts -setvnclegacy -vnclegacy yes \
-        -clientopts -setvncpw -vncpw $(openssl rand -base64 12) \
+        -clientopts -setvncpw -vncpw "$(openssl rand -base64 12)" \
         -restart -agent -privs -all
     
     check_success "Remote Management enabled" "Failed to enable Remote Management"
@@ -402,7 +403,7 @@ info "Your Mac Mini server has been configured with the following network settin
 [ "$REMOTE_MGMT_ENABLED" = "true" ] && info "  - Apple Remote Desktop (Remote Management) enabled"
 info "  - Network settings optimized for server performance"
 info "  - mDNS service discovery configured"
-info "  - Network monitoring scheduled every $(($MONITOR_INTERVAL / 60)) minutes"
+info "  - Network monitoring scheduled every $((MONITOR_INTERVAL / 60)) minutes"
 
 success "Network configuration completed successfully!"
 log "Network configuration completed successfully!"
