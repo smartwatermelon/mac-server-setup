@@ -79,10 +79,12 @@ if ! command -v yq &> /dev/null; then
         log "Installing Homebrew..."
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
         if [[ $(uname -m) == 'arm64' ]]; then
-            echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> $HOME/.zprofile
+            # shellcheck disable=SC2016
+            echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> "$HOME/.zprofile"
             eval "$(/opt/homebrew/bin/brew shellenv)"
         else
-            echo 'eval "$(/usr/local/bin/brew shellenv)"' >> $HOME/.zprofile
+            # shellcheck disable=SC2016
+            echo 'eval "$(/usr/local/bin/brew shellenv)"' >> "$HOME/.zprofile"
             eval "$(/usr/local/bin/brew shellenv)"
         fi
         check_success "Homebrew installation" "Homebrew installation failed"
@@ -117,8 +119,8 @@ header "User Account Setup"
 log "Setting up user accounts"
 
 # Get user configurations
-ADMIN_USER=$(get_config '.system.users.admin.name')
-OPERATOR_USER=$(get_config '.system.users.operator.name')
+# ADMIN_USER="$(get_config '.system.users.admin.name')"	# unused?
+OPERATOR_USER="$(get_config '.system.users.operator.name')"
 
 # Check if operator user exists and create if not
 if ! dscl . -list /Users | grep -q "^$OPERATOR_USER$"; then
@@ -126,19 +128,19 @@ if ! dscl . -list /Users | grep -q "^$OPERATOR_USER$"; then
     log "Creating operator user: $OPERATOR_USER..."
     
     # Generate a random password
-    OPERATOR_PASSWORD=$(openssl rand -base64 12)
+    OPERATOR_PASSWORD="$(openssl rand -base64 12)"
     
     # Create the user
-    sudo dscl . -create /Users/$OPERATOR_USER
-    sudo dscl . -create /Users/$OPERATOR_USER UserShell /bin/bash
-    sudo dscl . -create /Users/$OPERATOR_USER RealName "Server Operator"
-    sudo dscl . -create /Users/$OPERATOR_USER UniqueID 501
-    sudo dscl . -create /Users/$OPERATOR_USER PrimaryGroupID 20
-    sudo dscl . -create /Users/$OPERATOR_USER NFSHomeDirectory /Users/$OPERATOR_USER
-    sudo dscl . -passwd /Users/$OPERATOR_USER $OPERATOR_PASSWORD
+    sudo dscl . -create "/Users/$OPERATOR_USER"
+    sudo dscl . -create "/Users/$OPERATOR_USER" UserShell /bin/bash
+    sudo dscl . -create "/Users/$OPERATOR_USER" RealName "Server Operator"
+    sudo dscl . -create "/Users/$OPERATOR_USER" UniqueID 501
+    sudo dscl . -create "/Users/$OPERATOR_USER" PrimaryGroupID 20
+    sudo dscl . -create "/Users/$OPERATOR_USER" NFSHomeDirectory "/Users/$OPERATOR_USER"
+    sudo dscl . -passwd "/Users/$OPERATOR_USER" "$OPERATOR_PASSWORD"
     
     # Create home directory
-    sudo createhomedir -c -u $OPERATOR_USER
+    sudo createhomedir -c -u "$OPERATOR_USER"
     
     # Show the generated password (would be better to store this securely)
     info "Operator user created with password: $OPERATOR_PASSWORD"
@@ -163,10 +165,12 @@ if ! command -v brew &> /dev/null; then
     log "Installing Homebrew..."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     if [[ $(uname -m) == 'arm64' ]]; then
-        echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> $HOME/.zprofile
+        # shellcheck disable=SC2016
+        echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> "$HOME/.zprofile"
         eval "$(/opt/homebrew/bin/brew shellenv)"
     else
-        echo 'eval "$(/usr/local/bin/brew shellenv)"' >> $HOME/.zprofile
+        # shellcheck disable=SC2016
+        echo 'eval "$(/usr/local/bin/brew shellenv)"' >> "$HOME/.zprofile"
         eval "$(/usr/local/bin/brew shellenv)"
     fi
     check_success "Homebrew installation" "Homebrew installation failed"
@@ -194,7 +198,7 @@ if [ -n "$CLI_TOOLS" ]; then
     echo "$CLI_TOOLS" > "$FORMULA_LIST"
     
     # Install all packages at once
-    brew install $(cat "$FORMULA_LIST") || warning "Some CLI tools failed to install. Check logs for details."
+    brew install "$(cat "$FORMULA_LIST")" || warning "Some CLI tools failed to install. Check logs for details."
     log "CLI tools installation command executed"
     
     # Cleanup
@@ -215,7 +219,7 @@ if [ -n "$CASK_APPS" ]; then
     echo "$CASK_APPS" > "$CASK_LIST"
     
     # Install all casks at once
-    brew install --cask $(cat "$CASK_LIST") || warning "Some Cask apps failed to install. Check logs for details."
+    brew install --cask "$(cat "$CASK_LIST")" || warning "Some Cask apps failed to install. Check logs for details."
     log "Cask apps installation command executed"
     
     # Cleanup
@@ -248,11 +252,11 @@ else
         
         # Parse and install each app
         while IFS= read -r app_info; do
-            app_id=$(echo $app_info | cut -d':' -f2)
-            app_name=$(echo $app_info | cut -d':' -f1)
+            app_id=$(echo "$app_info" | cut -d':' -f2)
+            app_name=$(echo "$app_info" | cut -d':' -f1)
             
             info "Installing $app_name from Mac App Store..."
-            mas install $app_id
+            mas install "$app_id"
             check_success "$app_name installation" "$app_name installation failed"
         done <<< "$MAS_APPS"
     else
@@ -296,7 +300,7 @@ setup_bash_env() {
     
     # Set up .bash_profile
     if [ ! -f "$home_dir/.bash_profile" ]; then
-        sudo -u $user bash -c "cat > $home_dir/.bash_profile << 'EOL'
+        sudo -u "$user" bash -c "cat > $home_dir/.bash_profile << 'EOL'
 # Homebrew
 if [[ \$(uname -m) == 'arm64' ]]; then
     eval \"\$(/opt/homebrew/bin/brew shellenv)\"
@@ -350,7 +354,7 @@ EOL"
     
     # Set up .bashrc
     if [ ! -f "$home_dir/.bashrc" ]; then
-        sudo -u $user bash -c "cat > $home_dir/.bashrc << 'EOL'
+        sudo -u "$user" bash -c "cat > $home_dir/.bashrc << 'EOL'
 # Source .bash_profile
 if [ -f \"\$HOME/.bash_profile\" ]; then
     source \"\$HOME/.bash_profile\"
@@ -404,13 +408,13 @@ create_directories() {
     info "Creating standard directories for $user..."
     log "Creating standard directories for $user..."
     
-    sudo -u $user mkdir -p "$home_dir/scripts"
-    sudo -u $user mkdir -p "$home_dir/logs"
-    sudo -u $user mkdir -p "$home_dir/backups"
-    sudo -u $user mkdir -p "$home_dir/NAS"
+    sudo -u "$user" mkdir -p "$home_dir/scripts"
+    sudo -u "$user" mkdir -p "$home_dir/logs"
+    sudo -u "$user" mkdir -p "$home_dir/backups"
+    sudo -u "$user" mkdir -p "$home_dir/NAS"
     
     # Create Docker data directory if using containers
-    local container_data_dir=$(get_config '.containers.data_dir')
+    local container_data_dir; container_data_dir="$(get_config '.containers.data_dir')"
     if [ -n "$container_data_dir" ]; then
         container_data_dir="${container_data_dir/#\~/$home_dir}"
         container_data_dir="${container_data_dir/#\$HOME/$home_dir}"
@@ -419,9 +423,9 @@ create_directories() {
         container_data_dir="${container_data_dir//\$OPERATOR_USER/$user}"
         container_data_dir="${container_data_dir//\$USER/$user}"
         
-        sudo -u $user mkdir -p "$container_data_dir"
-        sudo -u $user mkdir -p "$container_data_dir/config"
-        sudo -u $user mkdir -p "$container_data_dir/data"
+        sudo -u "$user" mkdir -p "$container_data_dir"
+        sudo -u "$user" mkdir -p "$container_data_dir/config"
+        sudo -u "$user" mkdir -p "$container_data_dir/data"
         
         success "Created Docker data directory: $container_data_dir"
         log "Created Docker data directory: $container_data_dir"
@@ -574,7 +578,7 @@ if [ "$CONTAINER_RUNTIME" = "colima" ]; then
     # Start Colima (lightweight container runtime for macOS)
     info "Starting Colima container runtime..."
     log "Starting Colima container runtime..."
-    colima start --cpu $CONTAINER_CPU --memory $CONTAINER_MEMORY --disk $CONTAINER_DISK
+    colima start --cpu "$CONTAINER_CPU" --memory "$CONTAINER_MEMORY" --disk "$CONTAINER_DISK"
     check_success "Colima startup" "Colima startup failed"
     
     # Verify Docker is working
@@ -630,7 +634,7 @@ if [ "$FIREWALL_ENABLED" = "true" ]; then
                         # If it's a numeric port
                         info "Adding port $service to firewall exceptions..."
                         log "Adding port $service to firewall exceptions..."
-                        sudo /usr/sbin/ipfw add allow tcp from any to any $service
+                        sudo /usr/sbin/ipfw add allow tcp from any to any "$service"
                     else
                         warning "Unknown service for firewall exception: $service"
                         log "Unknown service for firewall exception: $service"
