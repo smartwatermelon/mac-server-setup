@@ -91,7 +91,7 @@ fi
 
 # Get NAS configuration values
 NAS_MOUNT_TYPE=$(get_config '.nas.mount_type')
-NAS_MOUNTS_JSON=$(get_config '.nas.mounts')
+# NAS_MOUNTS_JSON=$(get_config '.nas.mounts')	# unused?
 
 # Validate NAS configuration
 if [ -z "$NAS_MOUNT_TYPE" ]; then
@@ -133,8 +133,7 @@ configure_nfs_mount() {
     log "Testing NFS connection to $server:$share"
     
     # Check if the server and share are accessible
-    showmount -e "$server" | grep -q "$share"
-    if [ $? -ne 0 ]; then
+    if ! showmount -e "$server" | grep -q "$share"; then
         warning "Could not verify NFS share $server:$share. It might not be exported or the server might be unreachable."
         log "Could not verify NFS share $server:$share"
         # Continue anyway as the server might be reachable later
@@ -315,7 +314,7 @@ if [ "$MOUNT_COUNT" -eq 0 ]; then
     warning "No NAS mounts defined in configuration"
     log "No NAS mounts defined in configuration"
 else
-    for i in $(seq 0 $(($MOUNT_COUNT - 1))); do
+    for i in $(seq 0 $((MOUNT_COUNT - 1))); do
         # Extract mount details
         NAME=$(get_config ".nas.mounts[$i].name")
         SERVER=$(get_config ".nas.mounts[$i].server")
@@ -400,7 +399,7 @@ echo "\$(date): Running NAS mount check" >> "\$LOG_FILE"
 EOL
 
 # Add checks for each mount point
-for i in $(seq 0 $(($MOUNT_COUNT - 1))); do
+for i in $(seq 0 $((MOUNT_COUNT - 1))); do
     NAME=$(get_config ".nas.mounts[$i].name")
     MOUNT_POINT=$(get_config ".nas.mounts[$i].mount_point")
     
@@ -505,7 +504,7 @@ header "NAS Setup Completed"
 log "NAS setup completed"
 
 info "Your NAS mounts have been configured with the following:"
-for i in $(seq 0 $(($MOUNT_COUNT - 1))); do
+for i in $(seq 0 $((MOUNT_COUNT - 1))); do
     NAME=$(get_config ".nas.mounts[$i].name")
     SERVER=$(get_config ".nas.mounts[$i].server")
     SHARE=$(get_config ".nas.mounts[$i].share")
