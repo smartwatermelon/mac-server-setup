@@ -17,7 +17,7 @@ header() {
 
 # Function for success messages
 success() {
-    echo -e "${GREEN}✓ $1${NC}"
+    echo -e "${GREEN} $1${NC}"
 }
 
 # Function for warning messages
@@ -27,7 +27,7 @@ warning() {
 
 # Function for error messages
 error() {
-    echo -e "${RED}✗ $1${NC}"
+    echo -e "${RED} $1${NC}"
 }
 
 # Function for info messages
@@ -53,7 +53,7 @@ log "Bootstrap process started"
 REPO_OWNER="smartwatermelon"
 REPO_NAME="mac-server-setup"
 REPO_URL="https://github.com/$REPO_OWNER/$REPO_NAME.git"
-REPO_BRANCH="main"
+# REPO_BRANCH="main"    # unused?
 
 # Local setup directory
 SETUP_DIR="$HOME/mac-server-setup"
@@ -68,19 +68,19 @@ if xcode-select -p &>/dev/null; then
 else
     info "Installing Xcode Command Line Tools..."
     log "Installing Xcode Command Line Tools"
-    
+
     # Start installation in the background
     touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
-    
+
     # Find the latest version
     PROD=$(softwareupdate -l | grep "\*.*Command Line" | sort | tail -n 1 | sed 's/^[^C]* //')
-    
+
     # Install it
     softwareupdate -i "$PROD" --verbose
-    
+
     # Clean up
     rm /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
-    
+
     if xcode-select -p &>/dev/null; then
         success "Xcode Command Line Tools installed successfully"
         log "Xcode Command Line Tools installed successfully"
@@ -101,18 +101,20 @@ if command -v brew &>/dev/null; then
 else
     info "Installing Homebrew..."
     log "Installing Homebrew"
-    
+
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    
+
     # Add Homebrew to PATH
     if [[ $(uname -m) == 'arm64' ]]; then
+        # shellcheck disable=SC2016
         echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> "$HOME/.zprofile"
         eval "$(/opt/homebrew/bin/brew shellenv)"
     else
+        # shellcheck disable=SC2016
         echo 'eval "$(/usr/local/bin/brew shellenv)"' >> "$HOME/.zprofile"
         eval "$(/usr/local/bin/brew shellenv)"
     fi
-    
+
     if command -v brew &>/dev/null; then
         success "Homebrew installed successfully"
         log "Homebrew installed successfully"
@@ -127,8 +129,7 @@ fi
 info "Installing essential tools..."
 log "Installing essential tools"
 
-brew install git
-if [ $? -eq 0 ]; then
+if brew install git; then
     success "Git installed successfully"
     log "Git installed successfully"
 else
@@ -138,8 +139,7 @@ else
 fi
 
 # Install yq for YAML parsing
-brew install yq
-if [ $? -eq 0 ]; then
+if brew install yq; then
     success "yq installed successfully"
     log "yq installed successfully"
 else
@@ -155,9 +155,7 @@ log "Setting up SSH keys for GitHub access"
 # Check if SSH key already exists
 if [ ! -f "$HOME/.ssh/id_ed25519" ]; then
     # Generate a new SSH key
-    ssh-keygen -t ed25519 -C "mac-mini-server" -f "$HOME/.ssh/id_ed25519" -N ""
-    
-    if [ $? -eq 0 ]; then
+    if ssh-keygen -t ed25519 -C "mac-mini-server" -f "$HOME/.ssh/id_ed25519" -N ""; then
         success "SSH key generated successfully"
         log "SSH key generated successfully"
     else
@@ -165,20 +163,20 @@ if [ ! -f "$HOME/.ssh/id_ed25519" ]; then
         log "Failed to generate SSH key"
         exit 1
     fi
-    
+
     # Start the SSH agent
     eval "$(ssh-agent -s)"
-    
+
     # Add the key to the agent
     ssh-add "$HOME/.ssh/id_ed25519"
-    
+
     # Display the public key
     info "Please add the following public key to your GitHub repository deploy keys:"
     echo ""
     cat "$HOME/.ssh/id_ed25519.pub"
     echo ""
     info "After adding the key to GitHub, press Enter to continue..."
-    read
+    read -n1 -sr
 else
     success "SSH key already exists"
     log "SSH key already exists"
@@ -195,16 +193,12 @@ if [ -d "$SETUP_DIR" ]; then
 fi
 
 # Try cloning with HTTPS first (more likely to work without configuration)
-git clone "https://github.com/$REPO_OWNER/$REPO_NAME.git" "$SETUP_DIR"
-
-if [ $? -ne 0 ]; then
+if ! git clone "https://github.com/$REPO_OWNER/$REPO_NAME.git" "$SETUP_DIR"; then
     warning "HTTPS clone failed, trying SSH..."
     log "HTTPS clone failed, trying SSH"
-    
+
     # Try with SSH
-    git clone "git@github.com:$REPO_OWNER/$REPO_NAME.git" "$SETUP_DIR"
-    
-    if [ $? -ne 0 ]; then
+    if ! git clone "git@github.com:$REPO_OWNER/$REPO_NAME.git" "$SETUP_DIR"; then
         error "Failed to clone repository"
         log "Failed to clone repository"
         exit 1
