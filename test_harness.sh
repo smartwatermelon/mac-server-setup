@@ -78,9 +78,9 @@ pre_checks() {
     
     # Backup hostname settings
     if [[ "$SCRIPT_NAME" == *"initial_setup"* ]]; then
-        sudo scutil --get ComputerName > "$BACKUP_DIR/ComputerName.txt" 2>/dev/null
-        sudo scutil --get HostName > "$BACKUP_DIR/HostName.txt" 2>/dev/null
-        sudo scutil --get LocalHostName > "$BACKUP_DIR/LocalHostName.txt" 2>/dev/null
+        scutil --get ComputerName > "$BACKUP_DIR/ComputerName.txt" 2>/dev/null
+        scutil --get HostName > "$BACKUP_DIR/HostName.txt" 2>/dev/null
+        scutil --get LocalHostName > "$BACKUP_DIR/LocalHostName.txt" 2>/dev/null
         echo "Hostname settings backed up to $BACKUP_DIR" >> "$LOG_FILE"
     fi
     
@@ -98,8 +98,8 @@ pre_checks() {
     
     # Backup firewall settings
     if [[ "$SCRIPT_NAME" == *"network"* ]] || [[ "$SCRIPT_NAME" == *"initial_setup"* ]]; then
-        sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate > "$BACKUP_DIR/firewall_state.txt" 2>/dev/null
-        sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode > "$BACKUP_DIR/firewall_stealth.txt" 2>/dev/null
+        /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate > "$BACKUP_DIR/firewall_state.txt" 2>/dev/null
+        /usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode > "$BACKUP_DIR/firewall_stealth.txt" 2>/dev/null
         echo "Firewall settings backed up to $BACKUP_DIR" >> "$LOG_FILE"
     fi
     
