@@ -17,7 +17,7 @@ header() {
 
 # Function for success messages
 success() {
-    echo -e "${GREEN} $1${NC}"
+    echo -e "${GREEN}✓ $1${NC}"
 }
 
 # Function for warning messages
@@ -27,7 +27,7 @@ warning() {
 
 # Function for error messages
 error() {
-    echo -e "${RED} $1${NC}"
+    echo -e "${RED}✗ $1${NC}"
 }
 
 # Function for info messages
