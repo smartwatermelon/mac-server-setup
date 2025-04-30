@@ -6,6 +6,7 @@ coreutils
 ffmpeg
 findutils
 gawk
+gh
 git
 gnu-getopt
 gnu-sed
@@ -26,6 +27,7 @@ node
 open-completion
 openssh
 pipx
+pv
 python@3.13
 qrencode
 ripgrep-all
@@ -36,3 +38,5 @@ speedtest
 telnet
 terminal-notifier
 vim
+watch
+yt-dlp
