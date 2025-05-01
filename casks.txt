@@ -24,6 +24,7 @@ notunes
 serial
 slack
 stay
+taskexplorer
 virtualbox
 vlc
 zoom
