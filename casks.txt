@@ -1,10 +1,10 @@
-1kc-razer
 1password
 1password-cli
 appcleaner
 backblaze
 bbedit
 blockblock
+catch
 claude
 coconutbattery
 coconutid
@@ -20,11 +20,14 @@ hot
 knockknock
 lulu
 macdown
+no-ip-duc
 notunes
+plex-media-server
 serial
 slack
 stay
 taskexplorer
+transmission
 virtualbox
 vlc
 zoom
