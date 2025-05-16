@@ -184,6 +184,6 @@ echo "The setup files at $OUTPUT_PATH are now ready for AirDrop."
 echo "AirDrop this entire folder to your Mac Mini after completing the macOS setup wizard"
 echo "and run the first-boot.sh script from the transferred directory."
 
-open "OUTPUT_PATH"
+open "$OUTPUT_PATH"
 
 exit 0
