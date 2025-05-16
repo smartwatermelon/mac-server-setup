@@ -16,7 +16,8 @@
 set -e
 
 # Configuration variables - adjust as needed
-LOG_FILE="/var/log/tilsit-monitoring.log"
+export LOG_DIR; LOG_DIR="$HOME/.local/state" # XDG_STATE_HOME
+LOG_FILE="$LOG_DIR/tilsit-monitoring.log"
 SCRIPTS_DIR="${HOME}/tilsit-scripts/monitoring"
 HEALTHCHECK_INTERVAL=15  # Minutes between health checks
 EMAIL_ALERTS="your.email@example.com"  # Change to your email
@@ -38,6 +39,7 @@ done
 
 # Function to log messages to both console and log file
 log() {
+  mkdir -p "$LOG_DIR"
   local timestamp; timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo "[$timestamp] $1"
   echo "[$timestamp] $1" | sudo tee -a "$LOG_FILE" >/dev/null
@@ -123,7 +125,8 @@ if [ ! -f "$HEALTH_CHECK_SCRIPT" ]; then
 # Created: $(date +"%Y-%m-%d")
 
 # Configuration
-LOG_FILE="/var/log/tilsit-monitoring.log"
+LOG_DIR="$HOME/.local/state" # XDG_STATE_HOME
+LOG_FILE="$LOG_DIR/tilsit-monitoring.log"
 EMAIL_ALERTS="$EMAIL_ALERTS"
 HOSTNAME="\$(hostname)"
 DISK_THRESHOLD=90  # Alert if disk usage exceeds this percentage
@@ -360,8 +363,8 @@ echo "... (showing last 20 error logs only)"
 echo ""
 
 echo "====== Recent Monitoring Alerts ======"
-if [ -f "/var/log/tilsit-monitoring.log" ]; then
-  grep "Alert sent" /var/log/tilsit-monitoring.log | tail -n 10
+if [ -f "$LOG_DIR/tilsit-monitoring.log" ]; then
+  grep "Alert sent" $LOG_DIR/tilsit-monitoring.log | tail -n 10
 else
   echo "No monitoring log found"
 fi
@@ -395,7 +398,8 @@ if [ ! -f "$BACKUP_SCRIPT" ]; then
 # Created: $(date +"%Y-%m-%d")
 
 # Configuration
-LOG_FILE="/var/log/tilsit-monitoring.log"
+LOG_DIR="$HOME/.local/state" # XDG_STATE_HOME
+LOG_FILE="$LOG_DIR/tilsit-monitoring.log"
 DEFAULT_BACKUP_DIR="${HOME}/Backups"
 BACKUP_DIR="${1:-$DEFAULT_BACKUP_DIR}"
 TIMESTAMP=$(date +"%Y%m%d-%H%M%S")
@@ -403,6 +407,7 @@ BACKUP_FILE="tilsit-backup-${TIMESTAMP}.tar.gz"
 
 # Log function
 log() {
+  mkdir -p "$LOG_DIR"
   local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo "[$timestamp] $1"
   echo "[$timestamp] $1" >> "$LOG_FILE"

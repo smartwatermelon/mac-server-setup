@@ -15,7 +15,8 @@
 set -e
 
 # Configuration variables - adjust as needed
-LOG_FILE="/var/log/tilsit-apps.log"
+export LOG_DIR; LOG_DIR="$HOME/.local/state" # XDG_STATE_HOME
+LOG_FILE="$LOG_DIR/tilsit-apps.log"
 TRANSMISSION_CONFIG_DIR="${HOME}/Docker/transmission/config"
 TRANSMISSION_DOWNLOADS_DIR="${HOME}/Docker/transmission/downloads"
 TRANSMISSION_WATCH_DIR="${HOME}/Docker/transmission/watch"
@@ -40,6 +41,7 @@ done
 
 # Function to log messages to both console and log file
 log() {
+  mkdir -p "$LOG_DIR"
   local timestamp; timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo "[$timestamp] $1"
   echo "[$timestamp] $1" | sudo tee -a "$LOG_FILE" >/dev/null

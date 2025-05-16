@@ -26,7 +26,8 @@ HOSTNAME="TILSIT"
 OPERATOR_USERNAME="operator"
 OPERATOR_FULLNAME="TILSIT Operator"
 ADMIN_USERNAME=$(whoami)
-LOG_FILE="/var/log/tilsit-setup.log"
+export LOG_DIR; LOG_DIR="$HOME/.local/state" # XDG_STATE_HOME
+LOG_FILE="$LOG_DIR/tilsit-setup.log"
 SETUP_DIR="$HOME/tilsit-setup" # Directory where AirDropped files are located
 SSH_KEY_SOURCE="$SETUP_DIR/ssh_keys"
 PAM_D_SOURCE="$SETUP_DIR/pam.d"
@@ -54,6 +55,7 @@ done
 
 # Function to log messages to both console and log file
 log() {
+  mkdir -p "$LOG_DIR"
   local timestamp; timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo "[$timestamp] $1"
   echo "[$timestamp] $1" | sudo tee -a "$LOG_FILE" >/dev/null
@@ -385,9 +387,9 @@ else
     <key>StartInterval</key>
     <integer>86400</integer>
     <key>StandardOutPath</key>
-    <string>/var/log/tilsit-secondboot.log</string>
+    <string>$HOME/.local/state/tilsit-secondboot.log</string>
     <key>StandardErrorPath</key>
-    <string>/var/log/tilsit-secondboot.log</string>
+    <string>$HOME/.local/state/tilsit-secondboot.log</string>
 </dict>
 </plist>
 EOF

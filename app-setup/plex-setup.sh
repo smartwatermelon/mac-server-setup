@@ -15,7 +15,8 @@
 set -e
 
 # Configuration variables - adjust as needed
-LOG_FILE="/var/log/tilsit-apps.log"
+export LOG_DIR; LOG_DIR=_DIR="$HOME/.local/state" # XDG_STATE_HOME
+LOG_FILE="$LOG_DIR/tilsit-apps.log"
 PLEX_CLAIM_TOKEN="" # Get from https://www.plex.tv/claim/
 PLEX_CONFIG_DIR="${HOME}/Docker/plex/config"
 PLEX_MEDIA_DIR="/Volumes/MediaDrive" # Adjust to your media location
@@ -38,6 +39,7 @@ done
 
 # Function to log messages to both console and log file
 log() {
+  mkdir -p "$LOG_DIR"
   local timestamp; timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo "[$timestamp] $1"
   echo "[$timestamp] $1" | sudo tee -a "$LOG_FILE" >/dev/null

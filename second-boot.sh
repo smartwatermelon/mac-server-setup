@@ -24,7 +24,8 @@ set -e
 HOMEBREW_VERSION="4.5.2"
 HOMEBREW_PKG_URL="https://github.com/Homebrew/brew/releases/download/${HOMEBREW_VERSION}/Homebrew-${HOMEBREW_VERSION}.pkg"
 HOMEBREW_PKG_FILE="/tmp/Homebrew-${HOMEBREW_VERSION}.pkg"
-LOG_FILE="/var/log/tilsit-setup.log"
+export LOG_DIR; LOG_DIR="$HOME/.local/state" # XDG_STATE_HOME
+LOG_FILE="$LOG_DIR/tilsit-setup.log"
 FORMULAE_FILE="/Users/$(whoami)/formulae.txt"
 CASKS_FILE="/Users/$(whoami)/casks.txt"
 
@@ -55,6 +56,7 @@ done
 
 # Function to log messages to both console and log file
 log() {
+  mkdir -p "$LOG_DIR"
   local timestamp; timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo "[$timestamp] $1"
   echo "[$timestamp] $1" | sudo tee -a "$LOG_FILE" >/dev/null

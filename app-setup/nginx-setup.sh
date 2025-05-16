@@ -15,7 +15,8 @@
 set -e
 
 # Configuration variables - adjust as needed
-LOG_FILE="/var/log/tilsit-apps.log"
+export LOG_DIR; LOG_DIR=_DIR="$HOME/.local/state" # XDG_STATE_HOME
+LOG_FILE="$LOG_DIR/tilsit-apps.log"
 NGINX_CONFIG_DIR="${HOME}/Docker/nginx/config"
 NGINX_SITES_DIR="${HOME}/Docker/nginx/sites"
 NGINX_HTML_DIR="${HOME}/Docker/nginx/html"
