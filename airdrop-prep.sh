@@ -40,6 +40,7 @@ mkdir -p "$OUTPUT_PATH/scripts/app-setup"
 mkdir -p "$OUTPUT_PATH/lists"
 mkdir -p "$OUTPUT_PATH/pam.d"
 mkdir -p "$OUTPUT_PATH/wifi"
+mkdir -p "$OUTPUT_PATH/URLs"
 
 # Copy SSH keys
 if [ -f "$SSH_KEY_PATH" ]; then
@@ -91,6 +92,21 @@ EOF
 else
   echo "Warning: Could not detect current WiFi network."
   echo "WiFi network configuration will not be automated."
+fi
+
+# Create and save one-time link for Apple ID password
+APPLE_ID_ITEM="$(op item list --categories Login --vault Personal --favorite --format=json | jq -r '.[] | select(.title == "Apple") | .id')"
+ONE_TIME_URL="$(op item share "$APPLE_ID_ITEM" --view-once)"
+if [ -n "$ONE_TIME_URL" ]; then
+  # Create the .url file with the correct format
+  cat > "$OUTPUT_PATH/URLs/apple_id_password.url" << EOF
+[InternetShortcut]
+URL=$ONE_TIME_URL
+EOF
+  chmod 600 "$OUTPUT_PATH/URLs/apple_id_password.url"
+  echo "✅ Apple ID one-time password link saved to URLs/apple_id_password.url"
+else
+  echo "⚠️ No URL provided, skipping Apple ID password link creation"
 fi
 
 # Option 1: Clone from GitHub repository if available

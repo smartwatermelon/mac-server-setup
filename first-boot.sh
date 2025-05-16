@@ -188,6 +188,38 @@ else
   log "No TouchID sudo setup directory found at $PAM_D_SOURCE"
 fi
 
+# Configure Apple ID (requires manual intervention)
+# Open Apple ID one-time password link if available
+APPLE_ID_URL_FILE="$SETUP_DIR/URLs/apple_id_password.url"
+if [ -f "$APPLE_ID_URL_FILE" ]; then
+  log "Opening Apple ID one-time password link"
+  open "$APPLE_ID_URL_FILE"
+  check_success "Opening Apple ID password link"
+
+  # Ask user to confirm they've retrieved the password
+  if [ "$FORCE" = false ]; then
+    read -rp "Have you retrieved your Apple ID password? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      log "Please retrieve your Apple ID password before continuing"
+      open "$APPLE_ID_URL_FILE"
+      read -p "Press any key to continue once you have your password... " -n 1 -r
+      echo
+    fi
+
+    # Open System Settings to the Apple ID section
+    log "Opening System Settings to the Apple ID section"
+    open "x-apple.systempreferences:com.apple.preferences.AppleIDPrefPane"
+    check_success "Opening System Settings"
+
+    # Give user time to add their Apple ID
+    read -rp "Please add your Apple ID in System Settings. Press any key when done... " -n 1 -r
+    echo
+  fi
+else
+  log "No Apple ID one-time password link found - you'll need to retrieve your password manually"
+fi
+
 # Create operator account if it doesn't exist
 section "Setting Up Operator Account"
 if dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
