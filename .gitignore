@@ -72,5 +72,7 @@ user_settings.yaml
 
 # Homebrew bundle files
 Brewfile.lock.json
-no.tgz # blah
-no/ # blah
+
+# Wrong turns
+no.tgz
+no/
