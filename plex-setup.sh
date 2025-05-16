@@ -38,7 +38,7 @@ done
 
 # Function to log messages to both console and log file
 log() {
-  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  local timestamp; timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo "[$timestamp] $1"
   echo "[$timestamp] $1" | sudo tee -a "$LOG_FILE" >/dev/null
 }
@@ -99,7 +99,7 @@ if [ -z "$PLEX_CLAIM_TOKEN" ] && [ "$FORCE" = false ]; then
   log "Plex claim token is not set"
   echo "Please get a claim token from https://www.plex.tv/claim/"
   echo "It will expire after 4 minutes, so be ready to use it immediately"
-  read -p "Enter your Plex claim token: " PLEX_CLAIM_TOKEN
+  read -rp "Enter your Plex claim token: " PLEX_CLAIM_TOKEN
   
   if [ -z "$PLEX_CLAIM_TOKEN" ]; then
     log "No claim token provided, continuing without it"
@@ -139,7 +139,7 @@ if [ ! -d "$PLEX_MEDIA_DIR" ]; then
     if [[ $REPLY =~ ^[Yy]$ ]]; then
       log "Creating media directory: $PLEX_MEDIA_DIR"
       sudo mkdir -p "$PLEX_MEDIA_DIR"
-      sudo chown $(id -u):$(id -g) "$PLEX_MEDIA_DIR"
+      sudo chown "$(id -u)":"$(id -g)" "$PLEX_MEDIA_DIR"
       check_success "Media directory creation"
     else
       log "Using non-existent media directory, Plex may not function properly"
@@ -147,7 +147,7 @@ if [ ! -d "$PLEX_MEDIA_DIR" ]; then
   else
     log "Creating media directory automatically: $PLEX_MEDIA_DIR"
     sudo mkdir -p "$PLEX_MEDIA_DIR"
-    sudo chown $(id -u):$(id -g) "$PLEX_MEDIA_DIR"
+    sudo chown "$(id -u)":"$(id -g)" "$PLEX_MEDIA_DIR"
     check_success "Media directory creation"
   fi
 else
@@ -192,7 +192,7 @@ else
     -v \"$PLEX_MEDIA_DIR\":/media"
   
   # Add claim token if provided
-  if [ ! -z "$PLEX_CLAIM_TOKEN" ]; then
+  if [ -n "$PLEX_CLAIM_TOKEN" ]; then
     DOCKER_CMD="$DOCKER_CMD \
     -e PLEX_CLAIM=\"$PLEX_CLAIM_TOKEN\""
   fi
@@ -202,7 +202,7 @@ else
     linuxserver/plex:latest"
   
   # Run the docker command
-  eval $DOCKER_CMD
+  eval "$DOCKER_CMD"
   check_success "Plex container creation"
 fi
 

@@ -55,7 +55,7 @@ done
 
 # Function to log messages to both console and log file
 log() {
-  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  local timestamp; timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo "[$timestamp] $1"
   echo "[$timestamp] $1" | sudo tee -a "$LOG_FILE" >/dev/null
 }
@@ -84,7 +84,7 @@ check_success() {
 
 # Disable LaunchAgent to prevent this from running again
 disable_launchagent() {
-  local launch_agent="/Users/$(whoami)/Library/LaunchAgents/com.tilsit.secondboot.plist"
+  local launch_agent; launch_agent="/Users/$(whoami)/Library/LaunchAgents/com.tilsit.secondboot.plist"
   
   if [ -f "$launch_agent" ]; then
     log "Disabling second-boot LaunchAgent"
@@ -179,8 +179,7 @@ if [ "$SKIP_HOMEBREW" = false ]; then
         # Only add if not already present
         if ! grep -q "HOMEBREW_PREFIX" "$SHELL_PROFILE"; then
           log "Adding Homebrew to $SHELL_PROFILE"
-          echo '' >> "$SHELL_PROFILE"
-          echo '# Homebrew' >> "$SHELL_PROFILE"
+          echo -e '\n# Homebrew' >> "$SHELL_PROFILE"
           echo "eval \"\$(${HOMEBREW_PREFIX}/bin/brew shellenv)\"" >> "$SHELL_PROFILE"
         fi
       fi

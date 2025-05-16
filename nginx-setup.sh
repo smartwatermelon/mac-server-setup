@@ -39,7 +39,7 @@ done
 
 # Function to log messages to both console and log file
 log() {
-  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  local timestamp; timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo "[$timestamp] $1"
   echo "[$timestamp] $1" | sudo tee -a "$LOG_FILE" >/dev/null
 }

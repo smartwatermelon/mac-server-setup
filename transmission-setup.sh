@@ -40,7 +40,7 @@ done
 
 # Function to log messages to both console and log file
 log() {
-  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  local timestamp; timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo "[$timestamp] $1"
   echo "[$timestamp] $1" | sudo tee -a "$LOG_FILE" >/dev/null
 }
@@ -93,9 +93,9 @@ if [ "$FORCE" = false ]; then
     read -p "Would you like to set a different password? (y/n) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-      read -s -p "Enter new password: " NEW_PASSWORD
+      read -srp "Enter new password: " NEW_PASSWORD
       echo
-      if [ ! -z "$NEW_PASSWORD" ]; then
+      if [ -n "$NEW_PASSWORD" ]; then
         TRANSMISSION_PASSWORD="$NEW_PASSWORD"
         log "Custom password set"
       else

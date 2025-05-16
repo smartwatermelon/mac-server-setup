@@ -38,7 +38,7 @@ done
 
 # Function to log messages to both console and log file
 log() {
-  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  local timestamp; timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo "[$timestamp] $1"
   echo "[$timestamp] $1" | sudo tee -a "$LOG_FILE" >/dev/null
 }
@@ -87,8 +87,8 @@ if [ "$FORCE" = false ]; then
   
   # Ask for email confirmation
   if [ "$EMAIL_ALERTS" = "your.email@example.com" ]; then
-    read -p "Enter email address for alerts: " USER_EMAIL
-    if [ ! -z "$USER_EMAIL" ]; then
+    read -rp "Enter email address for alerts: " USER_EMAIL
+    if [ -n "$USER_EMAIL" ]; then
       EMAIL_ALERTS="$USER_EMAIL"
       log "Email set to: $EMAIL_ALERTS"
     else
