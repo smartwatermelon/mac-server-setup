@@ -15,7 +15,7 @@
 #   --skip-update: Skip software updates (which can be time-consuming)
 #
 # Author: Claude
-# Version: 1.0
+# Version: 1.1
 # Created: 2025-05-13
 
 # Exit on any error
@@ -27,7 +27,9 @@ OPERATOR_USERNAME="operator"
 OPERATOR_FULLNAME="TILSIT Operator"
 ADMIN_USERNAME=$(whoami)
 LOG_FILE="/var/log/tilsit-setup.log"
-SSH_KEY_SOURCE="/Volumes/USB/ssh_keys" # Adjust based on your USB drive name
+SETUP_DIR="$HOME/tilsit-setup" # Directory where AirDropped files are located
+SSH_KEY_SOURCE="$SETUP_DIR/ssh_keys"
+PAM_D_SOURCE="$SETUP_DIR/pam.d"
 
 # Parse command line arguments
 FORCE=false
@@ -142,6 +144,19 @@ if [ -d "$SSH_KEY_SOURCE" ]; then
   fi
 else
   log "No SSH keys found at $SSH_KEY_SOURCE - manual key setup will be required"
+fi
+
+# TouchID sudo setup
+if [ -d "$PAM_D_SOURCE" ]; then
+  log "Found TouchID sudo setup in $PAM_D_SOURCE"
+  if [ -f "$PAM_D_SOURCE/sudo_local" ]; then
+    sudo cp "$PAM_D_SOURCE/sudo_local" "/etc/pam.d"
+    check_success "TouchID sudo setup"
+  else
+    log "No sudo_local file found in $PAM_D_SOURCE"
+  fi
+else
+  log "No TouchID sudo setup directory found at $PAM_D_SOURCE"
 fi
 
 # Create operator account if it doesn't exist
@@ -274,9 +289,8 @@ log "Ensuring SSH is allowed through firewall"
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/sbin/sshd
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/sbin/sshd
 
-# Set up pre-boot script for second stage
-section "Preparing for Second-Boot Setup"
-
+# Create scripts directory and copy second-boot script
+section "Setting Up Scripts Directory"
 SCRIPTS_DIR="/Users/$ADMIN_USERNAME/tilsit-scripts"
 if [ ! -d "$SCRIPTS_DIR" ]; then
   log "Creating scripts directory"
@@ -284,19 +298,35 @@ if [ ! -d "$SCRIPTS_DIR" ]; then
   check_success "Scripts directory creation"
 fi
 
-SECOND_BOOT_SCRIPT="$SCRIPTS_DIR/second-boot.sh"
-if [ -f "$SECOND_BOOT_SCRIPT" ]; then
-  log "Second-boot script already exists"
+# Copy second-boot script if available
+if [ -f "$SETUP_DIR/scripts/second-boot.sh" ]; then
+  log "Copying second-boot script from setup directory"
+  cp "$SETUP_DIR/scripts/second-boot.sh" "$SCRIPTS_DIR/"
+  chmod +x "$SCRIPTS_DIR/second-boot.sh"
+  check_success "Second-boot script copy"
 else
-  log "Creating second-boot script placeholder"
-  cat > "$SECOND_BOOT_SCRIPT" << 'EOF'
-#!/bin/bash
-# Second-boot setup script - will be replaced by actual script
-echo "Placeholder for second-boot setup script"
-echo "Replace this file with the actual second-boot.sh script before running"
-EOF
-  chmod +x "$SECOND_BOOT_SCRIPT"
-  check_success "Second-boot script placeholder creation"
+  log "Error: Required second-boot.sh script not found in $SETUP_DIR/scripts/"
+  if [ "$FORCE" = false ]; then
+    read -p "This is a critical error. Continue anyway? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      log "Exiting due to missing second-boot script"
+      exit 1
+    fi
+  fi
+fi
+
+# Copy package lists if available
+if [ -f "$SETUP_DIR/lists/formulae.txt" ]; then
+  log "Copying formulae list from setup directory"
+  cp "$SETUP_DIR/lists/formulae.txt" "/Users/$ADMIN_USERNAME/"
+  check_success "Formulae list copy"
+fi
+
+if [ -f "$SETUP_DIR/lists/casks.txt" ]; then
+  log "Copying casks list from setup directory"
+  cp "$SETUP_DIR/lists/casks.txt" "/Users/$ADMIN_USERNAME/"
+  check_success "Casks list copy"
 fi
 
 # Set up automatic second-boot execution via LaunchAgent
@@ -321,7 +351,7 @@ else
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>$SECOND_BOOT_SCRIPT</string>
+        <string>$SCRIPTS_DIR/second-boot.sh</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
