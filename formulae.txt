@@ -3,6 +3,7 @@ bash-completion@2
 bat
 brew-cask-completion
 coreutils
+f3
 ffmpeg
 findutils
 gawk
@@ -17,11 +18,13 @@ gnu-which
 gnupg
 grep
 imagemagick
+ipcalc
 iproute2mac
 launchctl-completion
 less
 liquidprompt
 mas
+moreutils
 nmap
 node
 open-completion
