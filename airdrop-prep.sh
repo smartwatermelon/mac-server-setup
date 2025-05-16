@@ -37,6 +37,7 @@ mkdir -p "$OUTPUT_PATH/ssh_keys"
 mkdir -p "$OUTPUT_PATH/scripts"
 mkdir -p "$OUTPUT_PATH/scripts/app-setup"
 mkdir -p "$OUTPUT_PATH/lists"
+mkdir -p "$OUTPUT_PATH/pam.d"
 
 # Copy SSH keys
 if [ -f "$SSH_KEY_PATH" ]; then
@@ -66,6 +67,7 @@ if [[ -n "$GITHUB_REPO" && "$GITHUB_REPO" != "https://github.com/yourusername/ti
   cp "$TMP_DIR/app-setup/"*.sh "$OUTPUT_PATH/scripts/app-setup/"
   cp "$TMP_DIR/formulae.txt" "$OUTPUT_PATH/lists/"
   cp "$TMP_DIR/casks.txt" "$OUTPUT_PATH/lists/"
+  cp "/etc/pam.d/sudo_local" "$OUTPUT_PATH/pam.d"
   
   # Clean up
   rm -rf "$TMP_DIR"
@@ -393,6 +395,13 @@ if [ -f "$SETUP_DIR/lists/casks.txt" ]; then
   log "Copying casks list from setup directory"
   cp "$SETUP_DIR/lists/casks.txt" "/Users/$ADMIN_USERNAME/"
   check_success "Casks list copy"
+fi
+
+# Copy TouchID sudo
+if [ -f "$SETUP_DIR/pam.d/sudo_local" ]; then
+	log "Copying TouchID sudo file from setup directory"
+	sudo cp "$SETUP_DIR/pam.d/sudo_local" "/etc/pam.d/"
+	check_success "TouchID sudo copy"
 fi
 
 # Set up automatic second-boot execution via LaunchAgent

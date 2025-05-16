@@ -126,6 +126,7 @@ Several security measures are implemented:
 - Automatic security updates (optional)
 - Limited-privilege operator account
 - Secure storage of generated credentials
+- TouchID sudo is enabled
 
 These measures provide a solid security baseline for the server.
 
@@ -178,6 +179,7 @@ Mount network storage at boot time by adding to /etc/fstab or using an automount
 ### 2. Backup System
 
 Extend the backup script to:
+
 - Perform differential backups
 - Use cloud storage (S3, Backblaze)
 - Implement retention policies
