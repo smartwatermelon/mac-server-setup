@@ -6,7 +6,7 @@
 # for setting up the Mac Mini M2 server. After running, AirDrop the entire directory
 # to your new Mac Mini.
 #
-# Usage: ./airdrop-prep.sh [output_path]
+# Usage: ./airdrop-prep.sh [output_path] [script_path]
 #	output_path: Path where the files will be created (default: ~/tilsit-setup)
 #
 # Author: Claude
@@ -20,7 +20,7 @@ set -e
 OUTPUT_PATH="${1:-$HOME/tilsit-setup}"
 GITHUB_REPO="https://github.com/yourusername/tilsit-setup.git"	# Replace with your actual repository
 SSH_KEY_PATH="$HOME/.ssh/id_ed25519.pub"  # Adjust to your SSH key path
-SCRIPT_SOURCE_DIR="./scripts"  # Directory containing source scripts (adjust as needed)
+SCRIPT_SOURCE_DIR="${2:-.}"  # Directory containing source scripts (default is current dir)
 
 # Check if output directory exists, create if not
 if [ ! -d "$OUTPUT_PATH" ]; then
@@ -57,6 +57,7 @@ fi
 if [ -f "/etc/pam.d/sudo_local" ]; then
   echo "Copying TouchID sudo file..."
   cp "/etc/pam.d/sudo_local" "$OUTPUT_PATH/pam.d/"
+  chmod +w "$OUTPUT_PATH/pam.d/sudo_local"
 else
   echo "Warning: TouchID sudo file not found at /etc/pam.d/sudo_local"
   echo "TouchID sudo will not be configured on the server"
@@ -182,5 +183,7 @@ echo "====== Setup Files Preparation Complete ======"
 echo "The setup files at $OUTPUT_PATH are now ready for AirDrop."
 echo "AirDrop this entire folder to your Mac Mini after completing the macOS setup wizard"
 echo "and run the first-boot.sh script from the transferred directory."
+
+open "OUTPUT_PATH"
 
 exit 0
