@@ -17,8 +17,8 @@ Before beginning the setup process, ensure you have:
 - A Mac Mini M2 with macOS installed
 - A monitor, keyboard, and mouse for initial setup
 - Administrator access to the Mac Mini
-- USB drive (optional, for easier transfer of scripts and SSH keys)
 - Development machine with SSH keys generated
+- 1Password and 1Password CLI (op) configured on your development machine
 
 ## Setup Process Overview
 
@@ -47,35 +47,31 @@ ls -la ~/.ssh/id_ed25519*
 ssh-keygen -t ed25519 -C "your_email@example.com"
 ```
 
-#### 1.2 Prepare Setup Files for AirDrop
+#### 1.2 Prepare TouchID Sudo Configuration (Optional)
+
+If you want to use TouchID for sudo authentication on the Mac Mini:
+
+```bash
+# Run the script to create the TouchID sudo configuration
+./create-touchid-sudo.sh
+```
+
+#### 1.3 Prepare Setup Files for AirDrop
 
 On your development machine:
-
-1. Create a directory for the setup files:
 
 ```bash
 # Run the AirDrop preparation script
 ./airdrop-prep.sh ~/tilsit-setup
 ```
 
-2. This script will create all necessary files in the specified directory
-3. After the preparation is complete, AirDrop the entire directory to your Mac Mini
+This script will:
 
-If you prefer to manually prepare the files:
-
-```bash
-# Create the directory structure
-mkdir -p ~/tilsit-setup/ssh_keys
-mkdir -p ~/tilsit-setup/scripts
-mkdir -p ~/tilsit-setup/lists
-
-# Copy your SSH key
-cp ~/.ssh/id_ed25519.pub ~/tilsit-setup/ssh_keys/authorized_keys
-cp ~/.ssh/id_ed25519.pub ~/tilsit-setup/ssh_keys/operator_authorized_keys
-
-# Copy the scripts from your source location
-cp path/to/scripts/* ~/tilsit-setup/scripts/
-```
+- Create all necessary directories and files
+- Copy your SSH keys
+- Generate a one-time password link for your Apple ID using 1Password
+- Copy setup scripts and package lists
+- Create a README with setup instructions
 
 ### 2. Initial Setup
 
@@ -86,24 +82,40 @@ cp path/to/scripts/* ~/tilsit-setup/scripts/
 3. Complete the macOS setup wizard with the following settings:
    - Select your country/region
    - Connect to your Wi-Fi network
-   - Sign in with your Apple ID (if desired)
+   - When prompted to sign in with your Apple ID, choose "Set Up Later" (we'll do this during the first-boot script)
    - Create an administrator account
    - Skip optional settings when possible
    - Choose minimal privacy/analytics settings
 
-#### 2.2 Post-Setup Configuration
+#### 2.2 Enable AirDrop and Transfer Files
 
 After reaching the desktop:
 
-1. Look for the AirDropped `tilsit-setup` folder in your Downloads folder
-2. Move it to your home directory:
+1. Enable AirDrop for file transfer:
+   - Open **Finder** from the Dock
+   - Click on **AirDrop** in the sidebar
+   - At the bottom of the window, click on "Allow me to be discovered by:" and select **Everyone**
+   - Keep this window open
+
+2. On your development machine:
+   - Ensure the AirDrop preparation script has completed
+   - Use AirDrop to send the entire `tilsit-setup` folder to your Mac Mini
+   - On the Mac Mini, accept the incoming AirDrop transfer
+
+3. After the transfer completes:
+   - You can change the AirDrop setting back to "Contacts Only" for improved security
+   - Verify the files are in your Downloads folder
+
+#### 2.3 Run First-Boot Script
+
+1. Move the setup folder to your home directory:
 
 ```bash
 mv ~/Downloads/tilsit-setup ~/
 ```
 
-3. Open Terminal
-4. Run the first-boot script:
+2. Open Terminal
+3. Run the first-boot script:
 
 ```bash
 # Navigate to the scripts directory
@@ -122,11 +134,31 @@ The `first-boot.sh` script will perform the following tasks:
 
 - Set the computer hostname to 'TILSIT'
 - Enable SSH for remote access
+- Set up SSH keys
+- Configure TouchID for sudo (if available)
+- Configure Apple ID (see steps below)
 - Create the 'operator' account
 - Configure power management settings
 - Set up automatic login
 - Run software updates
 - Create a placeholder for the second-boot script
+
+#### 3.1 Apple ID Configuration During First-Boot
+
+During the execution of `first-boot.sh`, you'll need to manually configure your Apple ID:
+
+1. The script will open the Apple ID one-time password link in your default browser
+2. In the browser:
+   - Copy your Apple ID password from the one-time link page (the link will expire after use)
+
+3. The script will then open System Settings to the Apple ID section
+4. In System Settings:
+   - Enter your Apple ID email address
+   - Paste the copied password
+   - Complete any verification steps (such as two-factor authentication)
+   - Select which services you want to enable (consider enabling only essential services)
+
+5. Return to Terminal and press any key to continue the script
 
 After the script completes, the system will reboot. You should now be able to SSH into the Mac Mini from your development machine:
 
@@ -136,7 +168,20 @@ ssh admin_username@tilsit.local
 
 ### 4. Second-Boot Setup
 
-After rebooting, log in to the Mac Mini via SSH and run the second-boot script:
+The `second-boot.sh` script will run automatically after reboot via the LaunchAgent. It will:
+
+- Install Homebrew from the GitHub release package
+- Install the specified formulae and casks
+- Set up environment paths
+- Prepare for application installation
+
+To verify the script has run successfully, check the log file:
+
+```bash
+cat ~/.local/state/tilsit-setup.log
+```
+
+If you need to run the script manually:
 
 ```bash
 # Navigate to the scripts directory
@@ -148,13 +193,6 @@ chmod +x second-boot.sh
 # Run the script
 ./second-boot.sh
 ```
-
-The `second-boot.sh` script will:
-
-- Install Homebrew from the GitHub release package
-- Install the specified formulae and casks
-- Set up environment paths
-- Prepare for application installation
 
 ### 5. Application Setup
 
