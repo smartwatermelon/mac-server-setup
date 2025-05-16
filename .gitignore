@@ -72,4 +72,5 @@ user_settings.yaml
 
 # Homebrew bundle files
 Brewfile.lock.json
-\nno.tgz # blahno # blah
+no.tgz # blah
+no/ # blah
