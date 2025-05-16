@@ -7,10 +7,10 @@
 # to your new Mac Mini.
 #
 # Usage: ./airdrop-prep.sh [output_path]
-#   output_path: Path where the files will be created (default: ~/tilsit-setup)
+#	output_path: Path where the files will be created (default: ~/tilsit-setup)
 #
 # Author: Claude
-# Version: 1.1
+# Version: 1.2
 # Created: 2025-05-13
 
 # Exit on error
@@ -18,7 +18,7 @@ set -e
 
 # Configuration
 OUTPUT_PATH="${1:-$HOME/tilsit-setup}"
-GITHUB_REPO="https://github.com/yourusername/tilsit-setup.git"  # Replace with your actual repository
+GITHUB_REPO="https://github.com/yourusername/tilsit-setup.git"	# Replace with your actual repository
 SSH_KEY_PATH="$HOME/.ssh/id_ed25519.pub"  # Adjust to your SSH key path
 SCRIPT_SOURCE_DIR="./scripts"  # Directory containing source scripts (adjust as needed)
 
@@ -39,6 +39,7 @@ mkdir -p "$OUTPUT_PATH/scripts"
 mkdir -p "$OUTPUT_PATH/scripts/app-setup"
 mkdir -p "$OUTPUT_PATH/lists"
 mkdir -p "$OUTPUT_PATH/pam.d"
+mkdir -p "$OUTPUT_PATH/wifi"
 
 # Copy SSH keys
 if [ -f "$SSH_KEY_PATH" ]; then
@@ -59,6 +60,36 @@ if [ -f "/etc/pam.d/sudo_local" ]; then
 else
   echo "Warning: TouchID sudo file not found at /etc/pam.d/sudo_local"
   echo "TouchID sudo will not be configured on the server"
+fi
+
+# Get current WiFi network info
+echo "Getting current WiFi network information..."
+CURRENT_SSID=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}')
+
+if [ -n "$CURRENT_SSID" ]; then
+  echo "Current WiFi network SSID: $CURRENT_SSID"
+
+  echo "Retrieving WiFi password..."
+  echo "You'll be prompted for your administrator password to access the keychain."
+  WIFI_PASSWORD=$(security find-generic-password -a "$CURRENT_SSID" -w "/Library/Keychains/System.keychain")
+
+  if [ -n "$WIFI_PASSWORD" ]; then
+	echo "WiFi password retrieved successfully."
+
+	# Save WiFi information securely
+	cat > "$OUTPUT_PATH/wifi/network.conf" << EOF
+WIFI_SSID="$CURRENT_SSID"
+WIFI_PASSWORD="$WIFI_PASSWORD"
+EOF
+	chmod 600 "$OUTPUT_PATH/wifi/network.conf"
+	echo "WiFi network configuration saved to wifi/network.conf"
+  else
+	echo "Error: Could not retrieve WiFi password."
+	echo "WiFi network configuration will not be automated."
+  fi
+else
+  echo "Warning: Could not detect current WiFi network."
+  echo "WiFi network configuration will not be automated."
 fi
 
 # Option 1: Clone from GitHub repository if available
@@ -112,6 +143,7 @@ This directory contains all the necessary files for setting up the Mac Mini M2 '
 - `scripts/`: Setup scripts for the server
 - `lists/`: Homebrew formulae and casks lists
 - `pam.d/`: TouchID sudo configuration
+- `wifi/`: WiFi network configuration
 
 ## Setup Instructions
 
@@ -137,12 +169,14 @@ For detailed instructions, refer to the complete runbook.
 - The operator account password will be saved to `~/Documents/operator_password.txt`
 - After setup, you can access the server via SSH using the admin or operator account
 - TouchID sudo will be enabled if the configuration file was available during preparation
+- WiFi will be configured automatically using the saved network information
 
 Created: $(date)
 EOF
 
 echo "Setting file permissions..."
 chmod -R 755 "$OUTPUT_PATH/scripts"
+chmod 600 "$OUTPUT_PATH/wifi/network.conf" 2>/dev/null || true
 
 echo "====== Setup Files Preparation Complete ======"
 echo "The setup files at $OUTPUT_PATH are now ready for AirDrop."

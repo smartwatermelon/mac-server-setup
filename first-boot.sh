@@ -15,7 +15,7 @@
 #   --skip-update: Skip software updates (which can be time-consuming)
 #
 # Author: Claude
-# Version: 1.1
+# Version: 1.2
 # Created: 2025-05-13
 
 # Exit on any error
@@ -30,6 +30,7 @@ LOG_FILE="/var/log/tilsit-setup.log"
 SETUP_DIR="$HOME/tilsit-setup" # Directory where AirDropped files are located
 SSH_KEY_SOURCE="$SETUP_DIR/ssh_keys"
 PAM_D_SOURCE="$SETUP_DIR/pam.d"
+WIFI_CONFIG_FILE="$SETUP_DIR/wifi/network.conf"
 
 # Parse command line arguments
 FORCE=false
@@ -102,6 +103,32 @@ if [ "$FORCE" = false ]; then
   fi
 fi
 
+# Configure WiFi if network config is available
+section "Configuring WiFi Network"
+if [ -f "$WIFI_CONFIG_FILE" ]; then
+  log "Found WiFi configuration file"
+
+  # Source the WiFi configuration file to get SSID and password
+  # shellcheck source=/dev/null
+  source "$WIFI_CONFIG_FILE"
+
+  if [ -n "$WIFI_SSID" ] && [ -n "$WIFI_PASSWORD" ]; then
+    log "Configuring WiFi network: $WIFI_SSID"
+
+    # Add WiFi network to preferred networks
+    networksetup -addpreferredwirelessnetworkatindex en0 "$WIFI_SSID" 0 "WPA/WPA2" "$WIFI_PASSWORD"
+    check_success "WiFi network configuration"
+
+    # Securely remove the WiFi password from the configuration file
+    sed -i '' "s/WIFI_PASSWORD=.*/WIFI_PASSWORD=\"REMOVED\"/" "$WIFI_CONFIG_FILE"
+    log "WiFi password removed from configuration file for security"
+  else
+    log "WiFi configuration file does not contain valid SSID and password"
+  fi
+else
+  log "No WiFi configuration file found - skipping WiFi setup"
+fi
+
 # Set hostname
 section "Setting Hostname"
 if [ "$(hostname)" = "$HOSTNAME" ]; then
@@ -127,7 +154,7 @@ fi
 # Copy SSH keys if available
 if [ -d "$SSH_KEY_SOURCE" ]; then
   log "Found SSH keys at $SSH_KEY_SOURCE"
-  
+
   # Set up admin SSH keys
   ADMIN_SSH_DIR="/Users/$ADMIN_USERNAME/.ssh"
   if [ ! -d "$ADMIN_SSH_DIR" ]; then
@@ -135,7 +162,7 @@ if [ -d "$SSH_KEY_SOURCE" ]; then
     mkdir -p "$ADMIN_SSH_DIR"
     chmod 700 "$ADMIN_SSH_DIR"
   fi
-  
+
   if [ -f "$SSH_KEY_SOURCE/authorized_keys" ]; then
     log "Copying authorized_keys for admin user"
     cp "$SSH_KEY_SOURCE/authorized_keys" "$ADMIN_SSH_DIR/"
@@ -167,28 +194,28 @@ else
   log "Creating operator account"
   # Generate a random password for the operator account
   OPERATOR_PASSWORD=$(openssl rand -base64 12)
-  
+
   # Create the operator account
   sudo sysadminctl -addUser "$OPERATOR_USERNAME" -fullName "$OPERATOR_FULLNAME" -password "$OPERATOR_PASSWORD" -hint "See admin for password reset"
   check_success "Operator account creation"
-  
+
   # Store the password in a secure location for admin reference
   echo "Operator account password: $OPERATOR_PASSWORD" > "/Users/$ADMIN_USERNAME/Documents/operator_password.txt"
   chmod 600 "/Users/$ADMIN_USERNAME/Documents/operator_password.txt"
-  
+
   log "Operator account created with password saved to ~/Documents/operator_password.txt"
-  
+
   # Set up operator SSH keys if available
   if [ -d "$SSH_KEY_SOURCE" ] && [ -f "$SSH_KEY_SOURCE/operator_authorized_keys" ]; then
     OPERATOR_SSH_DIR="/Users/$OPERATOR_USERNAME/.ssh"
     log "Setting up SSH keys for operator account"
-    
+
     sudo mkdir -p "$OPERATOR_SSH_DIR"
     sudo cp "$SSH_KEY_SOURCE/operator_authorized_keys" "$OPERATOR_SSH_DIR/authorized_keys"
     sudo chmod 700 "$OPERATOR_SSH_DIR"
     sudo chmod 600 "$OPERATOR_SSH_DIR/authorized_keys"
     sudo chown -R "$OPERATOR_USERNAME" "$OPERATOR_SSH_DIR"
-    
+
     check_success "Operator SSH key setup"
   fi
 fi
@@ -258,7 +285,7 @@ fi
 if [ "$SKIP_UPDATE" = false ]; then
   section "Running Software Updates"
   log "Checking for software updates (this may take a while)"
-  
+
   # Check for updates
   UPDATE_CHECK=$(softwareupdate -l)
   if echo "$UPDATE_CHECK" | grep -q "No new software available"; then
@@ -366,7 +393,7 @@ else
 EOF
   chmod 644 "$LAUNCH_AGENT_FILE"
   check_success "Second-boot LaunchAgent creation"
-  
+
   # Load the LaunchAgent
   launchctl load "$LAUNCH_AGENT_FILE"
   check_success "Second-boot LaunchAgent loading"
