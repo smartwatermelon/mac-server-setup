@@ -15,8 +15,8 @@
 #   --skip-update: Skip software updates (which can be time-consuming)
 #
 # Author: Claude
-# Version: 1.2
-# Created: 2025-05-13
+# Version: 1.3
+# Created: 2025-05-16
 
 # Exit on any error
 set -e
@@ -28,7 +28,7 @@ OPERATOR_FULLNAME="TILSIT Operator"
 ADMIN_USERNAME=$(whoami)
 export LOG_DIR; LOG_DIR="$HOME/.local/state" # XDG_STATE_HOME
 LOG_FILE="$LOG_DIR/tilsit-setup.log"
-SETUP_DIR="$HOME/tilsit-setup" # Directory where AirDropped files are located
+SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" # Directory where AirDropped files are located
 SSH_KEY_SOURCE="$SETUP_DIR/ssh_keys"
 PAM_D_SOURCE="$SETUP_DIR/pam.d"
 WIFI_CONFIG_FILE="$SETUP_DIR/wifi/network.conf"
@@ -96,6 +96,7 @@ section "Starting Mac Mini M2 'TILSIT' Server Setup"
 log "Running as user: $ADMIN_USERNAME"
 log "Date: $(date)"
 log "macOS Version: $(sw_vers -productVersion)"
+log "Setup directory: $SETUP_DIR"
 
 # Confirm operation if not forced
 if [ "$FORCE" = false ]; then
@@ -105,33 +106,6 @@ if [ "$FORCE" = false ]; then
     log "Setup cancelled by user"
     exit 0
   fi
-fi
-
-# Configure WiFi if network config is available
-section "Configuring WiFi Network"
-if [ -f "$WIFI_CONFIG_FILE" ]; then
-  log "Found WiFi configuration file"
-
-  # Source the WiFi configuration file to get SSID and password
-  # shellcheck source=/dev/null
-  source "$WIFI_CONFIG_FILE"
-
-  if [ -n "$WIFI_SSID" ] && [ -n "$WIFI_PASSWORD" ]; then
-    log "Configuring WiFi network: $WIFI_SSID"
-
-    # Add WiFi network to preferred networks
-    WIFI_IFACE="$(system_profiler SPAirPortDataType -xml | /usr/libexec/PlistBuddy -c "Print :0:_items:0:spairport_airport_interfaces:0:_name" /dev/stdin <<< "$(cat)")"
-    networksetup -addpreferredwirelessnetworkatindex "$WIFI_IFACE" "$WIFI_SSID" 0 "WPA/WPA2" "$WIFI_PASSWORD"
-    check_success "WiFi network configuration"
-
-    # Securely remove the WiFi password from the configuration file
-    sed -i '' "s/WIFI_PASSWORD=.*/WIFI_PASSWORD=\"REMOVED\"/" "$WIFI_CONFIG_FILE"
-    log "WiFi password removed from configuration file for security"
-  else
-    log "WiFi configuration file does not contain valid SSID and password"
-  fi
-else
-  log "No WiFi configuration file found - skipping WiFi setup"
 fi
 
 # Fix scroll setting
@@ -167,6 +141,33 @@ else
   log "No TouchID sudo setup directory found at $PAM_D_SOURCE"
 fi
 
+# Configure WiFi if network config is available
+section "Configuring WiFi Network"
+if [ -f "$WIFI_CONFIG_FILE" ]; then
+  log "Found WiFi configuration file"
+
+  # Source the WiFi configuration file to get SSID and password
+  # shellcheck source=/dev/null
+  source "$WIFI_CONFIG_FILE"
+
+  if [ -n "$WIFI_SSID" ] && [ -n "$WIFI_PASSWORD" ]; then
+    log "Configuring WiFi network: $WIFI_SSID"
+
+    # Add WiFi network to preferred networks
+    WIFI_IFACE="$(system_profiler SPAirPortDataType -xml | /usr/libexec/PlistBuddy -c "Print :0:_items:0:spairport_airport_interfaces:0:_name" /dev/stdin <<< "$(cat)")"
+    networksetup -addpreferredwirelessnetworkatindex "$WIFI_IFACE" "$WIFI_SSID" 0 "WPA/WPA2" "$WIFI_PASSWORD"
+    check_success "WiFi network configuration"
+
+    # Securely remove the WiFi password from the configuration file
+    sed -i '' "s/WIFI_PASSWORD=.*/WIFI_PASSWORD=\"REMOVED\"/" "$WIFI_CONFIG_FILE"
+    log "WiFi password removed from configuration file for security"
+  else
+    log "WiFi configuration file does not contain valid SSID and password"
+  fi
+else
+  log "No WiFi configuration file found - skipping WiFi setup"
+fi
+
 # Set hostname
 section "Setting Hostname"
 if [ "$(hostname)" = "$HOSTNAME" ]; then
@@ -194,10 +195,11 @@ else
   else
     # 3.b Failure case - need FDA
     log "We need to grant Full Disk Access permissions to Terminal to enable SSH."
-    if [ "$FORCE" = false ]; then
-      read -rp "Press any key to continue with the Full Disk Access setup... " -n 1 -r
-      echo
-    fi
+    log "1. We'll open System Settings to the Full Disk Access section"
+    log "2. We'll open Finder showing Terminal.app"
+    log "3. You'll need to drag Terminal from Finder into the FDA list"
+    log "4. IMPORTANT: After adding Terminal, you must CLOSE this Terminal window"
+    log "5. Then open a NEW Terminal window and run this script again"
 
     # Open Finder to show Terminal app
     log "Opening Finder window to locate Terminal.app..."
@@ -211,46 +213,10 @@ EOF
 
     # Open FDA preferences
     log "Opening System Settings to the Full Disk Access section..."
-    log "Please drag Terminal from the Finder window into the Full Disk Access list."
     open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
 
-    if [ "$FORCE" = false ]; then
-      read -rp "After adding Terminal to Full Disk Access, press any key to continue... " -n 1 -r
-      echo
-    fi
-
-    # Try enabling SSH again after FDA
-    log "Attempting to enable SSH again..."
-    if sudo systemsetup -setremotelogin on; then
-      # Success after FDA
-      log "✅ SSH has been enabled successfully"
-    else
-      # Still failing, try manual approach via System Settings
-      log "Still unable to enable SSH via command line."
-      log "We'll try enabling it through System Settings → Sharing instead."
-      if [ "$FORCE" = false ]; then
-        read -rp "Press any key to continue to Sharing preferences... " -n 1 -r
-        echo
-      fi
-
-      # Open Sharing preferences
-      open "x-apple.systempreferences:com.apple.preference.sharing?Service_SSH"
-      log "Please enable Remote Login in the Sharing settings panel."
-
-      if [ "$FORCE" = false ]; then
-        read -rp "After enabling Remote Login in System Settings, press any key to continue... " -n 1 -r
-        echo
-      fi
-
-      # Final check to see if it's enabled now
-      if sudo systemsetup -getremotelogin | grep -q "On"; then
-        log "✅ SSH has been enabled successfully via System Settings"
-      else
-        log "❌ SSH could not be enabled. Remote access will not be available."
-        # Set a flag to remind the user at the end
-        SSH_FAILED=true
-      fi
-    fi
+    log "After granting Full Disk Access to Terminal, close this window and run the script again."
+    exit 0
   fi
 fi
 
@@ -297,8 +263,15 @@ if [ -f "$APPLE_ID_URL_FILE" ]; then
 
     # Open System Settings to the Apple ID section
     log "Opening System Settings to the Apple ID section"
+    log "IMPORTANT: You will need to complete several steps:"
+    log "1. Enter your Apple ID and password"
+    log "2. You may be prompted to enter your Mac's user password"
+    log "3. Approve any verification codes that are sent to your other devices"
+    log "4. Select which services to enable (you can customize these)"
+    log "5. Return to Terminal after completing all Apple ID setup dialogs"
+
     open "x-apple.systempreferences:com.apple.preferences.AppleIDPrefPane"
-    check_success "Opening System Settings"
+    check_success "Opening Apple ID settings"
 
     # Give user time to add their Apple ID
     read -rp "Please add your Apple ID in System Settings. Press any key when done... " -n 1 -r
@@ -413,9 +386,9 @@ if [ "$SKIP_UPDATE" = false ]; then
   if echo "$UPDATE_CHECK" | grep -q "No new software available"; then
     log "System is up to date"
   else
-    log "Installing software updates (this may take a long time)"
-    sudo softwareupdate -i -a
-    check_success "Software update installation"
+    log "Installing software updates in background mode"
+    sudo softwareupdate -i -a --background
+    check_success "Initiating background software update"
   fi
 else
   log "Skipping software updates as requested"
@@ -423,11 +396,13 @@ fi
 
 # Configure firewall
 section "Configuring Firewall"
-FIREWALL_STATUS=$(sudo defaults read /Library/Preferences/com.apple.alf globalstate)
 
-if [ "$FIREWALL_STATUS" = "0" ]; then
+# Check if firewall is enabled using socketfilterfw
+FIREWALL_STATE=$(sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate)
+
+if [[ "$FIREWALL_STATE" =~ "disabled" ]]; then
   log "Enabling firewall"
-  sudo defaults write /Library/Preferences/com.apple.alf globalstate -int 1
+  sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
   check_success "Firewall activation"
 else
   log "Firewall is already enabled"
