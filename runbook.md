@@ -108,21 +108,12 @@ After reaching the desktop:
 
 #### 2.3 Run First-Boot Script
 
-1. Move the setup folder to your home directory:
-
-```bash
-mv ~/Downloads/tilsit-setup ~/
-```
-
-2. Open Terminal
-3. Run the first-boot script:
+1. Open Terminal
+2. Run the first-boot script:
 
 ```bash
 # Navigate to the scripts directory
-cd ~/tilsit-setup/scripts
-
-# Make the script executable (if needed)
-chmod +x first-boot.sh
+cd ~/Downloads/tilsit-setup/scripts
 
 # Run the script
 ./first-boot.sh
