@@ -32,6 +32,7 @@ SETUP_DIR="$HOME/tilsit-setup" # Directory where AirDropped files are located
 SSH_KEY_SOURCE="$SETUP_DIR/ssh_keys"
 PAM_D_SOURCE="$SETUP_DIR/pam.d"
 WIFI_CONFIG_FILE="$SETUP_DIR/wifi/network.conf"
+export SSH_FAILED
 
 # Parse command line arguments
 FORCE=false
@@ -58,7 +59,7 @@ log() {
   mkdir -p "$LOG_DIR"
   local timestamp; timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo "[$timestamp] $1"
-  echo "[$timestamp] $1" | sudo tee -a "$LOG_FILE" >/dev/null
+  echo "[$timestamp] $1" | tee -a "$LOG_FILE" >/dev/null
 }
 
 # Function to log section headers
@@ -85,8 +86,9 @@ check_success() {
 
 # Create log file if it doesn't exist
 if [ ! -f "$LOG_FILE" ]; then
-  sudo touch "$LOG_FILE"
-  sudo chmod 644 "$LOG_FILE"
+  mkdir -p "$LOG_DIR"
+  touch "$LOG_FILE"
+  chmod 644 "$LOG_FILE"
 fi
 
 # Print header
@@ -118,7 +120,8 @@ if [ -f "$WIFI_CONFIG_FILE" ]; then
     log "Configuring WiFi network: $WIFI_SSID"
 
     # Add WiFi network to preferred networks
-    networksetup -addpreferredwirelessnetworkatindex en0 "$WIFI_SSID" 0 "WPA/WPA2" "$WIFI_PASSWORD"
+    WIFI_IFACE="$(system_profiler SPAirPortDataType -xml | /usr/libexec/PlistBuddy -c "Print :0:_items:0:spairport_airport_interfaces:0:_name" /dev/stdin <<< "$(cat)")"
+    networksetup -addpreferredwirelessnetworkatindex "$WIFI_IFACE" "$WIFI_SSID" 0 "WPA/WPA2" "$WIFI_PASSWORD"
     check_success "WiFi network configuration"
 
     # Securely remove the WiFi password from the configuration file
@@ -129,6 +132,39 @@ if [ -f "$WIFI_CONFIG_FILE" ]; then
   fi
 else
   log "No WiFi configuration file found - skipping WiFi setup"
+fi
+
+# Fix scroll setting
+section "Fix scroll setting"
+log "Fixing Apple's default scroll setting"
+defaults write -g com.apple.swipescrolldirection -bool false
+check_success "Fix scroll setting"
+
+# TouchID sudo setup
+section "TouchID sudo setup"
+if [ -d "$PAM_D_SOURCE" ]; then
+  log "Found TouchID sudo setup in $PAM_D_SOURCE"
+
+  if [ -f "$PAM_D_SOURCE/sudo_local" ]; then
+    # Check if the file already exists with the correct content
+    if [ -f "/etc/pam.d/sudo_local" ] && diff -q "$PAM_D_SOURCE/sudo_local" "/etc/pam.d/sudo_local" >/dev/null; then
+      log "TouchID sudo is already properly configured"
+    else
+      # File doesn't exist OR exists but has different content - same action either way
+      log "TouchID sudo needs to be configured. We will ask for your user password."
+      sudo cp "$PAM_D_SOURCE/sudo_local" "/etc/pam.d"
+      check_success "TouchID sudo configuration"
+
+      # Test TouchID configuration
+      log "Testing TouchID sudo configuration..."
+      sudo -k; sudo -v
+      check_success "TouchID sudo test"
+    fi
+  else
+    log "No sudo_local file found in $PAM_D_SOURCE"
+  fi
+else
+  log "No TouchID sudo setup directory found at $PAM_D_SOURCE"
 fi
 
 # Set hostname
@@ -145,12 +181,77 @@ fi
 
 # Setup SSH access
 section "Configuring SSH Access"
+
+# 1. Check if remote login is already enabled
 if sudo systemsetup -getremotelogin | grep -q "On"; then
   log "SSH is already enabled"
 else
-  log "Enabling SSH"
-  sudo systemsetup -setremotelogin on
-  check_success "SSH activation"
+  # 2. Try to enable it directly first
+  log "Attempting to enable SSH..."
+  if sudo systemsetup -setremotelogin on; then
+    # 3.a Success case - it worked directly
+    log "✅ SSH has been enabled successfully"
+  else
+    # 3.b Failure case - need FDA
+    log "We need to grant Full Disk Access permissions to Terminal to enable SSH."
+    if [ "$FORCE" = false ]; then
+      read -rp "Press any key to continue with the Full Disk Access setup... " -n 1 -r
+      echo
+    fi
+
+    # Open Finder to show Terminal app
+    log "Opening Finder window to locate Terminal.app..."
+    osascript <<EOF
+tell application "Finder"
+  activate
+  open folder "Applications:Utilities:" of startup disk
+  select file "Terminal.app" of folder "Utilities" of folder "Applications" of startup disk
+end tell
+EOF
+
+    # Open FDA preferences
+    log "Opening System Settings to the Full Disk Access section..."
+    log "Please drag Terminal from the Finder window into the Full Disk Access list."
+    open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+
+    if [ "$FORCE" = false ]; then
+      read -rp "After adding Terminal to Full Disk Access, press any key to continue... " -n 1 -r
+      echo
+    fi
+
+    # Try enabling SSH again after FDA
+    log "Attempting to enable SSH again..."
+    if sudo systemsetup -setremotelogin on; then
+      # Success after FDA
+      log "✅ SSH has been enabled successfully"
+    else
+      # Still failing, try manual approach via System Settings
+      log "Still unable to enable SSH via command line."
+      log "We'll try enabling it through System Settings → Sharing instead."
+      if [ "$FORCE" = false ]; then
+        read -rp "Press any key to continue to Sharing preferences... " -n 1 -r
+        echo
+      fi
+
+      # Open Sharing preferences
+      open "x-apple.systempreferences:com.apple.preference.sharing?Service_SSH"
+      log "Please enable Remote Login in the Sharing settings panel."
+
+      if [ "$FORCE" = false ]; then
+        read -rp "After enabling Remote Login in System Settings, press any key to continue... " -n 1 -r
+        echo
+      fi
+
+      # Final check to see if it's enabled now
+      if sudo systemsetup -getremotelogin | grep -q "On"; then
+        log "✅ SSH has been enabled successfully via System Settings"
+      else
+        log "❌ SSH could not be enabled. Remote access will not be available."
+        # Set a flag to remind the user at the end
+        SSH_FAILED=true
+      fi
+    fi
+  fi
 fi
 
 # Copy SSH keys if available
@@ -173,19 +274,6 @@ if [ -d "$SSH_KEY_SOURCE" ]; then
   fi
 else
   log "No SSH keys found at $SSH_KEY_SOURCE - manual key setup will be required"
-fi
-
-# TouchID sudo setup
-if [ -d "$PAM_D_SOURCE" ]; then
-  log "Found TouchID sudo setup in $PAM_D_SOURCE"
-  if [ -f "$PAM_D_SOURCE/sudo_local" ]; then
-    sudo cp "$PAM_D_SOURCE/sudo_local" "/etc/pam.d"
-    check_success "TouchID sudo setup"
-  else
-    log "No sudo_local file found in $PAM_D_SOURCE"
-  fi
-else
-  log "No TouchID sudo setup directory found at $PAM_D_SOURCE"
 fi
 
 # Configure Apple ID (requires manual intervention)
