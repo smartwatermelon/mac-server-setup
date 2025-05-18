@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# first-boot.command - Initial configuration script for Mac Mini M2 'TILSIT' server
+# first-boot.command - Initial configuration script for Mac Mini M2 '$HOSTNAME' server
 #
 # This script performs the initial setup tasks for the Mac Mini server after
 # the macOS setup wizard has been completed. It configures:
@@ -22,17 +22,24 @@
 set -e
 
 # Configuration variables - adjust as needed
-HOSTNAME="TILSIT"
+HOSTNAME="TILSIT"; HOSTNAME_LOWER="$( tr '[:upper:]' '[:lower:]' <<< $HOSTNAME)"
 OPERATOR_USERNAME="operator"
-OPERATOR_FULLNAME="TILSIT Operator"
+OPERATOR_FULLNAME="$HOSTNAME Operator"
 ADMIN_USERNAME=$(whoami)
 export LOG_DIR; LOG_DIR="$HOME/.local/state" # XDG_STATE_HOME
-LOG_FILE="$LOG_DIR/tilsit-setup.log"
+LOG_FILE="$LOG_DIR/$HOSTNAME_LOWER-setup.log"
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" # Directory where AirDropped files are located
 SSH_KEY_SOURCE="$SETUP_DIR/ssh_keys"
 PAM_D_SOURCE="$SETUP_DIR/pam.d"
 WIFI_CONFIG_FILE="$SETUP_DIR/wifi/network.conf"
-export SSH_FAILED
+RERUN_AFTER_FDA=false
+
+# Look for evidence we're being re-run after FDA grant
+if [ -f "/tmp/${HOSTNAME_LOWER}_fda_requested" ]; then
+    RERUN_AFTER_FDA=true
+    rm -f "/tmp/${HOSTNAME_LOWER}_fda_requested"
+    log "Detected re-run after Full Disk Access grant"
+fi
 
 # Parse command line arguments
 FORCE=false
@@ -92,14 +99,14 @@ if [ ! -f "$LOG_FILE" ]; then
 fi
 
 # Print header
-section "Starting Mac Mini M2 'TILSIT' Server Setup"
+section "Starting Mac Mini M2 '$HOSTNAME' Server Setup"
 log "Running as user: $ADMIN_USERNAME"
 log "Date: $(date)"
 log "macOS Version: $(sw_vers -productVersion)"
 log "Setup directory: $SETUP_DIR"
 
 # Confirm operation if not forced
-if [ "$FORCE" = false ]; then
+if [ "$FORCE" = false ] && [ "$RERUN_AFTER_FDA" = false ]; then
   read -p "This script will configure your Mac Mini server. Continue? (y/n) " -n 1 -r
   echo
   if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -194,6 +201,8 @@ else
     log "✅ SSH has been enabled successfully"
   else
     # 3.b Failure case - need FDA
+    # Create a marker file to detect re-run
+    touch "/tmp/${HOSTNAME_LOWER}_fda_requested"
     log "We need to grant Full Disk Access permissions to Terminal to enable SSH."
     log "1. We'll open System Settings to the Full Disk Access section"
     log "2. We'll open Finder showing Terminal.app"
@@ -359,22 +368,11 @@ section "Configuring Screen Saver"
 defaults -currentHost write com.apple.screensaver askForPassword -int 0
 log "Disabled screen saver password requirement"
 
-# Configure automatic login
-section "Configuring Automatic Login"
-if sudo defaults read /Library/Preferences/com.apple.loginwindow | grep -q "autoLoginUser"; then
-  CURRENT_AUTOLOGIN=$(sudo defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser)
-  if [ "$CURRENT_AUTOLOGIN" = "$OPERATOR_USERNAME" ]; then
-    log "Automatic login already configured for $OPERATOR_USERNAME"
-  else
-    log "Changing automatic login from $CURRENT_AUTOLOGIN to $OPERATOR_USERNAME"
-    sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string "$OPERATOR_USERNAME"
-    check_success "Automatic login configuration change"
-  fi
-else
-  log "Setting up automatic login for $OPERATOR_USERNAME"
-  sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string "$OPERATOR_USERNAME"
-  check_success "Automatic login configuration"
-fi
+# Configure automatic login - temporarily use admin account
+section "Configuring Temporary Automatic Login"
+log "Setting up temporary automatic login for $ADMIN_USERNAME during setup"
+sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string "$ADMIN_USERNAME"
+check_success "Temporary automatic login configuration"
 
 # Run software updates if not skipped
 if [ "$SKIP_UPDATE" = false ]; then
@@ -415,7 +413,7 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/sbin/sshd
 
 # Create scripts directory and copy second-boot script
 section "Setting Up Scripts Directory"
-SCRIPTS_DIR="/Users/$ADMIN_USERNAME/tilsit-scripts"
+SCRIPTS_DIR="/Users/$ADMIN_USERNAME/$HOSTNAME_LOWER-scripts"
 if [ ! -d "$SCRIPTS_DIR" ]; then
   log "Creating scripts directory"
   mkdir -p "$SCRIPTS_DIR"
@@ -455,23 +453,27 @@ fi
 
 # Set up automatic second-boot execution via LaunchAgent
 LAUNCH_AGENT_DIR="/Users/$ADMIN_USERNAME/Library/LaunchAgents"
-LAUNCH_AGENT_FILE="$LAUNCH_AGENT_DIR/com.tilsit.secondboot.plist"
+LAUNCH_AGENT_FILE="$LAUNCH_AGENT_DIR/com.$HOSTNAME_LOWER.secondboot.plist"
 
 if [ ! -d "$LAUNCH_AGENT_DIR" ]; then
-  mkdir -p "$LAUNCH_AGENT_DIR"
+    mkdir -p "$LAUNCH_AGENT_DIR"
+    log "Created LaunchAgents directory"
 fi
 
 if [ -f "$LAUNCH_AGENT_FILE" ]; then
-  log "Second-boot LaunchAgent already exists"
-else
-  log "Creating LaunchAgent for second-boot script"
-  cat > "$LAUNCH_AGENT_FILE" << EOF
+    log "Second-boot LaunchAgent already exists, removing old version"
+    launchctl unload "$LAUNCH_AGENT_FILE" 2>/dev/null || true
+    rm -f "$LAUNCH_AGENT_FILE"
+fi
+
+log "Creating LaunchAgent for second-boot script"
+cat > "$LAUNCH_AGENT_FILE" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.tilsit.secondboot</string>
+    <string>com.$HOSTNAME_LOWER.secondboot</string>
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
@@ -482,18 +484,36 @@ else
     <key>StartInterval</key>
     <integer>86400</integer>
     <key>StandardOutPath</key>
-    <string>$HOME/.local/state/tilsit-secondboot.log</string>
+    <string>$HOME/.local/state/$HOSTNAME_LOWER-secondboot.log</string>
     <key>StandardErrorPath</key>
-    <string>$HOME/.local/state/tilsit-secondboot.log</string>
+    <string>$HOME/.local/state/$HOSTNAME_LOWER-secondboot.log</string>
 </dict>
 </plist>
 EOF
-  chmod 644 "$LAUNCH_AGENT_FILE"
-  check_success "Second-boot LaunchAgent creation"
+chmod 644 "$LAUNCH_AGENT_FILE"
+check_success "Second-boot LaunchAgent creation"
 
-  # Load the LaunchAgent
-  launchctl load "$LAUNCH_AGENT_FILE"
-  check_success "Second-boot LaunchAgent loading"
+# Ensure we unload any existing version before loading
+log "Unloading any existing LaunchAgent"
+launchctl unload "$LAUNCH_AGENT_FILE" 2>/dev/null || true
+log "Loading the LaunchAgent"
+log "Command used for loading LaunchAgent: launchctl load -w \"$LAUNCH_AGENT_FILE\""
+launchctl load -w "$LAUNCH_AGENT_FILE" 2>/tmp/launchctl_error.log || true
+check_success "Second-boot LaunchAgent loading"
+if [ -s "/tmp/launchctl_error.log" ]; then
+    log "⚠️ Warning: launchctl reported errors: $(cat /tmp/launchctl_error.log)"
+fi
+
+# Immediately verify the LaunchAgent is registered
+LOADED_AGENTS=$(launchctl list | grep com.$HOSTNAME_LOWER.secondboot || echo "")
+if [ -n "$LOADED_AGENTS" ]; then
+    log "Verified LaunchAgent is properly registered"
+else
+    log "⚠️ Warning: LaunchAgent doesn't appear to be registered. Will attempt to fix..."
+    # Try a different approach
+    log "Trying alternative LaunchAgent registration method"
+    launchctl bootstrap gui/$(id -u) "$LAUNCH_AGENT_FILE"
+    check_success "Alternative LaunchAgent registration"
 fi
 
 # Configure security settings

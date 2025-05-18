@@ -92,8 +92,7 @@ This script will:
 After reaching the desktop:
 
 1. Enable AirDrop for file transfer:
-   - Open **Finder** from the Dock
-   - Click on **AirDrop** in the sidebar
+   - Open **Finder** from the Dock and click on **AirDrop** in the sidebar OR press **Cmd-Shift-R** from the Desktop
    - At the bottom of the window, click on "Allow me to be discovered by:" and select **Everyone**
    - Keep this window open
 
@@ -120,6 +119,20 @@ cd ~/Downloads/tilsit-setup/scripts
 ./first-boot.command
 ```
 
+#### Mac Security Considerations
+Due to macOS security restrictions, you may encounter issues running scripts on a new Mac:
+
+1. When double-clicking `first-boot.command`, you may see a security warning
+2. To proceed, right-click (or Control+click) the file and select "Open"
+3. Click "Open" in the security dialog that appears
+4. Alternatively, you can run the script from Terminal:
+
+   ```bash
+   cd ~/Downloads/tilsit-setup/scripts
+   chmod +x first-boot.command
+   ./first-boot.command
+   ```
+
 ### 3. First-Boot Setup
 
 The `first-boot.command` script will perform the following tasks:
@@ -133,7 +146,7 @@ The `first-boot.command` script will perform the following tasks:
 - Configure power management settings
 - Set up automatic login
 - Run software updates
-- Create a placeholder for the second-boot script
+- Create a LaunchAgent for the second-boot script
 
 #### 3.1 Apple ID Configuration During First-Boot
 
@@ -152,11 +165,17 @@ During the execution of `first-boot.command`, you'll need to manually configure 
 
 5. Return to Terminal and press any key to continue the script
 
-After the script completes, the system will reboot. You should now be able to SSH into the Mac Mini from your development machine:
+6. After the script completes, the system will reboot. You should now be able to SSH into the Mac Mini from your development machine:
 
-```bash
-ssh admin_username@tilsit.local
-```
+	```bash
+	ssh admin_username@tilsit.local
+	```
+
+7. You may wish to configure passwordless SSH from your development machine:
+
+	```bash
+	ssh-copy-id admin_username@tilsit.local
+	```
 
 ### 4. Second-Boot Setup
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# second-boot.sh - Secondary setup script for Mac Mini M2 'TILSIT' server
+# second-boot.sh - Secondary setup script for Mac Mini M2 '$HOSTNAME' server
 #
 # This script handles:
 # - Homebrew installation from the GitHub release package
@@ -21,11 +21,12 @@
 set -e
 
 # Configuration variables
+HOSTNAME_LOWER="$(hostname -s | tr '[:upper:]' '[:lower:]')"
 HOMEBREW_VERSION="4.5.2"
 HOMEBREW_PKG_URL="https://github.com/Homebrew/brew/releases/download/${HOMEBREW_VERSION}/Homebrew-${HOMEBREW_VERSION}.pkg"
 HOMEBREW_PKG_FILE="/tmp/Homebrew-${HOMEBREW_VERSION}.pkg"
 export LOG_DIR; LOG_DIR="$HOME/.local/state" # XDG_STATE_HOME
-LOG_FILE="$LOG_DIR/tilsit-setup.log"
+LOG_FILE="$LOG_DIR/$HOSTNAME_LOWER-setup.log"
 FORMULAE_FILE="/Users/$(whoami)/formulae.txt"
 CASKS_FILE="/Users/$(whoami)/casks.txt"
 
@@ -86,8 +87,8 @@ check_success() {
 
 # Disable LaunchAgent to prevent this from running again
 disable_launchagent() {
-  local launch_agent; launch_agent="/Users/$(whoami)/Library/LaunchAgents/com.tilsit.secondboot.plist"
-  
+  local launch_agent; launch_agent="/Users/$(whoami)/Library/LaunchAgents/com.$HOSTNAME_LOWER.secondboot.plist"
+
   if [ -f "$launch_agent" ]; then
     log "Disabling second-boot LaunchAgent"
     launchctl unload "$launch_agent"
@@ -103,7 +104,7 @@ if [ ! -f "$LOG_FILE" ]; then
 fi
 
 # Print header
-section "Starting Second-Boot Setup for Mac Mini M2 'TILSIT' Server"
+section "Starting Second-Boot Setup for Mac Mini M2 '$HOSTNAME' Server"
 log "Running as user: $(whoami)"
 log "Date: $(date)"
 log "macOS Version: $(sw_vers -productVersion)"
@@ -146,12 +147,12 @@ fi
 # Install Homebrew
 if [ "$SKIP_HOMEBREW" = false ]; then
   section "Installing Homebrew"
-  
+
   # Check if Homebrew is already installed
   if command -v brew &>/dev/null; then
     BREW_VERSION=$(brew --version | head -n 1 | awk '{print $2}')
     log "Homebrew is already installed (version $BREW_VERSION)"
-    
+
     # Update Homebrew if already installed
     log "Updating Homebrew"
     brew update
@@ -160,21 +161,21 @@ if [ "$SKIP_HOMEBREW" = false ]; then
     log "Downloading Homebrew package installer"
     curl -L -o "$HOMEBREW_PKG_FILE" "$HOMEBREW_PKG_URL"
     check_success "Homebrew package download"
-    
+
     log "Installing Homebrew"
     sudo installer -pkg "$HOMEBREW_PKG_FILE" -target /
     check_success "Homebrew installation"
-    
+
     # Clean up
     rm -f "$HOMEBREW_PKG_FILE"
-    
+
     # Add Homebrew to path
     if [[ "$(uname -m)" == "arm64" ]]; then
       HOMEBREW_PREFIX="/opt/homebrew"
     else
       HOMEBREW_PREFIX="/usr/local"
     fi
-    
+
     # Add to shell configuration files
     for SHELL_PROFILE in ~/.zprofile ~/.bash_profile ~/.profile; do
       if [ -f "$SHELL_PROFILE" ]; then
@@ -186,12 +187,12 @@ if [ "$SKIP_HOMEBREW" = false ]; then
         fi
       fi
     done
-    
+
     # Apply to current session
     eval "$("$HOMEBREW_PREFIX/bin/brew" shellenv)"
-    
+
     log "Homebrew installation completed"
-    
+
     # Verify installation
     brew --version
     check_success "Homebrew verification"
@@ -201,7 +202,7 @@ fi
 # Install packages
 if [ "$SKIP_PACKAGES" = false ]; then
   section "Installing Packages"
-  
+
   # Function to install formulae if not already installed
   install_formula() {
     if ! brew list "$1" &>/dev/null; then
@@ -212,7 +213,7 @@ if [ "$SKIP_PACKAGES" = false ]; then
       log "Formula already installed: $1"
     fi
   }
-  
+
   # Function to install casks if not already installed
   install_cask() {
     if ! brew list --cask "$1" &>/dev/null 2>&1; then
@@ -223,7 +224,7 @@ if [ "$SKIP_PACKAGES" = false ]; then
       log "Cask already installed: $1"
     fi
   }
-  
+
   # Install formulae from list
   if [ -f "$FORMULAE_FILE" ]; then
     log "Installing formulae from $FORMULAE_FILE"
@@ -234,7 +235,7 @@ if [ "$SKIP_PACKAGES" = false ]; then
   else
     log "Formulae list not found, skipping formula installations"
   fi
-  
+
   # Install casks from list
   if [ -f "$CASKS_FILE" ]; then
     log "Installing casks from $CASKS_FILE"
@@ -245,7 +246,7 @@ if [ "$SKIP_PACKAGES" = false ]; then
   else
     log "Casks list not found, skipping cask installations"
   fi
-  
+
   # Cleanup after installation
   log "Cleaning up Homebrew files"
   brew cleanup
@@ -262,8 +263,8 @@ if [ ! -d "$APP_SETUP_DIR" ]; then
   check_success "App setup directory creation"
 fi
 
-# Copy application setup scripts from tilsit-setup directory if available
-SETUP_DIR="$HOME/tilsit-setup"
+# Copy application setup scripts from $HOSTNAME_LOWER-setup directory if available
+SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" # Directory where AirDropped files are located
 if [ -d "$SETUP_DIR/scripts/app-setup" ]; then
   log "Copying application setup scripts from $SETUP_DIR/scripts/app-setup"
   cp "$SETUP_DIR/scripts/app-setup/"*.sh "$APP_SETUP_DIR/" 2>/dev/null
@@ -272,6 +273,13 @@ if [ -d "$SETUP_DIR/scripts/app-setup" ]; then
 else
   log "No application setup scripts found in $SETUP_DIR/scripts/app-setup"
 fi
+
+# Switch automatic login to operator user
+section "Configuring Final Automatic Login"
+OPERATOR_USERNAME="operator"  # Make sure this matches first-boot value
+log "Switching automatic login from admin to $OPERATOR_USERNAME"
+sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string "$OPERATOR_USERNAME"
+check_success "Final automatic login configuration"
 
 # Disable the LaunchAgent to prevent this from running again
 section "Finalizing Setup"

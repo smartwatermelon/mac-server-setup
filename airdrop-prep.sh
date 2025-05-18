@@ -1,13 +1,13 @@
 #!/bin/bash
 #
-# airdrop-prep.sh - Script to prepare a directory with necessary files for Mac Mini M2 'TILSIT' server setup
+# airdrop-prep.sh - Script to prepare a directory with necessary files for Mac Mini M2 '$SERVER_NAME' server setup
 #
 # This script prepares a directory with all the necessary scripts and files
 # for setting up the Mac Mini M2 server. After running, AirDrop the entire directory
 # to your new Mac Mini.
 #
 # Usage: ./airdrop-prep.sh [output_path] [script_path]
-#	output_path: Path where the files will be created (default: ~/tilsit-setup)
+#	output_path: Path where the files will be created (default: ~/$SERVER_NAME_LOWER-setup)
 #
 # Author: Claude
 # Version: 1.2
@@ -17,8 +17,9 @@
 set -e
 
 # Configuration
-OUTPUT_PATH="${1:-$HOME/tilsit-setup}"
-GITHUB_REPO="https://github.com/yourusername/tilsit-setup.git"	# Replace with your actual repository
+SERVER_NAME="TILSIT"; SERVER_NAME_LOWER="$( tr '[:upper:]' '[:lower:]' <<< $SERVER_NAME)"
+OUTPUT_PATH="${1:-$HOME/$SERVER_NAME_LOWER-setup}"
+GITHUB_REPO="https://github.com/yourusername/$SERVER_NAME_LOWER-setup.git"	# Replace with your actual repository
 SSH_KEY_PATH="$HOME/.ssh/id_ed25519.pub"  # Adjust to your SSH key path
 SCRIPT_SOURCE_DIR="${2:-.}"  # Directory containing source scripts (default is current dir)
 
@@ -28,7 +29,7 @@ if [ ! -d "$OUTPUT_PATH" ]; then
   mkdir -p "$OUTPUT_PATH"
 fi
 
-echo "====== Preparing TILSIT Server Setup Files for AirDrop ======"
+echo "====== Preparing $SERVER_NAME Server Setup Files for AirDrop ======"
 echo "Output path: $OUTPUT_PATH"
 echo "Date: $(date)"
 
@@ -41,6 +42,9 @@ mkdir -p "$OUTPUT_PATH/lists"
 mkdir -p "$OUTPUT_PATH/pam.d"
 mkdir -p "$OUTPUT_PATH/wifi"
 mkdir -p "$OUTPUT_PATH/URLs"
+
+# Remove existing server host key if any
+ssh-keygen -R "$SERVER_NAME_LOWER".local
 
 # Copy SSH keys
 if [ -f "$SSH_KEY_PATH" ]; then
@@ -110,7 +114,7 @@ else
 fi
 
 # Option 1: Clone from GitHub repository if available
-if [[ -n "$GITHUB_REPO" && "$GITHUB_REPO" != "https://github.com/yourusername/tilsit-setup.git" ]]; then
+if [[ -n "$GITHUB_REPO" && "$GITHUB_REPO" != "https://github.com/yourusername/$SERVER_NAME_LOWER-setup.git" ]]; then
   echo "Cloning setup scripts from GitHub repository..."
 
   # Create temporary directory
@@ -150,9 +154,9 @@ fi
 # Create a README file
 echo "Creating README file..."
 cat > "$OUTPUT_PATH/README.md" << 'EOF'
-# TILSIT Server Setup Files
+# $SERVER_NAME Server Setup Files
 
-This directory contains all the necessary files for setting up the Mac Mini M2 'TILSIT' server.
+This directory contains all the necessary files for setting up the Mac Mini M2 '$SERVER_NAME' server.
 
 ## Contents
 
@@ -160,24 +164,21 @@ This directory contains all the necessary files for setting up the Mac Mini M2 '
 - `scripts/`: Setup scripts for the server
 - `lists/`: Homebrew formulae and casks lists
 - `pam.d/`: TouchID sudo configuration
+- 'URLs/' : Internet shortcuts used by Setup
 - `wifi/`: WiFi network configuration
 
 ## Setup Instructions
 
 1. Complete the macOS setup wizard on the Mac Mini
 2. AirDrop this entire folder to the Mac Mini (it will be placed in Downloads)
-3. Move the folder to your home directory:
+3. Open Terminal and run:
    ```bash
-   mv ~/Downloads/tilsit-setup ~/
-   ```
-4. Open Terminal and run:
-   ```bash
-   cd ~/tilsit-setup/scripts
+   cd ~/Downloads/$SERVER_NAME_LOWER-setup/scripts
    chmod +x first-boot.command
    ./first-boot.command
    ```
-5. Follow the on-screen instructions
-6. After reboot, the second-boot script will run automatically
+4. Follow the on-screen instructions
+5. After reboot, the second-boot script will run automatically
 
 For detailed instructions, refer to the complete runbook.
 
