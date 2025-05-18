@@ -81,7 +81,6 @@ This script will:
 2. Power on the Mac Mini
 3. Complete the macOS setup wizard with the following settings:
    - Select your country/region
-   - Connect to your Wi-Fi network
    - When prompted to sign in with your Apple ID, choose "Set Up Later" (we'll do this during the first-boot script)
    - Create an administrator account
    - Skip optional settings when possible

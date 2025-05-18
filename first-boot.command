@@ -34,13 +34,6 @@ PAM_D_SOURCE="$SETUP_DIR/pam.d"
 WIFI_CONFIG_FILE="$SETUP_DIR/wifi/network.conf"
 RERUN_AFTER_FDA=false
 
-# Look for evidence we're being re-run after FDA grant
-if [ -f "/tmp/${HOSTNAME_LOWER}_fda_requested" ]; then
-    RERUN_AFTER_FDA=true
-    rm -f "/tmp/${HOSTNAME_LOWER}_fda_requested"
-    log "Detected re-run after Full Disk Access grant"
-fi
-
 # Parse command line arguments
 FORCE=false
 SKIP_UPDATE=false
@@ -104,6 +97,13 @@ log "Running as user: $ADMIN_USERNAME"
 log "Date: $(date)"
 log "macOS Version: $(sw_vers -productVersion)"
 log "Setup directory: $SETUP_DIR"
+
+# Look for evidence we're being re-run after FDA grant
+if [ -f "/tmp/${HOSTNAME_LOWER}_fda_requested" ]; then
+    RERUN_AFTER_FDA=true
+    rm -f "/tmp/${HOSTNAME_LOWER}_fda_requested"
+    log "Detected re-run after Full Disk Access grant"
+fi
 
 # Confirm operation if not forced
 if [ "$FORCE" = false ] && [ "$RERUN_AFTER_FDA" = false ]; then
