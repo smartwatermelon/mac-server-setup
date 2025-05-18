@@ -108,20 +108,21 @@ After reaching the desktop:
 
 #### 2.3 Run First-Boot Script
 
-1. Open Terminal
-2. Run the first-boot script:
+1. Open the Finder folder `Downloads/tilsit-setup`
+2. Run the first-boot script by double-clicking the `first-boot.command` script.
+3. Alternatively you can run it from Terminal:
 
 ```bash
 # Navigate to the scripts directory
 cd ~/Downloads/tilsit-setup/scripts
 
 # Run the script
-./first-boot.sh
+./first-boot.command
 ```
 
 ### 3. First-Boot Setup
 
-The `first-boot.sh` script will perform the following tasks:
+The `first-boot.command` script will perform the following tasks:
 
 - Set the computer hostname to 'TILSIT'
 - Enable SSH for remote access
@@ -136,7 +137,7 @@ The `first-boot.sh` script will perform the following tasks:
 
 #### 3.1 Apple ID Configuration During First-Boot
 
-During the execution of `first-boot.sh`, you'll need to manually configure your Apple ID:
+During the execution of `first-boot.command`, you'll need to manually configure your Apple ID:
 
 1. The script will open the Apple ID one-time password link in your default browser
 2. In the browser:
@@ -304,7 +305,7 @@ All scripts are designed to be idempotent. If issues occur, you can safely run t
 
 ```bash
 # Rerun first-boot script (if needed)
-./first-boot.sh
+./first-boot.command
 
 # Rerun second-boot script (if needed)
 ./second-boot.sh

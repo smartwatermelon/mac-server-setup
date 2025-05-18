@@ -75,7 +75,7 @@ This provides essential monitoring without complex dependencies.
 The complete boot process automation works as follows:
 
 1. **First Boot** (requires manual interaction with macOS setup wizard)
-2. **first-boot.sh**: Configures system and creates LaunchAgent
+2. **first-boot.command**: Configures system and creates LaunchAgent
 3. **Automatic Reboot**: System reboots to apply changes
 4. **LaunchAgent**: Automatically runs second-boot.sh at login
 5. **second-boot.sh**: Installs Homebrew and packages, prepares for applications

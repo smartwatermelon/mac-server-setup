@@ -120,7 +120,7 @@ if [[ -n "$GITHUB_REPO" && "$GITHUB_REPO" != "https://github.com/yourusername/ti
   git clone "$GITHUB_REPO" "$TMP_DIR"
 
   # Copy scripts to output directory
-  cp "$TMP_DIR/first-boot.sh" "$OUTPUT_PATH/scripts/"
+  cp "$TMP_DIR/first-boot.command" "$OUTPUT_PATH/scripts/"
   cp "$TMP_DIR/second-boot.sh" "$OUTPUT_PATH/scripts/"
   cp "$TMP_DIR/app-setup/"*.sh "$OUTPUT_PATH/scripts/app-setup/"
   cp "$TMP_DIR/formulae.txt" "$OUTPUT_PATH/lists/"
@@ -135,7 +135,7 @@ elif [ -d "$SCRIPT_SOURCE_DIR" ]; then
   echo "Copying scripts from local source directory..."
 
   # Copy scripts
-  cp "$SCRIPT_SOURCE_DIR/first-boot.sh" "$OUTPUT_PATH/scripts/" 2>/dev/null || echo "Warning: first-boot.sh not found in source directory"
+  cp "$SCRIPT_SOURCE_DIR/first-boot.command" "$OUTPUT_PATH/scripts/" 2>/dev/null || echo "Warning: first-boot.command not found in source directory"
   cp "$SCRIPT_SOURCE_DIR/second-boot.sh" "$OUTPUT_PATH/scripts/" 2>/dev/null || echo "Warning: second-boot.sh not found in source directory"
   cp "$SCRIPT_SOURCE_DIR/app-setup/"*.sh "$OUTPUT_PATH/scripts/app-setup/" 2>/dev/null || echo "Warning: No app setup scripts found in source directory"
   cp "$SCRIPT_SOURCE_DIR/formulae.txt" "$OUTPUT_PATH/lists/" 2>/dev/null || echo "Warning: formulae.txt not found in source directory"
@@ -173,8 +173,8 @@ This directory contains all the necessary files for setting up the Mac Mini M2 '
 4. Open Terminal and run:
    ```bash
    cd ~/tilsit-setup/scripts
-   chmod +x first-boot.sh
-   ./first-boot.sh
+   chmod +x first-boot.command
+   ./first-boot.command
    ```
 5. Follow the on-screen instructions
 6. After reboot, the second-boot script will run automatically
@@ -198,7 +198,7 @@ chmod 600 "$OUTPUT_PATH/wifi/network.conf" 2>/dev/null || true
 echo "====== Setup Files Preparation Complete ======"
 echo "The setup files at $OUTPUT_PATH are now ready for AirDrop."
 echo "AirDrop this entire folder to your Mac Mini after completing the macOS setup wizard"
-echo "and run the first-boot.sh script from the transferred directory."
+echo "and run the first-boot.command script from the transferred directory."
 
 open "$OUTPUT_PATH"
 

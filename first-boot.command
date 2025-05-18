@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# first-boot.sh - Initial configuration script for Mac Mini M2 'TILSIT' server
+# first-boot.command - Initial configuration script for Mac Mini M2 'TILSIT' server
 #
 # This script performs the initial setup tasks for the Mac Mini server after
 # the macOS setup wizard has been completed. It configures:
@@ -10,7 +10,7 @@
 # - Power management
 # - Security configurations
 #
-# Usage: ./first-boot.sh [--force] [--skip-update]
+# Usage: ./first-boot.command [--force] [--skip-update]
 #   --force: Skip all confirmation prompts
 #   --skip-update: Skip software updates (which can be time-consuming)
 #
