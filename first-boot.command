@@ -175,8 +175,8 @@ else
   log "No WiFi configuration file found - skipping WiFi setup"
 fi
 
-# Set hostname
-section "Setting Hostname"
+# Set hostname and HD name
+section "Setting Hostname and HD volume name"
 if [ "$(hostname)" = "$HOSTNAME" ]; then
   log "Hostname is already set to $HOSTNAME"
 else
@@ -186,6 +186,9 @@ else
   sudo scutil --set HostName "$HOSTNAME"
   check_success "Hostname configuration"
 fi
+log "Renaming HD"
+diskutil rename "/Volumes/$(diskutil info -plist / | /usr/libexec/PlistBuddy -c "Print :VolumeName" /dev/stdin <<< "$(cat)")" "$HOSTNAME"
+check_success "Renamed HD"
 
 # Setup SSH access
 section "Configuring SSH Access"
