@@ -108,6 +108,17 @@ section "Starting Second-Boot Setup for Mac Mini M2 '$HOSTNAME' Server"
 log "Running as user: $(whoami)"
 log "Date: $(date)"
 log "macOS Version: $(sw_vers -productVersion)"
+log "Script executed with PID: $$"
+log "Current working directory: $(pwd)"
+log "User environment: $(env | grep -E '^(USER|HOME|PATH|SHELL)=')"
+log "LaunchAgent environment: $(launchctl getenv PATH)"
+
+if [ -f "$HOME/.local/state/$HOSTNAME_LOWER-secondboot-pending" ]; then
+  log "Found pending marker - script was properly triggered by LaunchAgent"
+  rm "$HOME/.local/state/$HOSTNAME_LOWER-secondboot-pending"
+else
+  log "No pending marker found - script may have been run manually"
+fi
 
 # Confirm operation if not forced
 if [ "$FORCE" = false ]; then

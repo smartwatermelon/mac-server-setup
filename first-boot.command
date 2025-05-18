@@ -371,16 +371,39 @@ fi
 
 check_success "Power management configuration"
 
-# Disable screen saver password
-section "Configuring Screen Saver"
-defaults -currentHost write com.apple.screensaver askForPassword -int 0
-log "Disabled screen saver password requirement"
+# Configure screen saver password requirement
+section "Configuring screen saver password requirement"
+defaults -currentHost write com.apple.screensaver askForPassword -int 1
+defaults -currentHost write com.apple.screensaver askForPasswordDelay -int 0
+log "Enabled immediate password requirement after screen saver"
 
 # Configure automatic login - temporarily use admin account
 section "Configuring Temporary Automatic Login"
 log "Setting up temporary automatic login for $ADMIN_USERNAME during setup"
-sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string "$ADMIN_USERNAME"
-check_success "Temporary automatic login configuration"
+
+# Create kcpassword file for auto-login (requires sudo)
+ADMIN_PASSWORD=$(osascript -e 'Tell application "System Events" to display dialog "Enter admin password for automatic login:" default answer "" with hidden answer' -e 'text returned of result' 2>/dev/null)
+
+if [ -n "$ADMIN_PASSWORD" ]; then
+  # Use a Perl script to encode the password for kcpassword
+  log "Creating encoded password file for auto-login"
+  perl -e '
+    my $pass = "'"$ADMIN_PASSWORD"'";
+    my @key = (0x7D, 0x89, 0x52, 0x23, 0xD2, 0xBC, 0xDD, 0xEA, 0xA3, 0xB9, 0x1F);
+    my $keyLen = scalar @key;
+    for (my $i = 0; $i < length($pass); $i++) {
+      my $char = ord(substr($pass, $i, 1)) ^ $key[$i % $keyLen];
+      print chr($char);
+    }
+  ' | sudo tee /etc/kcpassword >/dev/null
+  sudo chmod 600 /etc/kcpassword
+
+  # Enable auto-login
+  sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string "$ADMIN_USERNAME"
+  check_success "Temporary automatic login configuration"
+else
+  log "No password provided - skipping automatic login setup"
+fi
 
 # Run software updates if not skipped
 if [ "$SKIP_UPDATE" = false ]; then
@@ -421,7 +444,7 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/sbin/sshd
 
 # Create scripts directory and copy second-boot script
 section "Setting Up Scripts Directory"
-SCRIPTS_DIR="/Users/$ADMIN_USERNAME/$HOSTNAME_LOWER-scripts"
+SCRIPTS_DIR="/Users/$ADMIN_USERNAME/${HOSTNAME_LOWER}-scripts"
 if [ ! -d "$SCRIPTS_DIR" ]; then
   log "Creating scripts directory"
   mkdir -p "$SCRIPTS_DIR"
@@ -461,7 +484,7 @@ fi
 
 # Set up automatic second-boot execution via LaunchAgent
 LAUNCH_AGENT_DIR="/Users/$ADMIN_USERNAME/Library/LaunchAgents"
-LAUNCH_AGENT_FILE="$LAUNCH_AGENT_DIR/com.$HOSTNAME_LOWER.secondboot.plist"
+LAUNCH_AGENT_FILE="$LAUNCH_AGENT_DIR/com.${HOSTNAME_LOWER}.secondboot.plist"
 
 if [ ! -d "$LAUNCH_AGENT_DIR" ]; then
     mkdir -p "$LAUNCH_AGENT_DIR"
@@ -481,7 +504,7 @@ cat > "$LAUNCH_AGENT_FILE" << EOF
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.$HOSTNAME_LOWER.secondboot</string>
+    <string>com.${HOSTNAME_LOWER}.secondboot</string>
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
@@ -492,9 +515,9 @@ cat > "$LAUNCH_AGENT_FILE" << EOF
     <key>StartInterval</key>
     <integer>86400</integer>
     <key>StandardOutPath</key>
-    <string>$HOME/.local/state/$HOSTNAME_LOWER-secondboot.log</string>
+    <string>$LOG_DIR/${HOSTNAME_LOWER}-secondboot.log</string>
     <key>StandardErrorPath</key>
-    <string>$HOME/.local/state/$HOSTNAME_LOWER-secondboot.log</string>
+    <string>$LOG_DIR/${HOSTNAME_LOWER}-secondboot.log</string>
 </dict>
 </plist>
 EOF
@@ -513,7 +536,7 @@ if [ -s "/tmp/launchctl_error.log" ]; then
 fi
 
 # Immediately verify the LaunchAgent is registered
-LOADED_AGENTS="$(launchctl list | grep com."$HOSTNAME_LOWER".secondboot || echo "")"
+LOADED_AGENTS="$(launchctl list | grep com."${HOSTNAME_LOWER}".secondboot || echo "")"
 if [ -n "$LOADED_AGENTS" ]; then
     log "Verified LaunchAgent is properly registered"
 else
@@ -523,6 +546,15 @@ else
     launchctl bootstrap gui/"$(id -u)" "$LAUNCH_AGENT_FILE"
     check_success "Alternative LaunchAgent registration"
 fi
+
+log "Testing LaunchAgent directly"
+launchctl print-disabled user/"$(id -u)" | grep com."${HOSTNAME_LOWER}".secondboot || echo "Not found in disabled list (good)"
+launchctl list | grep com."${HOSTNAME_LOWER}".secondboot || echo "Not loaded yet"
+
+# Test immediate execution
+log "Testing immediate execution of second-boot script"
+bash -x "$SCRIPTS_DIR/second-boot.sh" --test-only 2>&1 | head -20 | tee -a "$LOG_FILE"
+check_success "Second-boot script test execution"
 
 # Configure security settings
 section "Configuring Security Settings"
@@ -544,6 +576,7 @@ if [ "$FORCE" = false ]; then
   echo
   if [[ $REPLY =~ ^[Yy]$ ]]; then
     log "Rebooting system now"
+    touch "$LOG_DIR/${HOSTNAME_LOWER}-secondboot-pending"
     sudo shutdown -r now
   else
     log "Please reboot manually when convenient"
