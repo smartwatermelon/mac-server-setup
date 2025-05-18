@@ -162,7 +162,12 @@ if [ -f "$WIFI_CONFIG_FILE" ]; then
 
     # Add WiFi network to preferred networks
     WIFI_IFACE="$(system_profiler SPAirPortDataType -xml | /usr/libexec/PlistBuddy -c "Print :0:_items:0:spairport_airport_interfaces:0:_name" /dev/stdin <<< "$(cat)")"
-    networksetup -addpreferredwirelessnetworkatindex "$WIFI_IFACE" "$WIFI_SSID" 0 "WPA/WPA2" "$WIFI_PASSWORD"
+    networksetup -addpreferredwirelessnetworkatindex "$WIFI_IFACE" "$WIFI_SSID" 0 "WPA/WPA2"
+    check_success "Add preferred WiFi network"
+    security add-generic-password -D "AirPort network password" -a "$WIFI_SSID" -s "AirPort" -w "$WIFI_PASSWORD"
+    check_success "Store password in keychain"
+    log "Attempting to join WiFi network $WIFI_SSID. This may initially fail in some circumstances but the network will be automatically joined after reboot."
+    networksetup -setairportnetwork "$WIFI_IFACE" "$WIFI_SSID" || true
     check_success "WiFi network configuration"
 
     # Securely remove the WiFi password from the configuration file
@@ -508,14 +513,14 @@ if [ -s "/tmp/launchctl_error.log" ]; then
 fi
 
 # Immediately verify the LaunchAgent is registered
-LOADED_AGENTS=$(launchctl list | grep com.$HOSTNAME_LOWER.secondboot || echo "")
+LOADED_AGENTS="$(launchctl list | grep com."$HOSTNAME_LOWER".secondboot || echo "")"
 if [ -n "$LOADED_AGENTS" ]; then
     log "Verified LaunchAgent is properly registered"
 else
     log "⚠️ Warning: LaunchAgent doesn't appear to be registered. Will attempt to fix..."
     # Try a different approach
     log "Trying alternative LaunchAgent registration method"
-    launchctl bootstrap gui/$(id -u) "$LAUNCH_AGENT_FILE"
+    launchctl bootstrap gui/"$(id -u)" "$LAUNCH_AGENT_FILE"
     check_success "Alternative LaunchAgent registration"
 fi
 

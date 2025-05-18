@@ -24,12 +24,12 @@ Before beginning the setup process, ensure you have:
 
 The setup process is divided into clearly defined phases:
 
-1. **Preparation**: Create necessary files and scripts and AirDrop them to the Mac Mini
-2. **Initial Setup**: Power on and complete the macOS setup wizard with minimal interaction
-3. **First-Boot Setup**: Run the first-boot script to configure remote access and system settings
-4. **Second-Boot Setup**: Install Homebrew and required packages
-5. **Application Setup**: Configure containerized applications (Plex, Nginx, etc.)
-6. **Monitoring Setup**: Configure system monitoring and alerts
+1. **Preparation**: Create necessary files and scripts on your development machine and AirDrop them to the Mac Mini
+2. **Initial Setup**: Power on the Mac Mini and complete the macOS setup wizard with minimal interaction
+3. **First-Boot Setup**: Run the first-boot script to configure remote access, system settings, and prepare for second boot
+4. **Second-Boot Setup**: After automatic reboot, a LaunchAgent runs second-boot.sh to install Homebrew and required packages
+5. **Application Setup**: Configure containerized applications (Plex, Nginx, Transmission)
+6. **Monitoring Setup**: Configure system monitoring, health checks, and alerts
 
 ## Detailed Steps
 
@@ -47,7 +47,7 @@ ls -la ~/.ssh/id_ed25519*
 ssh-keygen -t ed25519 -C "your_email@example.com"
 ```
 
-#### 1.2 Prepare TouchID Sudo Configuration (Optional)
+#### 1.2 Create TouchID Sudo Configuration (Optional)
 
 If you want to use TouchID for sudo authentication on the Mac Mini:
 
@@ -72,6 +72,8 @@ This script will:
 - Generate a one-time password link for your Apple ID using 1Password
 - Copy setup scripts and package lists
 - Create a README with setup instructions
+- Optionally configure WiFi by storing your current network's credentials
+- Set up TouchID sudo configuration if available
 
 ### 2. Initial Setup
 
@@ -136,16 +138,20 @@ Due to macOS security restrictions, you may encounter issues running scripts on 
 
 The `first-boot.command` script will perform the following tasks:
 
-- Set the computer hostname to 'TILSIT'
-- Enable SSH for remote access
-- Set up SSH keys
+- Set the computer hostname and HD name to 'TILSIT'
+- Enable SSH for remote access (may require Full Disk Access)
 - Configure TouchID for sudo (if available)
+- Fix scroll direction setting to natural
+- Set up WiFi (if configuration is available)
+- Set up SSH keys for secure authentication
 - Configure Apple ID (see steps below)
-- Create the 'operator' account
-- Configure power management settings
-- Set up automatic login
+- Create the 'operator' account with a secure random password
+- Configure power management settings for server use
+- Set up temporary automatic login for the admin account
+- Configure the firewall
 - Run software updates
 - Create a LaunchAgent for the second-boot script
+- Reboot the system
 
 #### 3.1 Apple ID Configuration During First-Boot
 
@@ -164,26 +170,38 @@ During the execution of `first-boot.command`, you'll need to manually configure 
 
 5. Return to Terminal and press any key to continue the script
 
-6. After the script completes, the system will reboot. You should now be able to SSH into the Mac Mini from your development machine:
+#### 3.2 Full Disk Access Consideration
 
-	```bash
-	ssh admin_username@tilsit.local
-	```
+If the script cannot enable SSH directly, it will:
+1. Request Full Disk Access for Terminal
+2. Guide you through this process with clear instructions
+3. Create a marker file to detect when it's re-run
+4. After adding Terminal to FDA, close the Terminal window and run the script again
 
-7. You may wish to configure passwordless SSH from your development machine:
+#### 3.3 After First-Boot Completion
 
-	```bash
-	ssh-copy-id admin_username@tilsit.local
-	```
+After the script completes, the system will reboot. You should now be able to SSH into the Mac Mini from your development machine:
+
+```bash
+ssh admin_username@tilsit.local
+```
+
+You may configure passwordless SSH from your development machine:
+
+```bash
+ssh-copy-id admin_username@tilsit.local
+```
 
 ### 4. Second-Boot Setup
 
 The `second-boot.sh` script will run automatically after reboot via the LaunchAgent. It will:
 
 - Install Homebrew from the GitHub release package
-- Install the specified formulae and casks
-- Set up environment paths
-- Prepare for application installation
+- Install the specified formulae and casks from the provided lists
+- Set up environment paths in shell configuration files
+- Prepare the application setup directory
+- Switch automatic login from admin to operator user
+- Disable its own LaunchAgent to prevent future runs
 
 To verify the script has run successfully, check the log file:
 
@@ -227,7 +245,9 @@ Each application setup script will:
 - Create necessary directories
 - Configure the application
 - Set up the Docker container
+- Create a Docker network (tilsit-network) if it doesn't exist
 - Provide access instructions
+- Handle restart settings for the container
 
 ### 6. Monitoring Setup
 
@@ -243,10 +263,16 @@ cd ~/tilsit-scripts
 
 The monitoring setup script will:
 
-- Create health check scripts
-- Configure scheduled checks
-- Set up email alerts
-- Create backup scripts
+- Create health check scripts that monitor:
+  - Disk usage
+  - CPU load
+  - Memory usage
+  - System temperature
+  - Docker container status
+  - System updates
+- Configure scheduled checks via cron
+- Set up email alerts for critical issues
+- Create status and backup scripts
 
 ## Maintenance Procedures
 
@@ -281,6 +307,15 @@ To check the server status:
 ~/tilsit-scripts/monitoring/server_status.sh
 ```
 
+### Monitoring Health Check Results
+
+To view recent monitoring results and alerts:
+
+```bash
+# View the monitoring log
+cat ~/.local/state/tilsit-monitoring.log
+```
+
 ## Troubleshooting
 
 ### SSH Connection Issues
@@ -298,6 +333,7 @@ If Docker containers aren't working:
 1. Check Docker daemon status: `docker info`
 2. Check container status: `docker ps -a`
 3. View container logs: `docker logs container_name`
+4. Verify Docker network exists: `docker network inspect tilsit-network`
 
 ### System Resource Issues
 
@@ -306,6 +342,7 @@ If the system is experiencing resource problems:
 1. Check CPU usage: `top -u`
 2. Check memory usage: `vm_stat`
 3. Check disk usage: `df -h`
+4. View latest health check results: `cat ~/.local/state/tilsit-monitoring.log`
 
 ## Recovery Procedures
 
@@ -313,7 +350,7 @@ If the system is experiencing resource problems:
 
 If a complete reset is needed:
 
-1. Backup important data
+1. Backup important data using the backup script
 2. Reinstall macOS
 3. Run through this setup process again
 
@@ -332,6 +369,13 @@ All scripts are designed to be idempotent. If issues occur, you can safely run t
 ./app-setup/plex-setup.sh
 ```
 
+### Operator Account Password Recovery
+
+If you need to recover the operator account password:
+
+1. Login as the admin user
+2. Check the password file: `cat ~/Documents/operator_password.txt`
+
 ## Conclusion
 
 This setup creates a stable, secure, and maintainable Mac Mini server environment that:
@@ -340,5 +384,7 @@ This setup creates a stable, secure, and maintainable Mac Mini server environmen
 - Runs applications in isolated containers
 - Automatically monitors system health
 - Provides clear procedures for all common tasks
+- Uses Docker for consistent application deployment
+- Implements security best practices
 
 The separation between base OS setup and containerized applications ensures that application issues don't affect the base system, and the automation-first approach minimizes the need for manual intervention throughout the server's lifecycle.
