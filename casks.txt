@@ -12,9 +12,7 @@ docker
 dropbox
 filebot
 font-inconsolata
-garmin-express
 google-chrome
-google-drive
 hiddenbar
 hot
 knockknock
@@ -24,10 +22,7 @@ no-ip-duc
 notunes
 plex-media-server
 serial
-slack
 stay
 taskexplorer
 transmission
-virtualbox
 vlc
-zoom
