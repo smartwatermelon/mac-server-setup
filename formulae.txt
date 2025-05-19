@@ -3,7 +3,6 @@ bash-completion@2
 bat
 brew-cask-completion
 coreutils
-f3
 ffmpeg
 findutils
 gawk
@@ -40,6 +39,7 @@ shellcheck
 speedtest
 telnet
 terminal-notifier
+tree
 vim
 watch
 yt-dlp

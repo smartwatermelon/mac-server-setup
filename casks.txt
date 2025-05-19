@@ -12,17 +12,13 @@ docker
 dropbox
 filebot
 font-inconsolata
-google-chrome
 hiddenbar
 hot
 knockknock
 lulu
-macdown
 no-ip-duc
 notunes
 plex-media-server
-serial
-stay
 taskexplorer
 transmission
 vlc
