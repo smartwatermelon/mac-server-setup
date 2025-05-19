@@ -80,24 +80,10 @@ The health check script monitors disk usage, CPU load, memory usage, system temp
 The complete boot process automation works as follows:
 
 1. **First Boot** (requires manual interaction with macOS setup wizard)
-2. **first-boot.command**: Configures system, enables SSH, sets up accounts, and creates LaunchAgent
-3. **Automatic Reboot**: System reboots to apply changes
-4. **LaunchAgent**: Automatically runs second-boot.sh at login 
-5. **second-boot.sh**: Installs Homebrew and packages, prepares for applications
-6. **Application Setup**: Individual application scripts set up containers
+2. **first-boot.sh**: Configures system, enables SSH, sets up accounts, installs Homebrew and packages, prepares for applications
+3. **Application Setup**: Individual application scripts set up containers
 
 This sequence ensures each step builds on a stable foundation provided by the previous step. The scripts handle temporary automatic login during setup, then switch to the operator account for day-to-day operation.
-
-### LaunchAgent Details
-
-The LaunchAgent that triggers the second-boot script has these key properties:
-
-- Runs at user login 
-- Has a daily interval (for potential reruns if needed)
-- Redirects output to a log file
-- Self-disables after successful execution through script code
-
-This provides a reliable mechanism for continuing setup after reboot without manual intervention. The second-boot script explicitly disables the LaunchAgent after completion to prevent unnecessary reruns.
 
 ### Homebrew Package Management
 

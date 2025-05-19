@@ -1,22 +1,26 @@
 #!/bin/bash
 #
-# first-boot.command - Initial configuration script for Mac Mini M2 '$HOSTNAME' server
+# first-boot.sh - Complete setup script for Mac Mini M2 '$HOSTNAME' server
 #
-# This script performs the initial setup tasks for the Mac Mini server after
+# This script performs the complete setup for the Mac Mini server after
 # the macOS setup wizard has been completed. It configures:
 # - Remote management (SSH)
 # - User accounts
 # - System settings
 # - Power management
 # - Security configurations
+# - Homebrew and packages installation
+# - Application preparation
 #
-# Usage: ./first-boot.command [--force] [--skip-update]
+# Usage: ./first-boot.sh [--force] [--skip-update] [--skip-homebrew] [--skip-packages]
 #   --force: Skip all confirmation prompts
 #   --skip-update: Skip software updates (which can be time-consuming)
+#   --skip-homebrew: Skip Homebrew installation/update
+#   --skip-packages: Skip package installation
 #
 # Author: Claude
-# Version: 1.3
-# Created: 2025-05-16
+# Version: 2.0
+# Created: 2025-05-18
 
 # Exit on any error
 set -e
@@ -25,18 +29,25 @@ set -e
 HOSTNAME="TILSIT"; HOSTNAME_LOWER="$( tr '[:upper:]' '[:lower:]' <<< $HOSTNAME)"
 OPERATOR_USERNAME="operator"
 OPERATOR_FULLNAME="$HOSTNAME Operator"
-ADMIN_USERNAME=$(whoami)
+ADMIN_USERNAME=$(whoami)  # Set this once and use throughout
 export LOG_DIR; LOG_DIR="$HOME/.local/state" # XDG_STATE_HOME
 LOG_FILE="$LOG_DIR/$HOSTNAME_LOWER-setup.log"
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" # Directory where AirDropped files are located
 SSH_KEY_SOURCE="$SETUP_DIR/ssh_keys"
 PAM_D_SOURCE="$SETUP_DIR/pam.d"
 WIFI_CONFIG_FILE="$SETUP_DIR/wifi/network.conf"
+FORMULAE_FILE="/Users/$ADMIN_USERNAME/formulae.txt"
+CASKS_FILE="/Users/$ADMIN_USERNAME/casks.txt"
+HOMEBREW_VERSION="4.5.2"
+HOMEBREW_PKG_URL="https://github.com/Homebrew/brew/releases/download/${HOMEBREW_VERSION}/Homebrew-${HOMEBREW_VERSION}.pkg"
+HOMEBREW_PKG_FILE="/tmp/Homebrew-${HOMEBREW_VERSION}.pkg"
 RERUN_AFTER_FDA=false
 
 # Parse command line arguments
 FORCE=false
 SKIP_UPDATE=false
+SKIP_HOMEBREW=false
+SKIP_PACKAGES=false
 
 for arg in "$@"; do
   case $arg in
@@ -46,6 +57,14 @@ for arg in "$@"; do
       ;;
     --skip-update)
       SKIP_UPDATE=true
+      shift
+      ;;
+    --skip-homebrew)
+      SKIP_HOMEBREW=true
+      shift
+      ;;
+    --skip-packages)
+      SKIP_PACKAGES=true
       shift
       ;;
     *)
@@ -114,6 +133,10 @@ if [ "$FORCE" = false ] && [ "$RERUN_AFTER_FDA" = false ]; then
     exit 0
   fi
 fi
+
+#
+# SYSTEM CONFIGURATION
+#
 
 # Fix scroll setting
 section "Fix scroll setting"
@@ -377,34 +400,6 @@ defaults -currentHost write com.apple.screensaver askForPassword -int 1
 defaults -currentHost write com.apple.screensaver askForPasswordDelay -int 0
 log "Enabled immediate password requirement after screen saver"
 
-# Configure automatic login - temporarily use admin account
-section "Configuring Temporary Automatic Login"
-log "Setting up temporary automatic login for $ADMIN_USERNAME during setup"
-
-# Create kcpassword file for auto-login (requires sudo)
-ADMIN_PASSWORD=$(osascript -e 'Tell application "System Events" to display dialog "Enter admin password for automatic login:" default answer "" with hidden answer' -e 'text returned of result' 2>/dev/null)
-
-if [ -n "$ADMIN_PASSWORD" ]; then
-  # Use a Perl script to encode the password for kcpassword
-  log "Creating encoded password file for auto-login"
-  perl -e '
-    my $pass = "'"$ADMIN_PASSWORD"'";
-    my @key = (0x7D, 0x89, 0x52, 0x23, 0xD2, 0xBC, 0xDD, 0xEA, 0xA3, 0xB9, 0x1F);
-    my $keyLen = scalar @key;
-    for (my $i = 0; $i < length($pass); $i++) {
-      my $char = ord(substr($pass, $i, 1)) ^ $key[$i % $keyLen];
-      print chr($char);
-    }
-  ' | sudo tee /etc/kcpassword >/dev/null
-  sudo chmod 600 /etc/kcpassword
-
-  # Enable auto-login
-  sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string "$ADMIN_USERNAME"
-  check_success "Temporary automatic login configuration"
-else
-  log "No password provided - skipping automatic login setup"
-fi
-
 # Run software updates if not skipped
 if [ "$SKIP_UPDATE" = false ]; then
   section "Running Software Updates"
@@ -442,31 +437,13 @@ log "Ensuring SSH is allowed through firewall"
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/sbin/sshd
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/sbin/sshd
 
-# Create scripts directory and copy second-boot script
+# Create scripts directory
 section "Setting Up Scripts Directory"
 SCRIPTS_DIR="/Users/$ADMIN_USERNAME/${HOSTNAME_LOWER}-scripts"
 if [ ! -d "$SCRIPTS_DIR" ]; then
   log "Creating scripts directory"
   mkdir -p "$SCRIPTS_DIR"
   check_success "Scripts directory creation"
-fi
-
-# Copy second-boot script if available
-if [ -f "$SETUP_DIR/scripts/second-boot.sh" ]; then
-  log "Copying second-boot script from setup directory"
-  cp "$SETUP_DIR/scripts/second-boot.sh" "$SCRIPTS_DIR/"
-  chmod +x "$SCRIPTS_DIR/second-boot.sh"
-  check_success "Second-boot script copy"
-else
-  log "Error: Required second-boot.sh script not found in $SETUP_DIR/scripts/"
-  if [ "$FORCE" = false ]; then
-    read -p "This is a critical error. Continue anyway? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-      log "Exiting due to missing second-boot script"
-      exit 1
-    fi
-  fi
 fi
 
 # Copy package lists if available
@@ -482,80 +459,6 @@ if [ -f "$SETUP_DIR/lists/casks.txt" ]; then
   check_success "Casks list copy"
 fi
 
-# Set up automatic second-boot execution via LaunchAgent
-LAUNCH_AGENT_DIR="/Users/$ADMIN_USERNAME/Library/LaunchAgents"
-LAUNCH_AGENT_FILE="$LAUNCH_AGENT_DIR/com.${HOSTNAME_LOWER}.secondboot.plist"
-
-if [ ! -d "$LAUNCH_AGENT_DIR" ]; then
-    mkdir -p "$LAUNCH_AGENT_DIR"
-    log "Created LaunchAgents directory"
-fi
-
-if [ -f "$LAUNCH_AGENT_FILE" ]; then
-    log "Second-boot LaunchAgent already exists, removing old version"
-    launchctl unload "$LAUNCH_AGENT_FILE" 2>/dev/null || true
-    rm -f "$LAUNCH_AGENT_FILE"
-fi
-
-log "Creating LaunchAgent for second-boot script"
-cat > "$LAUNCH_AGENT_FILE" << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.${HOSTNAME_LOWER}.secondboot</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/bin/bash</string>
-        <string>$SCRIPTS_DIR/second-boot.sh</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>StartInterval</key>
-    <integer>86400</integer>
-    <key>StandardOutPath</key>
-    <string>$LOG_DIR/${HOSTNAME_LOWER}-secondboot.log</string>
-    <key>StandardErrorPath</key>
-    <string>$LOG_DIR/${HOSTNAME_LOWER}-secondboot.log</string>
-</dict>
-</plist>
-EOF
-chmod 644 "$LAUNCH_AGENT_FILE"
-check_success "Second-boot LaunchAgent creation"
-
-# Ensure we unload any existing version before loading
-log "Unloading any existing LaunchAgent"
-launchctl unload "$LAUNCH_AGENT_FILE" 2>/dev/null || true
-log "Loading the LaunchAgent"
-log "Command used for loading LaunchAgent: launchctl load -w \"$LAUNCH_AGENT_FILE\""
-launchctl load -w "$LAUNCH_AGENT_FILE" 2>/tmp/launchctl_error.log || true
-check_success "Second-boot LaunchAgent loading"
-if [ -s "/tmp/launchctl_error.log" ]; then
-    log "⚠️ Warning: launchctl reported errors: $(cat /tmp/launchctl_error.log)"
-fi
-
-# Immediately verify the LaunchAgent is registered
-LOADED_AGENTS="$(launchctl list | grep com."${HOSTNAME_LOWER}".secondboot || echo "")"
-if [ -n "$LOADED_AGENTS" ]; then
-    log "Verified LaunchAgent is properly registered"
-else
-    log "⚠️ Warning: LaunchAgent doesn't appear to be registered. Will attempt to fix..."
-    # Try a different approach
-    log "Trying alternative LaunchAgent registration method"
-    launchctl bootstrap gui/"$(id -u)" "$LAUNCH_AGENT_FILE"
-    check_success "Alternative LaunchAgent registration"
-fi
-
-log "Testing LaunchAgent directly"
-launchctl print-disabled user/"$(id -u)" | grep com."${HOSTNAME_LOWER}".secondboot || echo "Not found in disabled list (good)"
-launchctl list | grep com."${HOSTNAME_LOWER}".secondboot || echo "Not loaded yet"
-
-# Test immediate execution
-log "Testing immediate execution of second-boot script"
-bash -x "$SCRIPTS_DIR/second-boot.sh" --test-only 2>&1 | head -20 | tee -a "$LOG_FILE"
-check_success "Second-boot script test execution"
-
 # Configure security settings
 section "Configuring Security Settings"
 
@@ -566,21 +469,182 @@ log "Note: Firmware password should be set manually for security reasons"
 defaults write com.apple.SoftwareUpdate AutomaticDownload -int 0
 log "Disabled automatic app downloads"
 
-# Setup completed successfully
-section "Setup Complete"
-log "First-boot setup has been completed successfully"
-log "System will need to be rebooted to apply all changes"
+#
+# HOMEBREW & PACKAGE INSTALLATION
+#
 
-if [ "$FORCE" = false ]; then
-  read -p "Reboot now? (y/n) " -n 1 -r
-  echo
-  if [[ $REPLY =~ ^[Yy]$ ]]; then
-    log "Rebooting system now"
-    touch "$LOG_DIR/${HOSTNAME_LOWER}-secondboot-pending"
-    sudo shutdown -r now
+# Install Homebrew
+if [ "$SKIP_HOMEBREW" = false ]; then
+  section "Installing Homebrew"
+
+  # Check if Homebrew is already installed
+  if command -v brew &>/dev/null; then
+    BREW_VERSION=$(brew --version | head -n 1 | awk '{print $2}')
+    log "Homebrew is already installed (version $BREW_VERSION)"
+
+    # Update Homebrew if already installed
+    log "Updating Homebrew"
+    brew update
+    check_success "Homebrew update"
   else
-    log "Please reboot manually when convenient"
+    log "Downloading Homebrew package installer"
+    curl -L -o "$HOMEBREW_PKG_FILE" "$HOMEBREW_PKG_URL"
+    check_success "Homebrew package download"
+
+    log "Installing Homebrew"
+    sudo installer -pkg "$HOMEBREW_PKG_FILE" -target /
+    check_success "Homebrew installation"
+
+    # Clean up
+    rm -f "$HOMEBREW_PKG_FILE"
+
+    # Add Homebrew to path
+    if [[ "$(uname -m)" == "arm64" ]]; then
+      HOMEBREW_PREFIX="/opt/homebrew"
+    else
+      HOMEBREW_PREFIX="/usr/local"
+    fi
+
+    # Add to shell configuration files
+    for SHELL_PROFILE in ~/.zprofile ~/.bash_profile ~/.profile; do
+      if [ -f "$SHELL_PROFILE" ]; then
+        # Only add if not already present
+        if ! grep -q "HOMEBREW_PREFIX" "$SHELL_PROFILE"; then
+          log "Adding Homebrew to $SHELL_PROFILE"
+          echo -e '\n# Homebrew' >> "$SHELL_PROFILE"
+          echo "eval \"\$(${HOMEBREW_PREFIX}/bin/brew shellenv)\"" >> "$SHELL_PROFILE"
+        fi
+      fi
+    done
+
+    # Apply to current session
+    eval "$("$HOMEBREW_PREFIX/bin/brew" shellenv)"
+
+    log "Homebrew installation completed"
+
+    # Verify installation
+    brew --version
+    check_success "Homebrew verification"
   fi
 fi
+
+# Install packages
+if [ "$SKIP_PACKAGES" = false ]; then
+  section "Installing Packages"
+
+  # Function to install formulae if not already installed
+  install_formula() {
+    if ! brew list "$1" &>/dev/null; then
+      log "Installing formula: $1"
+      brew install "$1"
+      check_success "Formula installation: $1"
+    else
+      log "Formula already installed: $1"
+    fi
+  }
+
+  # Function to install casks if not already installed
+  install_cask() {
+    if ! brew list --cask "$1" &>/dev/null 2>&1; then
+      log "Installing cask: $1"
+      brew install --cask "$1"
+      check_success "Cask installation: $1"
+    else
+      log "Cask already installed: $1"
+    fi
+  }
+
+  # Install formulae from list
+  if [ -f "$FORMULAE_FILE" ]; then
+    log "Installing formulae from $FORMULAE_FILE"
+    while read -r formula; do
+      [[ -z "$formula" || "$formula" == \#* ]] && continue
+      install_formula "$formula"
+    done < "$FORMULAE_FILE"
+  else
+    log "Formulae list not found, skipping formula installations"
+  fi
+
+  # Install casks from list
+  if [ -f "$CASKS_FILE" ]; then
+    log "Installing casks from $CASKS_FILE"
+    while read -r cask; do
+      [[ -z "$cask" || "$cask" == \#* ]] && continue
+      install_cask "$cask"
+    done < "$CASKS_FILE"
+  else
+    log "Casks list not found, skipping cask installations"
+  fi
+
+  # Cleanup after installation
+  log "Cleaning up Homebrew files"
+  brew cleanup
+  check_success "Homebrew cleanup"
+fi
+
+#
+# APPLICATION SETUP PREPARATION
+#
+
+# Create application setup directory
+section "Preparing Application Setup"
+APP_SETUP_DIR="/Users/$ADMIN_USERNAME/app-setup"
+
+if [ ! -d "$APP_SETUP_DIR" ]; then
+  log "Creating application setup directory"
+  mkdir -p "$APP_SETUP_DIR"
+  check_success "App setup directory creation"
+fi
+
+# Copy application setup scripts if available
+if [ -d "$SETUP_DIR/scripts/app-setup" ]; then
+  log "Copying application setup scripts from $SETUP_DIR/scripts/app-setup"
+  cp "$SETUP_DIR/scripts/app-setup/"*.sh "$APP_SETUP_DIR/" 2>/dev/null
+  chmod +x "$APP_SETUP_DIR/"*.sh 2>/dev/null
+  check_success "Application scripts copy"
+else
+  log "No application setup scripts found in $SETUP_DIR/scripts/app-setup"
+fi
+
+# Configure automatic login for operator account
+section "Configuring Automatic Login"
+log "Setting up automatic login for $OPERATOR_USERNAME"
+
+# Check if operator account exists
+if ! dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
+  log "Operator account doesn't exist, cannot set up automatic login"
+else
+  # Create kcpassword file for auto-login (requires operator password)
+  OPERATOR_PASSWORD=$(grep "password" "/Users/$ADMIN_USERNAME/Documents/operator_password.txt" | awk '{print $NF}')
+
+  if [ -n "$OPERATOR_PASSWORD" ]; then
+    # Use a Perl script to encode the password for kcpassword
+    log "Creating encoded password file for auto-login"
+    perl -e '
+      my $pass = "'"$OPERATOR_PASSWORD"'";
+      my @key = (0x7D, 0x89, 0x52, 0x23, 0xD2, 0xBC, 0xDD, 0xEA, 0xA3, 0xB9, 0x1F);
+      my $keyLen = scalar @key;
+      for (my $i = 0; $i < length($pass); $i++) {
+        my $char = ord(substr($pass, $i, 1)) ^ $key[$i % $keyLen];
+        print chr($char);
+      }
+    ' | sudo tee /etc/kcpassword >/dev/null
+    sudo chmod 600 /etc/kcpassword
+
+    # Enable auto-login
+    sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string "$OPERATOR_USERNAME"
+    check_success "Automatic login configuration"
+    
+    # Clear the variable for security
+    OPERATOR_PASSWORD=""
+  else
+    log "Could not retrieve operator password - skipping automatic login setup"
+  fi
+fi
+
+# Setup completed successfully
+section "Setup Complete"
+log "Server setup has been completed successfully"
+log "You can now set up individual applications with scripts in: $APP_SETUP_DIR"
 
 exit 0

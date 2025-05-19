@@ -18,7 +18,7 @@ Before beginning the setup process, ensure you have:
 - A monitor, keyboard, and mouse for initial setup
 - Administrator access to the Mac Mini
 - Development machine with SSH keys generated
-- 1Password and 1Password CLI (op) configured on your development machine
+- 1Password and 1Password CLI (`op`) configured on your development machine
 
 ## Setup Process Overview
 
@@ -26,8 +26,7 @@ The setup process is divided into clearly defined phases:
 
 1. **Preparation**: Create necessary files and scripts on your development machine and AirDrop them to the Mac Mini
 2. **Initial Setup**: Power on the Mac Mini and complete the macOS setup wizard with minimal interaction
-3. **First-Boot Setup**: Run the first-boot script to configure remote access, system settings, and prepare for second boot
-4. **Second-Boot Setup**: After automatic reboot, a LaunchAgent runs second-boot.sh to install Homebrew and required packages
+3. **First-Boot Setup**: Run the first-boot script to configure remote access, system settings, and install Homebrew and required packages
 5. **Application Setup**: Configure containerized applications (Plex, Nginx, Transmission)
 6. **Monitoring Setup**: Configure system monitoring, health checks, and alerts
 
@@ -103,42 +102,23 @@ After reaching the desktop:
    - On the Mac Mini, accept the incoming AirDrop transfer
 
 3. After the transfer completes:
-   - You can change the AirDrop setting back to "Contacts Only" for improved security
    - Verify the files are in your Downloads folder
 
 #### 2.3 Run First-Boot Script
 
 1. Open the Finder folder `Downloads/tilsit-setup`
-2. Run the first-boot script by double-clicking the `first-boot.command` script.
-3. Alternatively you can run it from Terminal:
+2. Right-click the `scripts` folder and select **New Terminal at Folder**
+3. Run the first-boot script:
 
 ```bash
-# Navigate to the scripts directory
-cd ~/Downloads/tilsit-setup/scripts
-
-# Run the script
-./first-boot.command
+./first-boot.sh
 ```
-
-#### Mac Security Considerations
-Due to macOS security restrictions, you may encounter issues running scripts on a new Mac:
-
-1. When double-clicking `first-boot.command`, you may see a security warning
-2. To proceed, right-click (or Control+click) the file and select "Open"
-3. Click "Open" in the security dialog that appears
-4. Alternatively, you can run the script from Terminal:
-
-   ```bash
-   cd ~/Downloads/tilsit-setup/scripts
-   chmod +x first-boot.command
-   ./first-boot.command
-   ```
 
 ### 3. First-Boot Setup
 
-The `first-boot.command` script will perform the following tasks:
+The `first-boot.sh` script will perform the following tasks:
 
-- Set the computer hostname and HD name to 'TILSIT'
+- Set the computer hostname and HD name
 - Enable SSH for remote access (may require Full Disk Access)
 - Configure TouchID for sudo (if available)
 - Fix scroll direction setting to natural
@@ -147,15 +127,33 @@ The `first-boot.command` script will perform the following tasks:
 - Configure Apple ID (see steps below)
 - Create the 'operator' account with a secure random password
 - Configure power management settings for server use
-- Set up temporary automatic login for the admin account
 - Configure the firewall
 - Run software updates
-- Create a LaunchAgent for the second-boot script
-- Reboot the system
+- Install Homebrew from the GitHub release package
+- Install the specified formulae and casks from the provided lists
+- Set up environment paths in shell configuration files
+- Prepare the application setup directory
+- Set up automatic login for the operator account
+
+To verify the script has run successfully, check the log file:
+
+```bash
+cat ~/.local/state/tilsit-setup.log
+```
+
+If you need to re-run the script manually:
+
+```bash
+# Navigate to the scripts directory
+cd ~/tilsit-scripts
+
+# Run the script
+./first-boot.sh
+```
 
 #### 3.1 Apple ID Configuration During First-Boot
 
-During the execution of `first-boot.command`, you'll need to manually configure your Apple ID:
+During the execution of `first-boot.sh`, you'll need to manually configure your Apple ID:
 
 1. The script will open the Apple ID one-time password link in your default browser
 2. In the browser:
@@ -173,6 +171,7 @@ During the execution of `first-boot.command`, you'll need to manually configure 
 #### 3.2 Full Disk Access Consideration
 
 If the script cannot enable SSH directly, it will:
+
 1. Request Full Disk Access for Terminal
 2. Guide you through this process with clear instructions
 3. Create a marker file to detect when it's re-run
@@ -192,39 +191,9 @@ You may configure passwordless SSH from your development machine:
 ssh-copy-id admin_username@tilsit.local
 ```
 
-### 4. Second-Boot Setup
-
-The `second-boot.sh` script will run automatically after reboot via the LaunchAgent. It will:
-
-- Install Homebrew from the GitHub release package
-- Install the specified formulae and casks from the provided lists
-- Set up environment paths in shell configuration files
-- Prepare the application setup directory
-- Switch automatic login from admin to operator user
-- Disable its own LaunchAgent to prevent future runs
-
-To verify the script has run successfully, check the log file:
-
-```bash
-cat ~/.local/state/tilsit-setup.log
-```
-
-If you need to run the script manually:
-
-```bash
-# Navigate to the scripts directory
-cd ~/tilsit-scripts
-
-# Make the script executable (if needed)
-chmod +x second-boot.sh
-
-# Run the script
-./second-boot.sh
-```
-
 ### 5. Application Setup
 
-After the second-boot script completes, you can set up individual applications:
+After the first-boot script completes, you can set up individual applications:
 
 ```bash
 # Navigate to the application setup directory
@@ -360,10 +329,7 @@ All scripts are designed to be idempotent. If issues occur, you can safely run t
 
 ```bash
 # Rerun first-boot script (if needed)
-./first-boot.command
-
-# Rerun second-boot script (if needed)
-./second-boot.sh
+./first-boot.sh
 
 # Rerun application setup scripts (if needed)
 ./app-setup/plex-setup.sh
