@@ -1,7 +1,6 @@
 bash
 bash-completion@2
 bat
-brew-cask-completion
 coreutils
 ffmpeg
 findutils
