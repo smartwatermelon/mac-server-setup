@@ -152,7 +152,7 @@ Each application setup script has customizable variables:
 
 - **Plex**: Claim token, media directory, timezone
 - **Nginx**: Configuration directories, HTML content, timezone
-- **Transmission**: Download directory, watch directory, credentials, timezone 
+- **Transmission**: Download directory, watch directory, credentials, timezone
 
 Modify these variables before running the scripts. The scripts generate appropriate configurations and container settings based on these variables.
 
@@ -176,6 +176,7 @@ Mount network storage at boot time by adding to /etc/fstab or using an automount
 ### 2. Backup System
 
 The backup script can be extended to:
+
 - Perform differential backups
 - Use cloud storage (S3, Backblaze)
 - Implement retention policies
@@ -186,6 +187,7 @@ The `tmutil` command provides powerful control over Time Machine configurations 
 ### 3. Advanced Monitoring
 
 Enhance monitoring with:
+
 - Prometheus + Grafana dashboards
 - InfluxDB for time-series metrics
 - Alertmanager for sophisticated alerting
@@ -195,6 +197,7 @@ The existing monitoring framework provides a solid foundation that can be extend
 ### 4. Home Automation
 
 Integrate with home automation by:
+
 - Adding a Node-RED container
 - Implementing MQTT for IoT communication
 - Configuring HomeKit integration
