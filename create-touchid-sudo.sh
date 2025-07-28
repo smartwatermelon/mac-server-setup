@@ -3,7 +3,7 @@
 # create-touchid-sudo.sh - Script to create TouchID sudo configuration file on Mac
 #
 # This script creates the sudo_local file that enables TouchID authentication
-# for sudo commands on macOS. Run this on your development Mac before using 
+# for sudo commands on macOS. Run this on your development Mac before using
 # airdrop-prep.sh if you don't already have the file.
 #
 # Usage: ./create-touchid-sudo.sh

@@ -1,16 +1,16 @@
 #!/bin/bash
 #
-# airdrop-prep.sh - Script to prepare a directory with necessary files for Mac Mini M2 '$SERVER_NAME' server setup
+# airdrop-prep.sh - Script to prepare a directory with necessary files for Mac Mini M2 'TILSIT' server setup
 #
 # This script prepares a directory with all the necessary scripts and files
 # for setting up the Mac Mini M2 server. After running, AirDrop the entire directory
 # to your new Mac Mini.
 #
 # Usage: ./airdrop-prep.sh [output_path] [script_path]
-#	output_path: Path where the files will be created (default: ~/$SERVER_NAME_LOWER-setup)
+#	output_path: Path where the files will be created (default: ~/tilsit-setup)
 #
 # Author: Claude
-# Version: 1.2
+# Version: 1.3
 # Created: 2025-05-13
 
 # Exit on error
@@ -98,6 +98,33 @@ else
   echo "WiFi network configuration will not be automated."
 fi
 
+# Set up operator account credentials using 1Password
+echo "Setting up operator account credentials..."
+
+# Check if tilsit credentials exist in 1Password
+if ! op item get "tilsit" --vault personal >/dev/null 2>&1; then
+  echo "Creating tilsit server credentials in 1Password..."
+
+  # Generate a secure password and create the item
+  GENERATED_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-20)
+
+  op item create --category login \
+    --title "tilsit" \
+    --vault personal \
+    username="operator" \
+    password="$GENERATED_PASSWORD"
+
+  echo "✅ Created tilsit credentials in 1Password"
+else
+  echo "✅ Found existing tilsit credentials in 1Password"
+fi
+
+# Retrieve the password and save it for transfer
+echo "Retrieving operator password from 1Password..."
+op read "op://personal/tilsit/password" > "$OUTPUT_PATH/operator_password"
+chmod 600 "$OUTPUT_PATH/operator_password"
+echo "✅ Operator password saved for transfer"
+
 # Create and save one-time link for Apple ID password
 APPLE_ID_ITEM="$(op item list --categories Login --vault Personal --favorite --format=json | jq -r '.[] | select(.title == "Apple") | .id')"
 ONE_TIME_URL="$(op item share "$APPLE_ID_ITEM" --view-once)"
@@ -152,9 +179,9 @@ fi
 # Create a README file
 echo "Creating README file..."
 cat > "$OUTPUT_PATH/README.md" << 'EOF'
-# $SERVER_NAME Server Setup Files
+# TILSIT Server Setup Files
 
-This directory contains all the necessary files for setting up the Mac Mini M2 '$SERVER_NAME' server.
+This directory contains all the necessary files for setting up the Mac Mini M2 'TILSIT' server.
 
 ## Contents
 
@@ -162,8 +189,9 @@ This directory contains all the necessary files for setting up the Mac Mini M2 '
 - `scripts/`: Setup scripts for the server
 - `lists/`: Homebrew formulae and casks lists
 - `pam.d/`: TouchID sudo configuration
-- 'URLs/' : Internet shortcuts used by Setup
+- `URLs/`: Internet shortcuts used by Setup
 - `wifi/`: WiFi network configuration
+- `operator_password`: Operator account password from 1Password
 
 ## Setup Instructions
 
@@ -171,7 +199,7 @@ This directory contains all the necessary files for setting up the Mac Mini M2 '
 2. AirDrop this entire folder to the Mac Mini (it will be placed in Downloads)
 3. Open Terminal and run:
    ```bash
-   cd ~/Downloads/$SERVER_NAME_LOWER-setup/scripts
+   cd ~/Downloads/tilsit-setup/scripts
    chmod +x first-boot.sh
    ./first-boot.sh
    ```
@@ -181,7 +209,7 @@ For detailed instructions, refer to the complete runbook.
 
 ## Notes
 
-- The operator account password will be saved to `~/Documents/operator_password.txt`
+- The operator account password is retrieved from 1Password (op://personal/tilsit/password)
 - After setup, you can access the server via SSH using the admin or operator account
 - TouchID sudo will be enabled if the configuration file was available during preparation
 - WiFi will be configured automatically using the saved network information
@@ -192,6 +220,7 @@ EOF
 echo "Setting file permissions..."
 chmod -R 755 "$OUTPUT_PATH/scripts"
 chmod 600 "$OUTPUT_PATH/wifi/network.conf" 2>/dev/null || true
+chmod 600 "$OUTPUT_PATH/operator_password" 2>/dev/null || true
 
 echo "====== Setup Files Preparation Complete ======"
 echo "The setup files at $OUTPUT_PATH are now ready for AirDrop."

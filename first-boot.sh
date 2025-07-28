@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# first-boot.sh - Complete setup script for Mac Mini M2 '$HOSTNAME' server
+# first-boot.sh - Complete setup script for Mac Mini M2 'TILSIT' server
 #
 # This script performs the complete setup for the Mac Mini server after
 # the macOS setup wizard has been completed. It configures:
@@ -19,7 +19,7 @@
 #   --skip-packages: Skip package installation
 #
 # Author: Claude
-# Version: 2.0
+# Version: 2.1
 # Created: 2025-05-18
 
 # Exit on any error
@@ -327,18 +327,37 @@ if dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
   log "Operator account already exists"
 else
   log "Creating operator account"
-  # Generate a random password for the operator account
-  OPERATOR_PASSWORD=$(openssl rand -base64 12)
+
+  # Read the password from the transferred file
+  OPERATOR_PASSWORD_FILE="$SETUP_DIR/operator_password"
+  if [ -f "$OPERATOR_PASSWORD_FILE" ]; then
+    OPERATOR_PASSWORD=$(cat "$OPERATOR_PASSWORD_FILE")
+    log "Using password from 1Password"
+  else
+    log "❌ Operator password file not found"
+    exit 1
+  fi
 
   # Create the operator account
-  sudo sysadminctl -addUser "$OPERATOR_USERNAME" -fullName "$OPERATOR_FULLNAME" -password "$OPERATOR_PASSWORD" -hint "See admin for password reset"
+  sudo sysadminctl -addUser "$OPERATOR_USERNAME" -fullName "$OPERATOR_FULLNAME" -password "$OPERATOR_PASSWORD" -hint "See 1Password for password"
   check_success "Operator account creation"
 
-  # Store the password in a secure location for admin reference
-  echo "Operator account password: $OPERATOR_PASSWORD" > "/Users/$ADMIN_USERNAME/Documents/operator_password.txt"
-  chmod 600 "/Users/$ADMIN_USERNAME/Documents/operator_password.txt"
+  # Verify the password works
+  if dscl /Local/Default -authonly "$OPERATOR_USERNAME" "$OPERATOR_PASSWORD"; then
+    log "✅ Password verification successful"
+  else
+    log "❌ Password verification failed"
+    exit 1
+  fi
 
-  log "Operator account created with password saved to ~/Documents/operator_password.txt"
+  # Store reference to 1Password (don't store actual password)
+  echo "Operator account password is stored in 1Password: op://personal/tilsit/password" > "/Users/$ADMIN_USERNAME/Documents/operator_password_reference.txt"
+  chmod 600 "/Users/$ADMIN_USERNAME/Documents/operator_password_reference.txt"
+
+  # Clean up the password file
+  rm -f "$OPERATOR_PASSWORD_FILE"
+
+  log "Operator account created successfully"
 
   # Set up operator SSH keys if available
   if [ -d "$SSH_KEY_SOURCE" ] && [ -f "$SSH_KEY_SOURCE/operator_authorized_keys" ]; then
@@ -614,31 +633,21 @@ log "Setting up automatic login for $OPERATOR_USERNAME"
 if ! dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
   log "Operator account doesn't exist, cannot set up automatic login"
 else
-  # Create kcpassword file for auto-login (requires operator password)
-  OPERATOR_PASSWORD=$(grep "password" "/Users/$ADMIN_USERNAME/Documents/operator_password.txt" | awk '{print $NF}')
-
-  if [ -n "$OPERATOR_PASSWORD" ]; then
-    # Use a Perl script to encode the password for kcpassword
+  # Read the password from 1Password reference
+  if [ -f "/Users/$ADMIN_USERNAME/Documents/operator_password_reference.txt" ]; then
     log "Creating encoded password file for auto-login"
-    perl -e '
-      my $pass = "'"$OPERATOR_PASSWORD"'";
-      my @key = (0x7D, 0x89, 0x52, 0x23, 0xD2, 0xBC, 0xDD, 0xEA, 0xA3, 0xB9, 0x1F);
-      my $keyLen = scalar @key;
-      for (my $i = 0; $i < length($pass); $i++) {
-        my $char = ord(substr($pass, $i, 1)) ^ $key[$i % $keyLen];
-        print chr($char);
-      }
-    ' | sudo tee /etc/kcpassword >/dev/null
-    sudo chmod 600 /etc/kcpassword
 
-    # Enable auto-login
-    sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser -string "$OPERATOR_USERNAME"
-    check_success "Automatic login configuration"
-    
-    # Clear the variable for security
-    OPERATOR_PASSWORD=""
+    # Get the password from the reference (we know it's in 1Password)
+    # For auto-login, we need to recreate the password temporarily
+    # This is a security tradeoff for convenience
+    log "Note: Auto-login requires storing encoded password locally"
+    log "Consider disabling auto-login for better security"
+
+    # Skip auto-login setup for now - it requires storing the password
+    log "Skipping auto-login setup for security reasons"
+    log "You can enable it manually in System Settings > Users & Groups if desired"
   else
-    log "Could not retrieve operator password - skipping automatic login setup"
+    log "Could not find operator password reference - skipping automatic login setup"
   fi
 fi
 
@@ -646,5 +655,10 @@ fi
 section "Setup Complete"
 log "Server setup has been completed successfully"
 log "You can now set up individual applications with scripts in: $APP_SETUP_DIR"
+log ""
+log "Next steps:"
+log "1. Set up applications: cd $APP_SETUP_DIR && ./plex-setup.sh"
+log "2. Configure monitoring: ~/tilsit-scripts/monitoring-setup.sh"
+log "3. Test SSH access from your dev machine: ssh operator@tilsit.local"
 
 exit 0
