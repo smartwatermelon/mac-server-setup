@@ -1,8 +1,10 @@
 bash
 bash-completion@2
 bat
+caddy
 coreutils
 ffmpeg
+fileicon
 findutils
 gawk
 gh
@@ -23,6 +25,7 @@ less
 liquidprompt
 mas
 moreutils
+netcat
 nmap
 node
 open-completion
@@ -38,6 +41,7 @@ shellcheck
 speedtest
 telnet
 terminal-notifier
+tmux
 tree
 vim
 watch
