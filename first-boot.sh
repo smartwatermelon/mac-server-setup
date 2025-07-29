@@ -678,10 +678,10 @@ section "Cleaning up Dock"
 log "Cleaning up Dock"
 if command -v dockutil &>/dev/null; then
 	for TILE in Messages Mail Maps Photos FaceTime Calendar Contacts Reminders Freeform TV Music News 'iPhone Mirroring' /System/Applications/Utilities/Terminal.app; do
-		dockutil --remove "$TILE" --allhomes --no-restart
+		dockutil --remove "$TILE" --allhomes --no-restart || true
 	done
 	check_success "Dock cleanup"
-	dockutil --add /Applications/iTerm.app --allhomes --no-restart
+	dockutil --add /Applications/iTerm.app --allhomes --no-restart || true
 	check_success "Add iTerm to Dock"
 	killall Dock
 else
