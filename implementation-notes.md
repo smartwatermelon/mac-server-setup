@@ -25,13 +25,13 @@ The setup implements a two-user model:
 - **Administrator Account**: Your Apple ID-linked admin account for system management
 - **Operator Account**: Limited-privilege account for day-to-day operation with password managed in 1Password
 
-This separation enhances security while maintaining usability. The operator account is used for automatic login, while the admin account retains full control. **The operator account password is generated and stored in 1Password, ensuring secure centralized credential management.**
+This separation enhances security while maintaining usability. The operator account is used for automatic login, while the admin account retains full control. **The operator account password is managed through 1Password using the "TILSIT operator" entry, ensuring secure centralized credential management.**
 
 ### 3. Password Management Strategy
 
 **1Password Integration** provides secure credential management:
 
-- Operator passwords are generated and stored in 1Password on the development machine
+- Operator passwords are managed in 1Password using the "TILSIT operator" entry
 - Passwords are retrieved using `op read` command during setup preparation
 - Only the password (not generation logic) is transferred to the Mac Mini
 - After account creation, the password file is removed and only a reference to 1Password is stored
@@ -58,14 +58,15 @@ This provides secure remote management while eliminating password management con
 
 ### 5. Homebrew Installation
 
-The Homebrew installation approach specifically avoids the curl-based script by:
+The Homebrew installation approach uses the official installation script:
 
-1. Downloading the .pkg installer from GitHub releases with a fixed version
-2. Installing via the standard installer
-3. Configuring environment paths in shell configuration files
-4. Supporting both Intel and Apple Silicon architectures
+1. Uses `NONINTERACTIVE=1` flag with the official installation script
+2. Follows Homebrew's recommended post-installation steps exactly
+3. Configures environment paths in shell configuration files
+4. Supports both Intel and Apple Silicon architectures
+5. Verifies installation with `brew help` command
 
-This approach provides a cleaner, more controlled installation process that can be automated. Package installation is handled via separate lists for formulae and casks, improving maintainability.
+This approach provides a clean, automated installation process that always gets the latest version. Package installation is handled via separate lists for formulae and casks, improving maintainability.
 
 ### 6. Container Strategy
 
@@ -98,10 +99,10 @@ The health check script monitors disk usage, CPU load, memory usage, system temp
 The complete boot process automation works as follows:
 
 1. **First Boot** (requires manual interaction with macOS setup wizard)
-2. **first-boot.sh**: Configures system, enables SSH, sets up accounts using 1Password credentials, installs Homebrew and packages, prepares for applications
+2. **first-boot.sh**: Configures system, enables SSH, sets up accounts using 1Password credentials, installs Xcode Command Line Tools silently, installs Homebrew using official script, installs packages, prepares for applications
 3. **Application Setup**: Individual application scripts set up containers
 
-This sequence ensures each step builds on a stable foundation provided by the previous step. **The operator account creation uses credentials from 1Password, eliminating password generation complexity and ensuring reliable authentication.**
+This sequence ensures each step builds on a stable foundation provided by the previous step. **The operator account creation uses credentials from the "TILSIT operator" entry in 1Password, eliminating password generation complexity and ensuring reliable authentication.**
 
 ### 1Password Integration Workflow
 
@@ -130,8 +131,10 @@ The Homebrew package installation uses these techniques:
 
 - Reading package lists from text files (formulae.txt and casks.txt)
 - Checking for existing installations before attempting to install
+- Using the official Homebrew installation script with `NONINTERACTIVE=1`
 - Proper environment variable configuration for different architectures
-- Using a specified version of Homebrew for consistency
+- Following Homebrew's recommended post-installation steps
+- Verification using `brew help` to ensure functionality
 
 This approach is flexible, maintainable, and ideal for version control. The scripts handle existing installations gracefully, making them safe to run multiple times.
 
@@ -155,12 +158,12 @@ Several security measures are implemented:
 - SSH using key-based authentication only
 - Automatic security updates (optional)
 - Limited-privilege operator account for daily use
-- **Secure credential storage in 1Password with enterprise-grade encryption**
+- **Secure credential storage in 1Password with enterprise-grade encryption using "TILSIT operator" entry**
 - **No plaintext passwords stored on the server**
 - Password randomization for operator account via 1Password
 - TouchID sudo integration for authorized admin users
 
-These measures provide a solid security baseline for the server, balancing security with usability. **The 1Password integration ensures sensitive credentials are never stored in plaintext and are managed through a secure, auditable system.**
+These measures provide a solid security baseline for the server, balancing security with usability. **The 1Password integration using the "TILSIT operator" entry ensures sensitive credentials are never stored in plaintext and are managed through a secure, auditable system.**
 
 ## Customization Options
 
