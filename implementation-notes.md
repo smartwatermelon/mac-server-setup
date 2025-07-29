@@ -2,289 +2,269 @@
 
 ## Project Overview
 
-This document provides detailed implementation notes and technical considerations for the Mac Mini M2 server setup project. It supplements the runbook with deeper technical explanations and rationale for design decisions.
+This document provides technical implementation details for the Mac Mini M2 server setup project. The approach emphasizes simplicity, reliability, and one-time execution over complex system management.
 
-## Key Technical Design Decisions
+## Core Design Philosophy
+
+The implementation follows a **"run once and done"** philosophy rather than building a complex management system:
+
+- **Single Execution**: Scripts designed to set up the server once successfully
+- **Minimal Complexity**: Straightforward bash scripting without over-engineering
+- **1Password Integration**: Leverages existing credential management infrastructure
+- **Error Handling**: Robust but simple error detection and recovery
+- **Clear Separation**: Base OS setup separate from containerized applications
+
+## Key Technical Decisions
 
 ### 1. Scripting Approach
 
-The implementation uses bash scripting with these key features:
+**Simple Bash with Essential Features**:
 
-- **Error Handling**: `set -e` ensures scripts exit on errors
-- **Logging**: Comprehensive logging to both console and log files with timestamps
-- **Idempotency**: All operations check current state before making changes
-- **User Interaction**: Interactive prompts with `--force` mode for automation
-- **Security Awareness**: Handling of sensitive information using 1Password integration
+- `set -e` for immediate error exit
+- Comprehensive logging with timestamps
+- Idempotent operations (safe to re-run)
+- Interactive prompts with `--force` mode override
+- macOS-specific commands (`scutil`, `defaults`, `systemsetup`)
 
-This approach ensures scripts are both human-friendly for manual execution and automation-ready when needed. The scripts leverage macOS-specific commands like `scutil`, `defaults`, and `systemsetup` to modify system configuration while maintaining compatibility with future macOS updates.
+This approach prioritizes reliability and maintainability over sophisticated automation frameworks.
 
-### 2. User Account Structure
+### 2. Credential Management Strategy
 
-The setup implements a two-user model:
+**1Password Integration** eliminates password generation complexity:
 
-- **Administrator Account**: Your Apple ID-linked admin account for system management
-- **Operator Account**: Limited-privilege account for day-to-day operation with password managed in 1Password
+**Preparation Phase** (`airdrop-prep.sh`):
 
-This separation enhances security while maintaining usability. The operator account is used for automatic login, while the admin account retains full control. **The operator account password is generated and stored in 1Password, ensuring secure centralized credential management.**
+- Checks for existing "TILSIT operator" credentials in 1Password
+- Creates credentials if missing using secure generation
+- Retrieves password via `op read` command
+- Transfers only the password value (not generation logic)
 
-### 3. Password Management Strategy
+**Setup Phase** (`first-boot.sh`):
 
-**1Password Integration** provides secure credential management:
+- Reads password from transferred file
+- Creates operator account using exact password
+- Verifies authentication works immediately
+- Stores reference to 1Password location
+- Removes password file after successful setup
 
-- Operator passwords are generated and stored in 1Password on the development machine
-- Passwords are retrieved using `op read` command during setup preparation
-- Only the password (not generation logic) is transferred to the Mac Mini
-- After account creation, the password file is removed and only a reference to 1Password is stored
-- This eliminates password generation complexity and verification issues
+**Benefits**:
 
-**Benefits:**
-
+- Eliminates password generation/verification mismatches
 - Centralized credential management
-- Reliable password verification (exact match between stored and set passwords)
 - Secure storage with enterprise-grade encryption
-- Easy retrieval when needed for maintenance
-- No complex password generation or verification logic needed in scripts
+- Easy maintenance and retrieval
+- No complex password verification logic needed
 
-### 4. SSH Configuration
+### 3. User Account Structure
 
-SSH is configured for secure remote access:
+**Two-User Model**:
 
-- Public key authentication (no password login)
-- Different keys for admin and operator accounts
-- Firewall rules specifically allowing SSH
-- Full Disk Access handling for Terminal if needed to enable SSH
+- **Administrator Account**: Your Apple ID-linked account for system management
+- **Operator Account**: Limited-privilege account with 1Password-managed credentials
 
-This provides secure remote management while eliminating password management concerns. The first-boot script detects if Full Disk Access is needed and guides the user through granting it, creating a seamless experience even with macOS security restrictions.
+The operator account password is never stored locally - only a reference to its 1Password location is maintained.
+
+### 4. Xcode Command Line Tools Installation
+
+**Silent Installation Approach**:
+
+```bash
+sudo touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+softwareupdate -i "$(softwareupdate -l | grep Label | tail -n 1 | cut -d ':' -f 2 | xargs)"
+```
+
+This method:
+
+- Avoids complex AppleScript automation
+- Requires no Accessibility permissions
+- Always installs latest available version
+- Works completely unattended
+- Eliminates user interaction dialogs
 
 ### 5. Homebrew Installation
 
-The Homebrew installation approach specifically avoids the curl-based script by:
+**Official Installation Script**:
 
-1. Downloading the .pkg installer from GitHub releases with a fixed version
-2. Installing via the standard installer
-3. Configuring environment paths in shell configuration files
-4. Supporting both Intel and Apple Silicon architectures
+- Uses `NONINTERACTIVE=1` flag for automation
+- Follows Homebrew's exact post-installation recommendations
+- Dynamic path detection for Intel vs Apple Silicon
+- Proper shell configuration for `.zprofile` and compatibility profiles
+- Verification using `brew help` to ensure functionality
 
-This approach provides a cleaner, more controlled installation process that can be automated. Package installation is handled via separate lists for formulae and casks, improving maintainability.
+### 6. Network Configuration
 
-### 6. Container Strategy
+**Intelligent WiFi Handling**:
 
-Applications are containerized using Docker with these principles:
+- Checks current network before attempting configuration
+- Skips setup if already connected to target network
+- Handles preferred networks list to avoid duplicates
+- Graceful handling of connection timing issues
+- Secure credential cleanup after setup
 
-- Each application has its own container
-- Data and configuration are stored in host volumes
-- The containers share a dedicated Docker network (`tilsit-network`)
-- Containers are configured to restart automatically
-- Consistent environment variables across containers
+### 7. SSH Configuration
 
-This design isolates applications while maintaining data persistence and making backup straightforward. The scripts handle configuration generation and volume mapping consistently across applications.
+**Secure Remote Access**:
 
-### 7. Monitoring Approach
+- Public key authentication only
+- Separate keys for admin and operator accounts
+- Full Disk Access handling with clear user guidance
+- Firewall configuration for SSH access
+- No password-based authentication
 
-The monitoring system balances simplicity with effectiveness:
+### 8. Container Strategy
 
-- Regular health checks via cron jobs (every 15 minutes)
-- Email-based alerting for critical issues
-- Comprehensive logging for troubleshooting
-- Status script for on-demand system inspection
-- Backup script for configuration and important data
+**Docker-Based Application Isolation**:
 
-The health check script monitors disk usage, CPU load, memory usage, system temperature, Docker container status, and system updates, with configurable thresholds for alerts.
+- Individual containers for each application
+- Shared Docker network (`tilsit-network`)
+- Host volume mounting for persistent data
+- Automatic restart policies
+- Consistent environment configuration
 
 ## Technical Implementation Details
 
-### Boot Process Automation
+### Boot Process Flow
 
-The complete boot process automation works as follows:
+1. **macOS Setup**: Manual completion of setup wizard
+2. **File Transfer**: AirDrop of prepared setup files
+3. **First-Boot Script**: Complete system configuration and package installation
+4. **Application Setup**: Individual containerized application configuration
 
-1. **First Boot** (requires manual interaction with macOS setup wizard)
-2. **first-boot.sh**: Configures system, enables SSH, sets up accounts using 1Password credentials, installs Homebrew and packages, prepares for applications
-3. **Application Setup**: Individual application scripts set up containers
+Each phase builds on a stable foundation from the previous phase.
 
-This sequence ensures each step builds on a stable foundation provided by the previous step. **The operator account creation uses credentials from 1Password, eliminating password generation complexity and ensuring reliable authentication.**
+### Error Handling Strategy
 
-### 1Password Integration Workflow
+**Graceful Degradation**:
 
-The 1Password integration follows this secure workflow:
+- Check current state before making changes
+- Skip operations that are already complete
+- Clear logging for troubleshooting
+- Non-fatal warnings for optional features
+- `--force` mode for automation scenarios
 
-1. **Preparation Phase** (`airdrop-prep.sh`):
-   - Check if "TILSIT operator" credentials exist in 1Password vault
-   - Create credentials if they don't exist using secure password generation
-   - Retrieve password using `op read` command
-   - Save password to temporary file for transfer
+### Package Management
 
-2. **Setup Phase** (`first-boot.sh`):
-   - Read password from transferred file
-   - Create operator account using this password
-   - Verify password works through authentication test
-   - Store reference to 1Password location (not actual password)
-   - Clean up transferred password file
+**Homebrew Integration**:
 
-3. **Maintenance**:
-   - Password always available via `op read "op://personal/TILSIT operator/password"`
-   - Can be updated in 1Password and propagated as needed
+- Text file-based package lists (`formulae.txt`, `casks.txt`)
+- Installation state checking to avoid duplicates
+- Proper environment variable configuration
+- Architecture-aware setup (Intel vs Apple Silicon)
+- Clean separation of formulae and casks
 
-### Homebrew Package Management
+### Security Implementation
 
-The Homebrew package installation uses these techniques:
-
-- Reading package lists from text files (formulae.txt and casks.txt)
-- Checking for existing installations before attempting to install
-- Proper environment variable configuration for different architectures
-- Using a specified version of Homebrew for consistency
-
-This approach is flexible, maintainable, and ideal for version control. The scripts handle existing installations gracefully, making them safe to run multiple times.
-
-### Docker Configuration
-
-The Docker setup provides these advanced features:
-
-- Custom bridge network (`tilsit-network`) for inter-container communication
-- Explicit port mappings for external access
-- Volume mounts for persistent data
-- Automatic container restart on failure or system reboot (`--restart=unless-stopped`)
-- Timezone configuration for all containers
-
-Each application setup script checks if Docker is running, creates the network if needed, and handles container creation/starting consistently. The scripts also provide status information and access instructions after setup.
-
-### Security Considerations
-
-Several security measures are implemented:
+**Defense in Depth**:
 
 - Firewall enabled with specific application exceptions
-- SSH using key-based authentication only
-- Automatic security updates (optional)
-- Limited-privilege operator account for daily use
-- **Secure credential storage in 1Password with enterprise-grade encryption**
-- **No plaintext passwords stored on the server**
-- Password randomization for operator account via 1Password
-- TouchID sudo integration for authorized admin users
+- SSH key-based authentication only
+- Limited-privilege operator account
+- **1Password for all credential storage**
+- **No plaintext passwords on server**
+- Automatic security updates (configurable)
+- Screen saver password requirements
 
-These measures provide a solid security baseline for the server, balancing security with usability. **The 1Password integration ensures sensitive credentials are never stored in plaintext and are managed through a secure, auditable system.**
+## 1Password Integration Details
 
-## Customization Options
+### Workflow Architecture
 
-The scripts include several customization points:
+1. **Development Machine**:
+   - Manages credentials in 1Password vault
+   - Uses `op read` to retrieve passwords
+   - Transfers only password values, not generation logic
 
-### 1. Media Storage Location
+2. **Mac Mini Setup**:
+   - Receives password from transfer file
+   - Creates accounts using exact password
+   - Verifies authentication immediately
+   - Stores only reference to 1Password location
 
-The Plex setup script allows customizing the media storage location. Modify the `PLEX_MEDIA_DIR` variable to point to your NAS or external drive:
+3. **Ongoing Management**:
+   - Password always available via `op read "op://personal/TILSIT operator/password"`
+   - Updates managed through 1Password interface
+   - No local password storage or generation
+
+### Security Benefits
+
+- **Enterprise-grade encryption** for credential storage
+- **Centralized management** across all devices
+- **Audit trail** of password access and changes
+- **No local credential storage** on server
+- **Reliable verification** - exact password matching guaranteed
+
+## Customization Points
+
+### Media Storage Configuration
 
 ```bash
-PLEX_MEDIA_DIR="/Volumes/MediaDrive"  # Change to your preferred location
+PLEX_MEDIA_DIR="/Volumes/MediaDrive"  # Configurable in plex-setup.sh
 ```
 
-The script checks if the directory exists and creates it if needed, with appropriate permissions.
-
-### 2. Email Alerts
-
-The monitoring system sends email alerts. Customize the recipient address:
+### Monitoring Configuration
 
 ```bash
-EMAIL_ALERTS="your.email@example.com"  # Change to your email
+EMAIL_ALERTS="your.email@example.com"  # Configurable in monitoring setup
 ```
 
-The monitoring script asks for email confirmation if not using `--force` mode and the default email is still set.
+### Application-Specific Settings
 
-### 3. Application-Specific Configurations
+Each application setup script contains configurable variables for directories, credentials, and timezone settings.
 
-Each application setup script has customizable variables:
+## Limitations and Considerations
 
-- **Plex**: Claim token, media directory, timezone
-- **Nginx**: Configuration directories, HTML content, timezone
-- **Transmission**: Download directory, watch directory, credentials, timezone
+### Current Limitations
 
-Modify these variables before running the scripts. The scripts generate appropriate configurations and container settings based on these variables.
+1. **Manual macOS Setup**: Initial setup wizard requires user interaction
+2. **One-time Use**: Scripts not designed for ongoing system management
+3. **Basic Monitoring**: Simple health checks rather than comprehensive monitoring
+4. **Static Configuration**: Container settings defined at setup time
 
-### 4. Hardware-Specific Optimizations
+### Future Considerations
 
-For M2 Mac Mini optimization:
+1. **Backup Strategy**: Implement regular configuration backups
+2. **Update Management**: Establish update policies for containers and packages
+3. **Monitoring Enhancement**: Consider more sophisticated monitoring if needed
+4. **Documentation**: Maintain setup procedures as macOS evolves
 
-- Temperature thresholds in monitoring (adjustable in health_check.sh)
-- Power management settings for server use
-- Performance vs. efficiency core utilization (via containerization)
-- Disk sleep and display sleep settings
+## Maintenance Approach
 
-## Advanced Integration Possibilities
+### Regular Tasks
 
-The system design allows for these advanced integrations:
+- **macOS Security Updates**: Monthly review and application
+- **Package Updates**: Quarterly `brew update && brew upgrade`
+- **Container Updates**: As-needed basis for security or feature updates
+- **Configuration Backups**: Quarterly backup of settings and data
 
-### 1. NAS Integration
+### Credential Management
 
-Mount network storage at boot time by adding to /etc/fstab or using an automount script. The Plex setup already supports external media storage volumes.
+- **Password Rotation**: Update in 1Password as needed
+- **SSH Key Management**: Periodic review and rotation
+- **Access Auditing**: Regular review of account access
 
-### 2. Backup System
+## Common Issues and Solutions
 
-The backup script can be extended to:
+### Setup Issues
 
-- Perform differential backups
-- Use cloud storage (S3, Backblaze)
-- Implement retention policies
-- **Set up Time Machine backups to the NAS using `tmutil`** (future work)
+1. **SSH Permission Problems**: Handled by Full Disk Access guidance
+2. **WiFi Configuration**: Graceful handling of connection timing
+3. **Package Installation**: Xcode CLT installation automated
+4. **Password Verification**: Eliminated through 1Password integration
 
-The `tmutil` command provides powerful control over Time Machine configurations and can be used to automate backup schedules, destination management, and exclusions without requiring manual GUI interaction.
+### Runtime Issues
 
-### 3. Advanced Monitoring
-
-Enhance monitoring with:
-
-- Prometheus + Grafana dashboards
-- InfluxDB for time-series metrics
-- Alertmanager for sophisticated alerting
-
-The existing monitoring framework provides a solid foundation that can be extended with these more advanced monitoring tools if needed.
-
-### 4. Home Automation
-
-Integrate with home automation by:
-
-- Adding a Node-RED container
-- Implementing MQTT for IoT communication
-- Configuring HomeKit integration
-
-The server could serve as a local hub for home automation using additional containerized applications.
-
-## Limitations and Future Improvements
-
-The current implementation has these limitations:
-
-1. **No Web-Based Management Interface**: A future improvement could add a web dashboard for server management
-2. **Manual macOS Updates**: Updates could be further automated with MDM tools
-3. **Basic Monitoring**: Could be enhanced with more sophisticated monitoring tools
-4. **Static Docker Compose**: Could be improved with dynamic configuration generation or Docker Compose
-5. **Limited Recovery Automation**: Disaster recovery could be further automated
-
-## Technical Debt and Maintenance Considerations
-
-Areas requiring ongoing maintenance:
-
-1. **macOS Security Updates**: Regular review and application
-2. **Docker Image Updates**: Establish a policy for container image updates
-3. **Homebrew Package Management**: Regular brew update/upgrade cycles
-4. **Configuration Backups**: Implement a regular backup strategy
-5. **Security Auditing**: Periodically review security configurations and update as needed
-6. **1Password Credential Rotation**: Establish policy for password rotation if required
-
-A documented maintenance schedule would help ensure these tasks are performed regularly.
-
-## Common Errors and Solutions
-
-The implementation addresses several common issues:
-
-1. **SSH Permission Issues**: Addressed by detecting and handling Full Disk Access requirements
-2. **LaunchAgent Failures**: Multiple methods to register the LaunchAgent with verification
-3. **Docker Network Conflicts**: Checking for existing networks before creating new ones
-4. **Path Environment Issues**: Properly setting up shell environment for Homebrew
-5. **Script Permission Problems**: Adding executable permissions where needed
-6. **Media Directory Access**: Checking and creating directories with proper permissions
-7. **Password Verification Issues**: Eliminated through 1Password integration ensuring exact password matches
+1. **Container Problems**: Standard Docker troubleshooting applies
+2. **Network Issues**: Standard macOS network diagnostics
+3. **Performance**: Monitor system resources via health checks
 
 ## Conclusion
 
-This implementation provides a robust, secure, and maintainable foundation for a Mac Mini M2 server that balances automation with the practical realities of macOS management. **The 1Password integration eliminates password-related complexity while ensuring enterprise-grade credential security.** The separation of concerns approach makes it adaptable to changing requirements, while the containerization strategy ensures applications remain isolated from the base system.
+This implementation provides a practical, maintainable approach to Mac Mini server setup that emphasizes:
 
-The scripts and configuration are designed to be understood, maintained, and extended by administrators with basic bash and Docker knowledge, without relying on complex orchestration tools that would be overkill for a home server setup.
+- **Simplicity over complexity** - straightforward scripts rather than elaborate frameworks
+- **Reliability over features** - proven approaches rather than experimental techniques  
+- **Security through integration** - leveraging 1Password rather than custom credential management
+- **One-time execution** - setup scripts rather than ongoing management systems
 
-**The 1Password integration represents a significant improvement in security and reliability**, ensuring that credentials are managed through a proven, secure system rather than ad-hoc password generation. This eliminates a major source of setup failures and maintenance complexity.
+The **1Password integration** represents the key architectural decision that eliminates the most common source of setup failures while providing enterprise-grade credential security. The approach acknowledges that this is a home server setup that needs to work reliably without requiring ongoing script maintenance or complex orchestration systems.
 
-The careful attention to idempotency, error handling, and security concerns ensures that the server remains reliable and secure throughout its lifecycle, with clear procedures for setup, maintenance, and troubleshooting.
+The careful attention to idempotency and error handling ensures the setup process is robust, while the clear separation of concerns makes the system understandable and maintainable by someone with basic bash and Docker knowledge.
