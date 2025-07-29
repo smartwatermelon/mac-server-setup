@@ -209,7 +209,7 @@ For detailed instructions, refer to the complete runbook.
 
 ## Notes
 
-- The operator account password is retrieved from 1Password (op://personal/tilsit/password)
+- The operator account password is retrieved from 1Password on the developer machine (op://personal/tilsit/password)
 - After setup, you can access the server via SSH using the admin or operator account
 - TouchID sudo will be enabled if the configuration file was available during preparation
 - WiFi will be configured automatically using the saved network information
