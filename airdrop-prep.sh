@@ -101,27 +101,27 @@ fi
 # Set up operator account credentials using 1Password
 echo "Setting up operator account credentials..."
 
-# Check if tilsit credentials exist in 1Password
-if ! op item get "tilsit" --vault personal >/dev/null 2>&1; then
-  echo "Creating tilsit server credentials in 1Password..."
+# Check if TILSIT operator credentials exist in 1Password
+if ! op item get "TILSIT operator" --vault personal >/dev/null 2>&1; then
+  echo "Creating TILSIT operator credentials in 1Password..."
 
   # Generate a secure password and create the item
   GENERATED_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-20)
 
   op item create --category login \
-    --title "tilsit" \
+    --title "TILSIT operator" \
     --vault personal \
     username="operator" \
     password="$GENERATED_PASSWORD"
 
-  echo "✅ Created tilsit credentials in 1Password"
+  echo "✅ Created TILSIT operator credentials in 1Password"
 else
-  echo "✅ Found existing tilsit credentials in 1Password"
+  echo "✅ Found existing TILSIT operator credentials in 1Password"
 fi
 
-# Retrieve the password and save it for transfer
+# Retrieve the operator password and save it for transfer
 echo "Retrieving operator password from 1Password..."
-op read "op://personal/tilsit/password" > "$OUTPUT_PATH/operator_password"
+op read "op://personal/TILSIT operator/password" > "$OUTPUT_PATH/operator_password"
 chmod 600 "$OUTPUT_PATH/operator_password"
 echo "✅ Operator password saved for transfer"
 
@@ -209,7 +209,7 @@ For detailed instructions, refer to the complete runbook.
 
 ## Notes
 
-- The operator account password is retrieved from 1Password on the developer machine (op://personal/tilsit/password)
+- The operator account password is retrieved from 1Password (op://personal/tilsit/password)
 - After setup, you can access the server via SSH using the admin or operator account
 - TouchID sudo will be enabled if the configuration file was available during preparation
 - WiFi will be configured automatically using the saved network information

@@ -19,6 +19,7 @@ Icon
 *.env
 .ssh/
 shellcheck/
+docs/
 
 # Log files
 logs/

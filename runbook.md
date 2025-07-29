@@ -7,7 +7,7 @@ This comprehensive runbook provides step-by-step instructions for setting up a M
 1. **Separation of Concerns**: Base OS setup is separate from containerized applications
 2. **Automation First**: Minimal human intervention throughout the lifecycle
 3. **Idempotency**: Scripts can be run multiple times without causing harm
-4. **Security**: Best practices for hardening and isolation
+4. **Security**: Best practices for hardening and isolation using 1Password for credential management
 5. **Documentation**: Clear procedures for all operations
 
 ## Prerequisites
@@ -18,7 +18,8 @@ Before beginning the setup process, ensure you have:
 - A monitor, keyboard, and mouse for initial setup
 - Administrator access to the Mac Mini
 - Development machine with SSH keys generated
-- 1Password and 1Password CLI (`op`) configured on your development machine
+- **1Password and 1Password CLI (`op`) configured on your development machine**
+- **1Password CLI authenticated and ready to use**
 
 ## Setup Process Overview
 
@@ -27,8 +28,8 @@ The setup process is divided into clearly defined phases:
 1. **Preparation**: Create necessary files and scripts on your development machine and AirDrop them to the Mac Mini
 2. **Initial Setup**: Power on the Mac Mini and complete the macOS setup wizard with minimal interaction
 3. **First-Boot Setup**: Run the first-boot script to configure remote access, system settings, and install Homebrew and required packages
-5. **Application Setup**: Configure containerized applications (Plex, Nginx, Transmission)
-6. **Monitoring Setup**: Configure system monitoring, health checks, and alerts
+4. **Application Setup**: Configure containerized applications (Plex, Nginx, Transmission)
+5. **Monitoring Setup**: Configure system monitoring, health checks, and alerts
 
 ## Detailed Steps
 
@@ -46,7 +47,19 @@ ls -la ~/.ssh/id_ed25519*
 ssh-keygen -t ed25519 -C "your_email@example.com"
 ```
 
-#### 1.2 Create TouchID Sudo Configuration (Optional)
+#### 1.2 Verify 1Password CLI Setup
+
+Ensure 1Password CLI is properly configured:
+
+```bash
+# Check if op CLI is installed and authenticated
+op account list
+
+# If not authenticated, sign in
+op signin
+```
+
+#### 1.3 Create TouchID Sudo Configuration (Optional)
 
 If you want to use TouchID for sudo authentication on the Mac Mini:
 
@@ -55,7 +68,7 @@ If you want to use TouchID for sudo authentication on the Mac Mini:
 ./create-touchid-sudo.sh
 ```
 
-#### 1.3 Prepare Setup Files for AirDrop
+#### 1.4 Prepare Setup Files for AirDrop
 
 On your development machine:
 
@@ -68,6 +81,8 @@ This script will:
 
 - Create all necessary directories and files
 - Copy your SSH keys
+- **Check for existing TILSIT credentials in 1Password or create them**
+- **Retrieve the operator password from 1Password for transfer**
 - Generate a one-time password link for your Apple ID using 1Password
 - Copy setup scripts and package lists
 - Create a README with setup instructions
@@ -125,7 +140,7 @@ The `first-boot.sh` script will perform the following tasks:
 - Set up WiFi (if configuration is available)
 - Set up SSH keys for secure authentication
 - Configure Apple ID (see steps below)
-- Create the 'operator' account with a secure random password
+- **Create the 'operator' account using the password from 1Password**
 - Configure power management settings for server use
 - Configure the firewall
 - Run software updates
@@ -133,7 +148,6 @@ The `first-boot.sh` script will perform the following tasks:
 - Install the specified formulae and casks from the provided lists
 - Set up environment paths in shell configuration files
 - Prepare the application setup directory
-- Set up automatic login for the operator account
 
 To verify the script has run successfully, check the log file:
 
@@ -177,21 +191,36 @@ If the script cannot enable SSH directly, it will:
 3. Create a marker file to detect when it's re-run
 4. After adding Terminal to FDA, close the Terminal window and run the script again
 
-#### 3.3 After First-Boot Completion
+#### 3.3 Operator Account Setup
+
+The script will:
+
+1. **Read the operator password from the transferred 1Password file**
+2. **Create the operator account using this password**
+3. **Verify the password works by testing authentication**
+4. **Store a reference to the 1Password location (not the actual password)**
+5. **Clean up the transferred password file for security**
+
+#### 3.4 After First-Boot Completion
 
 After the script completes, the system will reboot. You should now be able to SSH into the Mac Mini from your development machine:
 
 ```bash
+# Using the admin account
 ssh admin_username@tilsit.local
+
+# Or using the operator account with the password from 1Password
+ssh operator@tilsit.local
 ```
 
 You may configure passwordless SSH from your development machine:
 
 ```bash
 ssh-copy-id admin_username@tilsit.local
+ssh-copy-id operator@tilsit.local
 ```
 
-### 5. Application Setup
+### 4. Application Setup
 
 After the first-boot script completes, you can set up individual applications:
 
@@ -218,7 +247,7 @@ Each application setup script will:
 - Provide access instructions
 - Handle restart settings for the container
 
-### 6. Monitoring Setup
+### 5. Monitoring Setup
 
 Finally, set up system monitoring:
 
@@ -256,6 +285,18 @@ sudo softwareupdate -i -a
 # Update Homebrew and packages
 brew update
 brew upgrade
+```
+
+### Password Management
+
+**Operator account password** is managed through 1Password:
+
+```bash
+# Retrieve the current operator password
+op read "op://personal/TILSIT operator/password"
+
+# Update the password if needed (on development machine)
+op item edit "TILSIT operator" --vault personal password="new_password"
 ```
 
 ### Backup
@@ -313,6 +354,14 @@ If the system is experiencing resource problems:
 3. Check disk usage: `df -h`
 4. View latest health check results: `cat ~/.local/state/tilsit-monitoring.log`
 
+### Password Issues
+
+**Operator account password problems:**
+
+1. Verify password in 1Password: `op read "op://personal/TILSIT operator/password"`
+2. Test authentication: `dscl /Local/Default -authonly operator $(op read "op://personal/TILSIT operator/password")`
+3. Reset password if needed: `sudo dscl . -passwd /Users/operator $(op read "op://personal/TILSIT operator/password")`
+
 ## Recovery Procedures
 
 ### Complete System Reset
@@ -337,10 +386,10 @@ All scripts are designed to be idempotent. If issues occur, you can safely run t
 
 ### Operator Account Password Recovery
 
-If you need to recover the operator account password:
+**The operator account password is always available from 1Password:**
 
-1. Login as the admin user
-2. Check the password file: `cat ~/Documents/operator_password.txt`
+1. From your development machine: `op read "op://personal/TILSIT operator/password"`
+2. Or through the 1Password app/web interface at: `op://personal/TILSIT operator/password`
 
 ## Conclusion
 
@@ -351,6 +400,7 @@ This setup creates a stable, secure, and maintainable Mac Mini server environmen
 - Automatically monitors system health
 - Provides clear procedures for all common tasks
 - Uses Docker for consistent application deployment
-- Implements security best practices
+- Implements security best practices with centralized credential management
+- **Leverages 1Password for secure, reliable password management**
 
-The separation between base OS setup and containerized applications ensures that application issues don't affect the base system, and the automation-first approach minimizes the need for manual intervention throughout the server's lifecycle.
+The separation between base OS setup and containerized applications ensures that application issues don't affect the base system, and the automation-first approach minimizes the need for manual intervention throughout the server's lifecycle. **1Password integration ensures passwords are securely managed and easily retrievable when needed.**

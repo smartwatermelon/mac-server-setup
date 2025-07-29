@@ -339,7 +339,7 @@ else
   fi
 
   # Create the operator account
-  sudo sysadminctl -addUser "$OPERATOR_USERNAME" -fullName "$OPERATOR_FULLNAME" -password "$OPERATOR_PASSWORD" -hint "See 1Password for password"
+  sudo sysadminctl -addUser "$OPERATOR_USERNAME" -fullName "$OPERATOR_FULLNAME" -password "$OPERATOR_PASSWORD" -hint "See 1Password TILSIT operator for password"
   check_success "Operator account creation"
 
   # Verify the password works
@@ -351,7 +351,7 @@ else
   fi
 
   # Store reference to 1Password (don't store actual password)
-  echo "Operator account password is stored in 1Password: op://personal/tilsit/password" > "/Users/$ADMIN_USERNAME/Documents/operator_password_reference.txt"
+  echo "Operator account password is stored in 1Password: op://personal/TILSIT operator/password" > "/Users/$ADMIN_USERNAME/Documents/operator_password_reference.txt"
   chmod 600 "/Users/$ADMIN_USERNAME/Documents/operator_password_reference.txt"
 
   # Clean up the password file
