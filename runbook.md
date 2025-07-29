@@ -81,7 +81,7 @@ This script will:
 
 - Create all necessary directories and files
 - Copy your SSH keys
-- **Check for existing TILSIT credentials in 1Password or create them**
+- **Check for existing "TILSIT operator" credentials in 1Password or create them**
 - **Retrieve the operator password from 1Password for transfer**
 - Generate a one-time password link for your Apple ID using 1Password
 - Copy setup scripts and package lists
@@ -143,8 +143,9 @@ The `first-boot.sh` script will perform the following tasks:
 - **Create the 'operator' account using the password from 1Password**
 - Configure power management settings for server use
 - Configure the firewall
-- Run software updates
-- Install Homebrew from the GitHub release package
+- **Install Xcode Command Line Tools silently**
+- **Install Homebrew using the official installation script**
+- **Apply Homebrew's recommended PATH configuration**
 - Install the specified formulae and casks from the provided lists
 - Set up environment paths in shell configuration files
 - Prepare the application setup directory
