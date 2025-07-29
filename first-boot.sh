@@ -186,9 +186,17 @@ if [ -f "$WIFI_CONFIG_FILE" ]; then
     check_success "Add preferred WiFi network"
     security add-generic-password -D "AirPort network password" -a "$WIFI_SSID" -s "AirPort" -w "$WIFI_PASSWORD" || true
     check_success "Store password in keychain"
-    log "Attempting to join WiFi network $WIFI_SSID. This may initially fail in some circumstances but the network will be automatically joined after reboot."
+    log "Attempting to join WiFi network $WIFI_SSID..."
     networksetup -setairportnetwork "$WIFI_IFACE" "$WIFI_SSID" || true
-    check_success "WiFi network configuration"
+
+    # Give it a few seconds and check if we connected
+    sleep 5
+    CURRENT_NETWORK=$(networksetup -getairportnetwork "$WIFI_IFACE" 2>/dev/null | cut -d' ' -f4- || echo "")
+    if [ "$CURRENT_NETWORK" = "$WIFI_SSID" ]; then
+      log "✅ Successfully connected to WiFi network: $WIFI_SSID"
+    else
+      log "WiFi network will be automatically joined after reboot"
+    fi
 
     # Securely remove the WiFi password from the configuration file
     sed -i '' "s/WIFI_PASSWORD=.*/WIFI_PASSWORD=\"REMOVED\"/" "$WIFI_CONFIG_FILE"
