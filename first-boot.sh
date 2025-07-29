@@ -557,6 +557,9 @@ if [ "$SKIP_HOMEBREW" = false ]; then
     NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     check_success "Homebrew installation"
 
+    # Follow Homebrew's suggested post-installation steps
+    log "Running Homebrew's suggested post-installation steps"
+
     # Add Homebrew to path for current session
     if [[ "$(uname -m)" == "arm64" ]]; then
       HOMEBREW_PREFIX="/opt/homebrew"
@@ -564,11 +567,20 @@ if [ "$SKIP_HOMEBREW" = false ]; then
       HOMEBREW_PREFIX="/usr/local"
     fi
 
-    # Add to shell configuration files
-    for SHELL_PROFILE in ~/.zprofile ~/.bash_profile ~/.profile; do
+    # Add to .zprofile (Homebrew's recommended approach)
+    echo >> "/Users/$ADMIN_USERNAME/.zprofile"
+    echo "eval \"\$($HOMEBREW_PREFIX/bin/brew shellenv)\"" >> "/Users/$ADMIN_USERNAME/.zprofile"
+    log "Added Homebrew to .zprofile"
+
+    # Apply to current session
+    eval "$("$HOMEBREW_PREFIX/bin/brew" shellenv)"
+    log "Applied Homebrew environment to current session"
+
+    # Add to other shell configuration files for compatibility
+    for SHELL_PROFILE in ~/.bash_profile ~/.profile; do
       if [ -f "$SHELL_PROFILE" ]; then
         # Only add if not already present
-        if ! grep -q "HOMEBREW_PREFIX" "$SHELL_PROFILE"; then
+        if ! grep -q "HOMEBREW_PREFIX\|brew shellenv" "$SHELL_PROFILE"; then
           log "Adding Homebrew to $SHELL_PROFILE"
           echo -e '\n# Homebrew' >> "$SHELL_PROFILE"
           echo "eval \"\$(${HOMEBREW_PREFIX}/bin/brew shellenv)\"" >> "$SHELL_PROFILE"
@@ -576,14 +588,15 @@ if [ "$SKIP_HOMEBREW" = false ]; then
       fi
     done
 
-    # Apply to current session
-    eval "$("$HOMEBREW_PREFIX/bin/brew" shellenv)"
-
     log "Homebrew installation completed"
 
-    # Verify installation
-    brew --version
-    check_success "Homebrew verification"
+    # Verify installation with brew help
+    if brew help >/dev/null 2>&1; then
+      log "✅ Homebrew verification successful"
+    else
+      log "❌ Homebrew verification failed - brew help returned an error"
+      exit 1
+    fi
   fi
 fi
 
