@@ -502,16 +502,60 @@ else
   xcode-select --install
   sleep 1
 
-  # Use AppleScript to automate the installation dialog
-  log "Automating installation dialog..."
-  osascript <<-EOD
-    tell application "System Events"
-      tell process "Install Command Line Developer Tools"
-        keystroke return
-        click button "Agree" of window "License Agreement"
+  # Check if Terminal has Accessibility access for AppleScript automation
+  log "Checking Terminal Accessibility permissions for automation..."
+
+  # Test if we can use AppleScript (this will fail if no Accessibility access)
+  if ! osascript -e 'tell application "System Events" to get name of first process' &>/dev/null; then
+    # Create a marker file to detect re-run after Accessibility grant
+    touch "/tmp/${HOSTNAME_LOWER}_accessibility_requested"
+
+    log "Terminal needs Accessibility access to automate the Xcode CLT installation."
+    log "1. We'll open System Settings to the Privacy & Security > Accessibility section"
+    log "2. We'll open Finder showing Terminal.app"
+    log "3. You'll need to drag Terminal from Finder into the Accessibility list"
+    log "4. IMPORTANT: After adding Terminal, you must CLOSE this Terminal window"
+    log "5. Then open a NEW Terminal window and run this script again"
+    log "   (Xcode CLT installation will continue in the background and we'll wait for it)"
+
+    # Open Finder to show Terminal app
+    log "Opening Finder window to locate Terminal.app..."
+    osascript <<EOF
+tell application "Finder"
+  activate
+  open folder "Applications:Utilities:" of startup disk
+  select file "Terminal.app" of folder "Utilities" of folder "Applications" of startup disk
+end tell
+EOF
+
+    # Open Accessibility preferences
+    log "Opening System Settings to the Accessibility section..."
+    open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+
+    log "After granting Accessibility access to Terminal, close this window and run the script again."
+    exit 0
+  fi
+
+  # Check if we're being re-run after Accessibility grant
+  if [ -f "/tmp/${HOSTNAME_LOWER}_accessibility_requested" ]; then
+    rm -f "/tmp/${HOSTNAME_LOWER}_accessibility_requested"
+    log "Detected re-run after Accessibility access grant - checking if CLT installation is still running..."
+  fi
+
+  # Use AppleScript to automate the installation dialog (if CLT installer is still running)
+  if pgrep -f "Install Command Line Developer Tools" >/dev/null; then
+    log "Automating installation dialog..."
+    osascript <<-EOD
+      tell application "System Events"
+        tell process "Install Command Line Developer Tools"
+          keystroke return
+          click button "Agree" of window "License Agreement"
+        end tell
       end tell
-    end tell
 EOD
+  else
+    log "CLT installer dialog not found - may have already been handled or completed"
+  fi
 
   # Wait for installation to complete
   log "Waiting for Xcode Command Line Tools installation to complete..."
