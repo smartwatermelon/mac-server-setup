@@ -38,9 +38,6 @@ PAM_D_SOURCE="$SETUP_DIR/pam.d"
 WIFI_CONFIG_FILE="$SETUP_DIR/wifi/network.conf"
 FORMULAE_FILE="/Users/$ADMIN_USERNAME/formulae.txt"
 CASKS_FILE="/Users/$ADMIN_USERNAME/casks.txt"
-HOMEBREW_VERSION="4.5.2"
-HOMEBREW_PKG_URL="https://github.com/Homebrew/brew/releases/download/${HOMEBREW_VERSION}/Homebrew-${HOMEBREW_VERSION}.pkg"
-HOMEBREW_PKG_FILE="/tmp/Homebrew-${HOMEBREW_VERSION}.pkg"
 RERUN_AFTER_FDA=false
 
 # Parse command line arguments
@@ -492,6 +489,40 @@ log "Disabled automatic app downloads"
 # HOMEBREW & PACKAGE INSTALLATION
 #
 
+# Install Xcode Command Line Tools first
+section "Installing Xcode Command Line Tools"
+
+# Check if Xcode CLT is already installed
+if xcode-select -p &>/dev/null; then
+  log "Xcode Command Line Tools already installed at: $(xcode-select -p)"
+else
+  log "Installing Xcode Command Line Tools..."
+
+  # Trigger the installation
+  xcode-select --install
+  sleep 1
+
+  # Use AppleScript to automate the installation dialog
+  log "Automating installation dialog..."
+  osascript <<-EOD
+    tell application "System Events"
+      tell process "Install Command Line Developer Tools"
+        keystroke return
+        click button "Agree" of window "License Agreement"
+      end tell
+    end tell
+EOD
+
+  # Wait for installation to complete
+  log "Waiting for Xcode Command Line Tools installation to complete..."
+  while ! xcode-select -p &>/dev/null; do
+    sleep 10
+    log "Still waiting for Xcode CLT installation..."
+  done
+
+  log "✅ Xcode Command Line Tools installation completed"
+fi
+
 # Install Homebrew
 if [ "$SKIP_HOMEBREW" = false ]; then
   section "Installing Homebrew"
@@ -506,18 +537,13 @@ if [ "$SKIP_HOMEBREW" = false ]; then
     brew update
     check_success "Homebrew update"
   else
-    log "Downloading Homebrew package installer"
-    curl -L -o "$HOMEBREW_PKG_FILE" "$HOMEBREW_PKG_URL"
-    check_success "Homebrew package download"
+    log "Installing Homebrew using official installation script"
 
-    log "Installing Homebrew"
-    sudo installer -pkg "$HOMEBREW_PKG_FILE" -target /
+    # Use the official Homebrew installation script
+    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     check_success "Homebrew installation"
 
-    # Clean up
-    rm -f "$HOMEBREW_PKG_FILE"
-
-    # Add Homebrew to path
+    # Add Homebrew to path for current session
     if [[ "$(uname -m)" == "arm64" ]]; then
       HOMEBREW_PREFIX="/opt/homebrew"
     else
