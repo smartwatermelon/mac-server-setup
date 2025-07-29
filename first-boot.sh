@@ -391,6 +391,11 @@ else
     sudo chown -R "$OPERATOR_USERNAME" "$OPERATOR_SSH_DIR"
 
     check_success "Operator SSH key setup"
+
+    # Add operator to SSH access group
+    log "Adding operator to SSH access group"
+    sudo dseditgroup -o edit -a "$OPERATOR_USERNAME" -t user com.apple.access_ssh
+    check_success "Operator SSH group membership"
   fi
 fi
 
@@ -500,9 +505,6 @@ fi
 
 # Configure security settings
 section "Configuring Security Settings"
-
-# Check and set firmware password if needed (skipped in this automated script for security)
-log "Note: Firmware password should be set manually for security reasons"
 
 # Disable automatic app downloads
 defaults write com.apple.SoftwareUpdate AutomaticDownload -int 0
@@ -652,6 +654,81 @@ if [ "$SKIP_PACKAGES" = false ]; then
   log "Cleaning up Homebrew files"
   brew cleanup
   check_success "Homebrew cleanup"
+
+  # Run brew doctor and save output
+  log "Running brew doctor diagnostic"
+  BREW_DOCTOR_OUTPUT="$LOG_DIR/brew-doctor-$(date +%Y%m%d-%H%M%S).log"
+  brew doctor > "$BREW_DOCTOR_OUTPUT" 2>&1 || true
+  log "Brew doctor output saved to: $BREW_DOCTOR_OUTPUT"
+  check_success "Brew doctor diagnostic"
+fi
+
+#
+# RELOAD PROFILE FOR CURRENT SESSION
+#
+section "Reload Profile"
+# shellcheck source=/dev/null
+source ~/.zprofile
+check_success "Reload profile"
+
+#
+# CLEAN UP DOCK
+#
+section "Cleaning up Dock"
+log "Cleaning up Dock"
+if command -v dockutil &>/dev/null; then
+	for TILE in Messages Mail Maps Photos FaceTime Calendar Contacts Reminders Freeform TV Music News 'iPhone Mirroring' /System/Applications/Utilities/Terminal.app; do
+		dockutil --remove "$TILE" --allhomes --no-restart
+	done
+	check_success "Dock cleanup"
+	dockutil --add /Applications/iTerm.app --allhomes --no-restart
+	check_success "Add iTerm to Dock"
+	killall Dock
+else
+	log "Could not locate dockutil"
+fi
+
+#
+# CHANGE DEFAULT SHELL TO HOMEBREW BASH
+#
+section "Changing Default Shell to Homebrew Bash"
+
+# Get the Homebrew bash path
+HOMEBREW_BASH="$(brew --prefix)/bin/bash"
+
+if [ -f "$HOMEBREW_BASH" ]; then
+  log "Found Homebrew bash at: $HOMEBREW_BASH"
+
+  # Add to /etc/shells if not already present
+  if ! grep -q "$HOMEBREW_BASH" /etc/shells; then
+    log "Adding Homebrew bash to /etc/shells"
+    echo "$HOMEBREW_BASH" | sudo tee -a /etc/shells
+    check_success "Add Homebrew bash to /etc/shells"
+  else
+    log "Homebrew bash already in /etc/shells"
+  fi
+
+  # Change shell for admin user
+  if [ "$(dscl . -read /Users/"$ADMIN_USERNAME" UserShell | awk '{print $2}')" != "$HOMEBREW_BASH" ]; then
+    log "Changing shell for admin user to Homebrew bash"
+    sudo chsh -s "$HOMEBREW_BASH" "$ADMIN_USERNAME"
+    check_success "Admin user shell change"
+  else
+    log "Admin user already using Homebrew bash"
+  fi
+
+  # Change shell for operator user if it exists
+  if dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
+    if [ "$(dscl . -read /Users/$OPERATOR_USERNAME UserShell | awk '{print $2}')" != "$HOMEBREW_BASH" ]; then
+      log "Changing shell for operator user to Homebrew bash"
+      sudo chsh -s "$HOMEBREW_BASH" "$OPERATOR_USERNAME"
+      check_success "Operator user shell change"
+    else
+      log "Operator user already using Homebrew bash"
+    fi
+  fi
+else
+  log "Homebrew bash not found - skipping shell change"
 fi
 
 #
@@ -686,21 +763,22 @@ log "Setting up automatic login for $OPERATOR_USERNAME"
 if ! dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
   log "Operator account doesn't exist, cannot set up automatic login"
 else
-  # Read the password from 1Password reference
-  if [ -f "/Users/$ADMIN_USERNAME/Documents/operator_password_reference.txt" ]; then
-    log "Creating encoded password file for auto-login"
+  # We have the password available temporarily from the operator account creation
+  if [ -n "$OPERATOR_PASSWORD" ]; then
+    log "Configuring automatic login for operator account"
 
-    # Get the password from the reference (we know it's in 1Password)
-    # For auto-login, we need to recreate the password temporarily
-    # This is a security tradeoff for convenience
-    log "Note: Auto-login requires storing encoded password locally"
-    log "Consider disabling auto-login for better security"
+    # Create the encoded password file that macOS uses for auto-login
+    echo "$OPERATOR_PASSWORD" | openssl enc -base64 | sudo tee /etc/kcpassword > /dev/null
+    sudo chmod 600 /etc/kcpassword
+    check_success "Create auto-login password file"
 
-    # Skip auto-login setup for now - it requires storing the password
-    log "Skipping auto-login setup for security reasons"
-    log "You can enable it manually in System Settings > Users & Groups if desired"
+    # Set the auto-login user
+    sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser "$OPERATOR_USERNAME"
+    check_success "Set auto-login user"
+
+    log "✅ Automatic login configured for $OPERATOR_USERNAME"
   else
-    log "Could not find operator password reference - skipping automatic login setup"
+    log "Operator password not available - skipping automatic login setup"
   fi
 fi
 
@@ -712,6 +790,8 @@ log ""
 log "Next steps:"
 log "1. Set up applications: cd $APP_SETUP_DIR && ./plex-setup.sh"
 log "2. Configure monitoring: ~/tilsit-scripts/monitoring-setup.sh"
-log "3. Test SSH access from your dev machine: ssh operator@tilsit.local"
+log "3. Test SSH access from your dev machine:"
+log "   ssh $ADMIN_USERNAME@tilsit.local"
+log "   ssh operator@tilsit.local"
 
 exit 0

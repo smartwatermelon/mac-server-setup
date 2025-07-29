@@ -16,7 +16,6 @@ font-inconsolata
 hiddenbar
 hot
 iterm2
-jordanbaird-ice
 knockknock
 lulu
 no-ip-duc

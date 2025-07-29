@@ -3,6 +3,7 @@ bash-completion@2
 bat
 caddy
 coreutils
+dockutil
 ffmpeg
 fileicon
 findutils
