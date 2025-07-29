@@ -1,4 +1,62 @@
-#!/bin/bash
+else
+  log "Installing Xcode Command Line Tools..."
+
+  # Trigger the installation
+  xcode-select --install
+  sleep 1
+
+  # Check if we need Accessibility access by looking for the marker file from a previous run
+  if [ ! -f "/tmp/${HOSTNAME_LOWER}_accessibility_requested" ]; then
+    # First time - we need to request Accessibility access before attempting osascript
+    # Create a marker file to detect re-run after Accessibility grant
+    touch "/tmp/${HOSTNAME_LOWER}_accessibility_requested"
+
+    log "We need to grant Accessibility permissions to Terminal to automate the CLT installation."
+    log "1. We'll open System Settings to the Privacy & Security > Accessibility section"
+    log "2. We'll open Finder showing Terminal.app"
+    log "3. You need to either:"
+    log "   - Add Terminal to the list (drag from Finder), OR"
+    log "   - If Terminal is already listed, turn ON the switch next to it"
+    log "4. IMPORTANT: After enabling Terminal access, you must CLOSE this Terminal window"
+    log "5. Then open a NEW Terminal window and run this script again"
+    log "   (Xcode CLT installation will continue in the background and we'll wait for it)"
+
+    # Open Finder to show Terminal app
+    log "Opening Finder window to locate Terminal.app..."
+    osascript <<EOF
+tell application "Finder"
+  activate
+  open folder "Applications:Utilities:" of startup disk
+  select file "Terminal.app" of folder "Utilities" of folder "Applications" of startup disk
+end tell
+EOF
+
+    # Open Accessibility preferences
+    log "Opening System Settings to the Accessibility section..."
+    open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+
+    log "After enabling Terminal Accessibility access, close this window and run the script again."
+    exit 0
+  else
+    # We're being re-run after Accessibility grant
+    rm -f "/tmp/${HOSTNAME_LOWER}_accessibility_requested"
+    log "Detected re-run after Accessibility access grant - proceeding with automation..."
+  fi
+
+  # Use AppleScript to automate the installation dialog (if CLT installer is still running)
+  if pgrep -f "Install Command Line Developer Tools" >/dev/null; then
+    log "Automating installation dialog..."
+    osascript <<-EOD
+      tell application "System Events"
+        tell process "Install Command Line Developer Tools"
+          keystroke return
+          click button "Agree" of window "License Agreement"
+        end tell
+      end tell
+EOD
+  else
+    log "CLT installer dialog not found - may have already been handled or completed"
+  fi#!/bin/bash
 #
 # first-boot.sh - Complete setup script for Mac Mini M2 'TILSIT' server
 #
@@ -178,24 +236,39 @@ if [ -f "$WIFI_CONFIG_FILE" ]; then
   source "$WIFI_CONFIG_FILE"
 
   if [ -n "$WIFI_SSID" ] && [ -n "$WIFI_PASSWORD" ]; then
-    log "Configuring WiFi network: $WIFI_SSID"
+    # Check if we're already connected to the target network
+    CURRENT_SSID=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}')
 
-    # Add WiFi network to preferred networks
-    WIFI_IFACE="$(system_profiler SPAirPortDataType -xml | /usr/libexec/PlistBuddy -c "Print :0:_items:0:spairport_airport_interfaces:0:_name" /dev/stdin <<< "$(cat)")"
-    networksetup -addpreferredwirelessnetworkatindex "$WIFI_IFACE" "$WIFI_SSID" "@" "WPA/WPA2"
-    check_success "Add preferred WiFi network"
-    security add-generic-password -D "AirPort network password" -a "$WIFI_SSID" -s "AirPort" -w "$WIFI_PASSWORD" || true
-    check_success "Store password in keychain"
-    log "Attempting to join WiFi network $WIFI_SSID..."
-    networksetup -setairportnetwork "$WIFI_IFACE" "$WIFI_SSID" || true
-
-    # Give it a few seconds and check if we connected
-    sleep 5
-    CURRENT_NETWORK=$(networksetup -getairportnetwork "$WIFI_IFACE" 2>/dev/null | cut -d' ' -f4- || echo "")
-    if [ "$CURRENT_NETWORK" = "$WIFI_SSID" ]; then
-      log "✅ Successfully connected to WiFi network: $WIFI_SSID"
+    if [ "$CURRENT_SSID" = "$WIFI_SSID" ]; then
+      log "Already connected to WiFi network: $WIFI_SSID"
     else
-      log "WiFi network will be automatically joined after reboot"
+      log "Configuring WiFi network: $WIFI_SSID"
+
+      # Check if SSID is already in preferred networks list
+      WIFI_IFACE="$(system_profiler SPAirPortDataType -xml | /usr/libexec/PlistBuddy -c "Print :0:_items:0:spairport_airport_interfaces:0:_name" /dev/stdin <<< "$(cat)")"
+
+      if networksetup -listpreferredwirelessnetworks "$WIFI_IFACE" | grep -q "$WIFI_SSID"; then
+        log "WiFi network $WIFI_SSID is already in preferred networks list"
+      else
+        # Add WiFi network to preferred networks
+        networksetup -addpreferredwirelessnetworkatindex "$WIFI_IFACE" "$WIFI_SSID" "@" "WPA/WPA2"
+        check_success "Add preferred WiFi network"
+        security add-generic-password -D "AirPort network password" -a "$WIFI_SSID" -s "AirPort" -w "$WIFI_PASSWORD" || true
+        check_success "Store password in keychain"
+      fi
+
+      # Try to join the network
+      log "Attempting to join WiFi network $WIFI_SSID..."
+      networksetup -setairportnetwork "$WIFI_IFACE" "$WIFI_SSID" || true
+
+      # Give it a few seconds and check if we connected
+      sleep 5
+      CURRENT_NETWORK=$(networksetup -getairportnetwork "$WIFI_IFACE" 2>/dev/null | cut -d' ' -f4- || echo "")
+      if [ "$CURRENT_NETWORK" = "$WIFI_SSID" ]; then
+        log "✅ Successfully connected to WiFi network: $WIFI_SSID"
+      else
+        log "WiFi network will be automatically joined after reboot"
+      fi
     fi
 
     # Securely remove the WiFi password from the configuration file
@@ -513,16 +586,18 @@ else
   # Check if Terminal has Accessibility access for AppleScript automation
   log "Checking Terminal Accessibility permissions for automation..."
 
-  # Test if we can use AppleScript (this will fail if no Accessibility access)
-  if ! osascript -e 'tell application "System Events" to get name of first process' &>/dev/null; then
+  # Try to perform an actual AppleScript action that requires Accessibility
+  if ! osascript -e 'tell application "System Events" to keystroke "test"' &>/dev/null; then
     # Create a marker file to detect re-run after Accessibility grant
     touch "/tmp/${HOSTNAME_LOWER}_accessibility_requested"
 
     log "Terminal needs Accessibility access to automate the Xcode CLT installation."
     log "1. We'll open System Settings to the Privacy & Security > Accessibility section"
     log "2. We'll open Finder showing Terminal.app"
-    log "3. You'll need to drag Terminal from Finder into the Accessibility list"
-    log "4. IMPORTANT: After adding Terminal, you must CLOSE this Terminal window"
+    log "3. You need to either:"
+    log "   - Add Terminal to the list (drag from Finder), OR"
+    log "   - If Terminal is already listed, turn ON the switch next to it"
+    log "4. IMPORTANT: After enabling Terminal access, you must CLOSE this Terminal window"
     log "5. Then open a NEW Terminal window and run this script again"
     log "   (Xcode CLT installation will continue in the background and we'll wait for it)"
 
@@ -540,7 +615,7 @@ EOF
     log "Opening System Settings to the Accessibility section..."
     open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
 
-    log "After granting Accessibility access to Terminal, close this window and run the script again."
+    log "After enabling Terminal Accessibility access, close this window and run the script again."
     exit 0
   fi
 
