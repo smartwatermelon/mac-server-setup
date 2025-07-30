@@ -771,36 +771,44 @@ check_success "Reload profile"
 section "Cleaning up Administrator Dock"
 log "Cleaning up Administrator Dock"
 if command -v dockutil &>/dev/null; then
-	dockutil --remove Messages --remove Mail --remove Maps --remove Photos --remove FaceTime --remove Calendar --remove Contacts --remove Reminders --remove Freeform --remove TV --remove Music --remove News --remove 'iPhone Mirroring' --remove /System/Applications/Utilities/Terminal.app --allhomes --no-restart
-	check_success "Administrator Dock cleaned up"
-	dockutil --add /Applications/iTerm.app --allhomes --no-restart 2>/dev/null || true
-	check_success "Add iTerm to Administrator Dock"
-	killall Dock
+  dockutil \
+		--remove Messages \
+		--remove Mail \
+		--remove Maps \
+		--remove Photos \
+		--remove FaceTime \
+		--remove Calendar \
+		--remove Contacts \
+		--remove Reminders \
+		--remove Freeform \
+		--remove TV \
+		--remove Music \
+		--remove News \
+		--remove 'iPhone Mirroring' \
+		--remove /System/Applications/Utilities/Terminal.app \
+		--add /Applications/iTerm.app \
+		--allhomes \
+		2>/dev/null || true
+  check_success "Administrator Dock cleaned up"
 else
 	log "Could not locate dockutil"
 fi
 
-# Setup operator dock cleanup LaunchAgent
-section "Setting Up Operator Dock Cleanup"
+# Setup operator dock cleanup script
+section "Setting Up Operator Dock Cleanup Script"
 
-if [ -f "$SETUP_DIR/launch-agents/com.tilsit.operator.dockutil.plist" ] && dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
-  log "Installing operator dock cleanup LaunchAgent"
+if [ -f "$SETUP_DIR/dock-cleanup.command" ] && dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
+  log "Installing operator dock cleanup script on desktop"
 
-  # Create LaunchAgents directory for operator
-  sudo -u "$OPERATOR_USERNAME" mkdir -p "/Users/$OPERATOR_USERNAME/Library/LaunchAgents"
+  # Copy script to operator's desktop
+  sudo cp "$SETUP_DIR/dock-cleanup.command" "/Users/$OPERATOR_USERNAME/Desktop/"
+  sudo chown "$OPERATOR_USERNAME:staff" "/Users/$OPERATOR_USERNAME/Desktop/dock-cleanup.command"
+  sudo chmod +x "/Users/$OPERATOR_USERNAME/Desktop/dock-cleanup.command"
 
-  # Copy the plist file
-  sudo cp "$SETUP_DIR/launch-agents/com.tilsit.operator.dockutil.plist" "/Users/$OPERATOR_USERNAME/Library/LaunchAgents/"
-  sudo chown "$OPERATOR_USERNAME" "/Users/$OPERATOR_USERNAME/Library/LaunchAgents/com.tilsit.operator.dockutil.plist"
-
-  # Bootstrap the LaunchAgent
-  OPERATOR_UID=$(id -u "$OPERATOR_USERNAME")
-  sudo launchctl bootstrap "gui/$OPERATOR_UID" "/Users/$OPERATOR_USERNAME/Library/LaunchAgents/com.tilsit.operator.dockutil.plist"
-  check_success "Operator dock cleanup LaunchAgent setup"
-
-  show_log "✅ Operator dock will be cleaned up on first login"
+  check_success "Operator dock cleanup script setup"
+  show_log "✅ Dock cleanup script placed on operator desktop"
 else
-  log "Operator dock cleanup LaunchAgent not found or operator account doesn't exist"
+  log "Operator dock cleanup script not found or operator account doesn't exist"
 fi
 
 #

@@ -42,7 +42,6 @@ mkdir -p "$OUTPUT_PATH/lists"
 mkdir -p "$OUTPUT_PATH/pam.d"
 mkdir -p "$OUTPUT_PATH/wifi"
 mkdir -p "$OUTPUT_PATH/URLs"
-mkdir -p "$OUTPUT_PATH/launch-agents"
 
 # Remove existing server host key if any
 ssh-keygen -R "$SERVER_NAME_LOWER".local
@@ -168,10 +167,11 @@ else
   echo "⚠️ No URL provided, skipping Apple ID password link creation"
 fi
 
-# Copy LaunchAgent for operator dock cleanup
-if [ -f "$SCRIPT_SOURCE_DIR/launch-agents/com.tilsit.operator.dockutil.plist" ]; then
-  echo "Copying operator dock cleanup LaunchAgent"
-  cp "$SCRIPT_SOURCE_DIR/launch-agents/com.tilsit.operator.dockutil.plist" "$OUTPUT_PATH/launch-agents/"
+# Copy dock cleanup script for operator
+if [ -f "$SCRIPT_SOURCE_DIR/dock-cleanup.command" ]; then
+  echo "Copying operator dock cleanup script"
+  cp "$SCRIPT_SOURCE_DIR/dock-cleanup.command" "$OUTPUT_PATH/"
+  chmod +x "$OUTPUT_PATH/dock-cleanup.command"
 fi
 
 # Copy from local script source directory
@@ -205,7 +205,6 @@ This directory contains all the necessary files for setting up the Mac Mini M2 '
 - `pam.d/`: TouchID sudo configuration
 - `URLs/`: Internet shortcuts used by Setup
 - `wifi/`: WiFi network configuration
-- `launch-agents` : LaunchCtl plists for automatically launching services
 - `operator_password`: Operator account password
 - `timemachine.conf` : Configuration information for Time Machine
 
