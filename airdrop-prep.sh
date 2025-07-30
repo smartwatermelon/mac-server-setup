@@ -20,7 +20,6 @@ set -e
 SERVER_NAME="TILSIT"; SERVER_NAME_LOWER="$( tr '[:upper:]' '[:lower:]' <<< $SERVER_NAME)"
 OP_TIMEMACHINE_ENTRY="PECORINO DS-413 - TimeMachine"
 OUTPUT_PATH="${1:-$HOME/$SERVER_NAME_LOWER-setup}"
-GITHUB_REPO="https://github.com/yourusername/$SERVER_NAME_LOWER-setup.git"	# Replace with your actual repository
 SSH_KEY_PATH="$HOME/.ssh/id_ed25519.pub"  # Adjust to your SSH key path
 SCRIPT_SOURCE_DIR="${2:-.}"  # Directory containing source scripts (default is current dir)
 
@@ -43,6 +42,7 @@ mkdir -p "$OUTPUT_PATH/lists"
 mkdir -p "$OUTPUT_PATH/pam.d"
 mkdir -p "$OUTPUT_PATH/wifi"
 mkdir -p "$OUTPUT_PATH/URLs"
+mkdir -p "$OUTPUT_PATH/launch-agents"
 
 # Remove existing server host key if any
 ssh-keygen -R "$SERVER_NAME_LOWER".local
@@ -168,28 +168,14 @@ else
   echo "⚠️ No URL provided, skipping Apple ID password link creation"
 fi
 
-# Option 1: Clone from GitHub repository if available
-if [[ -n "$GITHUB_REPO" && "$GITHUB_REPO" != "https://github.com/yourusername/$SERVER_NAME_LOWER-setup.git" ]]; then
-  echo "Cloning setup scripts from GitHub repository..."
+# Copy LaunchAgent for operator dock cleanup
+if [ -f "$SCRIPT_SOURCE_DIR/launch-agents/com.tilsit.operator.dockutil.plist" ]; then
+  echo "Copying operator dock cleanup LaunchAgent"
+  cp "$SCRIPT_SOURCE_DIR/launch-agents/com.tilsit.operator.dockutil.plist" "$OUTPUT_PATH/launch-agents/"
+fi
 
-  # Create temporary directory
-  TMP_DIR=$(mktemp -d)
-
-  # Clone repository
-  git clone "$GITHUB_REPO" "$TMP_DIR"
-
-  # Copy scripts to output directory
-  cp "$TMP_DIR/first-boot.sh" "$OUTPUT_PATH/scripts/"
-  cp "$TMP_DIR/app-setup/"*.sh "$OUTPUT_PATH/scripts/app-setup/"
-  cp "$TMP_DIR/formulae.txt" "$OUTPUT_PATH/lists/"
-  cp "$TMP_DIR/casks.txt" "$OUTPUT_PATH/lists/"
-
-  # Clean up
-  rm -rf "$TMP_DIR"
-
-  echo "Scripts copied from GitHub repository"
-# Option 2: Copy from local script source directory
-elif [ -d "$SCRIPT_SOURCE_DIR" ]; then
+# Copy from local script source directory
+if [ -d "$SCRIPT_SOURCE_DIR" ]; then
   echo "Copying scripts from local source directory..."
 
   # Copy scripts
@@ -200,7 +186,7 @@ elif [ -d "$SCRIPT_SOURCE_DIR" ]; then
 
   echo "Scripts copied from local source directory"
 else
-  echo "Error: No script source found. Please specify a GitHub repository or provide a local script source directory."
+  echo "Error: No script source found. Please provide a local script source directory."
   exit 1
 fi
 
@@ -219,7 +205,9 @@ This directory contains all the necessary files for setting up the Mac Mini M2 '
 - `pam.d/`: TouchID sudo configuration
 - `URLs/`: Internet shortcuts used by Setup
 - `wifi/`: WiFi network configuration
-- `operator_password`: Operator account password from 1Password
+- `launch-agents` : LaunchCtl plists for automatically launching services
+- `operator_password`: Operator account password
+- `timemachine.conf` : Configuration information for Time Machine
 
 ## Setup Instructions
 

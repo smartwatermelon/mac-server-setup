@@ -771,15 +771,36 @@ check_success "Reload profile"
 section "Cleaning up Administrator Dock"
 log "Cleaning up Administrator Dock"
 if command -v dockutil &>/dev/null; then
-	for TILE in Messages Mail Maps Photos FaceTime Calendar Contacts Reminders Freeform TV Music News 'iPhone Mirroring' /System/Applications/Utilities/Terminal.app; do
-		dockutil --remove "$TILE" --allhomes --no-restart 2>/dev/null || true
-	done
+	dockutil --remove Messages --remove Mail --remove Maps --remove Photos --remove FaceTime --remove Calendar --remove Contacts --remove Reminders --remove Freeform --remove TV --remove Music --remove News --remove 'iPhone Mirroring' --remove /System/Applications/Utilities/Terminal.app --allhomes --no-restart
 	check_success "Administrator Dock cleaned up"
 	dockutil --add /Applications/iTerm.app --allhomes --no-restart 2>/dev/null || true
 	check_success "Add iTerm to Administrator Dock"
 	killall Dock
 else
 	log "Could not locate dockutil"
+fi
+
+# Setup operator dock cleanup LaunchAgent
+section "Setting Up Operator Dock Cleanup"
+
+if [ -f "$SETUP_DIR/launch-agents/com.tilsit.operator.dockutil.plist" ] && dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
+  log "Installing operator dock cleanup LaunchAgent"
+
+  # Create LaunchAgents directory for operator
+  sudo -u "$OPERATOR_USERNAME" mkdir -p "/Users/$OPERATOR_USERNAME/Library/LaunchAgents"
+
+  # Copy the plist file
+  sudo cp "$SETUP_DIR/launch-agents/com.tilsit.operator.dockutil.plist" "/Users/$OPERATOR_USERNAME/Library/LaunchAgents/"
+  sudo chown "$OPERATOR_USERNAME" "/Users/$OPERATOR_USERNAME/Library/LaunchAgents/com.tilsit.operator.dockutil.plist"
+
+  # Bootstrap the LaunchAgent
+  OPERATOR_UID=$(id -u "$OPERATOR_USERNAME")
+  sudo launchctl bootstrap "gui/$OPERATOR_UID" "/Users/$OPERATOR_USERNAME/Library/LaunchAgents/com.tilsit.operator.dockutil.plist"
+  check_success "Operator dock cleanup LaunchAgent setup"
+
+  show_log "✅ Operator dock will be cleaned up on first login"
+else
+  log "Operator dock cleanup LaunchAgent not found or operator account doesn't exist"
 fi
 
 #
