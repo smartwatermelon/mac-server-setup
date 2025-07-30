@@ -70,11 +70,17 @@ for arg in "$@"; do
   esac
 done
 
-# Function to log messages to both console and log file
+# log function - only writes to log file
 log() {
   mkdir -p "$LOG_DIR"
   local timestamp; timestamp=$(date +"%Y-%m-%d %H:%M:%S")
   echo "[$timestamp] $1" >> "$LOG_FILE"
+}
+
+# New wrapper function - shows in main window AND logs
+show_log() {
+  echo "$1"
+  log "$1"
 }
 
 # Function to log section headers
@@ -85,9 +91,9 @@ section() {
 # Function to check if a command was successful
 check_success() {
   if [ $? -eq 0 ]; then
-    log "✅ $1"
+    show_log "✅ $1"
   else
-    log "❌ $1 failed"
+    show_log "❌ $1 failed"
     if [ "$FORCE" = false ]; then
       read -p "Continue anyway? (y/n) " -n 1 -r
       echo
@@ -154,7 +160,7 @@ if [ -d "$PAM_D_SOURCE" ]; then
       log "TouchID sudo is already properly configured"
     else
       # File doesn't exist OR exists but has different content - same action either way
-      log "TouchID sudo needs to be configured. We will ask for your user password."
+      show_log "TouchID sudo needs to be configured. We will ask for your user password."
       sudo cp "$PAM_D_SOURCE/sudo_local" "/etc/pam.d"
       check_success "TouchID sudo configuration"
 
@@ -209,9 +215,9 @@ if [ -f "$WIFI_CONFIG_FILE" ]; then
       sleep 5
       CURRENT_NETWORK=$(networksetup -getairportnetwork "$WIFI_IFACE" 2>/dev/null | cut -d' ' -f4- || echo "")
       if [ "$CURRENT_NETWORK" = "$WIFI_SSID" ]; then
-        log "✅ Successfully connected to WiFi network: $WIFI_SSID"
+        show_log "✅ Successfully connected to WiFi network: $WIFI_SSID"
       else
-        log "WiFi network will be automatically joined after reboot"
+        show_log "WiFi network will be automatically joined after reboot"
       fi
     fi
 
@@ -251,17 +257,17 @@ else
   log "Attempting to enable SSH..."
   if sudo systemsetup -setremotelogin on; then
     # 3.a Success case - it worked directly
-    log "✅ SSH has been enabled successfully"
+    show_log "✅ SSH has been enabled successfully"
   else
     # 3.b Failure case - need FDA
     # Create a marker file to detect re-run
     touch "/tmp/${HOSTNAME_LOWER}_fda_requested"
-    log "We need to grant Full Disk Access permissions to Terminal to enable SSH."
-    log "1. We'll open System Settings to the Full Disk Access section"
-    log "2. We'll open Finder showing Terminal.app"
-    log "3. You'll need to drag Terminal from Finder into the FDA list"
-    log "4. IMPORTANT: After adding Terminal, you must CLOSE this Terminal window"
-    log "5. Then open a NEW Terminal window and run this script again"
+    show_log "We need to grant Full Disk Access permissions to Terminal to enable SSH."
+    show_log "1. We'll open System Settings to the Full Disk Access section"
+    show_log "2. We'll open Finder showing Terminal.app"
+    show_log "3. You'll need to drag Terminal from Finder into the FDA list"
+    show_log "4. IMPORTANT: After adding Terminal, you must CLOSE this Terminal window"
+    show_log "5. Then open a NEW Terminal window and run this script again"
 
     # Open Finder to show Terminal app
     log "Opening Finder window to locate Terminal.app..."
@@ -277,7 +283,7 @@ EOF
     log "Opening System Settings to the Full Disk Access section..."
     open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
 
-    log "After granting Full Disk Access to Terminal, close this window and run the script again."
+    show_log "After granting Full Disk Access to Terminal, close this window and run the script again."
     exit 0
   fi
 fi
@@ -317,20 +323,20 @@ if [ -f "$APPLE_ID_URL_FILE" ]; then
     read -rp "Have you retrieved your Apple ID password? (y/n) " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-      log "Please retrieve your Apple ID password before continuing"
+      show_log "Please retrieve your Apple ID password before continuing"
       open "$APPLE_ID_URL_FILE"
       read -p "Press any key to continue once you have your password... " -n 1 -r
       echo
     fi
 
     # Open System Settings to the Apple ID section
-    log "Opening System Settings to the Apple ID section"
-    log "IMPORTANT: You will need to complete several steps:"
-    log "1. Enter your Apple ID and password"
-    log "2. You may be prompted to enter your Mac's user password"
-    log "3. Approve any verification codes that are sent to your other devices"
-    log "4. Select which services to enable (you can customize these)"
-    log "5. Return to Terminal after completing all Apple ID setup dialogs"
+    show_log "Opening System Settings to the Apple ID section"
+    show_log "IMPORTANT: You will need to complete several steps:"
+    show_log "1. Enter your Apple ID and password"
+    show_log "2. You may be prompted to enter your Mac's user password"
+    show_log "3. Approve any verification codes that are sent to your other devices"
+    show_log "4. Select which services to enable (you can customize these)"
+    show_log "5. Return to Terminal after completing all Apple ID setup dialogs"
 
     open "x-apple.systempreferences:com.apple.preferences.AppleIDPrefPane"
     check_success "Opening Apple ID settings"
@@ -366,7 +372,7 @@ else
 
   # Verify the password works
   if dscl /Local/Default -authonly "$OPERATOR_USERNAME" "$OPERATOR_PASSWORD"; then
-    log "✅ Password verification successful"
+    show_log "✅ Password verification successful"
   else
     log "❌ Password verification failed"
     exit 1
@@ -379,7 +385,7 @@ else
   # Clean up the password file
   rm -f "$OPERATOR_PASSWORD_FILE"
 
-  log "Operator account created successfully"
+  show_log "Operator account created successfully"
 
   # Set up operator SSH keys if available
   if [ -d "$SSH_KEY_SOURCE" ] && [ -f "$SSH_KEY_SOURCE/operator_authorized_keys" ]; then
@@ -449,7 +455,7 @@ log "Enabled immediate password requirement after screen saver"
 # Run software updates if not skipped
 if [ "$SKIP_UPDATE" = false ]; then
   section "Running Software Updates"
-  log "Checking for software updates (this may take a while)"
+  show_log "Checking for software updates (this may take a while)"
 
   # Check for updates
   UPDATE_CHECK=$(softwareupdate -l)
@@ -523,7 +529,7 @@ section "Installing Xcode Command Line Tools"
 if softwareupdate --history | grep 'Command Line Tools for Xcode' >/dev/null; then
   log "Xcode Command Line Tools already installed"
 else
-  log "Installing Xcode Command Line Tools silently..."
+  show_log "Installing Xcode Command Line Tools silently..."
 
   # Touch flag to indicate user has requested CLT installation
   sudo touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
@@ -532,13 +538,13 @@ else
   CLT_PACKAGE=$(softwareupdate -l | grep Label | tail -n 1 | cut -d ':' -f 2 | xargs)
   log "Installing package: $CLT_PACKAGE"
 
-  softwareupdate -i "$CLT_PACKAGE"
+  softwareupdate -v -i "$CLT_PACKAGE"
   check_success "Xcode Command Line Tools installation"
 
   # Clean up the flag
   sudo rm -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
 
-  log "✅ Xcode Command Line Tools installation completed"
+  show_log "✅ Xcode Command Line Tools installation completed"
 fi
 
 # Install Homebrew
@@ -555,7 +561,7 @@ if [ "$SKIP_HOMEBREW" = false ]; then
     brew update
     check_success "Homebrew update"
   else
-    log "Installing Homebrew using official installation script"
+    show_log "Installing Homebrew using official installation script"
 
     # Use the official Homebrew installation script
     NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
@@ -592,11 +598,11 @@ if [ "$SKIP_HOMEBREW" = false ]; then
       fi
     done
 
-    log "Homebrew installation completed"
+    show_log "Homebrew installation completed"
 
     # Verify installation with brew help
     if brew help >/dev/null 2>&1; then
-      log "✅ Homebrew verification successful"
+      show_log "✅ Homebrew verification successful"
     else
       log "❌ Homebrew verification failed - brew help returned an error"
       exit 1
@@ -632,7 +638,7 @@ if [ "$SKIP_PACKAGES" = false ]; then
 
   # Install formulae from list
   if [ -f "$FORMULAE_FILE" ]; then
-    log "Installing formulae from $FORMULAE_FILE"
+    show_log "Installing formulae from $FORMULAE_FILE"
     while read -r formula; do
       [[ -z "$formula" || "$formula" == \#* ]] && continue
       install_formula "$formula"
@@ -643,7 +649,7 @@ if [ "$SKIP_PACKAGES" = false ]; then
 
   # Install casks from list
   if [ -f "$CASKS_FILE" ]; then
-    log "Installing casks from $CASKS_FILE"
+    show_log "Installing casks from $CASKS_FILE"
     while read -r cask; do
       [[ -z "$cask" || "$cask" == \#* ]] && continue
       install_cask "$cask"
@@ -778,7 +784,7 @@ else
     sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser "$OPERATOR_USERNAME"
     check_success "Set auto-login user"
 
-    log "✅ Automatic login configured for $OPERATOR_USERNAME"
+    show_log "✅ Automatic login configured for $OPERATOR_USERNAME"
   else
     log "Operator password not available - skipping automatic login setup"
   fi
@@ -786,14 +792,14 @@ fi
 
 # Setup completed successfully
 section "Setup Complete"
-log "Server setup has been completed successfully"
-log "You can now set up individual applications with scripts in: $APP_SETUP_DIR"
-log ""
-log "Next steps:"
-log "1. Set up applications: cd $APP_SETUP_DIR && ./plex-setup.sh"
-log "2. Configure monitoring: ~/tilsit-scripts/monitoring-setup.sh"
-log "3. Test SSH access from your dev machine:"
-log "   ssh $ADMIN_USERNAME@tilsit.local"
-log "   ssh operator@tilsit.local"
+show_log "Server setup has been completed successfully"
+show_log "You can now set up individual applications with scripts in: $APP_SETUP_DIR"
+show_log ""
+show_log "Next steps:"
+show_log "1. Set up applications: cd $APP_SETUP_DIR && ./plex-setup.sh"
+show_log "2. Configure monitoring: ~/tilsit-scripts/monitoring-setup.sh"
+show_log "3. Test SSH access from your dev machine:"
+show_log "   ssh $ADMIN_USERNAME@tilsit.local"
+show_log "   ssh operator@tilsit.local"
 
 exit 0
