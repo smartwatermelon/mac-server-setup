@@ -733,11 +733,11 @@ log "Cleaning up Docks"
 if command -v dockutil &>/dev/null; then
 	for TILE in Messages Mail Maps Photos FaceTime Calendar Contacts Reminders Freeform TV Music News 'iPhone Mirroring' /System/Applications/Utilities/Terminal.app; do
 		dockutil --remove "$TILE" --allhomes --no-restart 2>/dev/null || true
-		sudo dockutil --list /Users/"$OPERATOR_USERNAME" --remove "$TILE" --no-restart 2>/dev/null || true
+		sudo dockutil --remove "$TILE" --no-restart '/System/Library/User Template/English.lproj' 2>/dev/null || true
 	done
 	check_success "Docks cleaned up"
 	dockutil --add /Applications/iTerm.app --allhomes --no-restart 2>/dev/null || true
-	sudo dockutil --list /Users/"$OPERATOR_USERNAME" --add /Applications/iTerm.app --no-restart 2>/dev/null || true
+	sudo dockutil --add /Applications/iTerm.app --no-restart '/System/Library/User Template/English.lproj' 2>/dev/null || true
 	check_success "Add iTerm to Docks"
 	killall Dock
 else

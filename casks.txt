@@ -5,7 +5,6 @@ backblaze
 bbedit
 blockblock
 catch
-claude
 coconutbattery
 coconutid
 docker
