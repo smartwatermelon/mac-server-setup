@@ -105,12 +105,17 @@ check_success() {
   fi
 }
 
-# Create log file if it doesn't exist
-if [ ! -f "$LOG_FILE" ]; then
-  mkdir -p "$LOG_DIR"
-  touch "$LOG_FILE"
-  chmod 644 "$LOG_FILE"
-fi
+# Create log file if it doesn't exist, rotate if it exists
+	if [ -f "$LOG_FILE" ]; then
+		# Rotate existing log file with timestamp
+		ROTATED_LOG="${LOG_FILE%.log}-$(date +%Y%m%d-%H%M%S).log"
+		mv "$LOG_FILE" "$ROTATED_LOG"
+		log "Rotated previous log to: $ROTATED_LOG"
+	fi
+
+	mkdir -p "$LOG_DIR"
+	touch "$LOG_FILE"
+	chmod 644 "$LOG_FILE"
 
 # Tail log in separate window
 osascript -e 'tell application "Terminal" to do script "printf \"\\e]0;TILSIT Setup Log\\a\"; tail -F '"$LOG_FILE"'"' || echo "oops, no tail"
@@ -615,48 +620,56 @@ if [ "$SKIP_PACKAGES" = false ]; then
   section "Installing Packages"
 
   # Function to install formulae if not already installed
-  install_formula() {
-    if ! brew list "$1" &>/dev/null; then
-      log "Installing formula: $1"
-      brew install "$1"
-      check_success "Formula installation: $1"
-    else
-      log "Formula already installed: $1"
-    fi
-  }
+	install_formula() {
+		if ! brew list "$1" &>/dev/null; then
+			log "Installing formula: $1"
+			if brew install "$1"; then
+				log "✅ Formula installation: $1"
+			else
+				log "❌ Formula installation failed: $1"
+				# Continue instead of exiting
+			fi
+		else
+			log "Formula already installed: $1"
+		fi
+	}
 
   # Function to install casks if not already installed
   install_cask() {
-    if ! brew list --cask "$1" &>/dev/null 2>&1; then
+    if ! brew list --cask "$1" &>/dev/null; then
       log "Installing cask: $1"
-      brew install --cask "$1"
-      check_success "Cask installation: $1"
+      if brew install --cask "$1"; then
+				log "✅ Cask installation: $1"
+			else
+				log "❌ Cask installation failed: $1"
+				# Continue instead of exiting
+			fi
     else
       log "Cask already installed: $1"
     fi
   }
 
-  # Install formulae from list
-  if [ -f "$FORMULAE_FILE" ]; then
-    show_log "Installing formulae from $FORMULAE_FILE"
-    while read -r formula; do
-      [[ -z "$formula" || "$formula" == \#* ]] && continue
-      install_formula "$formula"
-    done < "$FORMULAE_FILE"
-  else
-    log "Formulae list not found, skipping formula installations"
-  fi
+	# Install formulae from list
+	if [ -f "$FORMULAE_FILE" ]; then
+	 show_log "Installing formulae from $FORMULAE_FILE"
+	 mapfile -t formulae < <(grep -v '^#' "$FORMULAE_FILE" | grep -v '^$')
+	 for formula in "${formulae[@]}"; do
+		 install_formula "$formula"
+	 done
+	else
+	 log "Formulae list not found, skipping formula installations"
+	fi
 
-  # Install casks from list
-  if [ -f "$CASKS_FILE" ]; then
-    show_log "Installing casks from $CASKS_FILE"
-    while read -r cask; do
-      [[ -z "$cask" || "$cask" == \#* ]] && continue
-      install_cask "$cask"
-    done < "$CASKS_FILE"
-  else
-    log "Casks list not found, skipping cask installations"
-  fi
+	# Install casks from list
+	if [ -f "$CASKS_FILE" ]; then
+	 show_log "Installing casks from $CASKS_FILE"
+	 mapfile -t casks < <(grep -v '^#' "$CASKS_FILE" | grep -v '^$')
+	 for cask in "${casks[@]}"; do
+		 install_cask "$cask"
+	 done
+	else
+	 log "Casks list not found, skipping cask installations"
+	fi
 
   # Cleanup after installation
   log "Cleaning up Homebrew files"
@@ -771,8 +784,10 @@ log "Setting up automatic login for $OPERATOR_USERNAME"
 if ! dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
   log "Operator account doesn't exist, cannot set up automatic login"
 else
-  # We have the password available temporarily from the operator account creation
-  if [ -n "$OPERATOR_PASSWORD" ]; then
+  # Read the password from the setup directory file
+  OPERATOR_PASSWORD_FILE="$SETUP_DIR/operator_password"
+  if [ -f "$OPERATOR_PASSWORD_FILE" ]; then
+    OPERATOR_PASSWORD=$(cat "$OPERATOR_PASSWORD_FILE")
     log "Configuring automatic login for operator account"
 
     # Create the encoded password file that macOS uses for auto-login
@@ -786,7 +801,7 @@ else
 
     show_log "✅ Automatic login configured for $OPERATOR_USERNAME"
   else
-    log "Operator password not available - skipping automatic login setup"
+    log "Operator password file not found at $OPERATOR_PASSWORD_FILE - skipping automatic login setup"
   fi
 fi
 
