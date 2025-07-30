@@ -649,27 +649,33 @@ if [ "$SKIP_PACKAGES" = false ]; then
     fi
   }
 
-	# Install formulae from list
-	if [ -f "$FORMULAE_FILE" ]; then
-	 show_log "Installing formulae from $FORMULAE_FILE"
-	 mapfile -t formulae < <(grep -v '^#' "$FORMULAE_FILE" | grep -v '^$')
-	 for formula in "${formulae[@]}"; do
-		 install_formula "$formula"
-	 done
-	else
-	 log "Formulae list not found, skipping formula installations"
-	fi
+# Install formulae from list
+ if [ -f "$FORMULAE_FILE" ]; then
+	show_log "Installing formulae from $FORMULAE_FILE"
+	formulae=()
+	while IFS= read -r line; do
+		formulae+=("$line")
+	done < <(grep -v '^#' "$FORMULAE_FILE" | grep -v '^$')
+	for formula in "${formulae[@]}"; do
+	 install_formula "$formula"
+	done
+ else
+	log "Formulae list not found, skipping formula installations"
+ fi
 
-	# Install casks from list
-	if [ -f "$CASKS_FILE" ]; then
-	 show_log "Installing casks from $CASKS_FILE"
-	 mapfile -t casks < <(grep -v '^#' "$CASKS_FILE" | grep -v '^$')
-	 for cask in "${casks[@]}"; do
-		 install_cask "$cask"
-	 done
-	else
-	 log "Casks list not found, skipping cask installations"
-	fi
+ # Install casks from list
+ if [ -f "$CASKS_FILE" ]; then
+	show_log "Installing casks from $CASKS_FILE"
+	casks=()
+	while IFS= read -r line; do
+		casks+=("$line")
+	done < <(grep -v '^#' "$CASKS_FILE" | grep -v '^$')
+	for cask in "${casks[@]}"; do
+	 install_cask "$cask"
+	done
+ else
+	log "Casks list not found, skipping cask installations"
+ fi
 
   # Cleanup after installation
   log "Cleaning up Homebrew files"

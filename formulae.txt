@@ -39,7 +39,7 @@ ripgrep-all
 rsync
 s-search
 shellcheck
-speedtest
+teamookla/speedtest/speedtest
 telnet
 terminal-notifier
 tmux
