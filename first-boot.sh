@@ -74,8 +74,7 @@ done
 log() {
   mkdir -p "$LOG_DIR"
   local timestamp; timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-  echo "[$timestamp] $1"
-  echo "[$timestamp] $1" | tee -a "$LOG_FILE" >/dev/null
+  echo "[$timestamp] $1" >> "$LOG_FILE"
 }
 
 # Function to log section headers
@@ -107,12 +106,8 @@ if [ ! -f "$LOG_FILE" ]; then
   chmod 644 "$LOG_FILE"
 fi
 
-# Tail logfile in a separate window
-osascript <<EOF
-tell application "Terminal"
-    do script "printf \"\\e]0;TILSIT Setup Log\\a\"; tail -F $LOG_FILE"
-end tell
-EOF
+# Tail log in separate window
+osascript -e 'tell application "Terminal" to do script "printf \"\\e]0;TILSIT Setup Log\\a\"; tail -F '"$LOG_FILE"'"' || echo "oops, no tail"
 
 # Print header
 section "Starting Mac Mini M2 '$HOSTNAME' Server Setup"
