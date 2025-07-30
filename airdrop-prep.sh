@@ -18,6 +18,7 @@ set -e
 
 # Configuration
 SERVER_NAME="TILSIT"; SERVER_NAME_LOWER="$( tr '[:upper:]' '[:lower:]' <<< $SERVER_NAME)"
+OP_TIMEMACHINE_ENTRY="PECORINO DS-413 - TimeMachine"
 OUTPUT_PATH="${1:-$HOME/$SERVER_NAME_LOWER-setup}"
 GITHUB_REPO="https://github.com/yourusername/$SERVER_NAME_LOWER-setup.git"	# Replace with your actual repository
 SSH_KEY_PATH="$HOME/.ssh/id_ed25519.pub"  # Adjust to your SSH key path
@@ -124,6 +125,33 @@ echo "Retrieving operator password from 1Password..."
 op read "op://personal/TILSIT operator/password" > "$OUTPUT_PATH/operator_password"
 chmod 600 "$OUTPUT_PATH/operator_password"
 echo "✅ Operator password saved for transfer"
+
+# Set up Time Machine credentials using 1Password
+echo "Setting up Time Machine credentials..."
+
+# Check if Time Machine credentials exist in 1Password
+if ! op item get "$OP_TIMEMACHINE_ENTRY" --vault personal >/dev/null 2>&1; then
+  echo "⚠️ Time Machine credentials not found in 1Password"
+  echo "Please create '$OP_TIMEMACHINE_ENTRY' entry manually"
+  echo "Skipping Time Machine credential setup"
+else
+  echo "✅ Found Time Machine credentials in 1Password"
+
+  # Retrieve Time Machine details from 1Password
+  echo "Retrieving Time Machine details from 1Password..."
+  TM_USERNAME=$(op item get "$OP_TIMEMACHINE_ENTRY" --vault personal --fields username)
+  TM_PASSWORD=$(op read "op://personal/$OP_TIMEMACHINE_ENTRY/password")
+  TM_URL=$(op item get "$OP_TIMEMACHINE_ENTRY" --vault personal --format json | jq -r '.urls[0].href')
+
+  # Create Time Machine configuration file
+  cat > "$OUTPUT_PATH/timemachine.conf" << EOF
+TM_USERNAME="$TM_USERNAME"
+TM_PASSWORD="$TM_PASSWORD"
+TM_URL="$TM_URL"
+EOF
+  chmod 600 "$OUTPUT_PATH/timemachine.conf"
+  echo "✅ Time Machine configuration saved for transfer"
+fi
 
 # Create and save one-time link for Apple ID password
 APPLE_ID_ITEM="$(op item list --categories Login --vault Personal --favorite --format=json | jq -r '.[] | select(.title == "Apple") | .id')"

@@ -349,6 +349,34 @@ if [ -f "$APPLE_ID_URL_FILE" ]; then
     # Give user time to add their Apple ID
     read -rp "Please add your Apple ID in System Settings. Press any key when done... " -n 1 -r
     echo
+
+		# Configure iCloud and notification settings for admin user
+		section "Configuring iCloud and Notification Settings"
+
+		# Disable specific iCloud services for admin user (server doesn't need these)
+		log "Disabling unnecessary iCloud services for admin user"
+		defaults write com.apple.bird syncedDataclasses -dict \
+			"Bookmarks" 0 \
+			"Calendar" 0 \
+			"Contacts" 0 \
+			"Mail" 0 \
+			"Messages" 0 \
+			"Notes" 0 \
+			"Reminders" 0
+		check_success "iCloud services configuration"
+
+		# Disable notifications for messaging apps
+		log "Disabling notifications for messaging apps"
+		defaults write com.apple.ncprefs apps -array-add '{
+			"bundle-id" = "com.apple.FaceTime";
+			"flags" = 0;
+		}'
+		defaults write com.apple.ncprefs apps -array-add '{
+			"bundle-id" = "com.apple.MobileSMS";
+			"flags" = 0;
+		}'
+		check_success "Notification settings configuration"
+
   fi
 else
   log "No Apple ID one-time password link found - you'll need to retrieve your password manually"
@@ -389,14 +417,26 @@ else
 
  show_log "Operator account created successfully"
 
- # Skip some setup screens for operator account
-	sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant DidSeeCloudSetup -bool true
-	sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant GestureMovieSeen none
-	sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant LastSeenCloudProductVersion "$(sw_vers -productVersion)"
-	sudo -u "$OPERATOR_USERNAME" defaults write com.apple.screensaver showClock -bool false
+	# Skip setup screens for operator account (more aggressive approach)
+	 log "Configuring operator account to skip setup screens"
+	 sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant DidSeeCloudSetup -bool true
+	 sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant SkipCloudSetup -bool true
+	 sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant DidSeePrivacy -bool true
+	 sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant GestureMovieSeen none
+	 sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant LastSeenCloudProductVersion "$(sw_vers -productVersion)"
+	 sudo -u "$OPERATOR_USERNAME" defaults write com.apple.screensaver showClock -bool false
 
-	# Screen Time specifically
-	sudo -u "$OPERATOR_USERNAME" defaults write com.apple.ScreenTimeAgent DidCompleteSetup -bool true
+	 # Screen Time and Apple Intelligence
+	 sudo -u "$OPERATOR_USERNAME" defaults write com.apple.ScreenTimeAgent DidCompleteSetup -bool true
+	 sudo -u "$OPERATOR_USERNAME" defaults write com.apple.intelligenceplatform.ui SetupHasBeenDisplayed -bool true
+
+	 # Accessibility and Data & Privacy
+	 sudo -u "$OPERATOR_USERNAME" defaults write com.apple.universalaccess didSeeAccessibilitySetup -bool true
+	 sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant DidSeeDataAndPrivacy -bool true
+
+	 # TouchID setup bypass (this might help with the password confusion)
+	 sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant DidSeeTouchID -bool true
+	 check_success "Operator setup screen suppression"
 
  # Set up operator SSH keys if available
  if [ -d "$SSH_KEY_SOURCE" ] && [ -f "$SSH_KEY_SOURCE/operator_authorized_keys" ]; then
@@ -728,17 +768,15 @@ check_success "Reload profile"
 #
 # CLEAN UP DOCK
 #
-section "Cleaning up Docks"
-log "Cleaning up Docks"
+section "Cleaning up Administrator Dock"
+log "Cleaning up Administrator Dock"
 if command -v dockutil &>/dev/null; then
 	for TILE in Messages Mail Maps Photos FaceTime Calendar Contacts Reminders Freeform TV Music News 'iPhone Mirroring' /System/Applications/Utilities/Terminal.app; do
 		dockutil --remove "$TILE" --allhomes --no-restart 2>/dev/null || true
-		sudo dockutil --remove "$TILE" --no-restart '/System/Library/User Template/English.lproj' 2>/dev/null || true
 	done
-	check_success "Docks cleaned up"
+	check_success "Administrator Dock cleaned up"
 	dockutil --add /Applications/iTerm.app --allhomes --no-restart 2>/dev/null || true
-	sudo dockutil --add /Applications/iTerm.app --no-restart '/System/Library/User Template/English.lproj' 2>/dev/null || true
-	check_success "Add iTerm to Docks"
+	check_success "Add iTerm to Administrator Dock"
 	killall Dock
 else
 	log "Could not locate dockutil"
@@ -809,6 +847,43 @@ if [ -d "$SETUP_DIR/scripts/app-setup" ]; then
   check_success "Application scripts copy"
 else
   log "No application setup scripts found in $SETUP_DIR/scripts/app-setup"
+fi
+
+# Configure Time Machine backup
+section "Configuring Time Machine"
+
+# Check if Time Machine configuration is available
+TIMEMACHINE_CONFIG_FILE="$SETUP_DIR/timemachine.conf"
+if [ -f "$TIMEMACHINE_CONFIG_FILE" ]; then
+  # Source the Time Machine configuration
+  # shellcheck source=/dev/null
+  source "$TIMEMACHINE_CONFIG_FILE"
+
+  log "Configuring Time Machine destination: $TM_URL"
+  # Construct the full SMB URL with credentials
+  TIMEMACHINE_URL="smb://${TM_USERNAME}:${TM_PASSWORD}@${TM_URL#*://}"
+
+  if sudo tmutil setdestination -a "$TIMEMACHINE_URL"; then
+    check_success "Time Machine destination configuration"
+
+    log "Enabling Time Machine"
+    if sudo tmutil enable; then
+      show_log "✅ Time Machine backup configured and enabled"
+      check_success "Time Machine enable"
+
+      # Add Time Machine to menu bar for admin user
+      log "Adding Time Machine to menu bar"
+      defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
+      killall SystemUIServer
+      check_success "Time Machine menu bar addition"
+    else
+      log "❌ Failed to enable Time Machine"
+    fi
+  else
+    log "❌ Failed to set Time Machine destination"
+  fi
+else
+  log "Time Machine configuration file not found - skipping Time Machine setup"
 fi
 
 # Setup completed successfully
