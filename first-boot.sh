@@ -357,59 +357,77 @@ fi
 # Create operator account if it doesn't exist
 section "Setting Up Operator Account"
 if dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
-  log "Operator account already exists"
+ log "Operator account already exists"
 else
-  log "Creating operator account"
+ log "Creating operator account"
 
-  # Read the password from the transferred file
-  OPERATOR_PASSWORD_FILE="$SETUP_DIR/operator_password"
-  if [ -f "$OPERATOR_PASSWORD_FILE" ]; then
-    OPERATOR_PASSWORD=$(cat "$OPERATOR_PASSWORD_FILE")
-    log "Using password from 1Password"
-  else
-    log "❌ Operator password file not found"
-    exit 1
-  fi
+ # Read the password from the transferred file
+ OPERATOR_PASSWORD_FILE="$SETUP_DIR/operator_password"
+ if [ -f "$OPERATOR_PASSWORD_FILE" ]; then
+   OPERATOR_PASSWORD=$(cat "$OPERATOR_PASSWORD_FILE")
+   log "Using password from 1Password"
+ else
+   log "❌ Operator password file not found"
+   exit 1
+ fi
 
-  # Create the operator account
-  sudo sysadminctl -addUser "$OPERATOR_USERNAME" -fullName "$OPERATOR_FULLNAME" -password "$OPERATOR_PASSWORD" -hint "See 1Password TILSIT operator for password"
-  check_success "Operator account creation"
+ # Create the operator account
+ sudo sysadminctl -addUser "$OPERATOR_USERNAME" -fullName "$OPERATOR_FULLNAME" -password "$OPERATOR_PASSWORD" -hint "See 1Password TILSIT operator for password"
+ check_success "Operator account creation"
 
-  # Verify the password works
-  if dscl /Local/Default -authonly "$OPERATOR_USERNAME" "$OPERATOR_PASSWORD"; then
-    show_log "✅ Password verification successful"
-  else
-    log "❌ Password verification failed"
-    exit 1
-  fi
+ # Verify the password works
+ if dscl /Local/Default -authonly "$OPERATOR_USERNAME" "$OPERATOR_PASSWORD"; then
+   show_log "✅ Password verification successful"
+ else
+   log "❌ Password verification failed"
+   exit 1
+ fi
 
-  # Store reference to 1Password (don't store actual password)
-  echo "Operator account password is stored in 1Password: op://personal/TILSIT operator/password" > "/Users/$ADMIN_USERNAME/Documents/operator_password_reference.txt"
-  chmod 600 "/Users/$ADMIN_USERNAME/Documents/operator_password_reference.txt"
+ # Store reference to 1Password (don't store actual password)
+ echo "Operator account password is stored in 1Password: op://personal/TILSIT operator/password" > "/Users/$ADMIN_USERNAME/Documents/operator_password_reference.txt"
+ chmod 600 "/Users/$ADMIN_USERNAME/Documents/operator_password_reference.txt"
 
-  # Clean up the password file
-  rm -f "$OPERATOR_PASSWORD_FILE"
+ show_log "Operator account created successfully"
 
-  show_log "Operator account created successfully"
+ # Set up operator SSH keys if available
+ if [ -d "$SSH_KEY_SOURCE" ] && [ -f "$SSH_KEY_SOURCE/operator_authorized_keys" ]; then
+   OPERATOR_SSH_DIR="/Users/$OPERATOR_USERNAME/.ssh"
+   log "Setting up SSH keys for operator account"
 
-  # Set up operator SSH keys if available
-  if [ -d "$SSH_KEY_SOURCE" ] && [ -f "$SSH_KEY_SOURCE/operator_authorized_keys" ]; then
-    OPERATOR_SSH_DIR="/Users/$OPERATOR_USERNAME/.ssh"
-    log "Setting up SSH keys for operator account"
+   sudo mkdir -p "$OPERATOR_SSH_DIR"
+   sudo cp "$SSH_KEY_SOURCE/operator_authorized_keys" "$OPERATOR_SSH_DIR/authorized_keys"
+   sudo chmod 700 "$OPERATOR_SSH_DIR"
+   sudo chmod 600 "$OPERATOR_SSH_DIR/authorized_keys"
+   sudo chown -R "$OPERATOR_USERNAME" "$OPERATOR_SSH_DIR"
 
-    sudo mkdir -p "$OPERATOR_SSH_DIR"
-    sudo cp "$SSH_KEY_SOURCE/operator_authorized_keys" "$OPERATOR_SSH_DIR/authorized_keys"
-    sudo chmod 700 "$OPERATOR_SSH_DIR"
-    sudo chmod 600 "$OPERATOR_SSH_DIR/authorized_keys"
-    sudo chown -R "$OPERATOR_USERNAME" "$OPERATOR_SSH_DIR"
+   check_success "Operator SSH key setup"
 
-    check_success "Operator SSH key setup"
+   # Add operator to SSH access group
+   log "Adding operator to SSH access group"
+   sudo dseditgroup -o edit -a "$OPERATOR_USERNAME" -t user com.apple.access_ssh
+   check_success "Operator SSH group membership"
+ fi
+fi
 
-    # Add operator to SSH access group
-    log "Adding operator to SSH access group"
-    sudo dseditgroup -o edit -a "$OPERATOR_USERNAME" -t user com.apple.access_ssh
-    check_success "Operator SSH group membership"
-  fi
+# Configure automatic login for operator account (whether new or existing)
+log "Configuring automatic login for operator account"
+OPERATOR_PASSWORD_FILE="$SETUP_DIR/operator_password"
+if [ -f "$OPERATOR_PASSWORD_FILE" ]; then
+ OPERATOR_PASSWORD=$(cat "$OPERATOR_PASSWORD_FILE")
+
+ # Create the encoded password file that macOS uses for auto-login
+ echo "$OPERATOR_PASSWORD" | openssl enc -base64 | sudo tee /etc/kcpassword > /dev/null
+ sudo chmod 600 /etc/kcpassword
+ check_success "Create auto-login password file"
+
+ # Set the auto-login user
+ sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser "$OPERATOR_USERNAME"
+ check_success "Set auto-login user"
+
+ show_log "✅ Automatic login configured for $OPERATOR_USERNAME"
+
+else
+ log "Operator password file not found at $OPERATOR_PASSWORD_FILE - skipping automatic login setup"
 fi
 
 # Configure power management settings
@@ -780,35 +798,6 @@ if [ -d "$SETUP_DIR/scripts/app-setup" ]; then
   check_success "Application scripts copy"
 else
   log "No application setup scripts found in $SETUP_DIR/scripts/app-setup"
-fi
-
-# Configure automatic login for operator account
-section "Configuring Automatic Login"
-log "Setting up automatic login for $OPERATOR_USERNAME"
-
-# Check if operator account exists
-if ! dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
-  log "Operator account doesn't exist, cannot set up automatic login"
-else
-  # Read the password from the setup directory file
-  OPERATOR_PASSWORD_FILE="$SETUP_DIR/operator_password"
-  if [ -f "$OPERATOR_PASSWORD_FILE" ]; then
-    OPERATOR_PASSWORD=$(cat "$OPERATOR_PASSWORD_FILE")
-    log "Configuring automatic login for operator account"
-
-    # Create the encoded password file that macOS uses for auto-login
-    echo "$OPERATOR_PASSWORD" | openssl enc -base64 | sudo tee /etc/kcpassword > /dev/null
-    sudo chmod 600 /etc/kcpassword
-    check_success "Create auto-login password file"
-
-    # Set the auto-login user
-    sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser "$OPERATOR_USERNAME"
-    check_success "Set auto-login user"
-
-    show_log "✅ Automatic login configured for $OPERATOR_USERNAME"
-  else
-    log "Operator password file not found at $OPERATOR_PASSWORD_FILE - skipping automatic login setup"
-  fi
 fi
 
 # Setup completed successfully
