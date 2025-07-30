@@ -107,6 +107,13 @@ if [ ! -f "$LOG_FILE" ]; then
   chmod 644 "$LOG_FILE"
 fi
 
+# Tail logfile in a separate window
+osascript <<EOF
+tell application "Terminal"
+    do script "printf \"\\e]0;TILSIT Setup Log\\a\"; tail -F $LOG_FILE"
+end tell
+EOF
+
 # Print header
 section "Starting Mac Mini M2 '$HOSTNAME' Server Setup"
 log "Running as user: $ADMIN_USERNAME"
