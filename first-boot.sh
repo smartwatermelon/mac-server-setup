@@ -389,6 +389,15 @@ else
 
  show_log "Operator account created successfully"
 
+ # Skip some setup screens for operator account
+	sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant DidSeeCloudSetup -bool true
+	sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant GestureMovieSeen none
+	sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant LastSeenCloudProductVersion "$(sw_vers -productVersion)"
+	sudo -u "$OPERATOR_USERNAME" defaults write com.apple.screensaver showClock -bool false
+
+	# Screen Time specifically
+	sudo -u "$OPERATOR_USERNAME" defaults write com.apple.ScreenTimeAgent DidCompleteSetup -bool true
+
  # Set up operator SSH keys if available
  if [ -d "$SSH_KEY_SOURCE" ] && [ -f "$SSH_KEY_SOURCE/operator_authorized_keys" ]; then
    OPERATOR_SSH_DIR="/Users/$OPERATOR_USERNAME/.ssh"
@@ -719,15 +728,17 @@ check_success "Reload profile"
 #
 # CLEAN UP DOCK
 #
-section "Cleaning up Dock"
-log "Cleaning up Dock"
+section "Cleaning up Docks"
+log "Cleaning up Docks"
 if command -v dockutil &>/dev/null; then
 	for TILE in Messages Mail Maps Photos FaceTime Calendar Contacts Reminders Freeform TV Music News 'iPhone Mirroring' /System/Applications/Utilities/Terminal.app; do
-		dockutil --remove "$TILE" --allhomes --no-restart || true
+		dockutil --remove "$TILE" --allhomes --no-restart 2>/dev/null || true
+		sudo dockutil --list /Users/"$OPERATOR_USERNAME" --remove "$TILE" --no-restart 2>/dev/null || true
 	done
-	check_success "Dock cleanup"
-	dockutil --add /Applications/iTerm.app --allhomes --no-restart || true
-	check_success "Add iTerm to Dock"
+	check_success "Docks cleaned up"
+	dockutil --add /Applications/iTerm.app --allhomes --no-restart 2>/dev/null || true
+	sudo dockutil --list /Users/"$OPERATOR_USERNAME" --add /Applications/iTerm.app --no-restart 2>/dev/null || true
+	check_success "Add iTerm to Docks"
 	killall Dock
 else
 	log "Could not locate dockutil"
