@@ -17,11 +17,12 @@
 set -e
 
 # Configuration
-SERVER_NAME="TILSIT"; SERVER_NAME_LOWER="$( tr '[:upper:]' '[:lower:]' <<< $SERVER_NAME)"
+SERVER_NAME="TILSIT"
+SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<$SERVER_NAME)"
 OP_TIMEMACHINE_ENTRY="PECORINO DS-413 - TimeMachine"
 OUTPUT_PATH="${1:-$HOME/$SERVER_NAME_LOWER-setup}"
-SSH_KEY_PATH="$HOME/.ssh/id_ed25519.pub"  # Adjust to your SSH key path
-SCRIPT_SOURCE_DIR="${2:-.}"  # Directory containing source scripts (default is current dir)
+SSH_KEY_PATH="$HOME/.ssh/id_ed25519.pub" # Adjust to your SSH key path
+SCRIPT_SOURCE_DIR="${2:-.}"              # Directory containing source scripts (default is current dir)
 
 # Check if output directory exists, create if not
 if [ ! -d "$OUTPUT_PATH" ]; then
@@ -80,18 +81,18 @@ if [ -n "$CURRENT_SSID" ]; then
   WIFI_PASSWORD=$(security find-generic-password -a "$CURRENT_SSID" -w "/Library/Keychains/System.keychain")
 
   if [ -n "$WIFI_PASSWORD" ]; then
-	echo "WiFi password retrieved successfully."
+    echo "WiFi password retrieved successfully."
 
-	# Save WiFi information securely
-	cat > "$OUTPUT_PATH/wifi/network.conf" << EOF
+    # Save WiFi information securely
+    cat >"$OUTPUT_PATH/wifi/network.conf" <<EOF
 WIFI_SSID="$CURRENT_SSID"
 WIFI_PASSWORD="$WIFI_PASSWORD"
 EOF
-	chmod 600 "$OUTPUT_PATH/wifi/network.conf"
-	echo "WiFi network configuration saved to wifi/network.conf"
+    chmod 600 "$OUTPUT_PATH/wifi/network.conf"
+    echo "WiFi network configuration saved to wifi/network.conf"
   else
-	echo "Error: Could not retrieve WiFi password."
-	echo "WiFi network configuration will not be automated."
+    echo "Error: Could not retrieve WiFi password."
+    echo "WiFi network configuration will not be automated."
   fi
 else
   echo "Warning: Could not detect current WiFi network."
@@ -121,7 +122,7 @@ fi
 
 # Retrieve the operator password and save it for transfer
 echo "Retrieving operator password from 1Password..."
-op read "op://personal/TILSIT operator/password" > "$OUTPUT_PATH/operator_password"
+op read "op://personal/TILSIT operator/password" >"$OUTPUT_PATH/operator_password"
 chmod 600 "$OUTPUT_PATH/operator_password"
 echo "✅ Operator password saved for transfer"
 
@@ -143,7 +144,7 @@ else
   TM_URL=$(op item get "$OP_TIMEMACHINE_ENTRY" --vault personal --format json | jq -r '.urls[0].href')
 
   # Create Time Machine configuration file
-  cat > "$OUTPUT_PATH/timemachine.conf" << EOF
+  cat >"$OUTPUT_PATH/timemachine.conf" <<EOF
 TM_USERNAME="$TM_USERNAME"
 TM_PASSWORD="$TM_PASSWORD"
 TM_URL="$TM_URL"
@@ -157,7 +158,7 @@ APPLE_ID_ITEM="$(op item list --categories Login --vault Personal --favorite --f
 ONE_TIME_URL="$(op item share "$APPLE_ID_ITEM" --view-once)"
 if [ -n "$ONE_TIME_URL" ]; then
   # Create the .url file with the correct format
-  cat > "$OUTPUT_PATH/URLs/apple_id_password.url" << EOF
+  cat >"$OUTPUT_PATH/URLs/apple_id_password.url" <<EOF
 [InternetShortcut]
 URL=$ONE_TIME_URL
 EOF
@@ -192,7 +193,7 @@ fi
 
 # Create a README file
 echo "Creating README file..."
-cat > "$OUTPUT_PATH/README.md" << 'EOF'
+cat >"$OUTPUT_PATH/README.md" <<'EOF'
 # TILSIT Server Setup Files
 
 This directory contains all the necessary files for setting up the Mac Mini M2 'TILSIT' server.
