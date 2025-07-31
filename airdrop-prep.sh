@@ -18,52 +18,52 @@ set -e
 
 # Configuration
 SERVER_NAME="TILSIT"
-SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<$SERVER_NAME)"
+SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 OP_TIMEMACHINE_ENTRY="PECORINO DS-413 - TimeMachine"
-OUTPUT_PATH="${1:-$HOME/$SERVER_NAME_LOWER-setup}"
-SSH_KEY_PATH="$HOME/.ssh/id_ed25519.pub" # Adjust to your SSH key path
+OUTPUT_PATH="${1:-${HOME}/${SERVER_NAME_LOWER}-setup}"
+SSH_KEY_PATH="${HOME}/.ssh/id_ed25519.pub" # Adjust to your SSH key path
 SCRIPT_SOURCE_DIR="${2:-.}"              # Directory containing source scripts (default is current dir)
 
 # Check if output directory exists, create if not
-if [ ! -d "$OUTPUT_PATH" ]; then
-  echo "Creating output directory: $OUTPUT_PATH"
-  mkdir -p "$OUTPUT_PATH"
+if [[ ! -d "${OUTPUT_PATH}" ]]; then
+  echo "Creating output directory: ${OUTPUT_PATH}"
+  mkdir -p "${OUTPUT_PATH}"
 fi
 
-echo "====== Preparing $SERVER_NAME Server Setup Files for AirDrop ======"
-echo "Output path: $OUTPUT_PATH"
+echo "====== Preparing ${SERVER_NAME} Server Setup Files for AirDrop ======"
+echo "Output path: ${OUTPUT_PATH}"
 echo "Date: $(date)"
 
 # Create directory structure
 echo "Creating directory structure..."
-mkdir -p "$OUTPUT_PATH/ssh_keys"
-mkdir -p "$OUTPUT_PATH/scripts"
-mkdir -p "$OUTPUT_PATH/scripts/app-setup"
-mkdir -p "$OUTPUT_PATH/lists"
-mkdir -p "$OUTPUT_PATH/pam.d"
-mkdir -p "$OUTPUT_PATH/wifi"
-mkdir -p "$OUTPUT_PATH/URLs"
+mkdir -p "${OUTPUT_PATH}/ssh_keys"
+mkdir -p "${OUTPUT_PATH}/scripts"
+mkdir -p "${OUTPUT_PATH}/scripts/app-setup"
+mkdir -p "${OUTPUT_PATH}/lists"
+mkdir -p "${OUTPUT_PATH}/pam.d"
+mkdir -p "${OUTPUT_PATH}/wifi"
+mkdir -p "${OUTPUT_PATH}/URLs"
 
 # Remove existing server host key if any
-ssh-keygen -R "$SERVER_NAME_LOWER".local
+ssh-keygen -R "${SERVER_NAME_LOWER}".local
 
 # Copy SSH keys
-if [ -f "$SSH_KEY_PATH" ]; then
+if [[ -f "${SSH_KEY_PATH}" ]]; then
   echo "Copying SSH public key..."
-  cp "$SSH_KEY_PATH" "$OUTPUT_PATH/ssh_keys/authorized_keys"
+  cp "${SSH_KEY_PATH}" "${OUTPUT_PATH}/ssh_keys/authorized_keys"
 
   # Create operator keys (same as admin for now)
-  cp "$SSH_KEY_PATH" "$OUTPUT_PATH/ssh_keys/operator_authorized_keys"
+  cp "${SSH_KEY_PATH}" "${OUTPUT_PATH}/ssh_keys/operator_authorized_keys"
 else
-  echo "Warning: SSH public key not found at $SSH_KEY_PATH"
+  echo "Warning: SSH public key not found at ${SSH_KEY_PATH}"
   echo "Please generate SSH keys or specify the correct path"
 fi
 
 # Check for TouchID sudo file and copy if exists
-if [ -f "/etc/pam.d/sudo_local" ]; then
+if [[ -f "/etc/pam.d/sudo_local" ]]; then
   echo "Copying TouchID sudo file..."
-  cp "/etc/pam.d/sudo_local" "$OUTPUT_PATH/pam.d/"
-  chmod +w "$OUTPUT_PATH/pam.d/sudo_local"
+  cp "/etc/pam.d/sudo_local" "${OUTPUT_PATH}/pam.d/"
+  chmod +w "${OUTPUT_PATH}/pam.d/sudo_local"
 else
   echo "Warning: TouchID sudo file not found at /etc/pam.d/sudo_local"
   echo "TouchID sudo will not be configured on the server"
@@ -73,22 +73,22 @@ fi
 echo "Getting current WiFi network information..."
 CURRENT_SSID=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}')
 
-if [ -n "$CURRENT_SSID" ]; then
-  echo "Current WiFi network SSID: $CURRENT_SSID"
+if [[ -n "${CURRENT_SSID}" ]]; then
+  echo "Current WiFi network SSID: ${CURRENT_SSID}"
 
   echo "Retrieving WiFi password..."
   echo "You'll be prompted for your administrator password to access the keychain."
-  WIFI_PASSWORD=$(security find-generic-password -a "$CURRENT_SSID" -w "/Library/Keychains/System.keychain")
+  WIFI_PASSWORD=$(security find-generic-password -a "${CURRENT_SSID}" -w "/Library/Keychains/System.keychain")
 
-  if [ -n "$WIFI_PASSWORD" ]; then
+  if [[ -n "${WIFI_PASSWORD}" ]]; then
     echo "WiFi password retrieved successfully."
 
     # Save WiFi information securely
-    cat >"$OUTPUT_PATH/wifi/network.conf" <<EOF
-WIFI_SSID="$CURRENT_SSID"
-WIFI_PASSWORD="$WIFI_PASSWORD"
+    cat >"${OUTPUT_PATH}/wifi/network.conf" <<EOF
+WIFI_SSID="${CURRENT_SSID}"
+WIFI_PASSWORD="${WIFI_PASSWORD}"
 EOF
-    chmod 600 "$OUTPUT_PATH/wifi/network.conf"
+    chmod 600 "${OUTPUT_PATH}/wifi/network.conf"
     echo "WiFi network configuration saved to wifi/network.conf"
   else
     echo "Error: Could not retrieve WiFi password."
@@ -113,7 +113,7 @@ if ! op item get "TILSIT operator" --vault personal >/dev/null 2>&1; then
     --title "TILSIT operator" \
     --vault personal \
     username="operator" \
-    password="$GENERATED_PASSWORD"
+    password="${GENERATED_PASSWORD}"
 
   echo "✅ Created TILSIT operator credentials in 1Password"
 else
@@ -122,68 +122,68 @@ fi
 
 # Retrieve the operator password and save it for transfer
 echo "Retrieving operator password from 1Password..."
-op read "op://personal/TILSIT operator/password" >"$OUTPUT_PATH/operator_password"
-chmod 600 "$OUTPUT_PATH/operator_password"
+op read "op://personal/TILSIT operator/password" >"${OUTPUT_PATH}/operator_password"
+chmod 600 "${OUTPUT_PATH}/operator_password"
 echo "✅ Operator password saved for transfer"
 
 # Set up Time Machine credentials using 1Password
 echo "Setting up Time Machine credentials..."
 
 # Check if Time Machine credentials exist in 1Password
-if ! op item get "$OP_TIMEMACHINE_ENTRY" --vault personal >/dev/null 2>&1; then
+if ! op item get "${OP_TIMEMACHINE_ENTRY}" --vault personal >/dev/null 2>&1; then
   echo "⚠️ Time Machine credentials not found in 1Password"
-  echo "Please create '$OP_TIMEMACHINE_ENTRY' entry manually"
+  echo "Please create '${OP_TIMEMACHINE_ENTRY}' entry manually"
   echo "Skipping Time Machine credential setup"
 else
   echo "✅ Found Time Machine credentials in 1Password"
 
   # Retrieve Time Machine details from 1Password
   echo "Retrieving Time Machine details from 1Password..."
-  TM_USERNAME=$(op item get "$OP_TIMEMACHINE_ENTRY" --vault personal --fields username)
-  TM_PASSWORD=$(op read "op://personal/$OP_TIMEMACHINE_ENTRY/password")
-  TM_URL=$(op item get "$OP_TIMEMACHINE_ENTRY" --vault personal --format json | jq -r '.urls[0].href')
+  TM_USERNAME=$(op item get "${OP_TIMEMACHINE_ENTRY}" --vault personal --fields username)
+  TM_PASSWORD=$(op read "op://personal/${OP_TIMEMACHINE_ENTRY}/password")
+  TM_URL=$(op item get "${OP_TIMEMACHINE_ENTRY}" --vault personal --format json | jq -r '.urls[0].href')
 
   # Create Time Machine configuration file
-  cat >"$OUTPUT_PATH/timemachine.conf" <<EOF
-TM_USERNAME="$TM_USERNAME"
-TM_PASSWORD="$TM_PASSWORD"
-TM_URL="$TM_URL"
+  cat >"${OUTPUT_PATH}/timemachine.conf" <<EOF
+TM_USERNAME="${TM_USERNAME}"
+TM_PASSWORD="${TM_PASSWORD}"
+TM_URL="${TM_URL}"
 EOF
-  chmod 600 "$OUTPUT_PATH/timemachine.conf"
+  chmod 600 "${OUTPUT_PATH}/timemachine.conf"
   echo "✅ Time Machine configuration saved for transfer"
 fi
 
 # Create and save one-time link for Apple ID password
 APPLE_ID_ITEM="$(op item list --categories Login --vault Personal --favorite --format=json | jq -r '.[] | select(.title == "Apple") | .id')"
-ONE_TIME_URL="$(op item share "$APPLE_ID_ITEM" --view-once)"
-if [ -n "$ONE_TIME_URL" ]; then
+ONE_TIME_URL="$(op item share "${APPLE_ID_ITEM}" --view-once)"
+if [[ -n "${ONE_TIME_URL}" ]]; then
   # Create the .url file with the correct format
-  cat >"$OUTPUT_PATH/URLs/apple_id_password.url" <<EOF
+  cat >"${OUTPUT_PATH}/URLs/apple_id_password.url" <<EOF
 [InternetShortcut]
-URL=$ONE_TIME_URL
+URL=${ONE_TIME_URL}
 EOF
-  chmod 600 "$OUTPUT_PATH/URLs/apple_id_password.url"
+  chmod 600 "${OUTPUT_PATH}/URLs/apple_id_password.url"
   echo "✅ Apple ID one-time password link saved to URLs/apple_id_password.url"
 else
   echo "⚠️ No URL provided, skipping Apple ID password link creation"
 fi
 
 # Copy dock cleanup script for operator
-if [ -f "$SCRIPT_SOURCE_DIR/dock-cleanup.command" ]; then
+if [[ -f "${SCRIPT_SOURCE_DIR}/dock-cleanup.command" ]]; then
   echo "Copying operator dock cleanup script"
-  cp "$SCRIPT_SOURCE_DIR/dock-cleanup.command" "$OUTPUT_PATH/"
-  chmod +x "$OUTPUT_PATH/dock-cleanup.command"
+  cp "${SCRIPT_SOURCE_DIR}/dock-cleanup.command" "${OUTPUT_PATH}/"
+  chmod +x "${OUTPUT_PATH}/dock-cleanup.command"
 fi
 
 # Copy from local script source directory
-if [ -d "$SCRIPT_SOURCE_DIR" ]; then
+if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   echo "Copying scripts from local source directory..."
 
   # Copy scripts
-  cp "$SCRIPT_SOURCE_DIR/first-boot.sh" "$OUTPUT_PATH/scripts/" 2>/dev/null || echo "Warning: first-boot.sh not found in source directory"
-  cp "$SCRIPT_SOURCE_DIR/app-setup/"*.sh "$OUTPUT_PATH/scripts/app-setup/" 2>/dev/null || echo "Warning: No app setup scripts found in source directory"
-  cp "$SCRIPT_SOURCE_DIR/formulae.txt" "$OUTPUT_PATH/lists/" 2>/dev/null || echo "Warning: formulae.txt not found in source directory"
-  cp "$SCRIPT_SOURCE_DIR/casks.txt" "$OUTPUT_PATH/lists/" 2>/dev/null || echo "Warning: casks.txt not found in source directory"
+  cp "${SCRIPT_SOURCE_DIR}/first-boot.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: first-boot.sh not found in source directory"
+  cp "${SCRIPT_SOURCE_DIR}/app-setup/"*.sh "${OUTPUT_PATH}/scripts/app-setup/" 2>/dev/null || echo "Warning: No app setup scripts found in source directory"
+  cp "${SCRIPT_SOURCE_DIR}/formulae.txt" "${OUTPUT_PATH}/lists/" 2>/dev/null || echo "Warning: formulae.txt not found in source directory"
+  cp "${SCRIPT_SOURCE_DIR}/casks.txt" "${OUTPUT_PATH}/lists/" 2>/dev/null || echo "Warning: casks.txt not found in source directory"
 
   echo "Scripts copied from local source directory"
 else
@@ -193,7 +193,7 @@ fi
 
 # Create a README file
 echo "Creating README file..."
-cat >"$OUTPUT_PATH/README.md" <<'EOF'
+cat >"${OUTPUT_PATH}/README.md" <<'EOF'
 # TILSIT Server Setup Files
 
 This directory contains all the necessary files for setting up the Mac Mini M2 'TILSIT' server.
@@ -234,15 +234,15 @@ Created: $(date)
 EOF
 
 echo "Setting file permissions..."
-chmod -R 755 "$OUTPUT_PATH/scripts"
-chmod 600 "$OUTPUT_PATH/wifi/network.conf" 2>/dev/null || true
-chmod 600 "$OUTPUT_PATH/operator_password" 2>/dev/null || true
+chmod -R 755 "${OUTPUT_PATH}/scripts"
+chmod 600 "${OUTPUT_PATH}/wifi/network.conf" 2>/dev/null || true
+chmod 600 "${OUTPUT_PATH}/operator_password" 2>/dev/null || true
 
 echo "====== Setup Files Preparation Complete ======"
-echo "The setup files at $OUTPUT_PATH are now ready for AirDrop."
+echo "The setup files at ${OUTPUT_PATH} are now ready for AirDrop."
 echo "AirDrop this entire folder to your Mac Mini after completing the macOS setup wizard"
 echo "and run the first-boot.sh script from the transferred directory."
 
-open "$OUTPUT_PATH"
+open "${OUTPUT_PATH}"
 
 exit 0
