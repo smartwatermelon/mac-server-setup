@@ -23,7 +23,7 @@
 # Created: 2025-05-18
 
 # Exit on any error
-set -e
+set -eo pipefail
 
 # Configuration variables - adjust as needed
 HOSTNAME="TILSIT"
@@ -75,15 +75,35 @@ done
 # log function - only writes to log file
 log() {
   mkdir -p "${LOG_DIR}"
-  local timestamp
+  local timestamp no_newline=false
   timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-  echo "[${timestamp}] $1" >>"${LOG_FILE}"
+
+  # Check for -n flag
+  if [[ "$1" == "-n" ]]; then
+    no_newline=true
+    shift
+  fi
+
+  if [[ "${no_newline}" == true ]]; then
+    echo -n "[${timestamp}] $1" >>"${LOG_FILE}"
+  else
+    echo "[${timestamp}] $1" >>"${LOG_FILE}"
+  fi
 }
 
 # New wrapper function - shows in main window AND logs
 show_log() {
-  echo "$1"
-  log "$1"
+  local no_newline=false
+
+  # Check for -n flag
+  if [[ "$1" == "-n" ]]; then
+    no_newline=true
+    echo -n "$2"
+    log -n "$2"
+  else
+    echo "$1"
+    log "$1"
+  fi
 }
 
 # Function to log section headers
@@ -126,8 +146,10 @@ osascript -e 'tell application "Terminal" to do script "printf \"\\e]0;TILSIT Se
 # Print header
 section "Starting Mac Mini M2 '${HOSTNAME}' Server Setup"
 log "Running as user: ${ADMIN_USERNAME}"
-log "Date: $(date)"
-log "macOS Version: $(sw_vers -productVersion)"
+log -n "Date: "
+date
+log -n "macOS Version: "
+sw_vers -productVersion
 log "Setup directory: ${SETUP_DIR}"
 
 # Look for evidence we're being re-run after FDA grant
@@ -204,9 +226,9 @@ if [[ -f "${WIFI_CONFIG_FILE}" ]]; then
       log "Configuring WiFi network: ${WIFI_SSID}"
 
       # Check if SSID is already in preferred networks list
-      WIFI_IFACE="$(system_profiler SPAirPortDataType -xml | /usr/libexec/PlistBuddy -c "Print :0:_items:0:spairport_airport_interfaces:0:_name" /dev/stdin <<<"$(cat)")"
+      WIFI_IFACE="$(system_profiler SPAirPortDataType -xml | /usr/libexec/PlistBuddy -c "Print :0:_items:0:spairport_airport_interfaces:0:_name" /dev/stdin <<<"$(cat || true)" 2>/dev/null)"
 
-      if networksetup -listpreferredwirelessnetworks "${WIFI_IFACE}" | grep -q "${WIFI_SSID}"; then
+      if networksetup -listpreferredwirelessnetworks "${WIFI_IFACE}" 2>/dev/null | grep -q "${WIFI_SSID}"; then
         log "WiFi network ${WIFI_SSID} is already in preferred networks list"
       else
         # Add WiFi network to preferred networks
@@ -242,7 +264,7 @@ fi
 
 # Set hostname and HD name
 section "Setting Hostname and HD volume name"
-if [[ "$(hostname)" = "${HOSTNAME}" ]]; then
+if [[ "$(hostname || true)" = "${HOSTNAME}" ]]; then
   log "Hostname is already set to ${HOSTNAME}"
 else
   log "Setting hostname to ${HOSTNAME}"
@@ -252,14 +274,15 @@ else
   check_success "Hostname configuration"
 fi
 log "Renaming HD"
-diskutil rename "/Volumes/$(diskutil info -plist / | /usr/libexec/PlistBuddy -c "Print :VolumeName" /dev/stdin <<<"$(cat)")" "${HOSTNAME}"
+CURRENT_VOLUME=$(diskutil info -plist / | /usr/libexec/PlistBuddy -c "Print :VolumeName" /dev/stdin 2>/dev/null || echo "Macintosh HD")
+diskutil rename "/Volumes/${CURRENT_VOLUME}" "${HOSTNAME}"
 check_success "Renamed HD"
 
 # Setup SSH access
 section "Configuring SSH Access"
 
 # 1. Check if remote login is already enabled
-if sudo systemsetup -getremotelogin | grep -q "On"; then
+if sudo systemsetup -getremotelogin 2>/dev/null | grep -q "On"; then
   log "SSH is already enabled"
 else
   # 2. Try to enable it directly first
@@ -388,7 +411,7 @@ fi
 
 # Create operator account if it doesn't exist
 section "Setting Up Operator Account"
-if dscl . -list /Users | grep -q "^${OPERATOR_USERNAME}$"; then
+if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
   log "Operator account already exists"
 else
   log "Creating operator account"
@@ -427,7 +450,7 @@ else
   sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant SkipCloudSetup -bool true
   sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeePrivacy -bool true
   sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant GestureMovieSeen none
-  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant LastSeenCloudProductVersion "$(sw_vers -productVersion)"
+  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant LastSeenCloudProductVersion "$(sw_vers -productVersion || true)"
   sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.screensaver showClock -bool false
 
   # Screen Time and Apple Intelligence
@@ -469,7 +492,8 @@ if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
   OPERATOR_PASSWORD=$(cat "${OPERATOR_PASSWORD_FILE}")
 
   # Create the encoded password file that macOS uses for auto-login
-  echo "${OPERATOR_PASSWORD}" | openssl enc -base64 | sudo tee /etc/kcpassword >/dev/null
+  ENCODED_PASSWORD=$(echo "${OPERATOR_PASSWORD}" | openssl enc -base64)
+  echo "${ENCODED_PASSWORD}" | sudo tee /etc/kcpassword >/dev/null
   sudo chmod 600 /etc/kcpassword
   check_success "Create auto-login password file"
 
@@ -488,11 +512,11 @@ section "Configuring Power Management"
 log "Setting power management for server use"
 
 # Check current settings
-CURRENT_SLEEP=$(pmset -g | grep -E "^[ ]*sleep" | awk '{print $2}')
-CURRENT_DISPLAYSLEEP=$(pmset -g | grep -E "^[ ]*displaysleep" | awk '{print $2}')
-CURRENT_DISKSLEEP=$(pmset -g | grep -E "^[ ]*disksleep" | awk '{print $2}')
-CURRENT_WOMP=$(pmset -g | grep -E "^[ ]*womp" | awk '{print $2}')
-CURRENT_AUTORESTART=$(pmset -g | grep -E "^[ ]*autorestart" | awk '{print $2}')
+CURRENT_SLEEP=$(pmset -g 2>/dev/null | grep -E "^[ ]*sleep" | awk '{print $2}' || echo "unknown")
+CURRENT_DISPLAYSLEEP=$(pmset -g 2>/dev/null | grep -E "^[ ]*displaysleep" | awk '{print $2}' || echo "unknown")
+CURRENT_DISKSLEEP=$(pmset -g 2>/dev/null | grep -E "^[ ]*disksleep" | awk '{print $2}' || echo "unknown")
+CURRENT_WOMP=$(pmset -g 2>/dev/null | grep -E "^[ ]*womp" | awk '{print $2}' || echo "unknown")
+CURRENT_AUTORESTART=$(pmset -g 2>/dev/null | grep -E "^[ ]*autorestart" | awk '{print $2}' || echo "unknown")
 
 # Apply settings only if they differ from current
 if [[ "${CURRENT_SLEEP}" != "0" ]]; then
@@ -602,7 +626,7 @@ log "Disabled automatic app downloads"
 section "Installing Xcode Command Line Tools"
 
 # Check if CLT is already installed
-if softwareupdate --history | grep 'Command Line Tools for Xcode' >/dev/null; then
+if softwareupdate --history 2>/dev/null | grep 'Command Line Tools for Xcode' >/dev/null; then
   log "Xcode Command Line Tools already installed"
 else
   show_log "Installing Xcode Command Line Tools silently..."
@@ -611,13 +635,47 @@ else
   sudo touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
 
   # Find and install the latest CLT package
-  CLT_PACKAGE=$(softwareupdate -l | grep Label | tail -n 1 | cut -d ':' -f 2 | xargs)
-  log "Installing package: ${CLT_PACKAGE}"
+  CLT_PACKAGE=$(softwareupdate -l 2>/dev/null | grep Label | tail -n 1 | cut -d ':' -f 2 | xargs)
 
-  softwareupdate -i "${CLT_PACKAGE}"
-  check_success "Xcode Command Line Tools installation"
+  if [[ -n "${CLT_PACKAGE}" ]]; then
+    log "Installing package: ${CLT_PACKAGE}"
+    softwareupdate -i "${CLT_PACKAGE}"
+    check_success "Xcode Command Line Tools installation"
+  else
+    show_log "⚠️ Could not determine CLT package via softwareupdate"
+    show_log "Falling back to interactive xcode-select installation"
 
-  # Clean up the flag
+    # Clean up the flag since we're switching methods
+    sudo rm -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+
+    # Use xcode-select method (will prompt user)
+    if [[ "${FORCE}" = false ]]; then
+      show_log "This will open a dialog box for Command Line Tools installation"
+      read -rp "Press any key to continue..." -n 1 -r
+      echo
+    fi
+
+    xcode-select --install
+
+    # Wait for installation to complete
+    show_log "Waiting for Command Line Tools installation to complete..."
+    show_log "Please complete the installation dialog, then press any key to continue"
+
+    if [[ "${FORCE}" = false ]]; then
+      read -rp "Press any key when installation is complete..." -n 1 -r
+      echo
+    else
+      # In force mode, poll for completion
+      while ! xcode-select -p >/dev/null 2>&1; do
+        sleep 5
+        log "Waiting for Command Line Tools installation..."
+      done
+    fi
+
+    check_success "Xcode Command Line Tools installation (interactive)"
+  fi
+
+  # Clean up the flag regardless of method used
   sudo rm -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
 
   show_log "✅ Xcode Command Line Tools installation completed"
@@ -629,7 +687,7 @@ if [[ "${SKIP_HOMEBREW}" = false ]]; then
 
   # Check if Homebrew is already installed
   if command -v brew &>/dev/null; then
-    BREW_VERSION=$(brew --version | head -n 1 | awk '{print $2}')
+    BREW_VERSION=$(brew --version 2>/dev/null | head -n 1 | awk '{print $2}' || echo "unknown")
     log "Homebrew is already installed (version ${BREW_VERSION})"
 
     # Update Homebrew if already installed
@@ -640,14 +698,16 @@ if [[ "${SKIP_HOMEBREW}" = false ]]; then
     show_log "Installing Homebrew using official installation script"
 
     # Use the official Homebrew installation script
-    NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    HOMEBREW_INSTALLER=$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)
+    NONINTERACTIVE=1 /bin/bash -c "${HOMEBREW_INSTALLER}"
     check_success "Homebrew installation"
 
     # Follow Homebrew's suggested post-installation steps
     log "Running Homebrew's suggested post-installation steps"
 
     # Add Homebrew to path for current session
-    if [[ "$(uname -m)" == "arm64" ]]; then
+    MACHINE_ARCH=$(uname -m)
+    if [[ "${MACHINE_ARCH}" == "arm64" ]]; then
       HOMEBREW_PREFIX="/opt/homebrew"
     else
       HOMEBREW_PREFIX="/usr/local"
@@ -659,7 +719,8 @@ if [[ "${SKIP_HOMEBREW}" = false ]]; then
     log "Added Homebrew to .zprofile"
 
     # Apply to current session
-    eval "$("${HOMEBREW_PREFIX}/bin/brew" shellenv)"
+    BREW_SHELLENV=$("${HOMEBREW_PREFIX}/bin/brew" shellenv)
+    eval "${BREW_SHELLENV}"
     log "Applied Homebrew environment to current session"
 
     # Add to other shell configuration files for compatibility
@@ -726,7 +787,7 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
     formulae=()
     while IFS= read -r line; do
       formulae+=("${line}")
-    done < <(grep -v '^#' "${FORMULAE_FILE}" | grep -v '^$')
+    done < <(grep -v '^#' "${FORMULAE_FILE}" 2>/dev/null || true | grep -v '^$' || true)
     for formula in "${formulae[@]}"; do
       install_formula "${formula}"
     done
@@ -740,7 +801,7 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
     casks=()
     while IFS= read -r line; do
       casks+=("${line}")
-    done < <(grep -v '^#' "${CASKS_FILE}" | grep -v '^$')
+    done < <(grep -v '^#' "${CASKS_FILE}" 2>/dev/null || true | grep -v '^$' || true)
     for cask in "${casks[@]}"; do
       install_cask "${cask}"
     done
@@ -801,7 +862,7 @@ fi
 # Setup operator dock cleanup script
 section "Setting Up Operator Dock Cleanup Script"
 
-if [[ -f "${SETUP_DIR}/dock-cleanup.command" ]] && dscl . -list /Users | grep -q "^${OPERATOR_USERNAME}$"; then
+if [[ -f "${SETUP_DIR}/dock-cleanup.command" ]] && dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
   log "Installing operator dock cleanup script on desktop"
   DOCK_SCRIPT="/Users/${OPERATOR_USERNAME}/Desktop/dock-cleanup.command"
 
@@ -838,7 +899,8 @@ if [[ -f "${HOMEBREW_BASH}" ]]; then
   fi
 
   # Change shell for admin user
-  if [[ "$(dscl . -read /Users/"${ADMIN_USERNAME}" UserShell | awk '{print $2}')" != "${HOMEBREW_BASH}" ]]; then
+  CURRENT_ADMIN_SHELL=$(dscl . -read /Users/"${ADMIN_USERNAME}" UserShell 2>/dev/null | awk '{print $2}' || echo "/bin/bash")
+  if [[ "${CURRENT_ADMIN_SHELL}" != "${HOMEBREW_BASH}" ]]; then
     log "Changing shell for admin user to Homebrew bash"
     sudo chsh -s "${HOMEBREW_BASH}" "${ADMIN_USERNAME}"
     check_success "Admin user shell change"
@@ -847,8 +909,9 @@ if [[ -f "${HOMEBREW_BASH}" ]]; then
   fi
 
   # Change shell for operator user if it exists
-  if dscl . -list /Users | grep -q "^${OPERATOR_USERNAME}$"; then
-    if [[ "$(dscl . -read /Users/"${OPERATOR_USERNAME}" UserShell | awk '{print $2}')" != "${HOMEBREW_BASH}" ]]; then
+  if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
+    CURRENT_OPERATOR_SHELL=$(dscl . -read /Users/"${OPERATOR_USERNAME}" UserShell 2>/dev/null | awk '{print $2}' || echo "/bin/bash")
+    if [[ "${CURRENT_OPERATOR_SHELL}" != "${HOMEBREW_BASH}" ]]; then
       log "Changing shell for operator user to Homebrew bash"
       sudo chsh -s "${HOMEBREW_BASH}" "${OPERATOR_USERNAME}"
       check_success "Operator user shell change"
@@ -894,49 +957,56 @@ if [[ -f "${TIMEMACHINE_CONFIG_FILE}" ]]; then
   # shellcheck source=/dev/null
   source "${TIMEMACHINE_CONFIG_FILE}"
 
-  log "Checking existing Time Machine configuration"
-
-  # Check if Time Machine is already configured with our destination
-  EXPECTED_URL="smb://${TM_USERNAME}@${TM_URL}"
-  EXISTING_DESTINATIONS=$(tmutil destinationinfo 2>/dev/null | grep "^URL" | awk '{print $3}' || true)
-
-  # Escape special regex characters using bash parameter expansion
-  ESCAPED_URL="${EXPECTED_URL//\./\\.}"
-  ESCAPED_URL="${ESCAPED_URL//\//\\/}"
-
-  if echo "${EXISTING_DESTINATIONS}" | grep -q "${ESCAPED_URL}"; then
-    show_log "✅ Time Machine already configured with destination: ${TM_URL}"
-
-    # Still add to menu bar if not already there
-    if ! defaults read com.apple.systemuiserver menuExtras 2>/dev/null | grep -q "TimeMachine.menu"; then
-      log "Adding Time Machine to menu bar"
-      defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
-      killall SystemUIServer
-      check_success "Time Machine menu bar addition"
-    fi
+  # Validate required variables were sourced
+  if [[ -z "${TM_USERNAME:-}" || -z "${TM_PASSWORD:-}" || -z "${TM_URL:-}" ]]; then
+    log "Error: Time Machine configuration incomplete - missing required variables"
+    log "Skipping Time Machine setup"
   else
-    log "Configuring Time Machine destination: ${TM_URL}"
-    # Construct the full SMB URL with credentials
-    TIMEMACHINE_URL="smb://${TM_USERNAME}:${TM_PASSWORD}@${TM_URL#*://}"
+    log "Checking existing Time Machine configuration"
 
-    if sudo tmutil setdestination -a "${TIMEMACHINE_URL}"; then
-      check_success "Time Machine destination configuration"
+    # Check if Time Machine is already configured with our destination
+    EXPECTED_URL="smb://${TM_USERNAME}@${TM_URL}"
+    EXISTING_DESTINATIONS=$(tmutil destinationinfo 2>/dev/null | grep "^URL" | awk '{print $3}')
 
-      log "Enabling Time Machine"
-      if sudo tmutil enable; then
-        show_log "✅ Time Machine backup configured and enabled"
-        check_success "Time Machine enable"
+    # Escape special regex characters using bash parameter expansion
+    ESCAPED_URL="${EXPECTED_URL//\./\\.}"
+    ESCAPED_URL="${ESCAPED_URL//\//\\/}"
 
-        # Add Time Machine to menu bar for admin user
+    if echo "${EXISTING_DESTINATIONS}" | grep -q "${ESCAPED_URL}"; then
+      show_log "✅ Time Machine already configured with destination: ${TM_URL}"
+
+      # Still add to menu bar if not already there
+      if ! defaults read com.apple.systemuiserver menuExtras 2>/dev/null | grep -q "TimeMachine.menu"; then
+
         log "Adding Time Machine to menu bar"
         defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
         killall SystemUIServer
         check_success "Time Machine menu bar addition"
-      else
-        log "❌ Failed to enable Time Machine"
       fi
     else
-      log "❌ Failed to set Time Machine destination"
+      log "Configuring Time Machine destination: ${TM_URL}"
+      # Construct the full SMB URL with credentials
+      TIMEMACHINE_URL="smb://${TM_USERNAME}:${TM_PASSWORD}@${TM_URL#*://}"
+
+      if sudo tmutil setdestination -a "${TIMEMACHINE_URL}"; then
+        check_success "Time Machine destination configuration"
+
+        log "Enabling Time Machine"
+        if sudo tmutil enable; then
+          show_log "✅ Time Machine backup configured and enabled"
+          check_success "Time Machine enable"
+
+          # Add Time Machine to menu bar for admin user
+          log "Adding Time Machine to menu bar"
+          defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
+          killall SystemUIServer
+          check_success "Time Machine menu bar addition"
+        else
+          log "❌ Failed to enable Time Machine"
+        fi
+      else
+        log "❌ Failed to set Time Machine destination"
+      fi
     fi
   fi
 else
