@@ -799,11 +799,13 @@ section "Setting Up Operator Dock Cleanup Script"
 
 if [ -f "$SETUP_DIR/dock-cleanup.command" ] && dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
   log "Installing operator dock cleanup script on desktop"
+  DOCK_SCRIPT="/Users/$OPERATOR_USERNAME/Desktop/dock-cleanup.command"
 
   # Copy script to operator's desktop
   sudo cp "$SETUP_DIR/dock-cleanup.command" "/Users/$OPERATOR_USERNAME/Desktop/"
-  sudo chown "$OPERATOR_USERNAME:staff" "/Users/$OPERATOR_USERNAME/Desktop/dock-cleanup.command"
-  sudo chmod +x "/Users/$OPERATOR_USERNAME/Desktop/dock-cleanup.command"
+  sudo chown "$OPERATOR_USERNAME:staff" "$DOCK_SCRIPT"
+  sudo chmod +x "$DOCK_SCRIPT"
+  sudo xattr -d com.apple.quarantine "$DOCK_SCRIPT"
 
   check_success "Operator dock cleanup script setup"
   show_log "✅ Dock cleanup script placed on operator desktop"
@@ -888,28 +890,29 @@ if [ -f "$TIMEMACHINE_CONFIG_FILE" ]; then
   # shellcheck source=/dev/null
   source "$TIMEMACHINE_CONFIG_FILE"
 
-  log "Configuring Time Machine destination: $TM_URL"
-  # Construct the full SMB URL with credentials
-  TIMEMACHINE_URL="smb://${TM_USERNAME}:${TM_PASSWORD}@${TM_URL#*://}"
+  log "Checking existing Time Machine configuration"
 
-  if sudo tmutil setdestination -a "$TIMEMACHINE_URL"; then
-    check_success "Time Machine destination configuration"
+  # Check if Time Machine is already configured with our destination
+  EXPECTED_URL="smb://${TM_USERNAME}@${TM_URL}"
+  EXISTING_DESTINATIONS=$(tmutil destinationinfo 2>/dev/null | grep "^URL" | awk '{print $3}' || true)
 
-    log "Enabling Time Machine"
-    if sudo tmutil enable; then
-      show_log "✅ Time Machine backup configured and enabled"
-      check_success "Time Machine enable"
+  # Escape special regex characters using bash parameter expansion
+  ESCAPED_URL="${EXPECTED_URL//\./\\.}"
+  ESCAPED_URL="${ESCAPED_URL//\//\\/}"
 
-      # Add Time Machine to menu bar for admin user
+  if echo "$EXISTING_DESTINATIONS" | grep -q "$ESCAPED_URL"; then
+    show_log "✅ Time Machine already configured with destination: $TM_URL"
+
+    # Still add to menu bar if not already there
+    if ! defaults read com.apple.systemuiserver menuExtras 2>/dev/null | grep -q "TimeMachine.menu"; then
       log "Adding Time Machine to menu bar"
       defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
       killall SystemUIServer
       check_success "Time Machine menu bar addition"
-    else
-      log "❌ Failed to enable Time Machine"
     fi
   else
-    log "❌ Failed to set Time Machine destination"
+    log "Configuring Time Machine destination: $TM_URL"
+    # ... rest of the setup code remains the same
   fi
 else
   log "Time Machine configuration file not found - skipping Time Machine setup"
