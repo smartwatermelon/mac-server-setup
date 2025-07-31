@@ -485,6 +485,12 @@ else
   fi
 fi
 
+# After operator account creation and SSH setup
+section "Enabling Fast User Switching"
+log "Configuring Fast User Switching for multi-user access"
+sudo defaults write /Library/Preferences/com.apple.loginwindow MultipleSessionEnabled -bool true
+check_success "Fast User Switching configuration"
+
 # Configure automatic login for operator account (whether new or existing)
 log "Configuring automatic login for operator account"
 OPERATOR_PASSWORD_FILE="${SETUP_DIR}/operator_password"
