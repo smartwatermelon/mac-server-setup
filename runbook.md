@@ -83,11 +83,13 @@ This script will:
 - Copy your SSH keys
 - **Check for existing "TILSIT operator" credentials in 1Password or create them**
 - **Retrieve the operator password from 1Password for transfer**
+- **Set up Time Machine credentials from 1Password (if available)**
 - Generate a one-time password link for your Apple ID using 1Password
 - Copy setup scripts and package lists
 - Create a README with setup instructions
 - Optionally configure WiFi by storing your current network's credentials
 - Set up TouchID sudo configuration if available
+- **Create dock cleanup script for operator account**
 
 ### 2. Initial Setup
 
@@ -141,13 +143,17 @@ The `first-boot.sh` script will perform the following tasks:
 - Set up SSH keys for secure authentication
 - Configure Apple ID (see steps below)
 - **Create the 'operator' account using the password from 1Password**
+- **Configure automatic login for the operator account**
 - Configure power management settings for server use
 - Configure the firewall
 - **Install Xcode Command Line Tools silently**
 - **Install Homebrew using the official installation script**
 - **Apply Homebrew's recommended PATH configuration**
+- **Change default shell to Homebrew bash for both users**
 - Install the specified formulae and casks from the provided lists
 - Set up environment paths in shell configuration files
+- **Clean up dock for administrator account**
+- **Configure Time Machine backup (if credentials available)**
 - Prepare the application setup directory
 
 To verify the script has run successfully, check the log file:
@@ -198,13 +204,33 @@ The script will:
 
 1. **Read the operator password from the transferred 1Password file**
 2. **Create the operator account using this password**
-3. **Verify the password works by testing authentication**
-4. **Store a reference to the 1Password location (not the actual password)**
-5. **Clean up the transferred password file for security**
+3. **Configure automatic login for the operator account**
+4. **Verify the password works by testing authentication**
+5. **Store a reference to the 1Password location (not the actual password)**
+6. **Clean up the transferred password file for security**
+7. **Configure SSH access for the operator account**
 
-#### 3.4 After First-Boot Completion
+#### 3.4 Time Machine Configuration
 
-After the script completes, the system will reboot. You should now be able to SSH into the Mac Mini from your development machine:
+If Time Machine credentials are available from 1Password:
+
+1. **The script will retrieve Time Machine server details from the "PECORINO DS-413 - TimeMachine" entry**
+2. **Configure Time Machine destination automatically**
+3. **Add Time Machine to the menu bar for easy access**
+4. **Enable automatic backups**
+
+#### 3.5 Shell and Environment Configuration
+
+The script will:
+
+1. **Install Homebrew using the official installation script with proper environment setup**
+2. **Configure shell environments for both admin and operator accounts**
+3. **Change the default shell to Homebrew bash for enhanced functionality**
+4. **Set up proper PATH configuration across all shell profiles**
+
+#### 3.6 After First-Boot Completion
+
+After the script completes, the system will reboot and automatically log in as the operator user. You should now be able to SSH into the Mac Mini from your development machine:
 
 ```bash
 # Using the admin account
@@ -220,6 +246,15 @@ You may configure passwordless SSH from your development machine:
 ssh-copy-id admin_username@tilsit.local
 ssh-copy-id operator@tilsit.local
 ```
+
+#### 3.7 Dock Cleanup
+
+Both accounts will have their docks cleaned up automatically:
+
+- **Administrator account**: Dock is cleaned during first-boot script execution
+- **Operator account**: A dock cleanup script is placed on the desktop for one-time execution
+
+The operator can double-click the "dock-cleanup.command" file on their desktop to clean up their dock, which will then delete itself.
 
 ### 4. Application Setup
 
@@ -300,6 +335,25 @@ op read "op://personal/TILSIT operator/password"
 op item edit "TILSIT operator" --vault personal password="new_password"
 ```
 
+### Time Machine Management
+
+**Time Machine configuration** is managed through 1Password and system tools:
+
+```bash
+# Check Time Machine status
+tmutil status
+
+# View backup destinations
+tmutil destinationinfo
+
+# Start a backup manually
+tmutil startbackup
+
+# Retrieve Time Machine credentials from 1Password (if needed)
+op read "op://personal/PECORINO DS-413 - TimeMachine/username"
+op read "op://personal/PECORINO DS-413 - TimeMachine/password"
+```
+
 ### Backup
 
 To backup configuration and important data:
@@ -363,6 +417,25 @@ If the system is experiencing resource problems:
 2. Test authentication: `dscl /Local/Default -authonly operator $(op read "op://personal/TILSIT operator/password")`
 3. Reset password if needed: `sudo dscl . -passwd /Users/operator $(op read "op://personal/TILSIT operator/password")`
 
+### Time Machine Issues
+
+**Time Machine backup problems:**
+
+1. Check Time Machine status: `tmutil status`
+2. Verify destination: `tmutil destinationinfo`
+3. Check credentials in 1Password: `op item get "PECORINO DS-413 - TimeMachine"`
+4. Test network connectivity to backup destination
+5. Check available space on backup destination
+
+### Shell Environment Issues
+
+**Shell configuration problems:**
+
+1. Verify Homebrew installation: `brew --version`
+2. Check shell: `echo $SHELL`
+3. Verify PATH: `echo $PATH | grep homebrew`
+4. Reload shell configuration: `source ~/.zprofile`
+
 ## Recovery Procedures
 
 ### Complete System Reset
@@ -392,6 +465,15 @@ All scripts are designed to be idempotent. If issues occur, you can safely run t
 1. From your development machine: `op read "op://personal/TILSIT operator/password"`
 2. Or through the 1Password app/web interface at: `op://personal/TILSIT operator/password`
 
+### Time Machine Recovery
+
+**Time Machine can be reconfigured using stored credentials:**
+
+1. Retrieve credentials: `op item get "PECORINO DS-413 - TimeMachine"`
+2. Remove existing destination: `tmutil removedestination [destination_id]`
+3. Add destination: `tmutil setdestination [server_url]`
+4. Start backup: `tmutil startbackup`
+
 ## Conclusion
 
 This setup creates a stable, secure, and maintainable Mac Mini server environment that:
@@ -403,5 +485,7 @@ This setup creates a stable, secure, and maintainable Mac Mini server environmen
 - Uses Docker for consistent application deployment
 - Implements security best practices with centralized credential management
 - **Leverages 1Password for secure, reliable password management**
+- **Provides automated Time Machine backup configuration**
+- **Uses modern shell environments with Homebrew integration**
 
 The separation between base OS setup and containerized applications ensures that application issues don't affect the base system, and the automation-first approach minimizes the need for manual intervention throughout the server's lifecycle. **1Password integration ensures passwords are securely managed and easily retrievable when needed.**
