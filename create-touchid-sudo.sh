@@ -29,7 +29,7 @@ fi
 echo "Creating TouchID sudo configuration file at $SUDO_LOCAL_FILE"
 
 # Create sudo_local file with TouchID configuration
-sudo tee "$SUDO_LOCAL_FILE" > /dev/null << 'EOF'
+sudo tee "$SUDO_LOCAL_FILE" >/dev/null <<'EOF'
 # sudo_local: PAM configuration for enabling TouchID for sudo
 #
 # This file enables the use of TouchID as an authentication method for sudo
