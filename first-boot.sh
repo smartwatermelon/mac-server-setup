@@ -41,6 +41,7 @@ WIFI_CONFIG_FILE="${SETUP_DIR}/wifi/network.conf"
 FORMULAE_FILE="/Users/${ADMIN_USERNAME}/formulae.txt"
 CASKS_FILE="/Users/${ADMIN_USERNAME}/casks.txt"
 RERUN_AFTER_FDA=false
+NEED_SYSTEMUI_RESTART=false
 
 # Parse command line arguments
 FORCE=false
@@ -503,11 +504,18 @@ else
   fi
 fi
 
-# After operator account creation and SSH setup
+# Fast User Switching
 section "Enabling Fast User Switching"
 log "Configuring Fast User Switching for multi-user access"
 sudo defaults write /Library/Preferences/com.apple.loginwindow MultipleSessionEnabled -bool true
 check_success "Fast User Switching configuration"
+# Fast User Switching menu
+if ! defaults read com.apple.systemuiserver menuExtras 2>/dev/null | grep -q "User.menu"; then
+  log "Adding Fast User Switching to menu bar"
+  defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/User.menu"
+  check_success "Fast User Switching menu bar"
+  NEED_SYSTEMUI_RESTART=true
+fi
 
 # Configure automatic login for operator account (whether new or existing)
 log "Configuring automatic login for operator account"
@@ -1011,7 +1019,7 @@ if [[ -f "${TIMEMACHINE_CONFIG_FILE}" ]]; then
 
         log "Adding Time Machine to menu bar"
         defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
-        killall SystemUIServer
+        NEED_SYSTEMUI_RESTART=true
         check_success "Time Machine menu bar addition"
       fi
     else
@@ -1042,6 +1050,12 @@ if [[ -f "${TIMEMACHINE_CONFIG_FILE}" ]]; then
   fi
 else
   log "Time Machine configuration file not found - skipping Time Machine setup"
+fi
+
+if [[ "${NEED_SYSTEMUI_RESTART}" = true ]]; then
+  log "Restarting SystemUIServer to apply menu bar changes"
+  killall SystemUIServer
+  check_success "SystemUIServer restart for menu bar updates"
 fi
 
 # Setup completed successfully
