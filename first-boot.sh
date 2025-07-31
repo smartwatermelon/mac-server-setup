@@ -240,7 +240,7 @@ if [[ -f "${WIFI_CONFIG_FILE}" ]]; then
 
       # Try to join the network
       log "Attempting to join WiFi network ${WIFI_SSID}..."
-      networksetup -setairportnetwork "${WIFI_IFACE}" "${WIFI_SSID}" 2>/dev/null || true
+      networksetup -setairportnetwork "${WIFI_IFACE}" "${WIFI_SSID}" &>/dev/null || true
 
       # Give it a few seconds and check if we connected
       sleep 5
@@ -274,9 +274,27 @@ else
   check_success "Hostname configuration"
 fi
 log "Renaming HD"
-CURRENT_VOLUME=$(diskutil info -plist / | /usr/libexec/PlistBuddy -c "Print :VolumeName" /dev/stdin 2>/dev/null || echo "Macintosh HD")
-diskutil rename "/Volumes/${CURRENT_VOLUME}" "${HOSTNAME}"
-check_success "Renamed HD"
+
+# Create a temporary file for the plist output
+TEMP_PLIST=$(mktemp)
+if diskutil info -plist / >"${TEMP_PLIST}"; then
+  CURRENT_VOLUME=$(/usr/libexec/PlistBuddy -c "Print :VolumeName" "${TEMP_PLIST}" 2>/dev/null || echo "Macintosh HD")
+else
+  CURRENT_VOLUME="Macintosh HD"
+fi
+
+# Clean up temp file
+rm -f "${TEMP_PLIST}"
+
+# Only rename if the volume name is different
+if [[ "${CURRENT_VOLUME}" != "${HOSTNAME}" ]]; then
+  log "Current volume name: ${CURRENT_VOLUME}"
+  log "Renaming volume from '${CURRENT_VOLUME}' to '${HOSTNAME}'"
+  diskutil rename "/Volumes/${CURRENT_VOLUME}" "${HOSTNAME}"
+  check_success "Renamed HD from '${CURRENT_VOLUME}' to '${HOSTNAME}'"
+else
+  log "Volume is already named '${HOSTNAME}'"
+fi
 
 # Setup SSH access
 section "Configuring SSH Access"
@@ -859,7 +877,7 @@ if command -v dockutil &>/dev/null; then
     --remove /System/Applications/Utilities/Terminal.app \
     --add /Applications/iTerm.app \
     --allhomes \
-    2>/dev/null || true
+    &>/dev/null || true
   check_success "Administrator Dock cleaned up"
 else
   log "Could not locate dockutil"
@@ -972,13 +990,20 @@ if [[ -f "${TIMEMACHINE_CONFIG_FILE}" ]]; then
 
     # Check if Time Machine is already configured with our destination
     EXPECTED_URL="smb://${TM_USERNAME}@${TM_URL}"
-    EXISTING_DESTINATIONS=$(tmutil destinationinfo 2>/dev/null | grep "^URL" | awk '{print $3}')
+
+    # Handle case where no destinations exist yet (tmutil destinationinfo fails)
+    if EXISTING_DESTINATIONS=$(tmutil destinationinfo 2>/dev/null | grep "^URL" | awk '{print $3}'); then
+      log "Found existing Time Machine destinations"
+    else
+      log "No existing Time Machine destinations found"
+      EXISTING_DESTINATIONS=""
+    fi
 
     # Escape special regex characters using bash parameter expansion
     ESCAPED_URL="${EXPECTED_URL//\./\\.}"
     ESCAPED_URL="${ESCAPED_URL//\//\\/}"
 
-    if echo "${EXISTING_DESTINATIONS}" | grep -q "${ESCAPED_URL}"; then
+    if [[ -n "${EXISTING_DESTINATIONS}" ]] && echo "${EXISTING_DESTINATIONS}" | grep -q "${ESCAPED_URL}"; then
       show_log "✅ Time Machine already configured with destination: ${TM_URL}"
 
       # Still add to menu bar if not already there
