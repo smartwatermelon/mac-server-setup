@@ -19,17 +19,17 @@ set -e
 SUDO_LOCAL_FILE="/etc/pam.d/sudo_local"
 
 # Check if file already exists
-if [ -f "$SUDO_LOCAL_FILE" ]; then
-  echo "TouchID sudo file already exists at $SUDO_LOCAL_FILE"
+if [[ -f "${SUDO_LOCAL_FILE}" ]]; then
+  echo "TouchID sudo file already exists at ${SUDO_LOCAL_FILE}"
   echo "Contents:"
-  cat "$SUDO_LOCAL_FILE"
+  cat "${SUDO_LOCAL_FILE}"
   exit 0
 fi
 
-echo "Creating TouchID sudo configuration file at $SUDO_LOCAL_FILE"
+echo "Creating TouchID sudo configuration file at ${SUDO_LOCAL_FILE}"
 
 # Create sudo_local file with TouchID configuration
-sudo tee "$SUDO_LOCAL_FILE" >/dev/null <<'EOF'
+sudo tee "${SUDO_LOCAL_FILE}" >/dev/null <<'EOF'
 # sudo_local: PAM configuration for enabling TouchID for sudo
 #
 # This file enables the use of TouchID as an authentication method for sudo
@@ -41,7 +41,7 @@ sudo tee "$SUDO_LOCAL_FILE" >/dev/null <<'EOF'
 auth       sufficient     pam_tid.so
 EOF
 
-sudo chmod 644 "$SUDO_LOCAL_FILE"
+sudo chmod 644 "${SUDO_LOCAL_FILE}"
 
 echo "✅ TouchID sudo configuration created successfully"
 echo "You can now use TouchID for sudo authentication"
