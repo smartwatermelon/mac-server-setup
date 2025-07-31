@@ -42,6 +42,7 @@ FORMULAE_FILE="/Users/${ADMIN_USERNAME}/formulae.txt"
 CASKS_FILE="/Users/${ADMIN_USERNAME}/casks.txt"
 RERUN_AFTER_FDA=false
 NEED_SYSTEMUI_RESTART=false
+NEED_CONTROLCENTER_RESTART=false
 
 # Parse command line arguments
 FORCE=false
@@ -509,12 +510,16 @@ section "Enabling Fast User Switching"
 log "Configuring Fast User Switching for multi-user access"
 sudo defaults write /Library/Preferences/com.apple.loginwindow MultipleSessionEnabled -bool true
 check_success "Fast User Switching configuration"
-# Fast User Switching menu
-if ! defaults read com.apple.systemuiserver menuExtras 2>/dev/null | grep -q "User.menu"; then
+
+# Fast User Switching menu bar visibility
+CURRENT_FUS_VISIBLE=$(defaults read com.apple.controlcenter "NSStatusItem Visible UserSwitcher" 2>/dev/null || echo "0")
+if [[ "${CURRENT_FUS_VISIBLE}" != "1" ]]; then
   log "Adding Fast User Switching to menu bar"
-  defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/User.menu"
-  check_success "Fast User Switching menu bar"
-  NEED_SYSTEMUI_RESTART=true
+  defaults write com.apple.controlcenter "NSStatusItem Visible UserSwitcher" -int 1
+  check_success "Fast User Switching menu bar visibility"
+  NEED_CONTROLCENTER_RESTART=true
+else
+  log "Fast User Switching already visible in menu bar"
 fi
 
 # Configure automatic login for operator account (whether new or existing)
@@ -1052,10 +1057,16 @@ else
   log "Time Machine configuration file not found - skipping Time Machine setup"
 fi
 
+# Apply menu bar changes
 if [[ "${NEED_SYSTEMUI_RESTART}" = true ]]; then
   log "Restarting SystemUIServer to apply menu bar changes"
   killall SystemUIServer
   check_success "SystemUIServer restart for menu bar updates"
+fi
+if [[ "${NEED_CONTROLCENTER_RESTART}" = true ]]; then
+  log "Restarting Control Center to apply menu bar changes"
+  killall ControlCenter
+  check_success "Control Center restart for menu bar updates"
 fi
 
 # Setup completed successfully
