@@ -558,6 +558,8 @@ if [[ "${CURRENT_FUS_VISIBLE}" != "1" ]]; then
   defaults write com.apple.controlcenter "NSStatusItem Visible UserSwitcher" -int 1
   check_success "Fast User Switching menu bar visibility"
   NEED_CONTROLCENTER_RESTART=true
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.controlcenter "NSStatusItem Visible UserSwitcher" -int 1
+  check_success "Fast User Switching menu bar visibility for operator"
 else
   log "Fast User Switching already visible in menu bar"
 fi
@@ -1066,6 +1068,8 @@ if [[ -f "${TIMEMACHINE_CONFIG_FILE}" ]]; then
         defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
         NEED_SYSTEMUI_RESTART=true
         check_success "Time Machine menu bar addition"
+        sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
+        check_success "Time Machine menu bar addition for operator"
       fi
     else
       log "Configuring Time Machine destination: ${TM_URL}"
@@ -1083,8 +1087,10 @@ if [[ -f "${TIMEMACHINE_CONFIG_FILE}" ]]; then
           # Add Time Machine to menu bar for admin user
           log "Adding Time Machine to menu bar"
           defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
-          killall SystemUIServer
+          NEED_SYSTEMUI_RESTART=true
           check_success "Time Machine menu bar addition"
+          sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
+          check_success "Time Machine menu bar addition for operator"
         else
           log "❌ Failed to enable Time Machine"
         fi
