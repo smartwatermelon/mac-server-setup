@@ -214,7 +214,7 @@ if [ -f "$WIFI_CONFIG_FILE" ]; then
 
       # Try to join the network
       log "Attempting to join WiFi network $WIFI_SSID..."
-      networksetup -setairportnetwork "$WIFI_IFACE" "$WIFI_SSID" || true
+      networksetup -setairportnetwork "$WIFI_IFACE" "$WIFI_SSID" 2>/dev/null || true
 
       # Give it a few seconds and check if we connected
       sleep 5
@@ -610,7 +610,7 @@ else
   CLT_PACKAGE=$(softwareupdate -l | grep Label | tail -n 1 | cut -d ':' -f 2 | xargs)
   log "Installing package: $CLT_PACKAGE"
 
-  softwareupdate -v -i "$CLT_PACKAGE"
+  softwareupdate -i "$CLT_PACKAGE"
   check_success "Xcode Command Line Tools installation"
 
   # Clean up the flag
@@ -910,9 +910,30 @@ if [ -f "$TIMEMACHINE_CONFIG_FILE" ]; then
       killall SystemUIServer
       check_success "Time Machine menu bar addition"
     fi
-  else
+else
     log "Configuring Time Machine destination: $TM_URL"
-    # ... rest of the setup code remains the same
+    # Construct the full SMB URL with credentials
+    TIMEMACHINE_URL="smb://${TM_USERNAME}:${TM_PASSWORD}@${TM_URL#*://}"
+
+    if sudo tmutil setdestination -a "$TIMEMACHINE_URL"; then
+      check_success "Time Machine destination configuration"
+
+      log "Enabling Time Machine"
+      if sudo tmutil enable; then
+        show_log "✅ Time Machine backup configured and enabled"
+        check_success "Time Machine enable"
+
+        # Add Time Machine to menu bar for admin user
+        log "Adding Time Machine to menu bar"
+        defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
+        killall SystemUIServer
+        check_success "Time Machine menu bar addition"
+      else
+        log "❌ Failed to enable Time Machine"
+      fi
+    else
+      log "❌ Failed to set Time Machine destination"
+    fi
   fi
 else
   log "Time Machine configuration file not found - skipping Time Machine setup"
