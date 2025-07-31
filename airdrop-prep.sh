@@ -14,7 +14,7 @@
 # Created: 2025-05-13
 
 # Exit on error
-set -e
+set -eo pipefail
 
 # Configuration
 SERVER_NAME="TILSIT"
@@ -57,6 +57,18 @@ mkdir -p "${OUTPUT_PATH}/lists"
 mkdir -p "${OUTPUT_PATH}/pam.d"
 mkdir -p "${OUTPUT_PATH}/wifi"
 mkdir -p "${OUTPUT_PATH}/URLs"
+
+# Generate development machine fingerprint to prevent accidental execution
+DEV_FINGERPRINT=$(system_profiler SPHardwareDataType | grep "Hardware UUID" | awk '{print $3}')
+if [[ -n "${DEV_FINGERPRINT}" ]]; then
+  echo "Development machine fingerprint: ${DEV_FINGERPRINT}"
+  echo "DEV_MACHINE_FINGERPRINT=\"${DEV_FINGERPRINT}\"" >"${OUTPUT_PATH}/dev_fingerprint.conf"
+  chmod 600 "${OUTPUT_PATH}/dev_fingerprint.conf"
+  echo "Development fingerprint saved to prevent accidental execution on this machine"
+else
+  echo "❌ Could not generate development machine fingerprint"
+  exit 1
+fi
 
 # Remove existing server host key if any
 ssh-keygen -R "${SERVER_NAME_LOWER}".local

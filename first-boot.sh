@@ -43,6 +43,9 @@ CASKS_FILE="/Users/${ADMIN_USERNAME}/casks.txt"
 RERUN_AFTER_FDA=false
 NEED_SYSTEMUI_RESTART=false
 NEED_CONTROLCENTER_RESTART=false
+# Safety: Development machine fingerprint (to prevent accidental execution)
+DEV_FINGERPRINT_FILE="${SETUP_DIR}/dev_fingerprint.conf"
+DEV_MACHINE_FINGERPRINT="" # Default blank - will be populated from file
 
 # Parse command line arguments
 FORCE=false
@@ -129,6 +132,43 @@ check_success() {
     fi
   fi
 }
+
+# SAFETY CHECK: Prevent execution on development machine
+section "Development Machine Safety Check"
+
+# Load development fingerprint if available
+if [[ -f "${DEV_FINGERPRINT_FILE}" ]]; then
+  # shellcheck source=/dev/null
+  source "${DEV_FINGERPRINT_FILE}"
+  log "Loaded development machine fingerprint for safety check"
+else
+  echo "❌ SAFETY ABORT: No development fingerprint file found"
+  echo "This indicates the setup directory was not properly prepared with airdrop-prep.sh"
+  exit 1
+fi
+
+# Abort if fingerprint is blank (safety default)
+if [[ -z "${DEV_MACHINE_FINGERPRINT}" ]]; then
+  echo "❌ SAFETY ABORT: Blank development machine fingerprint"
+  echo "Setup directory appears corrupted or improperly prepared"
+  exit 1
+fi
+
+# Get current machine fingerprint
+CURRENT_FINGERPRINT=$(system_profiler SPHardwareDataType | grep "Hardware UUID" | awk '{print $3}')
+
+# Abort if running on development machine
+if [[ "${CURRENT_FINGERPRINT}" == "${DEV_MACHINE_FINGERPRINT}" ]]; then
+  echo "❌ SAFETY ABORT: This script is running on the development machine"
+  echo "Development fingerprint: ${DEV_MACHINE_FINGERPRINT}"
+  echo "Current fingerprint: ${CURRENT_FINGERPRINT}"
+  echo ""
+  echo "This script is only for target Mac Mini M2 server setup"
+  exit 1
+fi
+
+log "✅ Safety check passed - not running on development machine"
+log "Current machine: ${CURRENT_FINGERPRINT}"
 
 # Create log file if it doesn't exist, rotate if it exists
 if [[ -f "${LOG_FILE}" ]]; then
