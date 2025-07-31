@@ -22,7 +22,7 @@ SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 OP_TIMEMACHINE_ENTRY="PECORINO DS-413 - TimeMachine"
 OUTPUT_PATH="${1:-${HOME}/${SERVER_NAME_LOWER}-setup}"
 SSH_KEY_PATH="${HOME}/.ssh/id_ed25519.pub" # Adjust to your SSH key path
-SCRIPT_SOURCE_DIR="${2:-.}"              # Directory containing source scripts (default is current dir)
+SCRIPT_SOURCE_DIR="${2:-.}"                # Directory containing source scripts (default is current dir)
 
 # Check if output directory exists, create if not
 if [[ ! -d "${OUTPUT_PATH}" ]]; then
@@ -32,7 +32,8 @@ fi
 
 echo "====== Preparing ${SERVER_NAME} Server Setup Files for AirDrop ======"
 echo "Output path: ${OUTPUT_PATH}"
-echo "Date: $(date)"
+echo -n "Date: "
+date
 
 # Create directory structure
 echo "Creating directory structure..."
@@ -71,7 +72,7 @@ fi
 
 # Get current WiFi network info
 echo "Getting current WiFi network information..."
-CURRENT_SSID=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}')
+CURRENT_SSID=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}' || true)
 
 if [[ -n "${CURRENT_SSID}" ]]; then
   echo "Current WiFi network SSID: ${CURRENT_SSID}"
@@ -107,7 +108,9 @@ if ! op item get "TILSIT operator" --vault personal >/dev/null 2>&1; then
   echo "Creating TILSIT operator credentials in 1Password..."
 
   # Generate a secure password and create the item
-  GENERATED_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-20)
+  RANDOM_BYTES=$(openssl rand -base64 16)
+  CLEANED_BYTES=$(echo "${RANDOM_BYTES}" | tr -d "=+/")
+  GENERATED_PASSWORD=$(echo "${CLEANED_BYTES}" | cut -c1-20)
 
   op item create --category login \
     --title "TILSIT operator" \
@@ -141,7 +144,8 @@ else
   echo "Retrieving Time Machine details from 1Password..."
   TM_USERNAME=$(op item get "${OP_TIMEMACHINE_ENTRY}" --vault personal --fields username)
   TM_PASSWORD=$(op read "op://personal/${OP_TIMEMACHINE_ENTRY}/password")
-  TM_URL=$(op item get "${OP_TIMEMACHINE_ENTRY}" --vault personal --format json | jq -r '.urls[0].href')
+  TM_JSON=$(op item get "${OP_TIMEMACHINE_ENTRY}" --vault personal --format json)
+  TM_URL=$(echo "${TM_JSON}" | jq -r '.urls[0].href')
 
   # Create Time Machine configuration file
   cat >"${OUTPUT_PATH}/timemachine.conf" <<EOF
@@ -154,7 +158,7 @@ EOF
 fi
 
 # Create and save one-time link for Apple ID password
-APPLE_ID_ITEM="$(op item list --categories Login --vault Personal --favorite --format=json | jq -r '.[] | select(.title == "Apple") | .id')"
+APPLE_ID_ITEM="$(op item list --categories Login --vault Personal --favorite --format=json | jq -r '.[] | select(.title == "Apple") | .id' || true)"
 ONE_TIME_URL="$(op item share "${APPLE_ID_ITEM}" --view-once)"
 if [[ -n "${ONE_TIME_URL}" ]]; then
   # Create the .url file with the correct format
