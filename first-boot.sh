@@ -27,19 +27,19 @@ set -e
 
 # Configuration variables - adjust as needed
 HOSTNAME="TILSIT"
-HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<$HOSTNAME)"
+HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 OPERATOR_USERNAME="operator"
-OPERATOR_FULLNAME="$HOSTNAME Operator"
+OPERATOR_FULLNAME="${HOSTNAME} Operator"
 ADMIN_USERNAME=$(whoami) # Set this once and use throughout
 export LOG_DIR
-LOG_DIR="$HOME/.local/state" # XDG_STATE_HOME
-LOG_FILE="$LOG_DIR/$HOSTNAME_LOWER-setup.log"
+LOG_DIR="${HOME}/.local/state" # XDG_STATE_HOME
+LOG_FILE="${LOG_DIR}/${HOSTNAME_LOWER}-setup.log"
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" # Directory where AirDropped files are located
-SSH_KEY_SOURCE="$SETUP_DIR/ssh_keys"
-PAM_D_SOURCE="$SETUP_DIR/pam.d"
-WIFI_CONFIG_FILE="$SETUP_DIR/wifi/network.conf"
-FORMULAE_FILE="/Users/$ADMIN_USERNAME/formulae.txt"
-CASKS_FILE="/Users/$ADMIN_USERNAME/casks.txt"
+SSH_KEY_SOURCE="${SETUP_DIR}/ssh_keys"
+PAM_D_SOURCE="${SETUP_DIR}/pam.d"
+WIFI_CONFIG_FILE="${SETUP_DIR}/wifi/network.conf"
+FORMULAE_FILE="/Users/${ADMIN_USERNAME}/formulae.txt"
+CASKS_FILE="/Users/${ADMIN_USERNAME}/casks.txt"
 RERUN_AFTER_FDA=false
 
 # Parse command line arguments
@@ -49,7 +49,7 @@ SKIP_HOMEBREW=false
 SKIP_PACKAGES=false
 
 for arg in "$@"; do
-  case $arg in
+  case ${arg} in
     --force)
       FORCE=true
       shift
@@ -74,10 +74,10 @@ done
 
 # log function - only writes to log file
 log() {
-  mkdir -p "$LOG_DIR"
+  mkdir -p "${LOG_DIR}"
   local timestamp
   timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-  echo "[$timestamp] $1" >>"$LOG_FILE"
+  echo "[${timestamp}] $1" >>"${LOG_FILE}"
 }
 
 # New wrapper function - shows in main window AND logs
@@ -93,14 +93,14 @@ section() {
 
 # Function to check if a command was successful
 check_success() {
-  if [ $? -eq 0 ]; then
+  if [[ $? -eq 0 ]]; then
     show_log "✅ $1"
   else
     show_log "❌ $1 failed"
-    if [ "$FORCE" = false ]; then
+    if [[ "${FORCE}" = false ]]; then
       read -p "Continue anyway? (y/n) " -n 1 -r
       echo
-      if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      if [[ ! ${REPLY} =~ ^[Yy]$ ]]; then
         log "Exiting due to error"
         exit 1
       fi
@@ -109,39 +109,39 @@ check_success() {
 }
 
 # Create log file if it doesn't exist, rotate if it exists
-if [ -f "$LOG_FILE" ]; then
+if [[ -f "${LOG_FILE}" ]]; then
   # Rotate existing log file with timestamp
   ROTATED_LOG="${LOG_FILE%.log}-$(date +%Y%m%d-%H%M%S).log"
-  mv "$LOG_FILE" "$ROTATED_LOG"
-  log "Rotated previous log to: $ROTATED_LOG"
+  mv "${LOG_FILE}" "${ROTATED_LOG}"
+  log "Rotated previous log to: ${ROTATED_LOG}"
 fi
 
-mkdir -p "$LOG_DIR"
-touch "$LOG_FILE"
-chmod 644 "$LOG_FILE"
+mkdir -p "${LOG_DIR}"
+touch "${LOG_FILE}"
+chmod 644 "${LOG_FILE}"
 
 # Tail log in separate window
-osascript -e 'tell application "Terminal" to do script "printf \"\\e]0;TILSIT Setup Log\\a\"; tail -F '"$LOG_FILE"'"' || echo "oops, no tail"
+osascript -e 'tell application "Terminal" to do script "printf \"\\e]0;TILSIT Setup Log\\a\"; tail -F '"${LOG_FILE}"'"' || echo "oops, no tail"
 
 # Print header
-section "Starting Mac Mini M2 '$HOSTNAME' Server Setup"
-log "Running as user: $ADMIN_USERNAME"
+section "Starting Mac Mini M2 '${HOSTNAME}' Server Setup"
+log "Running as user: ${ADMIN_USERNAME}"
 log "Date: $(date)"
 log "macOS Version: $(sw_vers -productVersion)"
-log "Setup directory: $SETUP_DIR"
+log "Setup directory: ${SETUP_DIR}"
 
 # Look for evidence we're being re-run after FDA grant
-if [ -f "/tmp/${HOSTNAME_LOWER}_fda_requested" ]; then
+if [[ -f "/tmp/${HOSTNAME_LOWER}_fda_requested" ]]; then
   RERUN_AFTER_FDA=true
   rm -f "/tmp/${HOSTNAME_LOWER}_fda_requested"
   log "Detected re-run after Full Disk Access grant"
 fi
 
 # Confirm operation if not forced
-if [ "$FORCE" = false ] && [ "$RERUN_AFTER_FDA" = false ]; then
+if [[ "${FORCE}" = false ]] && [[ "${RERUN_AFTER_FDA}" = false ]]; then
   read -p "This script will configure your Mac Mini server. Continue? (y/n) " -n 1 -r
   echo
-  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+  if [[ ! ${REPLY} =~ ^[Yy]$ ]]; then
     log "Setup cancelled by user"
     exit 0
   fi
@@ -159,17 +159,17 @@ check_success "Fix scroll setting"
 
 # TouchID sudo setup
 section "TouchID sudo setup"
-if [ -d "$PAM_D_SOURCE" ]; then
-  log "Found TouchID sudo setup in $PAM_D_SOURCE"
+if [[ -d "${PAM_D_SOURCE}" ]]; then
+  log "Found TouchID sudo setup in ${PAM_D_SOURCE}"
 
-  if [ -f "$PAM_D_SOURCE/sudo_local" ]; then
+  if [[ -f "${PAM_D_SOURCE}/sudo_local" ]]; then
     # Check if the file already exists with the correct content
-    if [ -f "/etc/pam.d/sudo_local" ] && diff -q "$PAM_D_SOURCE/sudo_local" "/etc/pam.d/sudo_local" >/dev/null; then
+    if [[ -f "/etc/pam.d/sudo_local" ]] && diff -q "${PAM_D_SOURCE}/sudo_local" "/etc/pam.d/sudo_local" >/dev/null; then
       log "TouchID sudo is already properly configured"
     else
       # File doesn't exist OR exists but has different content - same action either way
       show_log "TouchID sudo needs to be configured. We will ask for your user password."
-      sudo cp "$PAM_D_SOURCE/sudo_local" "/etc/pam.d"
+      sudo cp "${PAM_D_SOURCE}/sudo_local" "/etc/pam.d"
       check_success "TouchID sudo configuration"
 
       # Test TouchID configuration
@@ -179,59 +179,59 @@ if [ -d "$PAM_D_SOURCE" ]; then
       check_success "TouchID sudo test"
     fi
   else
-    log "No sudo_local file found in $PAM_D_SOURCE"
+    log "No sudo_local file found in ${PAM_D_SOURCE}"
   fi
 else
-  log "No TouchID sudo setup directory found at $PAM_D_SOURCE"
+  log "No TouchID sudo setup directory found at ${PAM_D_SOURCE}"
 fi
 
 # Configure WiFi if network config is available
 section "Configuring WiFi Network"
-if [ -f "$WIFI_CONFIG_FILE" ]; then
+if [[ -f "${WIFI_CONFIG_FILE}" ]]; then
   log "Found WiFi configuration file"
 
   # Source the WiFi configuration file to get SSID and password
   # shellcheck source=/dev/null
-  source "$WIFI_CONFIG_FILE"
+  source "${WIFI_CONFIG_FILE}"
 
-  if [ -n "$WIFI_SSID" ] && [ -n "$WIFI_PASSWORD" ]; then
+  if [[ -n "${WIFI_SSID}" ]] && [[ -n "${WIFI_PASSWORD}" ]]; then
     # Check if we're already connected to the target network
     CURRENT_SSID=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}')
 
-    if [ "$CURRENT_SSID" = "$WIFI_SSID" ]; then
-      log "Already connected to WiFi network: $WIFI_SSID"
+    if [[ "${CURRENT_SSID}" = "${WIFI_SSID}" ]]; then
+      log "Already connected to WiFi network: ${WIFI_SSID}"
     else
-      log "Configuring WiFi network: $WIFI_SSID"
+      log "Configuring WiFi network: ${WIFI_SSID}"
 
       # Check if SSID is already in preferred networks list
       WIFI_IFACE="$(system_profiler SPAirPortDataType -xml | /usr/libexec/PlistBuddy -c "Print :0:_items:0:spairport_airport_interfaces:0:_name" /dev/stdin <<<"$(cat)")"
 
-      if networksetup -listpreferredwirelessnetworks "$WIFI_IFACE" | grep -q "$WIFI_SSID"; then
-        log "WiFi network $WIFI_SSID is already in preferred networks list"
+      if networksetup -listpreferredwirelessnetworks "${WIFI_IFACE}" | grep -q "${WIFI_SSID}"; then
+        log "WiFi network ${WIFI_SSID} is already in preferred networks list"
       else
         # Add WiFi network to preferred networks
-        networksetup -addpreferredwirelessnetworkatindex "$WIFI_IFACE" "$WIFI_SSID" "@" "WPA/WPA2"
+        networksetup -addpreferredwirelessnetworkatindex "${WIFI_IFACE}" "${WIFI_SSID}" "@" "WPA/WPA2"
         check_success "Add preferred WiFi network"
-        security add-generic-password -D "AirPort network password" -a "$WIFI_SSID" -s "AirPort" -w "$WIFI_PASSWORD" || true
+        security add-generic-password -D "AirPort network password" -a "${WIFI_SSID}" -s "AirPort" -w "${WIFI_PASSWORD}" || true
         check_success "Store password in keychain"
       fi
 
       # Try to join the network
-      log "Attempting to join WiFi network $WIFI_SSID..."
-      networksetup -setairportnetwork "$WIFI_IFACE" "$WIFI_SSID" 2>/dev/null || true
+      log "Attempting to join WiFi network ${WIFI_SSID}..."
+      networksetup -setairportnetwork "${WIFI_IFACE}" "${WIFI_SSID}" 2>/dev/null || true
 
       # Give it a few seconds and check if we connected
       sleep 5
-      CURRENT_NETWORK=$(networksetup -getairportnetwork "$WIFI_IFACE" 2>/dev/null | cut -d' ' -f4- || echo "")
-      if [ "$CURRENT_NETWORK" = "$WIFI_SSID" ]; then
-        show_log "✅ Successfully connected to WiFi network: $WIFI_SSID"
+      CURRENT_NETWORK=$(networksetup -getairportnetwork "${WIFI_IFACE}" 2>/dev/null | cut -d' ' -f4- || echo "")
+      if [[ "${CURRENT_NETWORK}" = "${WIFI_SSID}" ]]; then
+        show_log "✅ Successfully connected to WiFi network: ${WIFI_SSID}"
       else
         show_log "WiFi network will be automatically joined after reboot"
       fi
     fi
 
     # Securely remove the WiFi password from the configuration file
-    sed -i '' "s/WIFI_PASSWORD=.*/WIFI_PASSWORD=\"REMOVED\"/" "$WIFI_CONFIG_FILE"
+    sed -i '' "s/WIFI_PASSWORD=.*/WIFI_PASSWORD=\"REMOVED\"/" "${WIFI_CONFIG_FILE}"
     log "WiFi password removed from configuration file for security"
   else
     log "WiFi configuration file does not contain valid SSID and password"
@@ -242,17 +242,17 @@ fi
 
 # Set hostname and HD name
 section "Setting Hostname and HD volume name"
-if [ "$(hostname)" = "$HOSTNAME" ]; then
-  log "Hostname is already set to $HOSTNAME"
+if [[ "$(hostname)" = "${HOSTNAME}" ]]; then
+  log "Hostname is already set to ${HOSTNAME}"
 else
-  log "Setting hostname to $HOSTNAME"
-  sudo scutil --set ComputerName "$HOSTNAME"
-  sudo scutil --set LocalHostName "$HOSTNAME"
-  sudo scutil --set HostName "$HOSTNAME"
+  log "Setting hostname to ${HOSTNAME}"
+  sudo scutil --set ComputerName "${HOSTNAME}"
+  sudo scutil --set LocalHostName "${HOSTNAME}"
+  sudo scutil --set HostName "${HOSTNAME}"
   check_success "Hostname configuration"
 fi
 log "Renaming HD"
-diskutil rename "/Volumes/$(diskutil info -plist / | /usr/libexec/PlistBuddy -c "Print :VolumeName" /dev/stdin <<<"$(cat)")" "$HOSTNAME"
+diskutil rename "/Volumes/$(diskutil info -plist / | /usr/libexec/PlistBuddy -c "Print :VolumeName" /dev/stdin <<<"$(cat)")" "${HOSTNAME}"
 check_success "Renamed HD"
 
 # Setup SSH access
@@ -298,42 +298,42 @@ EOF
 fi
 
 # Copy SSH keys if available
-if [ -d "$SSH_KEY_SOURCE" ]; then
-  log "Found SSH keys at $SSH_KEY_SOURCE"
+if [[ -d "${SSH_KEY_SOURCE}" ]]; then
+  log "Found SSH keys at ${SSH_KEY_SOURCE}"
 
   # Set up admin SSH keys
-  ADMIN_SSH_DIR="/Users/$ADMIN_USERNAME/.ssh"
-  if [ ! -d "$ADMIN_SSH_DIR" ]; then
+  ADMIN_SSH_DIR="/Users/${ADMIN_USERNAME}/.ssh"
+  if [[ ! -d "${ADMIN_SSH_DIR}" ]]; then
     log "Creating SSH directory for admin user"
-    mkdir -p "$ADMIN_SSH_DIR"
-    chmod 700 "$ADMIN_SSH_DIR"
+    mkdir -p "${ADMIN_SSH_DIR}"
+    chmod 700 "${ADMIN_SSH_DIR}"
   fi
 
-  if [ -f "$SSH_KEY_SOURCE/authorized_keys" ]; then
+  if [[ -f "${SSH_KEY_SOURCE}/authorized_keys" ]]; then
     log "Copying authorized_keys for admin user"
-    cp "$SSH_KEY_SOURCE/authorized_keys" "$ADMIN_SSH_DIR/"
-    chmod 600 "$ADMIN_SSH_DIR/authorized_keys"
+    cp "${SSH_KEY_SOURCE}/authorized_keys" "${ADMIN_SSH_DIR}/"
+    chmod 600 "${ADMIN_SSH_DIR}/authorized_keys"
     check_success "Admin SSH key setup"
   fi
 else
-  log "No SSH keys found at $SSH_KEY_SOURCE - manual key setup will be required"
+  log "No SSH keys found at ${SSH_KEY_SOURCE} - manual key setup will be required"
 fi
 
 # Configure Apple ID (requires manual intervention)
 # Open Apple ID one-time password link if available
-APPLE_ID_URL_FILE="$SETUP_DIR/URLs/apple_id_password.url"
-if [ -f "$APPLE_ID_URL_FILE" ]; then
+APPLE_ID_URL_FILE="${SETUP_DIR}/URLs/apple_id_password.url"
+if [[ -f "${APPLE_ID_URL_FILE}" ]]; then
   log "Opening Apple ID one-time password link"
-  open "$APPLE_ID_URL_FILE"
+  open "${APPLE_ID_URL_FILE}"
   check_success "Opening Apple ID password link"
 
   # Ask user to confirm they've retrieved the password
-  if [ "$FORCE" = false ]; then
+  if [[ "${FORCE}" = false ]]; then
     read -rp "Have you retrieved your Apple ID password? (y/n) " -n 1 -r
     echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    if [[ ! ${REPLY} =~ ^[Yy]$ ]]; then
       show_log "Please retrieve your Apple ID password before continuing"
-      open "$APPLE_ID_URL_FILE"
+      open "${APPLE_ID_URL_FILE}"
       read -p "Press any key to continue once you have your password... " -n 1 -r
       echo
     fi
@@ -388,15 +388,15 @@ fi
 
 # Create operator account if it doesn't exist
 section "Setting Up Operator Account"
-if dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
+if dscl . -list /Users | grep -q "^${OPERATOR_USERNAME}$"; then
   log "Operator account already exists"
 else
   log "Creating operator account"
 
   # Read the password from the transferred file
-  OPERATOR_PASSWORD_FILE="$SETUP_DIR/operator_password"
-  if [ -f "$OPERATOR_PASSWORD_FILE" ]; then
-    OPERATOR_PASSWORD=$(cat "$OPERATOR_PASSWORD_FILE")
+  OPERATOR_PASSWORD_FILE="${SETUP_DIR}/operator_password"
+  if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
+    OPERATOR_PASSWORD=$(cat "${OPERATOR_PASSWORD_FILE}")
     log "Using password from 1Password"
   else
     log "❌ Operator password file not found"
@@ -404,11 +404,11 @@ else
   fi
 
   # Create the operator account
-  sudo sysadminctl -addUser "$OPERATOR_USERNAME" -fullName "$OPERATOR_FULLNAME" -password "$OPERATOR_PASSWORD" -hint "See 1Password TILSIT operator for password"
+  sudo sysadminctl -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${OPERATOR_PASSWORD}" -hint "See 1Password TILSIT operator for password"
   check_success "Operator account creation"
 
   # Verify the password works
-  if dscl /Local/Default -authonly "$OPERATOR_USERNAME" "$OPERATOR_PASSWORD"; then
+  if dscl /Local/Default -authonly "${OPERATOR_USERNAME}" "${OPERATOR_PASSWORD}"; then
     show_log "✅ Password verification successful"
   else
     log "❌ Password verification failed"
@@ -416,71 +416,71 @@ else
   fi
 
   # Store reference to 1Password (don't store actual password)
-  echo "Operator account password is stored in 1Password: op://personal/TILSIT operator/password" >"/Users/$ADMIN_USERNAME/Documents/operator_password_reference.txt"
-  chmod 600 "/Users/$ADMIN_USERNAME/Documents/operator_password_reference.txt"
+  echo "Operator account password is stored in 1Password: op://personal/TILSIT operator/password" >"/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
+  chmod 600 "/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
 
   show_log "Operator account created successfully"
 
   # Skip setup screens for operator account (more aggressive approach)
   log "Configuring operator account to skip setup screens"
-  sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant DidSeeCloudSetup -bool true
-  sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant SkipCloudSetup -bool true
-  sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant DidSeePrivacy -bool true
-  sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant GestureMovieSeen none
-  sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant LastSeenCloudProductVersion "$(sw_vers -productVersion)"
-  sudo -u "$OPERATOR_USERNAME" defaults write com.apple.screensaver showClock -bool false
+  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeeCloudSetup -bool true
+  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant SkipCloudSetup -bool true
+  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeePrivacy -bool true
+  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant GestureMovieSeen none
+  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant LastSeenCloudProductVersion "$(sw_vers -productVersion)"
+  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.screensaver showClock -bool false
 
   # Screen Time and Apple Intelligence
-  sudo -u "$OPERATOR_USERNAME" defaults write com.apple.ScreenTimeAgent DidCompleteSetup -bool true
-  sudo -u "$OPERATOR_USERNAME" defaults write com.apple.intelligenceplatform.ui SetupHasBeenDisplayed -bool true
+  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.ScreenTimeAgent DidCompleteSetup -bool true
+  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.intelligenceplatform.ui SetupHasBeenDisplayed -bool true
 
   # Accessibility and Data & Privacy
-  sudo -u "$OPERATOR_USERNAME" defaults write com.apple.universalaccess didSeeAccessibilitySetup -bool true
-  sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant DidSeeDataAndPrivacy -bool true
+  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.universalaccess didSeeAccessibilitySetup -bool true
+  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeeDataAndPrivacy -bool true
 
   # TouchID setup bypass (this might help with the password confusion)
-  sudo -u "$OPERATOR_USERNAME" defaults write com.apple.SetupAssistant DidSeeTouchID -bool true
+  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeeTouchID -bool true
   check_success "Operator setup screen suppression"
 
   # Set up operator SSH keys if available
-  if [ -d "$SSH_KEY_SOURCE" ] && [ -f "$SSH_KEY_SOURCE/operator_authorized_keys" ]; then
-    OPERATOR_SSH_DIR="/Users/$OPERATOR_USERNAME/.ssh"
+  if [[ -d "${SSH_KEY_SOURCE}" ]] && [[ -f "${SSH_KEY_SOURCE}/operator_authorized_keys" ]]; then
+    OPERATOR_SSH_DIR="/Users/${OPERATOR_USERNAME}/.ssh"
     log "Setting up SSH keys for operator account"
 
-    sudo mkdir -p "$OPERATOR_SSH_DIR"
-    sudo cp "$SSH_KEY_SOURCE/operator_authorized_keys" "$OPERATOR_SSH_DIR/authorized_keys"
-    sudo chmod 700 "$OPERATOR_SSH_DIR"
-    sudo chmod 600 "$OPERATOR_SSH_DIR/authorized_keys"
-    sudo chown -R "$OPERATOR_USERNAME" "$OPERATOR_SSH_DIR"
+    sudo mkdir -p "${OPERATOR_SSH_DIR}"
+    sudo cp "${SSH_KEY_SOURCE}/operator_authorized_keys" "${OPERATOR_SSH_DIR}/authorized_keys"
+    sudo chmod 700 "${OPERATOR_SSH_DIR}"
+    sudo chmod 600 "${OPERATOR_SSH_DIR}/authorized_keys"
+    sudo chown -R "${OPERATOR_USERNAME}" "${OPERATOR_SSH_DIR}"
 
     check_success "Operator SSH key setup"
 
     # Add operator to SSH access group
     log "Adding operator to SSH access group"
-    sudo dseditgroup -o edit -a "$OPERATOR_USERNAME" -t user com.apple.access_ssh
+    sudo dseditgroup -o edit -a "${OPERATOR_USERNAME}" -t user com.apple.access_ssh
     check_success "Operator SSH group membership"
   fi
 fi
 
 # Configure automatic login for operator account (whether new or existing)
 log "Configuring automatic login for operator account"
-OPERATOR_PASSWORD_FILE="$SETUP_DIR/operator_password"
-if [ -f "$OPERATOR_PASSWORD_FILE" ]; then
-  OPERATOR_PASSWORD=$(cat "$OPERATOR_PASSWORD_FILE")
+OPERATOR_PASSWORD_FILE="${SETUP_DIR}/operator_password"
+if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
+  OPERATOR_PASSWORD=$(cat "${OPERATOR_PASSWORD_FILE}")
 
   # Create the encoded password file that macOS uses for auto-login
-  echo "$OPERATOR_PASSWORD" | openssl enc -base64 | sudo tee /etc/kcpassword >/dev/null
+  echo "${OPERATOR_PASSWORD}" | openssl enc -base64 | sudo tee /etc/kcpassword >/dev/null
   sudo chmod 600 /etc/kcpassword
   check_success "Create auto-login password file"
 
   # Set the auto-login user
-  sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser "$OPERATOR_USERNAME"
+  sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser "${OPERATOR_USERNAME}"
   check_success "Set auto-login user"
 
-  show_log "✅ Automatic login configured for $OPERATOR_USERNAME"
+  show_log "✅ Automatic login configured for ${OPERATOR_USERNAME}"
 
 else
-  log "Operator password file not found at $OPERATOR_PASSWORD_FILE - skipping automatic login setup"
+  log "Operator password file not found at ${OPERATOR_PASSWORD_FILE} - skipping automatic login setup"
 fi
 
 # Configure power management settings
@@ -495,27 +495,27 @@ CURRENT_WOMP=$(pmset -g | grep -E "^[ ]*womp" | awk '{print $2}')
 CURRENT_AUTORESTART=$(pmset -g | grep -E "^[ ]*autorestart" | awk '{print $2}')
 
 # Apply settings only if they differ from current
-if [ "$CURRENT_SLEEP" != "0" ]; then
+if [[ "${CURRENT_SLEEP}" != "0" ]]; then
   sudo pmset -a sleep 0
   log "Disabled system sleep"
 fi
 
-if [ "$CURRENT_DISPLAYSLEEP" != "60" ]; then
+if [[ "${CURRENT_DISPLAYSLEEP}" != "60" ]]; then
   sudo pmset -a displaysleep 60 # Display sleeps after 1 hour
   log "Set display sleep to 60 minutes"
 fi
 
-if [ "$CURRENT_DISKSLEEP" != "0" ]; then
+if [[ "${CURRENT_DISKSLEEP}" != "0" ]]; then
   sudo pmset -a disksleep 0
   log "Disabled disk sleep"
 fi
 
-if [ "$CURRENT_WOMP" != "1" ]; then
+if [[ "${CURRENT_WOMP}" != "1" ]]; then
   sudo pmset -a womp 1 # Enable wake on network access
   log "Enabled Wake on Network Access"
 fi
 
-if [ "$CURRENT_AUTORESTART" != "1" ]; then
+if [[ "${CURRENT_AUTORESTART}" != "1" ]]; then
   sudo pmset -a autorestart 1 # Restart on power failure
   log "Enabled automatic restart after power failure"
 fi
@@ -529,13 +529,13 @@ defaults -currentHost write com.apple.screensaver askForPasswordDelay -int 0
 log "Enabled immediate password requirement after screen saver"
 
 # Run software updates if not skipped
-if [ "$SKIP_UPDATE" = false ]; then
+if [[ "${SKIP_UPDATE}" = false ]]; then
   section "Running Software Updates"
   show_log "Checking for software updates (this may take a while)"
 
   # Check for updates
   UPDATE_CHECK=$(softwareupdate -l)
-  if echo "$UPDATE_CHECK" | grep -q "No new software available"; then
+  if echo "${UPDATE_CHECK}" | grep -q "No new software available"; then
     log "System is up to date"
   else
     log "Installing software updates in background mode"
@@ -552,7 +552,7 @@ section "Configuring Firewall"
 # Check if firewall is enabled using socketfilterfw
 FIREWALL_STATE=$(sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate)
 
-if [[ "$FIREWALL_STATE" =~ "disabled" ]]; then
+if [[ "${FIREWALL_STATE}" =~ "disabled" ]]; then
   log "Enabling firewall"
   sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
   check_success "Firewall activation"
@@ -567,23 +567,23 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/sbin/sshd
 
 # Create scripts directory
 section "Setting Up Scripts Directory"
-SCRIPTS_DIR="/Users/$ADMIN_USERNAME/${HOSTNAME_LOWER}-scripts"
-if [ ! -d "$SCRIPTS_DIR" ]; then
+SCRIPTS_DIR="/Users/${ADMIN_USERNAME}/${HOSTNAME_LOWER}-scripts"
+if [[ ! -d "${SCRIPTS_DIR}" ]]; then
   log "Creating scripts directory"
-  mkdir -p "$SCRIPTS_DIR"
+  mkdir -p "${SCRIPTS_DIR}"
   check_success "Scripts directory creation"
 fi
 
 # Copy package lists if available
-if [ -f "$SETUP_DIR/lists/formulae.txt" ]; then
+if [[ -f "${SETUP_DIR}/lists/formulae.txt" ]]; then
   log "Copying formulae list from setup directory"
-  cp "$SETUP_DIR/lists/formulae.txt" "/Users/$ADMIN_USERNAME/"
+  cp "${SETUP_DIR}/lists/formulae.txt" "/Users/${ADMIN_USERNAME}/"
   check_success "Formulae list copy"
 fi
 
-if [ -f "$SETUP_DIR/lists/casks.txt" ]; then
+if [[ -f "${SETUP_DIR}/lists/casks.txt" ]]; then
   log "Copying casks list from setup directory"
-  cp "$SETUP_DIR/lists/casks.txt" "/Users/$ADMIN_USERNAME/"
+  cp "${SETUP_DIR}/lists/casks.txt" "/Users/${ADMIN_USERNAME}/"
   check_success "Casks list copy"
 fi
 
@@ -612,9 +612,9 @@ else
 
   # Find and install the latest CLT package
   CLT_PACKAGE=$(softwareupdate -l | grep Label | tail -n 1 | cut -d ':' -f 2 | xargs)
-  log "Installing package: $CLT_PACKAGE"
+  log "Installing package: ${CLT_PACKAGE}"
 
-  softwareupdate -i "$CLT_PACKAGE"
+  softwareupdate -i "${CLT_PACKAGE}"
   check_success "Xcode Command Line Tools installation"
 
   # Clean up the flag
@@ -624,13 +624,13 @@ else
 fi
 
 # Install Homebrew
-if [ "$SKIP_HOMEBREW" = false ]; then
+if [[ "${SKIP_HOMEBREW}" = false ]]; then
   section "Installing Homebrew"
 
   # Check if Homebrew is already installed
   if command -v brew &>/dev/null; then
     BREW_VERSION=$(brew --version | head -n 1 | awk '{print $2}')
-    log "Homebrew is already installed (version $BREW_VERSION)"
+    log "Homebrew is already installed (version ${BREW_VERSION})"
 
     # Update Homebrew if already installed
     log "Updating Homebrew"
@@ -654,22 +654,22 @@ if [ "$SKIP_HOMEBREW" = false ]; then
     fi
 
     # Add to .zprofile (Homebrew's recommended approach)
-    echo >>"/Users/$ADMIN_USERNAME/.zprofile"
-    echo "eval \"\$($HOMEBREW_PREFIX/bin/brew shellenv)\"" >>"/Users/$ADMIN_USERNAME/.zprofile"
+    echo >>"/Users/${ADMIN_USERNAME}/.zprofile"
+    echo "eval \"\$(${HOMEBREW_PREFIX}/bin/brew shellenv)\"" >>"/Users/${ADMIN_USERNAME}/.zprofile"
     log "Added Homebrew to .zprofile"
 
     # Apply to current session
-    eval "$("$HOMEBREW_PREFIX/bin/brew" shellenv)"
+    eval "$("${HOMEBREW_PREFIX}/bin/brew" shellenv)"
     log "Applied Homebrew environment to current session"
 
     # Add to other shell configuration files for compatibility
     for SHELL_PROFILE in ~/.bash_profile ~/.profile; do
-      if [ -f "$SHELL_PROFILE" ]; then
+      if [[ -f "${SHELL_PROFILE}" ]]; then
         # Only add if not already present
-        if ! grep -q "HOMEBREW_PREFIX\|brew shellenv" "$SHELL_PROFILE"; then
-          log "Adding Homebrew to $SHELL_PROFILE"
-          echo -e '\n# Homebrew' >>"$SHELL_PROFILE"
-          echo "eval \"\$(${HOMEBREW_PREFIX}/bin/brew shellenv)\"" >>"$SHELL_PROFILE"
+        if ! grep -q "HOMEBREW_PREFIX\|brew shellenv" "${SHELL_PROFILE}"; then
+          log "Adding Homebrew to ${SHELL_PROFILE}"
+          echo -e '\n# Homebrew' >>"${SHELL_PROFILE}"
+          echo "eval \"\$(${HOMEBREW_PREFIX}/bin/brew shellenv)\"" >>"${SHELL_PROFILE}"
         fi
       fi
     done
@@ -687,7 +687,7 @@ if [ "$SKIP_HOMEBREW" = false ]; then
 fi
 
 # Install packages
-if [ "$SKIP_PACKAGES" = false ]; then
+if [[ "${SKIP_PACKAGES}" = false ]]; then
   section "Installing Packages"
 
   # Function to install formulae if not already installed
@@ -721,28 +721,28 @@ if [ "$SKIP_PACKAGES" = false ]; then
   }
 
   # Install formulae from list
-  if [ -f "$FORMULAE_FILE" ]; then
-    show_log "Installing formulae from $FORMULAE_FILE"
+  if [[ -f "${FORMULAE_FILE}" ]]; then
+    show_log "Installing formulae from ${FORMULAE_FILE}"
     formulae=()
     while IFS= read -r line; do
-      formulae+=("$line")
-    done < <(grep -v '^#' "$FORMULAE_FILE" | grep -v '^$')
+      formulae+=("${line}")
+    done < <(grep -v '^#' "${FORMULAE_FILE}" | grep -v '^$')
     for formula in "${formulae[@]}"; do
-      install_formula "$formula"
+      install_formula "${formula}"
     done
   else
     log "Formulae list not found, skipping formula installations"
   fi
 
   # Install casks from list
-  if [ -f "$CASKS_FILE" ]; then
-    show_log "Installing casks from $CASKS_FILE"
+  if [[ -f "${CASKS_FILE}" ]]; then
+    show_log "Installing casks from ${CASKS_FILE}"
     casks=()
     while IFS= read -r line; do
-      casks+=("$line")
-    done < <(grep -v '^#' "$CASKS_FILE" | grep -v '^$')
+      casks+=("${line}")
+    done < <(grep -v '^#' "${CASKS_FILE}" | grep -v '^$')
     for cask in "${casks[@]}"; do
-      install_cask "$cask"
+      install_cask "${cask}"
     done
   else
     log "Casks list not found, skipping cask installations"
@@ -755,9 +755,9 @@ if [ "$SKIP_PACKAGES" = false ]; then
 
   # Run brew doctor and save output
   log "Running brew doctor diagnostic"
-  BREW_DOCTOR_OUTPUT="$LOG_DIR/brew-doctor-$(date +%Y%m%d-%H%M%S).log"
-  brew doctor >"$BREW_DOCTOR_OUTPUT" 2>&1 || true
-  log "Brew doctor output saved to: $BREW_DOCTOR_OUTPUT"
+  BREW_DOCTOR_OUTPUT="${LOG_DIR}/brew-doctor-$(date +%Y%m%d-%H%M%S).log"
+  brew doctor >"${BREW_DOCTOR_OUTPUT}" 2>&1 || true
+  log "Brew doctor output saved to: ${BREW_DOCTOR_OUTPUT}"
   check_success "Brew doctor diagnostic"
 fi
 
@@ -801,15 +801,15 @@ fi
 # Setup operator dock cleanup script
 section "Setting Up Operator Dock Cleanup Script"
 
-if [ -f "$SETUP_DIR/dock-cleanup.command" ] && dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
+if [[ -f "${SETUP_DIR}/dock-cleanup.command" ]] && dscl . -list /Users | grep -q "^${OPERATOR_USERNAME}$"; then
   log "Installing operator dock cleanup script on desktop"
-  DOCK_SCRIPT="/Users/$OPERATOR_USERNAME/Desktop/dock-cleanup.command"
+  DOCK_SCRIPT="/Users/${OPERATOR_USERNAME}/Desktop/dock-cleanup.command"
 
   # Copy script to operator's desktop
-  sudo cp "$SETUP_DIR/dock-cleanup.command" "/Users/$OPERATOR_USERNAME/Desktop/"
-  sudo chown "$OPERATOR_USERNAME:staff" "$DOCK_SCRIPT"
-  sudo chmod +x "$DOCK_SCRIPT"
-  sudo xattr -d com.apple.quarantine "$DOCK_SCRIPT"
+  sudo cp "${SETUP_DIR}/dock-cleanup.command" "/Users/${OPERATOR_USERNAME}/Desktop/"
+  sudo chown "${OPERATOR_USERNAME}:staff" "${DOCK_SCRIPT}"
+  sudo chmod +x "${DOCK_SCRIPT}"
+  sudo xattr -d com.apple.quarantine "${DOCK_SCRIPT}"
 
   check_success "Operator dock cleanup script setup"
   show_log "✅ Dock cleanup script placed on operator desktop"
@@ -825,32 +825,32 @@ section "Changing Default Shell to Homebrew Bash"
 # Get the Homebrew bash path
 HOMEBREW_BASH="$(brew --prefix)/bin/bash"
 
-if [ -f "$HOMEBREW_BASH" ]; then
-  log "Found Homebrew bash at: $HOMEBREW_BASH"
+if [[ -f "${HOMEBREW_BASH}" ]]; then
+  log "Found Homebrew bash at: ${HOMEBREW_BASH}"
 
   # Add to /etc/shells if not already present
-  if ! grep -q "$HOMEBREW_BASH" /etc/shells; then
+  if ! grep -q "${HOMEBREW_BASH}" /etc/shells; then
     log "Adding Homebrew bash to /etc/shells"
-    echo "$HOMEBREW_BASH" | sudo tee -a /etc/shells
+    echo "${HOMEBREW_BASH}" | sudo tee -a /etc/shells
     check_success "Add Homebrew bash to /etc/shells"
   else
     log "Homebrew bash already in /etc/shells"
   fi
 
   # Change shell for admin user
-  if [ "$(dscl . -read /Users/"$ADMIN_USERNAME" UserShell | awk '{print $2}')" != "$HOMEBREW_BASH" ]; then
+  if [[ "$(dscl . -read /Users/"${ADMIN_USERNAME}" UserShell | awk '{print $2}')" != "${HOMEBREW_BASH}" ]]; then
     log "Changing shell for admin user to Homebrew bash"
-    sudo chsh -s "$HOMEBREW_BASH" "$ADMIN_USERNAME"
+    sudo chsh -s "${HOMEBREW_BASH}" "${ADMIN_USERNAME}"
     check_success "Admin user shell change"
   else
     log "Admin user already using Homebrew bash"
   fi
 
   # Change shell for operator user if it exists
-  if dscl . -list /Users | grep -q "^$OPERATOR_USERNAME$"; then
-    if [ "$(dscl . -read /Users/$OPERATOR_USERNAME UserShell | awk '{print $2}')" != "$HOMEBREW_BASH" ]; then
+  if dscl . -list /Users | grep -q "^${OPERATOR_USERNAME}$"; then
+    if [[ "$(dscl . -read /Users/"${OPERATOR_USERNAME}" UserShell | awk '{print $2}')" != "${HOMEBREW_BASH}" ]]; then
       log "Changing shell for operator user to Homebrew bash"
-      sudo chsh -s "$HOMEBREW_BASH" "$OPERATOR_USERNAME"
+      sudo chsh -s "${HOMEBREW_BASH}" "${OPERATOR_USERNAME}"
       check_success "Operator user shell change"
     else
       log "Operator user already using Homebrew bash"
@@ -866,33 +866,33 @@ fi
 
 # Create application setup directory
 section "Preparing Application Setup"
-APP_SETUP_DIR="/Users/$ADMIN_USERNAME/app-setup"
+APP_SETUP_DIR="/Users/${ADMIN_USERNAME}/app-setup"
 
-if [ ! -d "$APP_SETUP_DIR" ]; then
+if [[ ! -d "${APP_SETUP_DIR}" ]]; then
   log "Creating application setup directory"
-  mkdir -p "$APP_SETUP_DIR"
+  mkdir -p "${APP_SETUP_DIR}"
   check_success "App setup directory creation"
 fi
 
 # Copy application setup scripts if available
-if [ -d "$SETUP_DIR/scripts/app-setup" ]; then
-  log "Copying application setup scripts from $SETUP_DIR/scripts/app-setup"
-  cp "$SETUP_DIR/scripts/app-setup/"*.sh "$APP_SETUP_DIR/" 2>/dev/null
-  chmod +x "$APP_SETUP_DIR/"*.sh 2>/dev/null
+if [[ -d "${SETUP_DIR}/scripts/app-setup" ]]; then
+  log "Copying application setup scripts from ${SETUP_DIR}/scripts/app-setup"
+  cp "${SETUP_DIR}/scripts/app-setup/"*.sh "${APP_SETUP_DIR}/" 2>/dev/null
+  chmod +x "${APP_SETUP_DIR}/"*.sh 2>/dev/null
   check_success "Application scripts copy"
 else
-  log "No application setup scripts found in $SETUP_DIR/scripts/app-setup"
+  log "No application setup scripts found in ${SETUP_DIR}/scripts/app-setup"
 fi
 
 # Configure Time Machine backup
 section "Configuring Time Machine"
 
 # Check if Time Machine configuration is available
-TIMEMACHINE_CONFIG_FILE="$SETUP_DIR/timemachine.conf"
-if [ -f "$TIMEMACHINE_CONFIG_FILE" ]; then
+TIMEMACHINE_CONFIG_FILE="${SETUP_DIR}/timemachine.conf"
+if [[ -f "${TIMEMACHINE_CONFIG_FILE}" ]]; then
   # Source the Time Machine configuration
   # shellcheck source=/dev/null
-  source "$TIMEMACHINE_CONFIG_FILE"
+  source "${TIMEMACHINE_CONFIG_FILE}"
 
   log "Checking existing Time Machine configuration"
 
@@ -904,8 +904,8 @@ if [ -f "$TIMEMACHINE_CONFIG_FILE" ]; then
   ESCAPED_URL="${EXPECTED_URL//\./\\.}"
   ESCAPED_URL="${ESCAPED_URL//\//\\/}"
 
-  if echo "$EXISTING_DESTINATIONS" | grep -q "$ESCAPED_URL"; then
-    show_log "✅ Time Machine already configured with destination: $TM_URL"
+  if echo "${EXISTING_DESTINATIONS}" | grep -q "${ESCAPED_URL}"; then
+    show_log "✅ Time Machine already configured with destination: ${TM_URL}"
 
     # Still add to menu bar if not already there
     if ! defaults read com.apple.systemuiserver menuExtras 2>/dev/null | grep -q "TimeMachine.menu"; then
@@ -915,11 +915,11 @@ if [ -f "$TIMEMACHINE_CONFIG_FILE" ]; then
       check_success "Time Machine menu bar addition"
     fi
   else
-    log "Configuring Time Machine destination: $TM_URL"
+    log "Configuring Time Machine destination: ${TM_URL}"
     # Construct the full SMB URL with credentials
     TIMEMACHINE_URL="smb://${TM_USERNAME}:${TM_PASSWORD}@${TM_URL#*://}"
 
-    if sudo tmutil setdestination -a "$TIMEMACHINE_URL"; then
+    if sudo tmutil setdestination -a "${TIMEMACHINE_URL}"; then
       check_success "Time Machine destination configuration"
 
       log "Enabling Time Machine"
@@ -946,13 +946,13 @@ fi
 # Setup completed successfully
 section "Setup Complete"
 show_log "Server setup has been completed successfully"
-show_log "You can now set up individual applications with scripts in: $APP_SETUP_DIR"
+show_log "You can now set up individual applications with scripts in: ${APP_SETUP_DIR}"
 show_log ""
 show_log "Next steps:"
-show_log "1. Set up applications: cd $APP_SETUP_DIR && ./plex-setup.sh"
+show_log "1. Set up applications: cd ${APP_SETUP_DIR} && ./plex-setup.sh"
 show_log "2. Configure monitoring: ~/tilsit-scripts/monitoring-setup.sh"
 show_log "3. Test SSH access from your dev machine:"
-show_log "   ssh $ADMIN_USERNAME@tilsit.local"
+show_log "   ssh ${ADMIN_USERNAME}@tilsit.local"
 show_log "   ssh operator@tilsit.local"
 
 exit 0
