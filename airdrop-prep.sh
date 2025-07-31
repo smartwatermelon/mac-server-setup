@@ -24,8 +24,21 @@ OUTPUT_PATH="${1:-${HOME}/${SERVER_NAME_LOWER}-setup}"
 SSH_KEY_PATH="${HOME}/.ssh/id_ed25519.pub" # Adjust to your SSH key path
 SCRIPT_SOURCE_DIR="${2:-.}"                # Directory containing source scripts (default is current dir)
 
-# Check if output directory exists, create if not
-if [[ ! -d "${OUTPUT_PATH}" ]]; then
+# Check if output directory exists
+if [[ -d "${OUTPUT_PATH}" ]]; then
+  echo "Output directory already exists: ${OUTPUT_PATH}"
+  echo "This directory contains files from a previous preparation run."
+  read -p "Remove existing directory and recreate? (y/n) " -n 1 -r
+  echo
+  if [[ ${REPLY} =~ ^[Yy]$ ]]; then
+    echo "Removing existing directory..."
+    rm -rf "${OUTPUT_PATH}"
+    echo "Creating fresh output directory: ${OUTPUT_PATH}"
+    mkdir -p "${OUTPUT_PATH}"
+  else
+    echo "Keeping existing directory. Files may be overwritten during preparation."
+  fi
+else
   echo "Creating output directory: ${OUTPUT_PATH}"
   mkdir -p "${OUTPUT_PATH}"
 fi
