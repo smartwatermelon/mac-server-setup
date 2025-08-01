@@ -17,8 +17,6 @@
 set -eo pipefail
 
 # Configuration
-SERVER_NAME="TILSIT"
-OUTPUT_PATH="${1:-${HOME}/${SERVER_NAME_LOWER}-setup}"
 SSH_KEY_PATH="${HOME}/.ssh/id_ed25519.pub" # Adjust to your SSH key path
 SCRIPT_SOURCE_DIR="${2:-.}"                # Directory containing source scripts (default is current dir)
 
@@ -43,6 +41,7 @@ fi
 
 # Set derived variables
 SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
+OUTPUT_PATH="${1:-${HOME}/${SERVER_NAME_LOWER}-setup}"
 OP_TIMEMACHINE_ENTRY="${ONEPASSWORD_TIMEMACHINE_ITEM}"
 
 # Check if output directory exists
@@ -235,6 +234,12 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   cp "${SCRIPT_SOURCE_DIR}/formulae.txt" "${OUTPUT_PATH}/lists/" 2>/dev/null || echo "Warning: formulae.txt not found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/casks.txt" "${OUTPUT_PATH}/lists/" 2>/dev/null || echo "Warning: casks.txt not found in source directory"
 
+  # Copy configuration file if it exists
+  if [[ -f "${CONFIG_FILE}" ]]; then
+    cp "${CONFIG_FILE}" "${OUTPUT_PATH}/"
+    echo "Configuration file copied to setup package"
+  fi
+
   echo "Scripts copied from local source directory"
 else
   echo "Error: No script source found. Please provide a local script source directory."
@@ -244,9 +249,9 @@ fi
 # Create a README file
 echo "Creating README file..."
 cat >"${OUTPUT_PATH}/README.md" <<'EOF'
-# TILSIT Server Setup Files
+# Server Setup Files
 
-This directory contains all the necessary files for setting up the Mac Mini M2 'TILSIT' server.
+This directory contains all the necessary files for setting up the Mac Mini M2 server.
 
 ## Contents
 
@@ -258,6 +263,7 @@ This directory contains all the necessary files for setting up the Mac Mini M2 '
 - `wifi/`: WiFi network configuration
 - `operator_password`: Operator account password
 - `timemachine.conf` : Configuration information for Time Machine
+- `config.conf`: Server configuration settings
 
 ## Setup Instructions
 
@@ -265,7 +271,7 @@ This directory contains all the necessary files for setting up the Mac Mini M2 '
 2. AirDrop this entire folder to the Mac Mini (it will be placed in Downloads)
 3. Open Terminal and run:
    ```bash
-   cd ~/Downloads/tilsit-setup/scripts
+   cd ~/Downloads/${SERVER_NAME_LOWER}-setup/scripts
    chmod +x first-boot.sh
    ./first-boot.sh
    ```
@@ -275,7 +281,7 @@ For detailed instructions, refer to the complete runbook.
 
 ## Notes
 
-- The operator account password is retrieved from 1Password (op://personal/tilsit/password)
+- The operator account password is retrieved from 1Password using configured credentials
 - After setup, you can access the server via SSH using the admin or operator account
 - TouchID sudo will be enabled if the configuration file was available during preparation
 - WiFi will be configured automatically using the saved network information
