@@ -24,4 +24,5 @@ echo "Cleaning up dock for operator account..."
   --remove 'iPhone Mirroring' \
   --remove /System/Applications/Utilities/Terminal.app \
   --add /Applications/iTerm.app \
+  --add /System/Applications/Passwords.app \
   &>/dev/null || true

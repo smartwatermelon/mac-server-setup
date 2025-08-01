@@ -931,6 +931,7 @@ if command -v dockutil &>/dev/null; then
     --remove 'iPhone Mirroring' \
     --remove /System/Applications/Utilities/Terminal.app \
     --add /Applications/iTerm.app \
+    --add /System/Applications/Passwords.app \
     --allhomes \
     &>/dev/null || true
   check_success "Administrator Dock cleaned up"
