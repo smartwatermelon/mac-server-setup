@@ -749,7 +749,7 @@ else
 
     # Use xcode-select method (will prompt user)
     if [[ "${FORCE}" = false ]]; then
-      show_log "This will open a dialog box for Command Line Tools installation"
+      show_log "This will open a dialog for Command Line Tools installation"
       read -rp "Press any key to continue..." -n 1 -r
       echo
     fi
