@@ -26,14 +26,7 @@
 set -eo pipefail
 
 # Configuration variables - adjust as needed
-HOSTNAME="TILSIT"
-HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
-OPERATOR_USERNAME="operator"
-OPERATOR_FULLNAME="${HOSTNAME} Operator"
-ADMIN_USERNAME=$(whoami) # Set this once and use throughout
-export LOG_DIR
-LOG_DIR="${HOME}/.local/state" # XDG_STATE_HOME
-LOG_FILE="${LOG_DIR}/${HOSTNAME_LOWER}-setup.log"
+ADMIN_USERNAME=$(whoami)                                     # Set this once and use throughout
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" # Directory where AirDropped files are located
 SSH_KEY_SOURCE="${SETUP_DIR}/ssh_keys"
 PAM_D_SOURCE="${SETUP_DIR}/pam.d"
@@ -76,6 +69,33 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+# Load configuration
+CONFIG_FILE="${SETUP_DIR}/config.conf"
+
+if [[ -f "${CONFIG_FILE}" ]]; then
+  # shellcheck source=/dev/null
+  source "${CONFIG_FILE}"
+  echo "Loaded configuration from ${CONFIG_FILE}"
+else
+  echo "Warning: Configuration file not found at ${CONFIG_FILE}"
+  echo "Using default values - you may want to create config.conf"
+  # Set fallback defaults
+  SERVER_NAME="TILSIT"
+  OPERATOR_USERNAME="operator"
+  ONEPASSWORD_VAULT="personal"
+  ONEPASSWORD_OPERATOR_ITEM="TILSIT operator"
+fi
+
+# Set derived variables
+HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
+HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
+OPERATOR_FULLNAME="${SERVER_NAME} Operator"
+# DOCKER_NETWORK="${DOCKER_NETWORK_OVERRIDE:-${HOSTNAME_LOWER}-network}"
+
+export LOG_DIR
+LOG_DIR="${HOME}/.local/state" # XDG_STATE_HOME
+LOG_FILE="${LOG_DIR}/${HOSTNAME_LOWER}-setup.log"
 
 # log function - only writes to log file
 log() {
@@ -186,7 +206,7 @@ chmod 644 "${LOG_FILE}"
 osascript -e 'tell application "Terminal" to do script "printf \"\\e]0;TILSIT Setup Log\\a\"; tail -F '"${LOG_FILE}"'"' || echo "oops, no tail"
 
 # Print header
-section "Starting Mac Mini M2 '${HOSTNAME}' Server Setup"
+section "Starting Mac Mini M2 '${SERVER_NAME}' Server Setup"
 log "Running as user: ${ADMIN_USERNAME}"
 log -n "Date: "
 date
@@ -480,7 +500,7 @@ else
   OPERATOR_PASSWORD_FILE="${SETUP_DIR}/operator_password"
   if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
     OPERATOR_PASSWORD=$(cat "${OPERATOR_PASSWORD_FILE}")
-    log "Using password from 1Password"
+    log "Using password from 1Password (${ONEPASSWORD_OPERATOR_ITEM})"
   else
     log "❌ Operator password file not found"
     exit 1
@@ -499,7 +519,7 @@ else
   fi
 
   # Store reference to 1Password (don't store actual password)
-  echo "Operator account password is stored in 1Password: op://personal/TILSIT operator/password" >"/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
+  echo "Operator account password is stored in 1Password: op://${ONEPASSWORD_VAULT}/${ONEPASSWORD_OPERATOR_ITEM}/password" >"/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
   chmod 600 "/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
 
   show_log "Operator account created successfully"
