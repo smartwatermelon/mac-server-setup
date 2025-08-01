@@ -1127,4 +1127,19 @@ show_log "3. Test SSH access from your dev machine:"
 show_log "   ssh ${ADMIN_USERNAME}@tilsit.local"
 show_log "   ssh operator@tilsit.local"
 
+# Optional reboot
+if [[ "${FORCE}" = false ]]; then
+  echo
+  read -p "Reboot now to apply all changes? (y/N) " -n 1 -r
+  echo
+  if [[ ${REPLY} =~ ^[Yy]$ ]]; then
+    show_log "Initiating system reboot..."
+    osascript -e 'tell app "System Events" to restart'
+  else
+    show_log "Reboot skipped. You may want to reboot manually later to ensure all changes take effect."
+  fi
+else
+  log "Force mode enabled - skipping reboot prompt"
+fi
+
 exit 0
