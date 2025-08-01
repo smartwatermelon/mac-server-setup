@@ -18,11 +18,32 @@ set -eo pipefail
 
 # Configuration
 SERVER_NAME="TILSIT"
-SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
-OP_TIMEMACHINE_ENTRY="PECORINO DS-413 - TimeMachine"
 OUTPUT_PATH="${1:-${HOME}/${SERVER_NAME_LOWER}-setup}"
 SSH_KEY_PATH="${HOME}/.ssh/id_ed25519.pub" # Adjust to your SSH key path
 SCRIPT_SOURCE_DIR="${2:-.}"                # Directory containing source scripts (default is current dir)
+
+# Load configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/config.conf"
+
+if [[ -f "${CONFIG_FILE}" ]]; then
+  # shellcheck source=/dev/null
+  source "${CONFIG_FILE}"
+  echo "Loaded configuration from ${CONFIG_FILE}"
+else
+  echo "Warning: Configuration file not found at ${CONFIG_FILE}"
+  echo "Using default values - you may want to create config.conf"
+  # Set fallback defaults
+  SERVER_NAME="TILSIT"
+  ONEPASSWORD_VAULT="personal"
+  ONEPASSWORD_OPERATOR_ITEM="TILSIT operator"
+  ONEPASSWORD_TIMEMACHINE_ITEM="PECORINO DS-413 - TimeMachine"
+  ONEPASSWORD_APPLEID_ITEM="Apple"
+fi
+
+# Set derived variables
+SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
+OP_TIMEMACHINE_ENTRY="${ONEPASSWORD_TIMEMACHINE_ITEM}"
 
 # Check if output directory exists
 if [[ -d "${OUTPUT_PATH}" ]]; then
@@ -129,8 +150,8 @@ fi
 echo "Setting up operator account credentials..."
 
 # Check if TILSIT operator credentials exist in 1Password
-if ! op item get "TILSIT operator" --vault personal >/dev/null 2>&1; then
-  echo "Creating TILSIT operator credentials in 1Password..."
+if ! op item get "${ONEPASSWORD_OPERATOR_ITEM}" --vault "${ONEPASSWORD_VAULT}" >/dev/null 2>&1; then
+  echo "Creating ${ONEPASSWORD_OPERATOR_ITEM} credentials in 1Password..."
 
   # Generate a secure password and create the item
   RANDOM_BYTES=$(openssl rand -base64 16)
@@ -138,19 +159,19 @@ if ! op item get "TILSIT operator" --vault personal >/dev/null 2>&1; then
   GENERATED_PASSWORD=$(echo "${CLEANED_BYTES}" | cut -c1-20)
 
   op item create --category login \
-    --title "TILSIT operator" \
-    --vault personal \
+    --title "${ONEPASSWORD_OPERATOR_ITEM}" \
+    --vault "${ONEPASSWORD_VAULT}" \
     username="operator" \
     password="${GENERATED_PASSWORD}"
 
-  echo "✅ Created TILSIT operator credentials in 1Password"
+  echo "✅ Created ${ONEPASSWORD_OPERATOR_ITEM} credentials in 1Password"
 else
-  echo "✅ Found existing TILSIT operator credentials in 1Password"
+  echo "✅ Found existing ${ONEPASSWORD_OPERATOR_ITEM} credentials in 1Password"
 fi
 
 # Retrieve the operator password and save it for transfer
 echo "Retrieving operator password from 1Password..."
-op read "op://personal/TILSIT operator/password" >"${OUTPUT_PATH}/operator_password"
+op read "op://${ONEPASSWORD_VAULT}/${ONEPASSWORD_OPERATOR_ITEM}/password" >"${OUTPUT_PATH}/operator_password"
 chmod 600 "${OUTPUT_PATH}/operator_password"
 echo "✅ Operator password saved for transfer"
 
@@ -158,7 +179,7 @@ echo "✅ Operator password saved for transfer"
 echo "Setting up Time Machine credentials..."
 
 # Check if Time Machine credentials exist in 1Password
-if ! op item get "${OP_TIMEMACHINE_ENTRY}" --vault personal >/dev/null 2>&1; then
+if ! op item get "${OP_TIMEMACHINE_ENTRY}" --vault "${ONEPASSWORD_VAULT}" >/dev/null 2>&1; then
   echo "⚠️ Time Machine credentials not found in 1Password"
   echo "Please create '${OP_TIMEMACHINE_ENTRY}' entry manually"
   echo "Skipping Time Machine credential setup"
@@ -167,9 +188,9 @@ else
 
   # Retrieve Time Machine details from 1Password
   echo "Retrieving Time Machine details from 1Password..."
-  TM_USERNAME=$(op item get "${OP_TIMEMACHINE_ENTRY}" --vault personal --fields username)
-  TM_PASSWORD=$(op read "op://personal/${OP_TIMEMACHINE_ENTRY}/password")
-  TM_JSON=$(op item get "${OP_TIMEMACHINE_ENTRY}" --vault personal --format json)
+  TM_USERNAME=$(op item get "${OP_TIMEMACHINE_ENTRY}" --vault "${ONEPASSWORD_VAULT}" --fields username)
+  TM_PASSWORD=$(op read "op://${ONEPASSWORD_VAULT}/${OP_TIMEMACHINE_ENTRY}/password")
+  TM_JSON=$(op item get "${OP_TIMEMACHINE_ENTRY}" --vault "${ONEPASSWORD_VAULT}" --format json)
   TM_URL=$(echo "${TM_JSON}" | jq -r '.urls[0].href')
 
   # Create Time Machine configuration file
@@ -183,7 +204,7 @@ EOF
 fi
 
 # Create and save one-time link for Apple ID password
-APPLE_ID_ITEM="$(op item list --categories Login --vault Personal --favorite --format=json | jq -r '.[] | select(.title == "Apple") | .id' || true)"
+APPLE_ID_ITEM="$(op item list --categories Login --vault "${ONEPASSWORD_VAULT}" --favorite --format=json | jq -r '.[] | select(.title == "'"${ONEPASSWORD_APPLEID_ITEM}"'") | .id' || true)"
 ONE_TIME_URL="$(op item share "${APPLE_ID_ITEM}" --view-once)"
 if [[ -n "${ONE_TIME_URL}" ]]; then
   # Create the .url file with the correct format
