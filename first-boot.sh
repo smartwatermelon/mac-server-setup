@@ -235,12 +235,6 @@ fi
 # SYSTEM CONFIGURATION
 #
 
-# Fix scroll setting
-section "Fix scroll setting"
-log "Fixing Apple's default scroll setting"
-defaults write -g com.apple.swipescrolldirection -bool false
-check_success "Fix scroll setting"
-
 # TouchID sudo setup
 section "TouchID sudo setup"
 if [[ -d "${PAM_D_SOURCE}" ]]; then
@@ -513,6 +507,10 @@ if [[ -f "${APPLE_ID_URL_FILE}" ]]; then
 			"bundle-id" = "com.apple.MobileSMS";
 			"flags" = 0;
 		}'
+    defaults write com.apple.ncprefs apps -array-add '{
+    "bundle-id" = "com.apple.iChat";
+    "flags" = 0;
+}'
     check_success "Notification settings configuration"
 
   fi
@@ -604,6 +602,7 @@ check_success "Fast User Switching configuration"
 
 # Fast User Switching menu bar style and visibility
 defaults write .GlobalPreferences userMenuExtraStyle -int 1                                             # username
+sudo -iu "${OPERATOR_USERNAME}" defaults write .GlobalPreferences userMenuExtraStyle -int 1             # username
 defaults -currentHost write com.apple.controlcenter UserSwitcher -int 2                                 # menubar
 sudo -iu "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.controlcenter UserSwitcher -int 2 # menubar
 
@@ -629,6 +628,13 @@ if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
 else
   log "Operator password file not found at ${OPERATOR_PASSWORD_FILE} - skipping automatic login setup"
 fi
+
+# Fix scroll setting
+section "Fix scroll setting"
+log "Fixing Apple's default scroll setting"
+defaults write -g com.apple.swipescrolldirection -bool false
+sudo -iu "${OPERATOR_USERNAME}" defaults write -g com.apple.swipescrolldirection -bool false
+check_success "Fix scroll setting"
 
 # Configure power management settings
 section "Configuring Power Management"
@@ -673,6 +679,8 @@ check_success "Power management configuration"
 section "Configuring screen saver password requirement"
 defaults -currentHost write com.apple.screensaver askForPassword -int 1
 defaults -currentHost write com.apple.screensaver askForPasswordDelay -int 0
+sudo -u "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.screensaver askForPassword -int 1
+sudo -u "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.screensaver askForPasswordDelay -int 0
 log "Enabled immediate password requirement after screen saver"
 
 # Run software updates if not skipped
@@ -696,16 +704,9 @@ fi
 # Configure firewall
 section "Configuring Firewall"
 
-# Check if firewall is enabled using socketfilterfw
-FIREWALL_STATE=$(sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate)
-
-if [[ "${FIREWALL_STATE}" =~ "disabled" ]]; then
-  log "Enabling firewall"
-  sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
-  check_success "Firewall activation"
-else
-  log "Firewall is already enabled"
-fi
+# Ensure it's on
+log "Ensuring firewall is enabled"
+sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
 
 # Add SSH to firewall allowed services
 log "Ensuring SSH is allowed through firewall"
@@ -1022,26 +1023,16 @@ if [[ -f "${HOMEBREW_BASH}" ]]; then
     log "Homebrew bash already in /etc/shells"
   fi
 
-  # Change shell for admin user
-  CURRENT_ADMIN_SHELL=$(dscl . -read /Users/"${ADMIN_USERNAME}" UserShell 2>/dev/null | awk '{print $2}' || echo "/bin/bash")
-  if [[ "${CURRENT_ADMIN_SHELL}" != "${HOMEBREW_BASH}" ]]; then
-    log "Changing shell for admin user to Homebrew bash"
-    sudo chsh -s "${HOMEBREW_BASH}" "${ADMIN_USERNAME}"
-    check_success "Admin user shell change"
-  else
-    log "Admin user already using Homebrew bash"
-  fi
+  # Change shell for admin user to Homebrew bash
+  log "Setting shell to Homebrew bash for admin user"
+  sudo chsh -s "${HOMEBREW_BASH}" "${ADMIN_USERNAME}"
+  check_success "Admin user shell change"
 
   # Change shell for operator user if it exists
   if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
-    CURRENT_OPERATOR_SHELL=$(dscl . -read /Users/"${OPERATOR_USERNAME}" UserShell 2>/dev/null | awk '{print $2}' || echo "/bin/bash")
-    if [[ "${CURRENT_OPERATOR_SHELL}" != "${HOMEBREW_BASH}" ]]; then
-      log "Changing shell for operator user to Homebrew bash"
-      sudo chsh -s "${HOMEBREW_BASH}" "${OPERATOR_USERNAME}"
-      check_success "Operator user shell change"
-    else
-      log "Operator user already using Homebrew bash"
-    fi
+    log "Setting shell to Homebrew bash for operator user"
+    sudo chsh -s "${HOMEBREW_BASH}" "${OPERATOR_USERNAME}"
+    check_success "Operator user shell change"
   fi
 else
   log "Homebrew bash not found - skipping shell change"
@@ -1106,16 +1097,13 @@ if [[ -f "${TIMEMACHINE_CONFIG_FILE}" ]]; then
     if [[ -n "${EXISTING_DESTINATIONS}" ]] && echo "${EXISTING_DESTINATIONS}" | grep -q "${ESCAPED_URL}"; then
       show_log "✅ Time Machine already configured with destination: ${TM_URL}"
 
-      # Still add to menu bar if not already there
-      if ! defaults read com.apple.systemuiserver menuExtras 2>/dev/null | grep -q "TimeMachine.menu"; then
-
-        log "Adding Time Machine to menu bar"
-        defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
-        NEED_SYSTEMUI_RESTART=true
-        check_success "Time Machine menu bar addition"
-        sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
-        check_success "Time Machine menu bar addition for operator"
-      fi
+      # Add to menu bar
+      log "Adding Time Machine to menu bar"
+      defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
+      NEED_SYSTEMUI_RESTART=true
+      check_success "Time Machine menu bar addition"
+      sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
+      check_success "Time Machine menu bar addition for operator"
     else
       log "Configuring Time Machine destination: ${TM_URL}"
       # Construct the full SMB URL with credentials
