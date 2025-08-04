@@ -115,34 +115,50 @@ else
   echo "TouchID sudo will not be configured on the server"
 fi
 
-# Get current WiFi network info
-echo "Getting current WiFi network information..."
-CURRENT_SSID=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}' || true)
+# WiFi Configuration Strategy Selection
+echo ""
+echo "====== WiFi Network Configuration Strategy ======"
+echo "Choose your WiFi setup method:"
+echo "1. Migration Assistant iPhone/iPad option (recommended - handles WiFi automatically)"
+echo "2. Script-based WiFi configuration (retrieves current network credentials)"
+echo ""
+read -p "Will you use Migration Assistant's iPhone/iPad option for WiFi? (Y/n) " -n 1 -r WIFI_STRATEGY
+echo ""
 
-if [[ -n "${CURRENT_SSID}" ]]; then
-  echo "Current WiFi network SSID: ${CURRENT_SSID}"
+if [[ ${WIFI_STRATEGY} =~ ^[Nn]$ ]]; then
+  echo "Selected: Script-based WiFi configuration"
+  echo "Getting current WiFi network information..."
+  CURRENT_SSID=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}' || true)
 
-  echo "Retrieving WiFi password..."
-  echo "You'll be prompted for your administrator password to access the keychain."
-  WIFI_PASSWORD=$(security find-generic-password -a "${CURRENT_SSID}" -w "/Library/Keychains/System.keychain")
+  if [[ -n "${CURRENT_SSID}" ]]; then
+    echo "Current WiFi network SSID: ${CURRENT_SSID}"
 
-  if [[ -n "${WIFI_PASSWORD}" ]]; then
-    echo "WiFi password retrieved successfully."
+    echo "Retrieving WiFi password..."
+    echo "You'll be prompted for your administrator password to access the keychain."
+    WIFI_PASSWORD=$(security find-generic-password -a "${CURRENT_SSID}" -w "/Library/Keychains/System.keychain")
 
-    # Save WiFi information securely
-    cat >"${OUTPUT_PATH}/wifi/network.conf" <<EOF
+    if [[ -n "${WIFI_PASSWORD}" ]]; then
+      echo "WiFi password retrieved successfully."
+
+      # Save WiFi information securely
+      cat >"${OUTPUT_PATH}/wifi/network.conf" <<EOF
 WIFI_SSID="${CURRENT_SSID}"
 WIFI_PASSWORD="${WIFI_PASSWORD}"
 EOF
-    chmod 600 "${OUTPUT_PATH}/wifi/network.conf"
-    echo "WiFi network configuration saved to wifi/network.conf"
+      chmod 600 "${OUTPUT_PATH}/wifi/network.conf"
+      echo "WiFi network configuration saved to wifi/network.conf"
+    else
+      echo "Error: Could not retrieve WiFi password."
+      echo "WiFi network configuration will not be automated."
+    fi
   else
-    echo "Error: Could not retrieve WiFi password."
+    echo "Warning: Could not detect current WiFi network."
     echo "WiFi network configuration will not be automated."
   fi
 else
-  echo "Warning: Could not detect current WiFi network."
-  echo "WiFi network configuration will not be automated."
+  echo "Selected: Migration Assistant WiFi configuration"
+  echo "✅ Migration Assistant will handle WiFi network setup automatically"
+  echo "No WiFi credentials will be transferred to the setup package"
 fi
 
 # Set up operator account credentials using 1Password
