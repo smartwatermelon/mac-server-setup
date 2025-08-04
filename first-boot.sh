@@ -568,23 +568,16 @@ fi
 # Fast User Switching
 section "Enabling Fast User Switching"
 log "Configuring Fast User Switching for multi-user access"
-sudo defaults write /Library/Preferences/com.apple.loginwindow MultipleSessionEnabled -bool true
+sudo defaults write /Library/Preferences/.GlobalPreferences MultipleSessionEnabled -bool true
 check_success "Fast User Switching configuration"
 
-# Fast User Switching menu bar visibility
-CURRENT_FUS_VISIBLE=$(defaults read com.apple.controlcenter "NSStatusItem Visible UserSwitcher" 2>/dev/null || echo "0")
-if [[ "${CURRENT_FUS_VISIBLE}" != "1" ]]; then
-  log "Adding Fast User Switching to menu bar"
-  defaults write com.apple.controlcenter "NSStatusItem Visible UserSwitcher" -int 1
-  check_success "Fast User Switching menu bar visibility"
-  NEED_CONTROLCENTER_RESTART=true
-  sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.controlcenter "NSStatusItem Visible UserSwitcher" -int 1
-  check_success "Fast User Switching menu bar visibility for operator"
-else
-  log "Fast User Switching already visible in menu bar"
-fi
+# Fast User Switching menu bar style and visibility
+defaults write .GlobalPreferences userMenuExtraStyle -int 1                                             # username
+defaults -currentHost write com.apple.controlcenter UserSwitcher -int 2                                 # menubar
+sudo -iu "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.controlcenter UserSwitcher -int 2 # menubar
 
 # Configure automatic login for operator account (whether new or existing)
+section "Automatic login for operator account"
 log "Configuring automatic login for operator account"
 OPERATOR_PASSWORD_FILE="${SETUP_DIR}/operator_password"
 if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
