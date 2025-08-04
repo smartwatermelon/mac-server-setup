@@ -269,49 +269,65 @@ else
   log "No TouchID sudo setup directory found at ${PAM_D_SOURCE}"
 fi
 
-# Configure WiFi if network config is available
-section "Configuring WiFi Network"
-if [[ -f "${WIFI_CONFIG_FILE}" ]]; then
-  log "Found WiFi configuration file"
+# WiFi Network Assessment and Configuration
+section "WiFi Network Assessment and Configuration"
+
+# Detect active WiFi interface
+WIFI_INTERFACE=$(networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}' || echo "en0")
+log "Using WiFi interface: ${WIFI_INTERFACE}"
+
+# Check current network connectivity status
+WIFI_CONFIGURED=false
+CURRENT_NETWORK=$(system_profiler SPAirPortDataType -detailLevel basic | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}')
+
+if [[ -n "${CURRENT_NETWORK}" ]]; then
+  log "Connected to WiFi network: ${CURRENT_NETWORK}"
+
+  # Test actual internet connectivity
+  log "Testing internet connectivity..."
+  if ping -c 1 -W 3000 8.8.8.8 >/dev/null 2>&1 || ping -c 1 -W 3000 1.1.1.1 >/dev/null 2>&1; then
+    show_log "✅ WiFi already configured and working: ${CURRENT_NETWORK}"
+    WIFI_CONFIGURED=true
+  else
+    log "⚠️ Connected to WiFi but no internet access detected"
+  fi
+else
+  log "No WiFi network currently connected"
+fi
+
+# Only attempt WiFi configuration if not already working
+if [[ "${WIFI_CONFIGURED}" != true ]] && [[ -f "${WIFI_CONFIG_FILE}" ]]; then
+  log "Found WiFi configuration file - attempting setup"
 
   # Source the WiFi configuration file to get SSID and password
   # shellcheck source=/dev/null
   source "${WIFI_CONFIG_FILE}"
 
   if [[ -n "${WIFI_SSID}" ]] && [[ -n "${WIFI_PASSWORD}" ]]; then
-    # Check if we're already connected to the target network
-    CURRENT_SSID=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}')
+    log "Configuring WiFi network: ${WIFI_SSID}"
 
-    if [[ "${CURRENT_SSID}" = "${WIFI_SSID}" ]]; then
-      log "Already connected to WiFi network: ${WIFI_SSID}"
+    # Check if SSID is already in preferred networks list
+    if networksetup -listpreferredwirelessnetworks "${WIFI_INTERFACE}" 2>/dev/null | grep -q "${WIFI_SSID}"; then
+      log "WiFi network ${WIFI_SSID} is already in preferred networks list"
     else
-      log "Configuring WiFi network: ${WIFI_SSID}"
+      # Add WiFi network to preferred networks
+      networksetup -addpreferredwirelessnetworkatindex "${WIFI_INTERFACE}" "${WIFI_SSID}" 0 WPA2
+      check_success "Add preferred WiFi network"
+      security add-generic-password -D "AirPort network password" -a "${WIFI_SSID}" -s "AirPort" -w "${WIFI_PASSWORD}" || true
+      check_success "Store password in keychain"
+    fi
 
-      # Check if SSID is already in preferred networks list
-      WIFI_IFACE="$(system_profiler SPAirPortDataType -xml | /usr/libexec/PlistBuddy -c "Print :0:_items:0:spairport_airport_interfaces:0:_name" /dev/stdin <<<"$(cat || true)" 2>/dev/null)"
+    # Try to join the network
+    log "Attempting to join WiFi network ${WIFI_SSID}..."
+    networksetup -setairportnetwork "${WIFI_INTERFACE}" "${WIFI_SSID}" "${WIFI_PASSWORD}" &>/dev/null || true
 
-      if networksetup -listpreferredwirelessnetworks "${WIFI_IFACE}" 2>/dev/null | grep -q "${WIFI_SSID}"; then
-        log "WiFi network ${WIFI_SSID} is already in preferred networks list"
-      else
-        # Add WiFi network to preferred networks
-        networksetup -addpreferredwirelessnetworkatindex "${WIFI_IFACE}" "${WIFI_SSID}" "@" "WPA/WPA2"
-        check_success "Add preferred WiFi network"
-        security add-generic-password -D "AirPort network password" -a "${WIFI_SSID}" -s "AirPort" -w "${WIFI_PASSWORD}" || true
-        check_success "Store password in keychain"
-      fi
-
-      # Try to join the network
-      log "Attempting to join WiFi network ${WIFI_SSID}..."
-      networksetup -setairportnetwork "${WIFI_IFACE}" "${WIFI_SSID}" &>/dev/null || true
-
-      # Give it a few seconds and check if we connected
-      sleep 5
-      CURRENT_NETWORK=$(networksetup -getairportnetwork "${WIFI_IFACE}" 2>/dev/null | cut -d' ' -f4- || echo "")
-      if [[ "${CURRENT_NETWORK}" = "${WIFI_SSID}" ]]; then
-        show_log "✅ Successfully connected to WiFi network: ${WIFI_SSID}"
-      else
-        show_log "WiFi network will be automatically joined after reboot"
-      fi
+    # Give it a few seconds and check if we connected
+    sleep 5
+    NEW_CONNECTION=$(system_profiler SPAirPortDataType -detailLevel basic | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}')
+    if [[ "${NEW_CONNECTION}" == "${WIFI_SSID}" ]]; then
+      show_log "✅ Successfully connected to WiFi network: ${WIFI_SSID}"
+    else
+      show_log "⚠️ WiFi network will be automatically joined after reboot"
     fi
 
     # Securely remove the WiFi password from the configuration file
@@ -320,8 +336,23 @@ if [[ -f "${WIFI_CONFIG_FILE}" ]]; then
   else
     log "WiFi configuration file does not contain valid SSID and password"
   fi
+elif [[ "${WIFI_CONFIGURED}" != true ]]; then
+  log "No WiFi configuration available and no working connection detected"
+  show_log "⚠️ Manual WiFi configuration required"
+  show_log "Opening System Settings WiFi section..."
+
+  # Open WiFi settings in System Settings
+  open "x-apple.systempreferences:com.apple.wifi-settings-extension"
+
+  if [[ "${FORCE}" = false ]]; then
+    show_log "Please configure WiFi in System Settings, then press any key to continue..."
+    read -p "Press any key when WiFi is configured... " -n 1 -r
+    echo
+  else
+    show_log "Force mode: continuing without WiFi - may affect subsequent steps"
+  fi
 else
-  log "No WiFi configuration file found - skipping WiFi setup"
+  log "WiFi already working - skipping configuration"
 fi
 
 # Set hostname and HD name
