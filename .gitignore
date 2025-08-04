@@ -19,6 +19,7 @@ Icon
 *.env
 .ssh/
 shellchecked/
+docs/old/
 
 # Log files
 logs/
