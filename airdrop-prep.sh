@@ -14,7 +14,7 @@
 # Created: 2025-05-13
 
 # Exit on error
-set -eo pipefail
+set -euo pipefail
 
 # Configuration
 SSH_KEY_PATH="${HOME}/.ssh/id_ed25519.pub" # Adjust to your SSH key path
