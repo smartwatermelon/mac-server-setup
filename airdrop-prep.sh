@@ -1,13 +1,13 @@
 #!/bin/bash
 #
-# airdrop-prep.sh - Script to prepare a directory with necessary files for Mac Mini M2 'TILSIT' server setup
+# airdrop-prep.sh - Script to prepare a directory with necessary files for Mac Mini M2 server setup
 #
 # This script prepares a directory with all the necessary scripts and files
 # for setting up the Mac Mini M2 server. After running, AirDrop the entire directory
 # to your new Mac Mini.
 #
 # Usage: ./airdrop-prep.sh [output_path] [script_path]
-#	output_path: Path where the files will be created (default: ~/tilsit-setup)
+#	output_path: Path where the files will be created (default: ~/macmini-setup)
 #
 # Author: Claude
 # Version: 1.3
@@ -32,10 +32,10 @@ else
   echo "Warning: Configuration file not found at ${CONFIG_FILE}"
   echo "Using default values - you may want to create config.conf"
   # Set fallback defaults
-  SERVER_NAME="TILSIT"
+  SERVER_NAME="MACMINI"
   ONEPASSWORD_VAULT="personal"
-  ONEPASSWORD_OPERATOR_ITEM="TILSIT operator"
-  ONEPASSWORD_TIMEMACHINE_ITEM="PECORINO DS-413 - TimeMachine"
+  ONEPASSWORD_OPERATOR_ITEM="operator"
+  ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
   ONEPASSWORD_APPLEID_ITEM="Apple"
 fi
 
@@ -164,7 +164,7 @@ fi
 # Set up operator account credentials using 1Password
 echo "Setting up operator account credentials..."
 
-# Check if TILSIT operator credentials exist in 1Password
+# Check if operator credentials exist in 1Password
 if ! op item get "${ONEPASSWORD_OPERATOR_ITEM}" --vault "${ONEPASSWORD_VAULT}" >/dev/null 2>&1; then
   echo "Creating ${ONEPASSWORD_OPERATOR_ITEM} credentials in 1Password..."
 
@@ -262,48 +262,15 @@ else
   exit 1
 fi
 
-# Create a README file
-echo "Creating README file..."
-cat >"${OUTPUT_PATH}/README.md" <<'EOF'
-# Server Setup Files
-
-This directory contains all the necessary files for setting up the Mac Mini M2 server.
-
-## Contents
-
-- `ssh_keys/`: SSH public keys for secure remote access
-- `scripts/`: Setup scripts for the server
-- `lists/`: Homebrew formulae and casks lists
-- `pam.d/`: TouchID sudo configuration
-- `URLs/`: Internet shortcuts used by Setup
-- `wifi/`: WiFi network configuration
-- `operator_password`: Operator account password
-- `timemachine.conf` : Configuration information for Time Machine
-- `config.conf`: Server configuration settings
-
-## Setup Instructions
-
-1. Complete the macOS setup wizard on the Mac Mini
-2. AirDrop this entire folder to the Mac Mini (it will be placed in Downloads)
-3. Open Terminal and run:
-   ```bash
-   cd ~/Downloads/${SERVER_NAME_LOWER}-setup/scripts
-   chmod +x first-boot.sh
-   ./first-boot.sh
-   ```
-4. Follow the on-screen instructions
-
-For detailed instructions, refer to the complete runbook.
-
-## Notes
-
-- The operator account password is retrieved from 1Password using configured credentials
-- After setup, you can access the server via SSH using the admin or operator account
-- TouchID sudo will be enabled if the configuration file was available during preparation
-- WiFi will be configured automatically using the saved network information
-
-Created: $(date)
-EOF
+# Copy README with variable substitution
+if [[ -f "${SCRIPT_SOURCE_DIR}/README-firstboot.md" ]]; then
+  echo "Processing README file..."
+  sed "s/\${SERVER_NAME_LOWER}/${SERVER_NAME_LOWER}/g" \
+    "${SCRIPT_SOURCE_DIR}/README-firstboot.md" >"${OUTPUT_PATH}/README.md"
+  check_success "README creation"
+else
+  echo "Warning: README-firstboot.md not found in source directory"
+fi
 
 echo "Setting file permissions..."
 chmod -R 755 "${OUTPUT_PATH}/scripts"

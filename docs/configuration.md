@@ -10,13 +10,13 @@ The configuration uses simple shell variable syntax:
 # config.conf - Configuration file for Mac Mini server setup
 
 # Server identity
-SERVER_NAME="TILSIT"
+SERVER_NAME="MACMINI"
 OPERATOR_USERNAME="operator"
 
 # 1Password configuration  
 ONEPASSWORD_VAULT="personal"
-ONEPASSWORD_OPERATOR_ITEM="TILSIT operator"
-ONEPASSWORD_TIMEMACHINE_ITEM="PECORINO DS-413 - TimeMachine"
+ONEPASSWORD_OPERATOR_ITEM="operator"
+ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
 ONEPASSWORD_APPLEID_ITEM="Apple"
 
 # Monitoring
@@ -33,7 +33,7 @@ DOCKER_NETWORK_OVERRIDE=""
 
 **SERVER_NAME**: Primary identifier for the server
 
-- **Default**: "TILSIT"
+- **Default**: "MACMINI"
 - **Used for**: Hostname, volume name, network identification
 - **Format**: Uppercase, no spaces (DNS-safe)
 - **Example**: `SERVER_NAME="HOMESERVER"`
@@ -57,7 +57,7 @@ All credential management relies on 1Password items. The configuration specifies
 
 **ONEPASSWORD_OPERATOR_ITEM**: Login item for operator account password
 
-- **Default**: "TILSIT operator"
+- **Default**: "operator"
 - **Requirements**: Must be a Login item with username and password
 - **Auto-creation**: Script creates item if it doesn't exist
 - **Example**: `ONEPASSWORD_OPERATOR_ITEM="HomeServer Operator"`
@@ -124,9 +124,9 @@ OPERATOR_FULLNAME="${SERVER_NAME} Operator"
 
 **Setup directory structure** based on SERVER_NAME:
 
-- Setup package: `~/tilsit-setup` (for SERVER_NAME="TILSIT")
-- Scripts directory: `~/tilsit-scripts`  
-- Log files: `~/.local/state/tilsit-setup.log`
+- Setup package: `~/macmini-setup` (for SERVER_NAME="MACMINI")
+- Scripts directory: `~/macmini-scripts`
+- Log files: `~/.local/state/macmini-setup.log`
 
 ## Customization Examples
 
@@ -266,9 +266,9 @@ HOSTNAME_OVERRIDE="unique-hostname"
 
 ```bash
 # Fix common permission issues
-chmod 755 ~/tilsit-setup/scripts/*.sh
-chmod 600 ~/tilsit-setup/operator_password
-chmod 600 ~/tilsit-setup/wifi/network.conf
+chmod 755 ~/macmini-setup/scripts/*.sh
+chmod 600 ~/macmini-setup/operator_password
+chmod 600 ~/macmini-setup/wifi/network.conf
 ```
 
 ## Advanced Configuration

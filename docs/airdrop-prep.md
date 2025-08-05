@@ -35,7 +35,7 @@ Create these items in your 1Password vault before running the prep script:
 
 > **Item Type**: Login
 >
-> **Title**: "SERVERNAME operator" (or as configured in `config.conf`)
+> **Title**: "MACMINI operator" (or as configured in `config.conf`)
 >
 > **Username**: operator
 >
@@ -83,7 +83,7 @@ This creates `/etc/pam.d/sudo_local` which will be copied to the Mac Mini during
 ./airdrop-prep.sh
 ```
 
-This creates a `servername-setup` directory in your home folder with all necessary files.
+This creates a `macmini-setup` directory in your home folder with all necessary files.
 
 ### Custom Output Path (Optional)
 
@@ -114,8 +114,8 @@ Select this to retrieve and transfer your current WiFi credentials automatically
 
 The prep script creates a complete setup package:
 
-```
-servername-setup/
+```plaintext
+macmini-setup/
 ├── ssh_keys/
 │   ├── authorized_keys           # Admin SSH access
 │   └── operator_authorized_keys  # Operator SSH access
@@ -153,13 +153,11 @@ servername-setup/
 
 1. **Complete macOS Setup Wizard** on the Mac Mini first
 2. **Enable AirDrop:** Press Cmd-Shift-R to open AirDrop, and select "Allow me to be discovered by: Everyone"
-3. **AirDrop the entire servername-setup folder** from your development Mac
-
- > You can use [airdrop-cli](https://github.com/vldmrkl/airdrop-cli) (requires Xcode) to AirDrop files from the command line!
- > Install: (`brew install --HEAD vldmrkl/formulae/airdrop-cli`)
-
-3. The folder will appear in `~/Downloads/servername-setup` on the Mac Mini
-4. Proceed with [First Boot Instructions](first-boot.md)
+3. **AirDrop the entire macmini-setup folder** from your development Mac
+   > You can use [airdrop-cli](https://github.com/vldmrkl/airdrop-cli) (requires Xcode) to AirDrop files from the command line!
+   > Install: (`brew install --HEAD vldmrkl/formulae/airdrop-cli`)
+4. The folder will appear in `~/Downloads/macmini-setup` on the Mac Mini
+5. Proceed with [First Boot Instructions](first-boot.md)
 
 ## Troubleshooting
 
@@ -202,7 +200,7 @@ Check that item titles exactly match your `config.conf` settings:
 op item list --vault "personal"
 
 # Check specific item
-op item get "servername operator" --vault "personal"
+op item get "operator" --vault "personal"
 ```
 
 ### TouchID Sudo Missing

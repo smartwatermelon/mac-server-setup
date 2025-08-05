@@ -26,10 +26,10 @@ Test SSH connectivity from your development Mac:
 
 ```bash
 # Test operator SSH access
-ssh operator@servername.local
+ssh operator@macmini.local
 
 # Test admin SSH access  
-ssh admin@servername.local
+ssh admin@macmini.local
 ```
 
 Both accounts should accept SSH key authentication without password prompts.
@@ -74,7 +74,7 @@ docker ps
 For system-level changes that require the original admin account:
 
 - **Fast User Switching**: Click the username in menu bar → Switch to admin account
-- **SSH Method**: `ssh admin@servername.local` from your development Mac
+- **SSH Method**: `ssh admin@macmini.local` from your development Mac
 
 ## Application Setup
 
@@ -127,8 +127,8 @@ The operator account uses **Homebrew bash** as the default shell with enhanced f
 
 ```bash
 # ~/.ssh/config
-Host servername
-    HostName servername.local
+Host macmini
+    HostName macmini.local
     User operator
     IdentityFile ~/.ssh/id_ed25519
 ```
@@ -138,7 +138,7 @@ Host servername
 ```bash
 # Add to ~/.bash_profile
 alias ll='ls -la'
-alias logs='tail -f ~/.local/state/servername-setup.log'
+alias logs='tail -f ~/.local/state/macmini-setup.log'
 alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
 ```
 
@@ -164,12 +164,12 @@ du -sh ~/Downloads ~/Documents
 
 ```bash
 ping google.com
-ssh admin@servername.local 'echo SSH working'
+ssh admin@macmini.local 'echo SSH working'
 ```
 
 ### Log Files
 
-- **Setup logs**: `~/.local/state/servername-setup.log`
+- **Setup logs**: `~/.local/state/macmini-setup.log`
 - **Application logs**: `~/app-setup/logs/` (created by app installers)
 - **System logs**: Use Console.app or `log show --predicate 'processImagePath contains "your-app"'`
 
@@ -188,7 +188,7 @@ Check that backups are running properly:
 
 ```bash
 # Generate operator-specific SSH key
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_operator -C "operator@servername"
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_operator -C "operator@macmini"
 
 # Add to authorized_keys
 cat ~/.ssh/id_ed25519_operator.pub >> ~/.ssh/authorized_keys
@@ -198,7 +198,7 @@ cat ~/.ssh/id_ed25519_operator.pub >> ~/.ssh/authorized_keys
 
 **TouchID is not available** for sudo commands, because TouchID cannot coexist with automatic login. For remote SSH sessions, you'll need to enter the operator password.
 
-**Password location**: `op://personal/servername operator/password` in 1Password
+**Password location**: `op://personal/operator/password` in 1Password
 
 ### Firewall Status
 
@@ -227,7 +227,7 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --listapps
 
 ### Getting Help
 
-- **Logs**: Most issues are logged in `~/.local/state/servername-setup.log`
+- **Logs**: Most issues are logged in `~/.local/state/macmini-setup.log`
 - **SSH troubleshooting**: Test from development Mac first
 - **Application issues**: Check individual app setup logs in `~/app-setup/logs/`
 

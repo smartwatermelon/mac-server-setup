@@ -8,23 +8,21 @@ The `first-boot.sh` script performs complete automated setup of your Mac Mini se
 
 1. **Connect power and peripherals** to Mac Mini
 2. **Follow macOS Setup Wizard** completely
-
-* You can use the Migration Assistant to pre-configure your WiFi network and other settings using your iPhone or iPad.
-
+   > You can use the Migration Assistant to pre-configure your WiFi network and other settings using your iPhone or iPad.
 3. **Create your admin account** (this becomes the primary administrator)
 4. **Complete Apple ID setup** if prompted, or skip to do later
-    * If your Apple ID password is long and complex, you can skip doing this now and use the 1Password one-time link later on in the process.
+   * If your Apple ID password is long and complex, you can skip doing this now and use the 1Password one-time link later on in the process.
 5. **Reach the desktop** before proceeding
 6. **Enable AirDrop:** Press Cmd-Shift-R to open AirDrop, and select "Allow me to be discovered by: Everyone"
 
 ### Transfer Setup Files
 
-1. **AirDrop the complete servername-setup folder** from your development Mac
+1. **AirDrop the complete macmini-setup folder** from your development Mac
 
    > You can use [airdrop-cli](https://github.com/vldmrkl/airdrop-cli) (requires Xcode) to AirDrop files from the command line!
    > Install: (`brew install --HEAD vldmrkl/formulae/airdrop-cli`)
 
-2. The folder appears in `~/Downloads/servername-setup` on the Mac Mini
+2. The folder appears in `~/Downloads/macmini-setup` on the Mac Mini
 
 3. **Do not run the first-boot script yet** - read the sections below first
 
@@ -44,7 +42,7 @@ The script performs these major configuration steps:
 ### Standard Setup
 
 ```bash
-cd ~/Downloads/servername-setup/scripts
+cd ~/Downloads/macmini-setup/scripts
 chmod +x first-boot.sh
 ./first-boot.sh
 ```
@@ -117,8 +115,8 @@ The script waits for you to complete Apple ID setup before continuing.
 
 The script automatically opens a second Terminal window showing live setup logs:
 
-```
-[2025-08-04 10:30:15] ====== Starting Mac Mini M2 'SERVERNAME' Server Setup ======
+```plaintext
+[2025-08-04 10:30:15] ====== Starting Mac Mini M2 Server Setup ======
 [2025-08-04 10:30:16] Running as user: admin
 [2025-08-04 10:30:16] ✅ TouchID sudo configuration
 [2025-08-04 10:30:18] ✅ SSH has been enabled successfully
@@ -167,10 +165,10 @@ From your development Mac:
 
 ```bash
 # Test admin access
-ssh admin@servername.local
+ssh admin@macmini.local
 
 # Test operator access (after reboot)
-ssh operator@servername.local
+ssh operator@macmini.local
 ```
 
 ### Verify Services
@@ -192,10 +190,10 @@ sudo echo "TouchID test"  # Should prompt for TouchID
 
 ### Check Logs
 
-Setup logs are saved to `~/.local/state/servername-setup.log`:
+Setup logs are saved to `~/.local/state/macmini-setup.log`:
 
 ```bash
-tail -f ~/.local/state/servername-setup.log
+tail -f ~/.local/state/macmini-setup.log
 ```
 
 ## Troubleshooting

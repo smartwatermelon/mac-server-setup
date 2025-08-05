@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# first-boot.sh - Complete setup script for Mac Mini M2 'TILSIT' server
+# first-boot.sh - Complete setup script for Mac Mini M2 server
 #
 # This script performs the complete setup for the Mac Mini server after
 # the macOS setup wizard has been completed. It configures:
@@ -81,10 +81,10 @@ else
   echo "Warning: Configuration file not found at ${CONFIG_FILE}"
   echo "Using default values - you may want to create config.conf"
   # Set fallback defaults
-  SERVER_NAME="TILSIT"
+  SERVER_NAME="MACMINI"
   OPERATOR_USERNAME="operator"
   ONEPASSWORD_VAULT="personal"
-  ONEPASSWORD_OPERATOR_ITEM="TILSIT operator"
+  ONEPASSWORD_OPERATOR_ITEM="operator"
 fi
 
 # Set derived variables
@@ -203,7 +203,7 @@ touch "${LOG_FILE}"
 chmod 644 "${LOG_FILE}"
 
 # Tail log in separate window
-osascript -e 'tell application "Terminal" to do script "printf \"\\e]0;TILSIT Setup Log\\a\"; tail -F '"${LOG_FILE}"'"' || echo "oops, no tail"
+osascript -e 'tell application "Terminal" to do script "printf \"\\e]0;Setup Log\\a\"; tail -F '"${LOG_FILE}"'"' || echo "oops, no tail"
 
 # Print header
 section "Starting Mac Mini M2 '${SERVER_NAME}' Server Setup"
@@ -602,7 +602,7 @@ else
   fi
 
   # Create the operator account
-  sudo sysadminctl -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${OPERATOR_PASSWORD}" -hint "See 1Password TILSIT operator for password" 2>/dev/null
+  sudo sysadminctl -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${OPERATOR_PASSWORD}" -hint "See 1Password ${ONEPASSWORD_OPERATOR_ITEM} for password" 2>/dev/null
   check_success "Operator account creation"
 
   # Verify the password works
@@ -1247,10 +1247,10 @@ show_log "You can now set up individual applications with scripts in: ${APP_SETU
 show_log ""
 show_log "Next steps:"
 show_log "1. Set up applications: cd ${APP_SETUP_DIR} && ./plex-setup.sh"
-show_log "2. Configure monitoring: ~/tilsit-scripts/monitoring-setup.sh"
+show_log "2. Configure monitoring: ~/${HOSTNAME_LOWER}-scripts/monitoring-setup.sh"
 show_log "3. Test SSH access from your dev machine:"
-show_log "   ssh ${ADMIN_USERNAME}@tilsit.local"
-show_log "   ssh operator@tilsit.local"
+show_log "   ssh ${ADMIN_USERNAME}@${HOSTNAME_LOWER}.local"
+show_log "   ssh operator@${HOSTNAME_LOWER}.local"
 
 # Optional reboot
 if [[ "${FORCE}" = false ]]; then

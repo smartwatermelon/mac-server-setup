@@ -61,7 +61,7 @@ The setup process consists of two main phases:
 3. **Run initial setup** on Mac Mini:
 
    ```bash
-   cd ~/Downloads/SERVERNAME-setup/scripts
+   cd ~/Downloads/MACMINI-setup/scripts # default name
    ./first-boot.sh
    ```
 
@@ -132,7 +132,7 @@ MONITORING_EMAIL="your-email@example.com"
 
 ### Logs
 
-Setup logs are stored in `~/.local/state/SERVERNAME-setup.log` with automatic rotation.
+Setup logs are stored in `~/.local/state/MACMINI-setup.log` with automatic rotation. (Default name)
 
 ## Contributing
 
