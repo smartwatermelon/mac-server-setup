@@ -594,7 +594,7 @@ else
   # Read the password from the transferred file
   OPERATOR_PASSWORD_FILE="${SETUP_DIR}/operator_password"
   if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
-    OPERATOR_PASSWORD=$(cat "${OPERATOR_PASSWORD_FILE}")
+    OPERATOR_PASSWORD=$(<"${OPERATOR_PASSWORD_FILE}")
     log "Using password from 1Password (${ONEPASSWORD_OPERATOR_ITEM})"
   else
     log "❌ Operator password file not found"
@@ -677,7 +677,7 @@ section "Automatic login for operator account"
 log "Configuring automatic login for operator account"
 OPERATOR_PASSWORD_FILE="${SETUP_DIR}/operator_password"
 if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
-  OPERATOR_PASSWORD=$(cat "${OPERATOR_PASSWORD_FILE}")
+  OPERATOR_PASSWORD=$(<"${OPERATOR_PASSWORD_FILE}")
 
   # Create the encoded password file that macOS uses for auto-login
   ENCODED_PASSWORD=$(echo "${OPERATOR_PASSWORD}" | openssl enc -base64)
