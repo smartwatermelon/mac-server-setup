@@ -58,6 +58,7 @@ venv/
 ENV/
 
 # Local configuration
+config.conf
 local_config.yaml
 user_settings.yaml
 
