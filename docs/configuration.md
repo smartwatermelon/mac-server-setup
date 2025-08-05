@@ -32,12 +32,14 @@ DOCKER_NETWORK_OVERRIDE=""
 ### Server Identity
 
 **SERVER_NAME**: Primary identifier for the server
+
 - **Default**: "TILSIT"
 - **Used for**: Hostname, volume name, network identification
 - **Format**: Uppercase, no spaces (DNS-safe)
 - **Example**: `SERVER_NAME="HOMESERVER"`
 
 **OPERATOR_USERNAME**: Name for the day-to-day user account
+
 - **Default**: "operator"  
 - **Used for**: User account creation, SSH access, automatic login
 - **Format**: Lowercase, no spaces (Unix username format)
@@ -48,23 +50,27 @@ DOCKER_NETWORK_OVERRIDE=""
 All credential management relies on 1Password items. The configuration specifies which vault and items to use.
 
 **ONEPASSWORD_VAULT**: 1Password vault containing server credentials
+
 - **Default**: "personal"
 - **Format**: Exact vault name as shown in 1Password
 - **Example**: `ONEPASSWORD_VAULT="Infrastructure"`
 
 **ONEPASSWORD_OPERATOR_ITEM**: Login item for operator account password
+
 - **Default**: "TILSIT operator"
 - **Requirements**: Must be a Login item with username and password
 - **Auto-creation**: Script creates item if it doesn't exist
 - **Example**: `ONEPASSWORD_OPERATOR_ITEM="HomeServer Operator"`
 
 **ONEPASSWORD_TIMEMACHINE_ITEM**: Login item for Time Machine backup credentials
+
 - **Default**: "PECORINO DS-413 - TimeMachine"
 - **Requirements**: Login item with username, password, and URL field
 - **URL Format**: `smb://nas-ip/share-name` or similar backup destination
 - **Example**: `ONEPASSWORD_TIMEMACHINE_ITEM="Synology TimeMachine"`
 
 **ONEPASSWORD_APPLEID_ITEM**: Login item for Apple ID credentials
+
 - **Default**: "Apple"
 - **Requirements**: Login item with Apple ID email and password
 - **Usage**: Creates one-time sharing links for secure password transfer
@@ -73,17 +79,20 @@ All credential management relies on 1Password items. The configuration specifies
 ### Optional Overrides
 
 **HOSTNAME_OVERRIDE**: Custom hostname different from SERVER_NAME
+
 - **Default**: Empty (uses SERVER_NAME)
 - **When to use**: When you want a different network hostname
 - **Example**: `HOSTNAME_OVERRIDE="media-server"`
 
 **DOCKER_NETWORK_OVERRIDE**: Custom Docker network name
+
 - **Default**: Empty (uses "${SERVER_NAME}-network")
 - **When to use**: To integrate with existing Docker infrastructure
 - **Example**: `DOCKER_NETWORK_OVERRIDE="homelab-network"`
 
 **MONITORING_EMAIL**: Email address for system notifications
-- **Default**: "andrew.rich@gmail.com" (should be customized)
+
+- **Default**: "<andrew.rich@gmail.com>" (should be customized)
 - **Usage**: Future monitoring system integration
 - **Example**: `MONITORING_EMAIL="admin@yourdomain.com"`
 
@@ -94,16 +103,19 @@ The setup scripts automatically calculate additional variables based on your con
 ### Computed Names
 
 **HOSTNAME**: Final hostname for the system
+
 ```bash
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 ```
 
 **HOSTNAME_LOWER**: Lowercase version for file paths and Docker networks
+
 ```bash  
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 ```
 
 **OPERATOR_FULLNAME**: Display name for operator account
+
 ```bash
 OPERATOR_FULLNAME="${SERVER_NAME} Operator"
 ```
@@ -111,6 +123,7 @@ OPERATOR_FULLNAME="${SERVER_NAME} Operator"
 ### File Paths
 
 **Setup directory structure** based on SERVER_NAME:
+
 - Setup package: `~/tilsit-setup` (for SERVER_NAME="TILSIT")
 - Scripts directory: `~/tilsit-scripts`  
 - Log files: `~/.local/state/tilsit-setup.log`
@@ -220,6 +233,7 @@ ssh operator@"${HOSTNAME_LOWER}.local"
 ### 1Password Authentication
 
 **Item not found errors**:
+
 ```bash
 # List all items to verify naming
 op item list --vault "${ONEPASSWORD_VAULT}"
@@ -229,6 +243,7 @@ op item get "exact-item-name" --vault "${ONEPASSWORD_VAULT}"
 ```
 
 **Vault access denied**:
+
 ```bash
 # Verify vault permissions
 op vault list
@@ -238,6 +253,7 @@ op vault get "${ONEPASSWORD_VAULT}"
 ### Network Configuration
 
 **Hostname conflicts**: If your chosen SERVER_NAME conflicts with existing network devices, use HOSTNAME_OVERRIDE:
+
 ```bash
 HOSTNAME_OVERRIDE="unique-hostname"
 ```
@@ -247,6 +263,7 @@ HOSTNAME_OVERRIDE="unique-hostname"
 ### File Permission Issues
 
 **Setup directory access**: Ensure setup files have correct permissions:
+
 ```bash
 # Fix common permission issues
 chmod 755 ~/tilsit-setup/scripts/*.sh
@@ -264,6 +281,7 @@ Modify the package installation by editing these files before running `airdrop-p
 **casks.txt**: GUI applications installed via Homebrew
 
 Example customization:
+
 ```bash
 # Add to formulae.txt
 htop
@@ -293,6 +311,7 @@ MONITORING_EMAIL="staging-alerts@company.com"
 ```
 
 Use with airdrop-prep.sh by copying the appropriate config:
+
 ```bash
 cp config-production.conf config.conf
 ./airdrop-prep.sh
