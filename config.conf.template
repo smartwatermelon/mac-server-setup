@@ -1,0 +1,21 @@
+# config.conf - Configuration file for Mac Mini server setup
+#
+# Copy this file to config.conf and edit these values before running the setup scripts
+#
+
+# Server identity
+SERVER_NAME="MACMINI"
+OPERATOR_USERNAME="operator"
+
+# 1Password configuration
+ONEPASSWORD_VAULT="personal"
+ONEPASSWORD_OPERATOR_ITEM="Mac Mini operator"
+ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine NAS"
+ONEPASSWORD_APPLEID_ITEM="Apple"
+
+# Monitoring
+MONITORING_EMAIL="your-email@example.com"
+
+# Optional overrides (leave empty to use defaults)
+HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME
+DOCKER_NETWORK_OVERRIDE=""  # If different from SERVER_NAME-network
