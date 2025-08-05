@@ -13,7 +13,7 @@
 # Created: 2025-05-16
 
 # Exit on error
-set -e
+set -euo pipefail
 
 # Target file
 SUDO_LOCAL_FILE="/etc/pam.d/sudo_local"
