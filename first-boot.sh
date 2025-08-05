@@ -4,7 +4,7 @@
 #
 # This script performs the complete setup for the Mac Mini server after
 # the macOS setup wizard has been completed. It configures:
-# - Remote management (SSH)
+# - Remote management (SSH and Remote Desktop)
 # - User accounts
 # - System settings
 # - Power management
@@ -23,7 +23,7 @@
 # Created: 2025-05-18
 
 # Exit on any error
-set -eo pipefail
+set -euo pipefail
 
 # Configuration variables - adjust as needed
 ADMIN_USERNAME=$(whoami)                                     # Set this once and use throughout
@@ -447,6 +447,48 @@ else
   log "No SSH keys found at ${SSH_KEY_SOURCE} - manual key setup will be required"
 fi
 
+# Configure Screen Sharing and Remote Management
+section "Configuring Screen Sharing and Remote Management"
+
+# Enable Screen Sharing first (foundation for Remote Management)
+log "Enabling Screen Sharing"
+sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
+check_success "Screen Sharing service enabled"
+
+# Now enable Remote Management on top of Screen Sharing
+log "Enabling Remote Management for Apple Remote Desktop access"
+
+# Enable Remote Management service
+sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+  -activate \
+  -configure -allowAccessFor -specifiedUsers
+
+check_success "Remote Management service activation"
+
+# Configure full privileges for admin user
+sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+  -configure -users "${ADMIN_USERNAME}" \
+  -access -on \
+  -privs -DeleteFiles -ControlObserve -TextMessages -OpenQuitApps \
+  -GenerateReports -RestartShutDown -SendFiles -ChangeSettings
+
+check_success "Admin Remote Management privileges"
+
+# Configure full privileges for operator user
+sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+  -configure -users "${OPERATOR_USERNAME}" \
+  -access -on \
+  -privs -DeleteFiles -ControlObserve -TextMessages -OpenQuitApps \
+  -GenerateReports -RestartShutDown -SendFiles -ChangeSettings
+
+check_success "Operator Remote Management privileges"
+
+# Restart the agent to apply changes
+sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+  -restart -agent
+
+show_log "✅ Screen Sharing and Remote Management enabled for both admin and operator accounts"
+
 # Configure Apple ID
 section "Apple ID Configuration"
 
@@ -859,6 +901,9 @@ if [[ "${SKIP_HOMEBREW}" = false ]]; then
     log "Updating Homebrew"
     brew update
     check_success "Homebrew update"
+    log "Updating installed packages"
+    brew upgrade
+    check_success "Homebrew package upgrade"
   else
     show_log "Installing Homebrew using official installation script"
 
