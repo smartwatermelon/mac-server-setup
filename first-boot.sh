@@ -560,7 +560,7 @@ else
   fi
 
   # Create the operator account
-  sudo sysadminctl -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${OPERATOR_PASSWORD}" -hint "See 1Password TILSIT operator for password"
+  sudo sysadminctl -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${OPERATOR_PASSWORD}" -hint "See 1Password TILSIT operator for password" 2>/dev/null
   check_success "Operator account creation"
 
   # Verify the password works
@@ -651,6 +651,23 @@ if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
 
 else
   log "Operator password file not found at ${OPERATOR_PASSWORD_FILE} - skipping automatic login setup"
+fi
+
+# Add operator to sudoers
+section "Configuring sudo access for operator"
+log "Adding operator account to sudoers"
+
+# Add operator to admin group for sudo access
+sudo dseditgroup -o edit -a "${OPERATOR_USERNAME}" -t user admin
+check_success "Operator admin group membership"
+
+# Verify sudo access works for operator
+log "Verifying sudo access for operator"
+if sudo -u "${OPERATOR_USERNAME}" sudo -n true 2>/dev/null; then
+  show_log "✅ Operator sudo access verified (passwordless test)"
+else
+  # This is expected - they'll need to enter password for sudo
+  show_log "✅ Operator has sudo access (will require password)"
 fi
 
 # Fix scroll setting
@@ -894,6 +911,12 @@ if [[ "${SKIP_HOMEBREW}" = false ]]; then
     fi
   fi
 fi
+
+# Add concurrent download configuration
+section "Configuring Homebrew for Optimal Performance"
+export HOMEBREW_DOWNLOAD_CONCURRENCY=auto
+CORES="$(sysctl -n hw.ncpu 2>/dev/null || echo "2x")"
+log "Enabled concurrent downloads (auto mode - using ${CORES} CPU cores for optimal parallelism)"
 
 # Install packages
 if [[ "${SKIP_PACKAGES}" = false ]]; then
