@@ -422,7 +422,7 @@ if docker ps --format '{{.Names}}' | grep -q "^${PLEX_CONTAINER_NAME}$"; then
     log "Migration completed:"
     log "  ✅ Configuration migrated from ${PLEX_OLD_CONFIG}"
     log "  ⚠️  You may need to update library paths in the web interface"
-    log "  ⚠️  Point libraries to /media/ paths instead of old paths"
+    log "  ⚠️  Point libraries to ${PLEX_MEDIA_MOUNT} paths instead of old paths"
   fi
 
 else
