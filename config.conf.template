@@ -16,6 +16,11 @@ ONEPASSWORD_APPLEID_ITEM="Apple"
 # Monitoring
 MONITORING_EMAIL="your-email@example.com"
 
+# Media NAS configuration
+NAS_HOSTNAME="nas.local"
+NAS_USERNAME="plex"
+NAS_SHARE_NAME="Media"
+
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME
 DOCKER_NETWORK_OVERRIDE=""  # If different from SERVER_NAME-network
