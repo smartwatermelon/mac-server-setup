@@ -62,6 +62,9 @@ config.conf
 local_config.yaml
 user_settings.yaml
 
+# Claude Code project documentation
+CLAUDE.md
+
 # Compiled files
 *.o
 *.so
