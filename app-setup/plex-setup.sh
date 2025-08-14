@@ -30,6 +30,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/../config.conf"
 IDU="$(id -u)"
 IDG="$(id -g)"
+WHOAMI="$(whoami)"
 
 if [[ -f "${CONFIG_FILE}" ]]; then
   # shellcheck source=/dev/null
@@ -57,11 +58,11 @@ fi
 
 # Plex-specific configuration
 PLEX_CONFIG_DIR="${HOME}/Docker/plex/config"
-PLEX_MEDIA_MOUNT="/Volumes/DSMedia"
+PLEX_MEDIA_MOUNT="/Volumes/${NAS_SHARE_NAME}"
 PLEX_MIGRATION_DIR="${HOME}/plex-migration"
 PLEX_OLD_CONFIG="${PLEX_MIGRATION_DIR}/Plex Media Server"
 PLEX_CONTAINER_NAME="${HOSTNAME_LOWER}-plex"
-PLEX_TIMEZONE="America/Los_Angeles" # Adjust as needed
+PLEX_TIMEZONE="$(readlink /etc/localtime | sed 's|.*/zoneinfo/||')"
 NAS_SMB_URL="smb://${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
 
 # Parse command line arguments
@@ -142,10 +143,7 @@ touch "${LOG_FILE}"
 
 # Print header
 section "Setting Up Plex Media Server for ${HOSTNAME}"
-WHOAMI="$(whoami)"
 log "Running as user: ${WHOAMI}"
-DATE="$(date)"
-log "Date: ${DATE}"
 log "Server name: ${SERVER_NAME}"
 log "Plex server name: ${PLEX_SERVER_NAME}"
 log "Operator username: ${OPERATOR_USERNAME}"
