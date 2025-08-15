@@ -52,7 +52,7 @@ LOG_DIR="${HOME}/.local/state"
 LOG_FILE="${LOG_DIR}/${HOSTNAME_LOWER}-apps.log"
 
 # Set default Plex server name to hostname if not specified
-if [[ -z "${PLEX_SERVER_NAME}" ]]; then
+if [[ -z "${PLEX_SERVER_NAME:-}" ]]; then
   PLEX_SERVER_NAME="${HOSTNAME}"
 fi
 
