@@ -336,7 +336,6 @@ log "Plex server name: ${PLEX_SERVER_NAME}"
 log "Operator username: ${OPERATOR_USERNAME}"
 
 # Confirm operation if not forced
-# shellcheck disable=2310
 if confirm "This script will set up Plex Media Server in a Docker container. Continue?"; then
   log "Proceeding with Plex setup"
 else
@@ -397,18 +396,19 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
     # Create mount point if it doesn't exist
     if [[ ! -d "${PLEX_MEDIA_MOUNT}" ]]; then
       log "Creating mount point: ${PLEX_MEDIA_MOUNT}"
+      log "This requires administrator privileges - you may be prompted for your user password"
       sudo mkdir -p "${PLEX_MEDIA_MOUNT}"
       check_success "Mount point creation"
     fi
 
     # Mount the SMB share
     log "Mounting SMB share..."
-    # shellcheck disable=2310
     if confirm "Mount NAS share now? (You may be prompted for NAS credentials)"; then
       # Use osascript to show GUI dialog for credentials if needed
       log "Attempting to mount ${NAS_SMB_URL}"
       open "${NAS_SMB_URL}" 2>/dev/null || {
         log "GUI mount failed, trying command line mount..."
+        log "Command line mount requires administrator privileges - you may be prompted for your user password"
         sudo mount -t smbfs "${NAS_SMB_URL}" "${PLEX_MEDIA_MOUNT}"
       }
       check_success "NAS mount"
@@ -460,7 +460,6 @@ if [[ "${SKIP_MIGRATION}" = false ]]; then
   # Check if we already have migrated config
   if [[ -d "${PLEX_OLD_CONFIG}" ]]; then
     log "Found existing Plex configuration at ${PLEX_OLD_CONFIG}"
-    # shellcheck disable=2310
     if confirm "Use existing migrated Plex configuration?"; then
       log "Using existing migration at ${PLEX_OLD_CONFIG}"
     else
@@ -474,7 +473,6 @@ if [[ "${SKIP_MIGRATION}" = false ]]; then
   if [[ ! -d "${PLEX_OLD_CONFIG}" ]]; then
     # If no migration source specified, ask user
     if [[ -z "${PLEX_MIGRATE_FROM}" ]]; then
-      # shellcheck disable=2310
       if confirm "Do you want to migrate from an existing Plex server?"; then
         # Try to discover Plex servers
         log "Scanning for Plex servers on the network..."
@@ -513,13 +511,11 @@ if [[ "${SKIP_MIGRATION}" = false ]]; then
     if [[ -n "${PLEX_MIGRATE_FROM}" ]]; then
       log "Migrating Plex configuration from ${PLEX_MIGRATE_FROM}"
 
-      # shellcheck disable=2310
       if confirm "Proceed with migration from ${PLEX_MIGRATE_FROM}?"; then
         if migrate_plex_from_host "${PLEX_MIGRATE_FROM}"; then
           log "✅ Automated migration completed successfully"
         else
           log "❌ Automated migration failed"
-          # shellcheck disable=2310
           if confirm "Continue with fresh Plex installation?"; then
             log "Continuing with fresh installation..."
           else
@@ -535,7 +531,6 @@ if [[ "${SKIP_MIGRATION}" = false ]]; then
 
   # Process migrated config if available
   if [[ -d "${PLEX_OLD_CONFIG}" ]]; then
-    # shellcheck disable=2310
     if confirm "Apply migrated Plex configuration to Docker container?"; then
       log "Stopping any existing Plex container..."
       docker stop "${PLEX_CONTAINER_NAME}" 2>/dev/null || true
@@ -599,7 +594,6 @@ else
 
   # Get Plex claim token if not migrating
   PLEX_CLAIM_TOKEN=""
-  # shellcheck disable=2310
   if [[ "${SKIP_MIGRATION}" = true ]] && confirm "Get Plex claim token for initial setup?"; then
     echo "Get a claim token from https://www.plex.tv/claim/"
     echo "It expires after 4 minutes, so be ready to use it immediately"
