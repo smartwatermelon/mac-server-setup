@@ -61,6 +61,7 @@ PLEX_CONFIG_DIR="${HOME}/Docker/plex/config"
 PLEX_MEDIA_MOUNT="/Volumes/${NAS_SHARE_NAME}"
 PLEX_MIGRATION_DIR="${HOME}/plex-migration"
 PLEX_OLD_CONFIG="${PLEX_MIGRATION_DIR}/Plex Media Server"
+PLEX_OLD_PLIST="${PLEX_MIGRATION_DIR}/com.plexapp.plexmediaserver.plist"
 PLEX_CONTAINER_NAME="${HOSTNAME_LOWER}-plex"
 PLEX_TIMEZONE="$(readlink /etc/localtime | sed 's|.*/zoneinfo/||')"
 NAS_SMB_URL="smb://${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
@@ -255,9 +256,27 @@ if [[ "${SKIP_MIGRATION}" = false ]]; then
         mkdir -p "${PLEX_CONFIG_DIR}"
       fi
 
-      log "Copying Plex configuration..."
-      cp -R "${PLEX_OLD_CONFIG}"/* "${PLEX_CONFIG_DIR}/"
+      log "Copying Plex configuration (excluding Cache directory)..."
+      # Use rsync to exclude Cache directory as recommended by Plex
+      if command -v rsync >/dev/null 2>&1; then
+        rsync -av --exclude='Cache' "${PLEX_OLD_CONFIG}/" "${PLEX_CONFIG_DIR}/"
+      else
+        # Fallback to cp, but warn about Cache directory
+        cp -R "${PLEX_OLD_CONFIG}"/* "${PLEX_CONFIG_DIR}/"
+        if [[ -d "${PLEX_CONFIG_DIR}/Cache" ]]; then
+          log "⚠️  Cache directory copied - consider removing for better performance"
+          log "   You can safely delete: ${PLEX_CONFIG_DIR}/Cache"
+        fi
+      fi
       check_success "Plex configuration migration"
+
+      # Handle macOS plist file if present
+      if [[ -f "${PLEX_OLD_PLIST}" ]]; then
+        log "Processing macOS preferences file..."
+        log "⚠️  Note: macOS plist preferences are not directly usable in Docker"
+        log "   Container will use environment variables instead"
+        log "   Original plist preserved at: ${PLEX_OLD_PLIST}"
+      fi
 
       # Set proper ownership
       log "Setting proper ownership on config files..."
@@ -265,7 +284,12 @@ if [[ "${SKIP_MIGRATION}" = false ]]; then
       check_success "Config ownership setup"
 
       log "✅ Plex configuration migrated successfully"
-      log "Note: You may need to update library paths after container starts"
+      log ""
+      log "📝 Post-migration steps required:"
+      log "   1. Start the container and access the web interface"
+      log "   2. Update library paths to point to /media/ instead of old paths"
+      log "   3. Scan libraries to re-associate media files"
+      log "   4. Verify all libraries are working correctly"
     else
       log "Skipping configuration migration"
     fi

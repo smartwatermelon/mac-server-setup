@@ -112,29 +112,43 @@ If migrating from an existing Plex server, place files at:
 │   ├── Metadata/
 │   ├── Media/
 │   ├── Logs/
-│   └── ... (all subdirectories except Cache)
-└── com.plexapp.plexmediaserver.plist   # macOS preferences (optional)
+│   ├── Cache/                  # Will be excluded during migration
+│   └── ... (all other subdirectories)
+└── com.plexapp.plexmediaserver.plist   # macOS preferences file
 ```
 
-**How to Obtain These Files**:
+**Migration follows official Plex guidelines**: This process is based on Plex's official documentation:
 
-1. **From macOS Plex Server**:
+- [Move an Install to Another System](https://support.plex.tv/articles/201370363-move-an-install-to-another-system/)
+- [Where is the Plex Media Server Data Directory Located](https://support.plex.tv/articles/202915258-where-is-the-plex-media-server-data-directory-located/)
+
+**How to Obtain These Files** (following [Plex's migration guide](https://support.plex.tv/articles/201370363-move-an-install-to-another-system/)):
+
+1. **Preparation on Source Server**:
+   - Disable "Empty trash automatically after every scan" in Plex settings
+   - Stop Plex Media Server completely
+
+2. **From macOS Plex Server** (recommended method):
 
    ```bash
-   # On the old server, copy the main directory
-   cp -R "~/Library/Application Support/Plex Media Server" ~/migration-backup/
+   # On the old server, copy main directory excluding Cache (recommended by Plex)
+   rsync -av --exclude='Cache' "~/Library/Application Support/Plex Media Server/" ~/migration-backup/
    
-   # Copy the preferences file
+   # Copy the macOS preferences file
    cp "~/Library/Preferences/com.plexapp.plexmediaserver.plist" ~/migration-backup/
    
    # Transfer to new server at ~/plex-migration/
    ```
 
-2. **Exclude Cache Directory** (recommended for faster transfer):
+3. **Alternative Method** (if rsync unavailable, but slower):
 
    ```bash
-   rsync -av --exclude='Cache' "~/Library/Application Support/Plex Media Server/" ~/migration-backup/
+   # Copy complete directory (includes Cache - will be handled during migration)
+   cp -R "~/Library/Application Support/Plex Media Server" ~/migration-backup/
+   cp "~/Library/Preferences/com.plexapp.plexmediaserver.plist" ~/migration-backup/
    ```
+
+**Important**: The Cache directory can be large and is not needed for migration. The setup script will automatically exclude it during the migration process using rsync when available.
 
 ### Generated Directory Structure
 
@@ -180,9 +194,17 @@ After script execution:
 ### Phase 4: Configuration Migration
 
 1. **Migration Check**: Looks for existing config at `~/plex-migration/`
-2. **Backup Creation**: Backs up any existing Docker config
-3. **File Copy**: Copies migration files to Docker config directory
-4. **Ownership Setup**: Sets proper file ownership for container access
+2. **Backup Creation**: Backs up any existing Docker config with timestamp
+3. **Smart File Copy** (following [Plex best practices](https://support.plex.tv/articles/201370363-move-an-install-to-another-system/)):
+   - Uses `rsync --exclude='Cache'` when available (recommended by Plex)
+   - Falls back to `cp` with Cache directory warning if rsync unavailable
+   - Preserves all settings, libraries, and metadata
+4. **macOS Preferences Handling**:
+   - Detects and acknowledges `com.plexapp.plexmediaserver.plist`
+   - Notes that plist preferences don't apply to Docker containers
+   - Container uses environment variables instead
+5. **Ownership Setup**: Sets proper file ownership for container access
+6. **Post-Migration Guidance**: Provides specific steps for completing the migration
 
 ### Phase 5: Container Deployment
 
@@ -295,6 +317,41 @@ docker logs ${HOSTNAME_LOWER}-plex
 # Follow logs in real-time
 docker logs -f ${HOSTNAME_LOWER}-plex
 ```
+
+## Migration Best Practices
+
+### Following Official Plex Guidelines
+
+The migration process implements recommendations from Plex's official documentation:
+
+- **[Move an Install to Another System](https://support.plex.tv/articles/201370363-move-an-install-to-another-system/)**: Complete migration workflow
+- **[Where is the Plex Media Server Data Directory Located](https://support.plex.tv/articles/202915258-where-is-the-plex-media-server-data-directory-located/)**: Source directory locations
+
+### Migration Process Details
+
+1. **Cache Directory Handling**:
+   - Automatically excluded using `rsync --exclude='Cache'` (Plex recommendation)
+   - Fallback to `cp` with warning if rsync unavailable
+   - Cache rebuilds automatically and safely after migration
+
+2. **macOS Preferences (plist) File**:
+   - Detected and preserved for reference
+   - Not directly usable in Docker environment
+   - Container uses environment variables instead
+   - Original settings may need manual reconfiguration
+
+3. **Post-Migration Requirements**:
+   - Library paths must be updated from old paths to `/media/` container paths
+   - Library scanning required to re-associate media files
+   - All libraries should be verified for proper operation
+
+### Expected Migration Timeline
+
+- **Small libraries** (< 1000 items): 5-15 minutes
+- **Medium libraries** (1000-10000 items): 15-60 minutes  
+- **Large libraries** (> 10000 items): 1+ hours
+
+  *Time depends on library size, metadata complexity, and system performance*
 
 ## Troubleshooting
 
