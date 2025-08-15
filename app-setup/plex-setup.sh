@@ -347,13 +347,42 @@ fi
 # Check if Docker is running
 section "Checking Docker"
 if ! docker info &>/dev/null; then
-  log "Docker is not running. Please start Colima first:"
-  log "  colima start"
-  log "Or if using Docker Desktop instead of Colima:"
-  log "  Open Docker Desktop application"
-  exit 1
+  log "Docker is not running"
+
+  # Check if Colima is available
+  if command -v colima &>/dev/null; then
+    log "Colima is available but not running"
+    if confirm "Start Colima now?"; then
+      log "Starting Colima..."
+      if colima start; then
+        log "✅ Colima started successfully"
+        # Verify Docker is now working
+        if docker info &>/dev/null; then
+          log "✅ Docker is now running"
+        else
+          log "❌ Docker still not responding after Colima start"
+          exit 1
+        fi
+      else
+        log "❌ Failed to start Colima"
+        exit 1
+      fi
+    else
+      log "Please start Colima manually and run the script again:"
+      log "  colima start"
+      exit 1
+    fi
+  else
+    log "Colima not found. Please install and start Colima:"
+    log "  brew install colima"
+    log "  colima start"
+    log "Or if using Docker Desktop instead:"
+    log "  Open Docker Desktop application"
+    exit 1
+  fi
+else
+  log "Docker is running"
 fi
-log "Docker is running"
 
 # Setup SMB mount to NAS
 if [[ "${SKIP_MOUNT}" = false ]]; then
