@@ -397,7 +397,7 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
     if [[ ! -d "${PLEX_MEDIA_MOUNT}" ]]; then
       log "Creating mount point: ${PLEX_MEDIA_MOUNT}"
       log "This requires administrator privileges - you may be prompted for your user password"
-      sudo mkdir -p "${PLEX_MEDIA_MOUNT}"
+      sudo -p "Enter your '${USER}' password to create mount point: " mkdir -p "${PLEX_MEDIA_MOUNT}"
       check_success "Mount point creation"
     fi
 
@@ -407,20 +407,20 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
       log "Mounting ${NAS_SMB_URL} at ${PLEX_MEDIA_MOUNT}"
 
       # Check for Plex NAS credentials file from airdrop-prep
-      PLEX_NAS_CREDS_FILE="${SCRIPT_DIR}/../plex_nas.conf"
+      PLEX_NAS_CREDS_FILE="${SCRIPT_DIR}/plex_nas.conf"
       if [[ -f "${PLEX_NAS_CREDS_FILE}" ]]; then
         log "Using Plex NAS credentials from 1Password"
         # shellcheck source=/dev/null
         source "${PLEX_NAS_CREDS_FILE}"
 
         # Mount using credentials from 1Password
-        if sudo mount -t smbfs "//${PLEX_NAS_USERNAME:-}:${PLEX_NAS_PASSWORD:-}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}"; then
+        if sudo -p "Enter your '${USER}' password to mount NAS (using 1Password credentials): " mount -t smbfs "//${PLEX_NAS_USERNAME:-}:${PLEX_NAS_PASSWORD:-}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}"; then
           log "✅ NAS mounted successfully using 1Password credentials"
         else
           log "❌ NAS mount failed with 1Password credentials, falling back to interactive prompt"
           log "⚠️  IMPORTANT: If running remotely (SSH/Screen Sharing), go to the desktop"
           log "   The password dialog will appear on the desktop, not in the terminal"
-          if sudo mount -t smbfs "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}"; then
+          if sudo -p "Enter your '${USER}' password to mount NAS (fallback after 1Password failed): " mount -t smbfs "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}"; then
             log "✅ NAS mounted successfully with interactive prompt"
           else
             log "❌ NAS mount failed completely"
@@ -433,7 +433,7 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
         log "You'll be prompted for the NAS password for user '${NAS_USERNAME}'"
 
         # Use mount_smbfs directly with username prompt for password
-        if sudo mount -t smbfs "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}"; then
+        if sudo -p "Enter your '${USER}' password to mount NAS (no 1Password credentials found): " mount -t smbfs "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}"; then
           log "✅ NAS mounted successfully"
         else
           log "❌ NAS mount failed"

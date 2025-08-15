@@ -250,13 +250,13 @@ else
   PLEX_NAS_JSON=$(op item get "${OP_PLEX_NAS_ENTRY}" --vault "${ONEPASSWORD_VAULT}" --format json)
   PLEX_NAS_URL=$(echo "${PLEX_NAS_JSON}" | jq -r '.urls[0].href // "nas.local"')
 
-  # Create Plex NAS configuration file
-  cat >"${OUTPUT_PATH}/plex_nas.conf" <<EOF
+  # Create Plex NAS configuration file in app-setup directory
+  cat >"${OUTPUT_PATH}/scripts/app-setup/plex_nas.conf" <<EOF
 PLEX_NAS_USERNAME="${PLEX_NAS_USERNAME}"
 PLEX_NAS_PASSWORD="${PLEX_NAS_PASSWORD}"
 PLEX_NAS_URL="${PLEX_NAS_URL}"
 EOF
-  chmod 600 "${OUTPUT_PATH}/plex_nas.conf"
+  chmod 600 "${OUTPUT_PATH}/scripts/app-setup/plex_nas.conf"
   echo "✅ Plex NAS configuration saved for transfer"
 fi
 

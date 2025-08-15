@@ -1202,12 +1202,13 @@ if [[ ! -d "${APP_SETUP_DIR}" ]]; then
   check_success "App setup directory creation"
 fi
 
-# Copy application setup scripts if available
+# Copy application setup scripts and configuration files if available
 if [[ -d "${SETUP_DIR}/scripts/app-setup" ]]; then
-  log "Copying application setup scripts from ${SETUP_DIR}/scripts/app-setup"
-  cp "${SETUP_DIR}/scripts/app-setup/"*.sh "${APP_SETUP_DIR}/" 2>/dev/null
+  log "Copying application setup scripts and config files from ${SETUP_DIR}/scripts/app-setup"
+  cp "${SETUP_DIR}/scripts/app-setup/"* "${APP_SETUP_DIR}/" 2>/dev/null
   chmod +x "${APP_SETUP_DIR}/"*.sh 2>/dev/null
-  check_success "Application scripts copy"
+  chmod 600 "${APP_SETUP_DIR}/"*.conf 2>/dev/null
+  check_success "Application scripts and config copy"
 else
   log "No application setup scripts found in ${SETUP_DIR}/scripts/app-setup"
 fi
