@@ -441,7 +441,22 @@ if [[ -d "${SSH_KEY_SOURCE}" ]]; then
     log "Copying authorized_keys for admin user"
     cp "${SSH_KEY_SOURCE}/authorized_keys" "${ADMIN_SSH_DIR}/"
     chmod 600 "${ADMIN_SSH_DIR}/authorized_keys"
-    check_success "Admin SSH key setup"
+    check_success "Admin authorized_keys setup"
+  fi
+
+  # Copy SSH key pair for outbound connections
+  if [[ -f "${SSH_KEY_SOURCE}/id_ed25519.pub" ]]; then
+    log "Copying SSH public key for admin user"
+    cp "${SSH_KEY_SOURCE}/id_ed25519.pub" "${ADMIN_SSH_DIR}/"
+    chmod 644 "${ADMIN_SSH_DIR}/id_ed25519.pub"
+    check_success "Admin SSH public key setup"
+  fi
+
+  if [[ -f "${SSH_KEY_SOURCE}/id_ed25519" ]]; then
+    log "Copying SSH private key for admin user"
+    cp "${SSH_KEY_SOURCE}/id_ed25519" "${ADMIN_SSH_DIR}/"
+    chmod 600 "${ADMIN_SSH_DIR}/id_ed25519"
+    check_success "Admin SSH private key setup"
   fi
 else
   log "No SSH keys found at ${SSH_KEY_SOURCE} - manual key setup will be required"

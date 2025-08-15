@@ -17,8 +17,7 @@
 set -euo pipefail
 
 # Configuration
-SSH_KEY_PATH="${HOME}/.ssh/id_ed25519.pub" # Adjust to your SSH key path
-SCRIPT_SOURCE_DIR="${2:-.}"                # Directory containing source scripts (default is current dir)
+SCRIPT_SOURCE_DIR="${2:-.}" # Directory containing source scripts (default is current dir)
 
 # Load configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -94,15 +93,28 @@ fi
 ssh-keygen -R "${SERVER_NAME_LOWER}".local
 
 # Copy SSH keys
-if [[ -f "${SSH_KEY_PATH}" ]]; then
+SSH_PUBLIC_KEY_PATH="${HOME}/.ssh/id_ed25519.pub"
+SSH_PRIVATE_KEY_PATH="${HOME}/.ssh/id_ed25519"
+
+if [[ -f "${SSH_PUBLIC_KEY_PATH}" ]]; then
   echo "Copying SSH public key..."
-  cp "${SSH_KEY_PATH}" "${OUTPUT_PATH}/ssh_keys/authorized_keys"
+  cp "${SSH_PUBLIC_KEY_PATH}" "${OUTPUT_PATH}/ssh_keys/authorized_keys"
+  cp "${SSH_PUBLIC_KEY_PATH}" "${OUTPUT_PATH}/ssh_keys/id_ed25519.pub"
 
   # Create operator keys (same as admin for now)
-  cp "${SSH_KEY_PATH}" "${OUTPUT_PATH}/ssh_keys/operator_authorized_keys"
+  cp "${SSH_PUBLIC_KEY_PATH}" "${OUTPUT_PATH}/ssh_keys/operator_authorized_keys"
 else
-  echo "Warning: SSH public key not found at ${SSH_KEY_PATH}"
+  echo "Warning: SSH public key not found at ${SSH_PUBLIC_KEY_PATH}"
   echo "Please generate SSH keys or specify the correct path"
+fi
+
+if [[ -f "${SSH_PRIVATE_KEY_PATH}" ]]; then
+  echo "Copying SSH private key..."
+  cp "${SSH_PRIVATE_KEY_PATH}" "${OUTPUT_PATH}/ssh_keys/id_ed25519"
+  chmod 600 "${OUTPUT_PATH}/ssh_keys/id_ed25519"
+else
+  echo "Warning: SSH private key not found at ${SSH_PRIVATE_KEY_PATH}"
+  echo "Private key will not be available on the server"
 fi
 
 # Check for TouchID sudo file and copy if exists
