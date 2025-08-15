@@ -28,6 +28,7 @@ The `plex-setup.sh` script automates the deployment of Plex Media Server in a Do
 - `--skip-migration`: Skip Plex configuration migration
 - `--skip-mount`: Skip SMB mount setup
 - `--server-name NAME`: Set Plex server name (default: hostname)
+- `--migrate-from HOST`: Source hostname for Plex migration (e.g., old-server.local)
 
 **Examples**:
 
@@ -43,6 +44,9 @@ The `plex-setup.sh` script automates the deployment of Plex Media Server in a Do
 
 # Setup with custom server name
 ./app-setup/plex-setup.sh --server-name "MyPlexServer"
+
+# Setup with automated migration from existing server
+./app-setup/plex-setup.sh --migrate-from old-server.local
 ```
 
 ## Configuration Sources
@@ -60,6 +64,7 @@ The script derives its configuration from multiple sources in the following prio
 - `NAS_HOSTNAME`: NAS hostname for SMB connection
 - `NAS_USERNAME`: Username for NAS access
 - `NAS_SHARE_NAME`: Name of the media share on NAS
+- `PLEX_MIGRATE_FROM`: Source hostname for Plex migration (optional)
 - `HOSTNAME_OVERRIDE`: Custom hostname (optional)
 - `DOCKER_NETWORK_OVERRIDE`: Custom Docker network name (optional)
 
@@ -192,6 +197,17 @@ After script execution:
 2. **Network Naming**: Uses `${HOSTNAME_LOWER}-network` pattern
 
 ### Phase 4: Configuration Migration
+
+**Automated Migration** (new in v2.0):
+
+1. **Source Detection**: Checks for migration source from config file or command line
+2. **Interactive Discovery**: Scans network for existing Plex servers using `dns-sd`
+3. **SSH Connectivity**: Tests SSH connection to source server
+4. **Size Estimation**: Provides migration size estimates (total size, files, directories)
+5. **Automated Transfer**: Uses `rsync` with progress indication to transfer config
+6. **Plist Handling**: Copies macOS preferences file for reference
+
+**Local Migration** (existing):
 
 1. **Migration Check**: Looks for existing config at `~/plex-migration/`
 2. **Backup Creation**: Backs up any existing Docker config with timestamp
@@ -363,9 +379,17 @@ The migration process implements recommendations from Plex's official documentat
 
 **Solutions**:
 
-- Start Docker Desktop application
-- Verify Docker daemon is running: `docker info`
-- Check Docker Desktop is signed in and licensed
+- **Using Colima (recommended for servers)**:
+
+  ```bash
+  colima start
+  ```
+
+- **Using Docker Desktop**:
+  - Start Docker Desktop application
+  - Check Docker Desktop is signed in and licensed
+- **Verify Docker daemon is running**: `docker info`
+- **Check status**: `colima status` (if using Colima)
 
 #### 2. NAS Mount Failures
 
@@ -596,8 +620,9 @@ The script inherits configuration from the main server setup:
 ### Compatibility
 
 - Designed to run after `first-boot.sh` completion
-- Requires Docker Desktop to be installed
+- Requires Docker daemon (Colima recommended, Docker Desktop also supported)
 - Compatible with existing Docker networks and containers
+- Colima auto-starts when operator user logs in (if configured during setup)
 
 ### Future Applications
 
