@@ -27,6 +27,7 @@ The `plex-setup.sh` script automates the deployment of Plex Media Server in a Do
 - `--force`: Skip all confirmation prompts (unattended installation)
 - `--skip-migration`: Skip Plex configuration migration
 - `--skip-mount`: Skip SMB mount setup
+- `--server-name NAME`: Set Plex server name (default: hostname)
 
 **Examples**:
 
@@ -39,6 +40,9 @@ The `plex-setup.sh` script automates the deployment of Plex Media Server in a Do
 
 # Setup without NAS mounting (mount manually later)
 ./app-setup/plex-setup.sh --skip-mount
+
+# Setup with custom server name
+./app-setup/plex-setup.sh --server-name "MyPlexServer"
 ```
 
 ## Configuration Sources
@@ -47,12 +51,15 @@ The script derives its configuration from multiple sources in the following prio
 
 ### 1. Server Configuration File
 
-**Source**: `../config.conf` (relative to script location)
+**Source**: `config.conf` (in same directory as script)
 
 **Key Variables Used**:
 
 - `SERVER_NAME`: Primary server identifier
 - `OPERATOR_USERNAME`: Non-admin user account name
+- `NAS_HOSTNAME`: NAS hostname for SMB connection
+- `NAS_USERNAME`: Username for NAS access
+- `NAS_SHARE_NAME`: Name of the media share on NAS
 - `HOSTNAME_OVERRIDE`: Custom hostname (optional)
 - `DOCKER_NETWORK_OVERRIDE`: Custom Docker network name (optional)
 
@@ -64,18 +71,19 @@ HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 DOCKER_NETWORK="${DOCKER_NETWORK_OVERRIDE:-${HOSTNAME_LOWER}-network}"
 ```
 
-### 2. Hard-coded Script Configuration
+### 2. Derived Script Configuration
 
 **NAS Configuration**:
 
-- `NAS_SMB_URL="smb://plex@pecorino.local/DSMedia"`
-- `PLEX_MEDIA_MOUNT="/Volumes/DSMedia"`
+- `NAS_SMB_URL="smb://${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"`
+- `PLEX_MEDIA_MOUNT="/Volumes/${NAS_SHARE_NAME}"`
 
 **Docker Configuration**:
 
 - `PLEX_CONTAINER_NAME="${HOSTNAME_LOWER}-plex"`
 - Docker image: `lscr.io/linuxserver/plex:latest`
-- Timezone: `America/Los_Angeles` (customizable in script)
+- Timezone: Auto-detected from system (`readlink /etc/localtime`)
+- Server name: `${PLEX_SERVER_NAME}` (--server-name option or hostname)
 
 **Directory Paths**:
 
@@ -150,14 +158,14 @@ After script execution:
 
 ### Phase 1: Initialization
 
-1. **Load Configuration**: Sources `../config.conf` and derives variables
+1. **Load Configuration**: Sources `config.conf` from script directory and derives variables
 2. **Parse Arguments**: Processes command-line flags
 3. **Validate Prerequisites**: Checks Docker availability
 4. **User Confirmation**: Prompts for operation confirmation (unless `--force`)
 
 ### Phase 2: NAS Mount Setup
 
-1. **Check Existing Mount**: Verifies if NAS already mounted at `/Volumes/DSMedia`
+1. **Check Existing Mount**: Verifies if NAS already mounted at `/Volumes/${NAS_SHARE_NAME}`
 2. **Create Mount Point**: Creates directory if needed
 3. **Mount SMB Share**:
    - Attempts GUI mount via `open smb://...`
@@ -202,7 +210,7 @@ After script execution:
 - `TZ=${PLEX_TIMEZONE}`: Timezone setting
 - `PUID=$(id -u)`: User ID for file permissions  
 - `PGID=$(id -g)`: Group ID for file permissions
-- `HOSTNAME=${HOSTNAME}-PLEX`: Container hostname
+- `HOSTNAME=${PLEX_SERVER_NAME}`: Container hostname (customizable via --server-name)
 - `PLEX_CLAIM=${PLEX_CLAIM_TOKEN}`: Initial server claim (optional)
 
 ### Volume Mounts
@@ -313,21 +321,21 @@ docker logs -f ${HOSTNAME_LOWER}-plex
 
 ```bash
 # Check current mounts
-mount | grep DSMedia
+mount | grep ${NAS_SHARE_NAME}
 
-# Manual SMB mount
-sudo mount -t smbfs smb://plex@pecorino.local/DSMedia /Volumes/DSMedia
+# Manual SMB mount (adjust values per your config.conf)
+sudo mount -t smbfs smb://${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME} /Volumes/${NAS_SHARE_NAME}
 
 # Test NAS connectivity
-ping pecorino.local
+ping ${NAS_HOSTNAME}
 
 # Check SMB service on NAS
-telnet pecorino.local 445
+telnet ${NAS_HOSTNAME} 445
 ```
 
 **Credential Issues**:
 
-- Verify NAS user `plex` exists and has access to `DSMedia` share
+- Verify NAS user exists and has access to media share (check config.conf values)
 - Try mounting with different credentials
 - Check NAS SMB/CIFS service is running
 
@@ -445,7 +453,7 @@ sudo -u ${OPERATOR_USERNAME} launchctl unload /Users/${OPERATOR_USERNAME}/Librar
 rm /Users/${OPERATOR_USERNAME}/Library/LaunchAgents/local.plex.docker.plist
 
 # Unmount NAS
-sudo umount /Volumes/DSMedia
+sudo umount /Volumes/${NAS_SHARE_NAME}
 
 # Re-run full setup
 ./app-setup/plex-setup.sh
@@ -474,7 +482,7 @@ docker run -d \
   -p 32413:32413/udp \
   -p 32414:32414/udp \
   -v ~/Docker/plex/config:/config \
-  -v /Volumes/DSMedia:/media \
+  -v /Volumes/${NAS_SHARE_NAME}:/media \
   lscr.io/linuxserver/plex:latest
 ```
 
