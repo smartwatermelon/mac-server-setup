@@ -4,6 +4,7 @@ bat
 caddy
 colima
 coreutils
+docker
 dockutil
 ffmpeg
 fileicon

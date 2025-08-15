@@ -166,8 +166,7 @@ After script execution:
     ├── Logs/                   # Plex logs
     └── ... (Plex directory structure)
 
-/Users/${OPERATOR_USERNAME}/Library/LaunchAgents/
-└── local.plex.docker.plist     # Auto-start configuration
+# No LaunchAgents needed - auto-start handled by Docker restart policy
 
 ~/.local/state/
 └── ${HOSTNAME_LOWER}-apps.log  # Script execution log
@@ -231,9 +230,9 @@ After script execution:
 
 ### Phase 6: Auto-Start Configuration
 
-1. **Launch Agent Creation**: Creates plist for operator user
-2. **Permission Setup**: Configures proper ownership
-3. **Service Loading**: Attempts to load launch agent
+1. **Docker Restart Policy**: Container configured with --restart=unless-stopped
+2. **Colima Integration**: When Colima starts via brew services, Docker starts
+3. **Automatic Container Start**: Docker automatically starts containers with restart policy
 
 ### Phase 7: Verification
 
@@ -274,31 +273,36 @@ After script execution:
 
 ## Auto-Start Configuration
 
-### Launch Agent Details
+### Docker Restart Policy
 
-**File**: `/Users/${OPERATOR_USERNAME}/Library/LaunchAgents/local.plex.docker.plist`
+**Method**: Docker's built-in `--restart=unless-stopped` policy
 
-**Purpose**: Automatically starts Plex container when operator user logs in
+**Purpose**: Automatically starts Plex container when Docker daemon starts
 
 **Behavior**:
 
-- Triggers on user login (`RunAtLoad: true`)
-- Does not keep alive (`KeepAlive: false`)
-- Logs to `${OPERATOR_HOME}/.local/state/plex-autostart.log`
+- Starts when Docker daemon starts (via Colima)
+- Restarts if container crashes
+- Does not restart if manually stopped
+- No additional configuration needed
 
-**Command Executed**: `/usr/local/bin/docker start ${PLEX_CONTAINER_NAME}`
+**Integration with Colima**:
 
-### Manual Launch Agent Management
+- Colima starts automatically via `brew services` when operator logs in
+- Docker daemon starts with Colima
+- Containers with restart policy start automatically
+
+### Manual Container Management
 
 ```bash
-# Load launch agent (as operator user)
-launchctl load ~/Library/LaunchAgents/local.plex.docker.plist
+# Start container manually
+docker start ${HOSTNAME_LOWER}-plex
 
-# Unload launch agent
-launchctl unload ~/Library/LaunchAgents/local.plex.docker.plist
+# Stop container (will not restart until manually started or Docker restarts)
+docker stop ${HOSTNAME_LOWER}-plex
 
-# Check launch agent status
-launchctl list | grep local.plex.docker
+# Check container status
+docker ps -a | grep plex
 ```
 
 ## Logging
@@ -473,17 +477,20 @@ docker run -it --rm lscr.io/linuxserver/plex:latest /bin/bash
 **Debugging**:
 
 ```bash
-# Check launch agent exists
-ls -la /Users/${OPERATOR_USERNAME}/Library/LaunchAgents/local.plex.docker.plist
+# Check if Colima is running
+colima status
 
-# Check launch agent status (as operator user)
-launchctl list | grep local.plex.docker
+# Check if Docker is running
+docker info
 
-# View auto-start logs
-cat /Users/${OPERATOR_USERNAME}/.local/state/plex-autostart.log
+# Check container status and restart policy
+docker inspect ${HOSTNAME_LOWER}-plex | grep -A5 RestartPolicy
 
-# Manually load launch agent
-sudo -u ${OPERATOR_USERNAME} launchctl load /Users/${OPERATOR_USERNAME}/Library/LaunchAgents/local.plex.docker.plist
+# Check Colima auto-start service
+brew services list | grep colima
+
+# Manually start Colima if needed
+colima start
 ```
 
 #### 6. Network Access Issues
@@ -530,8 +537,9 @@ mkdir -p ~/Docker/plex/config
 docker stop ${HOSTNAME_LOWER}-plex
 docker rm ${HOSTNAME_LOWER}-plex
 rm -rf ~/Docker/plex/
-sudo -u ${OPERATOR_USERNAME} launchctl unload /Users/${OPERATOR_USERNAME}/Library/LaunchAgents/local.plex.docker.plist
-rm /Users/${OPERATOR_USERNAME}/Library/LaunchAgents/local.plex.docker.plist
+
+# Stop Colima auto-start if needed
+brew services stop colima
 
 # Unmount NAS
 sudo umount /Volumes/${NAS_SHARE_NAME}

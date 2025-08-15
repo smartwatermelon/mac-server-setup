@@ -614,49 +614,12 @@ else
   check_success "Plex container creation"
 fi
 
-# Setup auto-start for operator user
-section "Setting Up Auto-Start for Operator User"
+# Auto-start configuration via Docker restart policy
+section "Auto-Start Configuration"
 
-OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
-LAUNCHAGENT_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
-LAUNCHAGENT_PLIST="${LAUNCHAGENT_DIR}/local.plex.docker.plist"
-
-log "Creating launch agent for automatic Plex startup..."
-sudo -u "${OPERATOR_USERNAME}" mkdir -p "${LAUNCHAGENT_DIR}"
-
-# Create launch agent plist
-sudo -u "${OPERATOR_USERNAME}" tee "${LAUNCHAGENT_PLIST}" >/dev/null <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>local.plex.docker</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/local/bin/docker</string>
-        <string>start</string>
-        <string>${PLEX_CONTAINER_NAME}</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <false/>
-    <key>StandardOutPath</key>
-    <string>${OPERATOR_HOME}/.local/state/plex-autostart.log</string>
-    <key>StandardErrorPath</key>
-    <string>${OPERATOR_HOME}/.local/state/plex-autostart.log</string>
-</dict>
-</plist>
-EOF
-
-check_success "Launch agent creation"
-
-# Load the launch agent for the operator user
-log "Loading launch agent for operator user..."
-sudo -u "${OPERATOR_USERNAME}" launchctl load "${LAUNCHAGENT_PLIST}" 2>/dev/null || {
-  log "Launch agent will be loaded when operator user logs in"
-}
+log "Plex auto-start is handled by Docker's restart policy"
+log "When Colima starts (via brew services), Docker starts automatically"
+log "Containers with --restart=unless-stopped policy start automatically"
 
 # Provide final status and instructions
 section "Plex Setup Complete"
