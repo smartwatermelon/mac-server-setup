@@ -414,16 +414,45 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
         source "${PLEX_NAS_CREDS_FILE}"
 
         # Mount using credentials from 1Password
-        if sudo -p "Enter your '${USER}' password to mount NAS (using 1Password credentials): " mount -t smbfs "//${PLEX_NAS_USERNAME:-}:${PLEX_NAS_PASSWORD:-}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}"; then
+        # Use PLEX_NAS_HOSTNAME from credentials if available, fall back to config NAS_HOSTNAME
+        MOUNT_HOSTNAME="${PLEX_NAS_HOSTNAME:-${NAS_HOSTNAME}}"
+        log "Attempting mount with: //${PLEX_NAS_USERNAME:-}@${MOUNT_HOSTNAME}/${NAS_SHARE_NAME}"
+        log "Using 1Password credentials for user: ${PLEX_NAS_USERNAME:-}"
+        log "Target hostname: ${MOUNT_HOSTNAME}"
+        # Capture mount output for better error reporting
+        MOUNT_OUTPUT=$(sudo -p "Enter your '${USER}' password to mount NAS (using 1Password credentials): " mount -t smbfs "//${PLEX_NAS_USERNAME:-}:${PLEX_NAS_PASSWORD:-}@${MOUNT_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}" 2>&1)
+        MOUNT_EXIT_CODE=$?
+        if [[ ${MOUNT_EXIT_CODE} -eq 0 ]]; then
           log "✅ NAS mounted successfully using 1Password credentials"
         else
-          log "❌ NAS mount failed with 1Password credentials, falling back to interactive prompt"
+          log "❌ NAS mount failed with 1Password credentials (exit code: ${MOUNT_EXIT_CODE})"
+          if [[ -n "${MOUNT_OUTPUT}" ]]; then
+            log "Mount error output:"
+            echo "${MOUNT_OUTPUT}" | while IFS= read -r line; do
+              log "  ${line}"
+            done
+          fi
+          log "This could indicate:"
+          log "  - Incorrect credentials in 1Password"
+          log "  - Network connectivity issue to ${MOUNT_HOSTNAME}"
+          log "  - SMB authentication format problem"
+          log "  - Hostname mismatch (1Password: ${MOUNT_HOSTNAME}, config: ${NAS_HOSTNAME})"
+          log "Falling back to interactive prompt..."
           log "⚠️  IMPORTANT: If running remotely (SSH/Screen Sharing), go to the desktop"
           log "   The password dialog will appear on the desktop, not in the terminal"
-          if sudo -p "Enter your '${USER}' password to mount NAS (fallback after 1Password failed): " mount -t smbfs "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}"; then
+          # Capture fallback mount output
+          FALLBACK_OUTPUT=$(sudo -p "Enter your '${USER}' password to mount NAS (fallback after 1Password failed): " mount -t smbfs "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}" 2>&1)
+          FALLBACK_EXIT_CODE=$?
+          if [[ ${FALLBACK_EXIT_CODE} -eq 0 ]]; then
             log "✅ NAS mounted successfully with interactive prompt"
           else
-            log "❌ NAS mount failed completely"
+            log "❌ NAS mount failed completely (exit code: ${FALLBACK_EXIT_CODE})"
+            if [[ -n "${FALLBACK_OUTPUT}" ]]; then
+              log "Fallback mount error output:"
+              echo "${FALLBACK_OUTPUT}" | while IFS= read -r line; do
+                log "  ${line}"
+              done
+            fi
           fi
         fi
       else
@@ -433,10 +462,18 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
         log "You'll be prompted for the NAS password for user '${NAS_USERNAME}'"
 
         # Use mount_smbfs directly with username prompt for password
-        if sudo -p "Enter your '${USER}' password to mount NAS (no 1Password credentials found): " mount -t smbfs "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}"; then
+        NO_CREDS_OUTPUT=$(sudo -p "Enter your '${USER}' password to mount NAS (no 1Password credentials found): " mount -t smbfs "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}" 2>&1)
+        NO_CREDS_EXIT_CODE=$?
+        if [[ ${NO_CREDS_EXIT_CODE} -eq 0 ]]; then
           log "✅ NAS mounted successfully"
         else
-          log "❌ NAS mount failed"
+          log "❌ NAS mount failed (exit code: ${NO_CREDS_EXIT_CODE})"
+          if [[ -n "${NO_CREDS_OUTPUT}" ]]; then
+            log "Mount error output:"
+            echo "${NO_CREDS_OUTPUT}" | while IFS= read -r line; do
+              log "  ${line}"
+            done
+          fi
         fi
       fi
 
@@ -459,8 +496,100 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
         log "Testing media access..."
         if ls "${PLEX_MEDIA_MOUNT}" >/dev/null 2>&1; then
           log "✅ Media directory is accessible"
+          # Show what's in the directory for verification
+          ITEM_COUNT=$(find "${PLEX_MEDIA_MOUNT}" -maxdepth 1 -not -path "${PLEX_MEDIA_MOUNT}" 2>/dev/null | wc -l)
+          log "Found ${ITEM_COUNT// /} items in media directory"
         else
           log "⚠️  Media directory mounted but not accessible"
+          log "Debugging mount access issue..."
+
+          log "Mount point permissions:"
+          if stat -f "Permissions: %Mp%Lp, Owner: %Su:%Sg, Size: %z" "${PLEX_MEDIA_MOUNT}" 2>/dev/null; then
+            MOUNT_STAT=$(stat -f "Permissions: %Mp%Lp, Owner: %Su:%Sg, Size: %z" "${PLEX_MEDIA_MOUNT}" 2>/dev/null)
+            log "  ${MOUNT_STAT}"
+          else
+            log "  Unable to get mount point permissions"
+          fi
+
+          log "Mount information:"
+          mount | grep "${PLEX_MEDIA_MOUNT}" | while IFS= read -r line; do
+            log "  ${line}"
+          done
+
+          log "Detailed mount point analysis:"
+          if [[ -e "${PLEX_MEDIA_MOUNT}" ]]; then
+            if [[ -d "${PLEX_MEDIA_MOUNT}" ]]; then
+              log "  ✅ Mount point exists as directory"
+
+              # Check if it's actually mounted
+              if mount | grep -q "${PLEX_MEDIA_MOUNT}"; then
+                log "  ✅ Mount point is actively mounted"
+
+                # Try to determine the mount type and status
+                MOUNT_INFO=$(mount | grep "${PLEX_MEDIA_MOUNT}")
+                log "  Mount details: ${MOUNT_INFO}"
+
+                # Check for common access issues
+                log "  Testing directory access methods:"
+
+                # Test with different access patterns
+                if [[ -r "${PLEX_MEDIA_MOUNT}" ]]; then
+                  log "    ✅ Directory is readable"
+                else
+                  log "    ❌ Directory is not readable"
+                fi
+
+                if [[ -x "${PLEX_MEDIA_MOUNT}" ]]; then
+                  log "    ✅ Directory is executable (traversable)"
+                else
+                  log "    ❌ Directory is not executable (not traversable)"
+                fi
+
+                # Test stat command
+                if stat "${PLEX_MEDIA_MOUNT}" >/dev/null 2>&1; then
+                  log "    ✅ stat command works"
+                  STAT_INFO=$(stat -f "Size: %z, Owner: %Su:%Sg, Mode: %Mp%Lp" "${PLEX_MEDIA_MOUNT}" 2>/dev/null)
+                  log "    Stat info: ${STAT_INFO}"
+                else
+                  log "    ❌ stat command fails"
+                fi
+
+                # Test find command
+                if find "${PLEX_MEDIA_MOUNT}" -maxdepth 1 >/dev/null 2>&1; then
+                  log "    ✅ find command works"
+                  FIND_COUNT=$(find "${PLEX_MEDIA_MOUNT}" -maxdepth 1 | wc -l)
+                  log "    Find shows ${FIND_COUNT// /} items (including directory itself)"
+                else
+                  log "    ❌ find command fails"
+                fi
+
+                # Check for authentication/session issues
+                log "  Possible causes:"
+                log "    - SMB authentication expired or invalid"
+                log "    - Network connectivity issues"
+                log "    - Permission denied by SMB server"
+                log "    - Mount succeeded but share is empty or access restricted"
+
+              else
+                log "  ❌ Mount point exists but is not actively mounted"
+              fi
+            else
+              log "  ❌ Mount point exists but is not a directory"
+            fi
+          else
+            log "  ❌ Mount point does not exist"
+          fi
+
+          log "  Current user: ${WHOAMI}"
+          log "  User ID/Group: ${IDU}:${IDG}"
+          log "  Effective permissions on parent directory:"
+          PARENT_DIR=$(dirname "${PLEX_MEDIA_MOUNT}")
+          if stat -f "Permissions: %Mp%Lp, Owner: %Su:%Sg" "${PARENT_DIR}" 2>/dev/null; then
+            PARENT_STAT=$(stat -f "Permissions: %Mp%Lp, Owner: %Su:%Sg" "${PARENT_DIR}" 2>/dev/null)
+            log "    ${PARENT_STAT}"
+          else
+            log "    Unable to get parent directory permissions"
+          fi
         fi
       else
         log "❌ Mount verification failed - mount may not have succeeded"

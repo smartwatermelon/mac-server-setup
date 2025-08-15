@@ -250,11 +250,20 @@ else
   PLEX_NAS_JSON=$(op item get "${OP_PLEX_NAS_ENTRY}" --vault "${ONEPASSWORD_VAULT}" --format json)
   PLEX_NAS_URL=$(echo "${PLEX_NAS_JSON}" | jq -r '.urls[0].href // "nas.local"')
 
+  # Extract hostname from URL if it's a full URL, otherwise use as-is
+  if [[ "${PLEX_NAS_URL}" =~ ^[a-zA-Z]+:// ]]; then
+    # Extract hostname from URL (e.g., "smb://nas.local/share" -> "nas.local")
+    PLEX_NAS_HOSTNAME=$(echo "${PLEX_NAS_URL}" | sed -E 's|^[^/]+//([^/]+).*|\1|')
+  else
+    # Use URL field directly as hostname (e.g., "nas.local")
+    PLEX_NAS_HOSTNAME="${PLEX_NAS_URL}"
+  fi
+
   # Create Plex NAS configuration file in app-setup directory
   cat >"${OUTPUT_PATH}/scripts/app-setup/plex_nas.conf" <<EOF
 PLEX_NAS_USERNAME="${PLEX_NAS_USERNAME}"
 PLEX_NAS_PASSWORD="${PLEX_NAS_PASSWORD}"
-PLEX_NAS_URL="${PLEX_NAS_URL}"
+PLEX_NAS_HOSTNAME="${PLEX_NAS_HOSTNAME}"
 EOF
   chmod 600 "${OUTPUT_PATH}/scripts/app-setup/plex_nas.conf"
   echo "✅ Plex NAS configuration saved for transfer"
