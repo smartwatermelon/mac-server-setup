@@ -35,6 +35,7 @@ else
   ONEPASSWORD_VAULT="personal"
   ONEPASSWORD_OPERATOR_ITEM="operator"
   ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
+  ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"
   ONEPASSWORD_APPLEID_ITEM="Apple"
 fi
 
@@ -42,6 +43,7 @@ fi
 SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 OUTPUT_PATH="${1:-${HOME}/${SERVER_NAME_LOWER}-setup}"
 OP_TIMEMACHINE_ENTRY="${ONEPASSWORD_TIMEMACHINE_ITEM}"
+OP_PLEX_NAS_ENTRY="${ONEPASSWORD_PLEX_NAS_ITEM}"
 
 # Check if output directory exists
 if [[ -d "${OUTPUT_PATH}" ]]; then
@@ -228,6 +230,34 @@ TM_URL="${TM_URL}"
 EOF
   chmod 600 "${OUTPUT_PATH}/timemachine.conf"
   echo "✅ Time Machine configuration saved for transfer"
+fi
+
+# Set up Plex NAS credentials using 1Password
+echo "Setting up Plex NAS credentials..."
+
+# Check if Plex NAS credentials exist in 1Password
+if ! op item get "${OP_PLEX_NAS_ENTRY}" --vault "${ONEPASSWORD_VAULT}" >/dev/null 2>&1; then
+  echo "⚠️ Plex NAS credentials not found in 1Password"
+  echo "Please create '${OP_PLEX_NAS_ENTRY}' entry manually"
+  echo "Skipping Plex NAS credential setup"
+else
+  echo "✅ Found Plex NAS credentials in 1Password"
+
+  # Retrieve Plex NAS details from 1Password
+  echo "Retrieving Plex NAS details from 1Password..."
+  PLEX_NAS_USERNAME=$(op item get "${OP_PLEX_NAS_ENTRY}" --vault "${ONEPASSWORD_VAULT}" --fields username)
+  PLEX_NAS_PASSWORD=$(op read "op://${ONEPASSWORD_VAULT}/${OP_PLEX_NAS_ENTRY}/password")
+  PLEX_NAS_JSON=$(op item get "${OP_PLEX_NAS_ENTRY}" --vault "${ONEPASSWORD_VAULT}" --format json)
+  PLEX_NAS_URL=$(echo "${PLEX_NAS_JSON}" | jq -r '.urls[0].href // "nas.local"')
+
+  # Create Plex NAS configuration file
+  cat >"${OUTPUT_PATH}/plex_nas.conf" <<EOF
+PLEX_NAS_USERNAME="${PLEX_NAS_USERNAME}"
+PLEX_NAS_PASSWORD="${PLEX_NAS_PASSWORD}"
+PLEX_NAS_URL="${PLEX_NAS_URL}"
+EOF
+  chmod 600 "${OUTPUT_PATH}/plex_nas.conf"
+  echo "✅ Plex NAS configuration saved for transfer"
 fi
 
 # Create and save one-time link for Apple ID password

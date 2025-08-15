@@ -403,20 +403,51 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
 
     # Mount the SMB share
     log "Mounting SMB share..."
-    if confirm "Mount NAS share now? (You'll be prompted for NAS password)"; then
+    if confirm "Mount NAS share now?"; then
       log "Mounting ${NAS_SMB_URL} at ${PLEX_MEDIA_MOUNT}"
-      log "You'll be prompted for the NAS password for user '${NAS_USERNAME}'"
 
-      # Use mount_smbfs directly with username prompt for password
-      if sudo mount -t smbfs "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}"; then
-        log "✅ NAS mounted successfully"
+      # Check for Plex NAS credentials file from airdrop-prep
+      PLEX_NAS_CREDS_FILE="${SCRIPT_DIR}/../plex_nas.conf"
+      if [[ -f "${PLEX_NAS_CREDS_FILE}" ]]; then
+        log "Using Plex NAS credentials from 1Password"
+        # shellcheck source=/dev/null
+        source "${PLEX_NAS_CREDS_FILE}"
+
+        # Mount using credentials from 1Password
+        if sudo mount -t smbfs "//${PLEX_NAS_USERNAME:-}:${PLEX_NAS_PASSWORD:-}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}"; then
+          log "✅ NAS mounted successfully using 1Password credentials"
+        else
+          log "❌ NAS mount failed with 1Password credentials, falling back to interactive prompt"
+          log "⚠️  IMPORTANT: If running remotely (SSH/Screen Sharing), go to the desktop"
+          log "   The password dialog will appear on the desktop, not in the terminal"
+          if sudo mount -t smbfs "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}"; then
+            log "✅ NAS mounted successfully with interactive prompt"
+          else
+            log "❌ NAS mount failed completely"
+          fi
+        fi
       else
-        log "❌ NAS mount failed"
+        log "No Plex NAS credentials file found - using interactive password prompt"
+        log "⚠️  IMPORTANT: If running remotely (SSH/Screen Sharing), go to the desktop"
+        log "   The password dialog will appear on the desktop, not in the terminal"
+        log "You'll be prompted for the NAS password for user '${NAS_USERNAME}'"
+
+        # Use mount_smbfs directly with username prompt for password
+        if sudo mount -t smbfs "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}"; then
+          log "✅ NAS mounted successfully"
+        else
+          log "❌ NAS mount failed"
+        fi
+      fi
+
+      # Check if mount failed and provide troubleshooting
+      if ! mount | grep -q "${PLEX_MEDIA_MOUNT}"; then
         log "Please verify:"
         log "  - NAS hostname is reachable: ${NAS_HOSTNAME}"
         log "  - Share exists: ${NAS_SHARE_NAME}"
         log "  - Username is correct: ${NAS_USERNAME}"
         log "  - Password is correct"
+        log "  - You entered the password in the desktop dialog (if running remotely)"
         if ! confirm "Continue without NAS mount? (You can mount manually later)"; then
           exit 1
         fi

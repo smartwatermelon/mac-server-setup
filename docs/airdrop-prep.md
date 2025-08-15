@@ -55,6 +55,20 @@ The script will create this item in 1Password automatically if it doesn't exist,
 >
 > **URL**: `smb://your-nas-ip/TimeMachine` (or appropriate backup URL)
 
+#### Plex NAS Credentials (Optional)
+
+> **Item Type**: Login  
+>
+> **Title**: "Plex NAS" (or as configured)
+>
+> **Username**: Your media NAS username (e.g., "plex")
+>
+> **Password**: Your media NAS password
+>
+> **URL**: `nas.local` (or your NAS hostname - optional)
+
+If this item is not found, the Plex setup will fall back to an interactive password prompt. Note that interactive prompts display as GUI dialogs on the desktop, not in the terminal.
+
 #### Apple ID Credentials
 
 > **Item Type**: Login

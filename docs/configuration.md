@@ -17,6 +17,7 @@ OPERATOR_USERNAME="operator"
 ONEPASSWORD_VAULT="personal"
 ONEPASSWORD_OPERATOR_ITEM="operator"
 ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
+ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"
 ONEPASSWORD_APPLEID_ITEM="Apple"
 
 # Monitoring
@@ -64,10 +65,18 @@ All credential management relies on 1Password items. The configuration specifies
 
 **ONEPASSWORD_TIMEMACHINE_ITEM**: Login item for Time Machine backup credentials
 
-- **Default**: "PECORINO DS-413 - TimeMachine"
+- **Default**: "TimeMachine"
 - **Requirements**: Login item with username, password, and URL field
 - **URL Format**: `smb://nas-ip/share-name` or similar backup destination
 - **Example**: `ONEPASSWORD_TIMEMACHINE_ITEM="Synology TimeMachine"`
+
+**ONEPASSWORD_PLEX_NAS_ITEM**: Login item for Plex media NAS credentials
+
+- **Default**: "Plex NAS"
+- **Requirements**: Login item with username, password, and URL field (optional)
+- **Purpose**: Provides automated SMB mounting for Plex media storage
+- **Fallback**: If not found, uses interactive password prompt with GUI dialog
+- **Example**: `ONEPASSWORD_PLEX_NAS_ITEM="Synology Plex"`
 
 **ONEPASSWORD_APPLEID_ITEM**: Login item for Apple ID credentials
 
@@ -193,6 +202,9 @@ op item get "${ONEPASSWORD_OPERATOR_ITEM}" --vault "${ONEPASSWORD_VAULT}" || ech
 
 # Verify Time Machine item exists
 op item get "${ONEPASSWORD_TIMEMACHINE_ITEM}" --vault "${ONEPASSWORD_VAULT}"
+
+# Verify Plex NAS item exists (optional - will fall back to interactive prompt)
+op item get "${ONEPASSWORD_PLEX_NAS_ITEM}" --vault "${ONEPASSWORD_VAULT}" || echo "Will use interactive password prompt"
 
 # Verify Apple ID item exists  
 op item get "${ONEPASSWORD_APPLEID_ITEM}" --vault "${ONEPASSWORD_VAULT}"
