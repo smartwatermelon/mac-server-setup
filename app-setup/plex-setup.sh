@@ -7,11 +7,13 @@
 # - Configuration migration from existing Plex server
 # - Auto-start configuration for operator user
 #
-# Usage: ./plex-setup.sh [--force] [--skip-migration] [--skip-mount] [--server-name NAME]
+# Usage: ./plex-setup.sh [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST]
 #   --force: Skip all confirmation prompts
 #   --skip-migration: Skip Plex config migration
 #   --skip-mount: Skip SMB mount setup
 #   --server-name: Set Plex server name (default: hostname)
+#   --migrate-from: Source hostname for Plex migration (e.g., old-server.local)
+#   Note: --skip-migration and --migrate-from are mutually exclusive
 #
 # Expected Plex config files location:
 #   ~/plex-migration/
@@ -56,6 +58,7 @@ FORCE=false
 SKIP_MIGRATION=false
 SKIP_MOUNT=false
 PLEX_SERVER_NAME=""
+PLEX_MIGRATE_FROM=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -75,12 +78,31 @@ while [[ $# -gt 0 ]]; do
       PLEX_SERVER_NAME="$2"
       shift 2
       ;;
+    --migrate-from)
+      PLEX_MIGRATE_FROM="$2"
+      shift 2
+      ;;
     *)
       # Unknown option
       shift
       ;;
   esac
 done
+
+# Validate mutually exclusive options
+if [[ "${SKIP_MIGRATION}" = true ]] && [[ -n "${PLEX_MIGRATE_FROM}" ]]; then
+  echo "Error: --skip-migration and --migrate-from are mutually exclusive"
+  exit 1
+fi
+
+# Command line --migrate-from takes precedence over config file
+# If not specified via command line, use config file value
+PLEX_MIGRATE_FROM_CMDLINE="${PLEX_MIGRATE_FROM}"
+if [[ -z "${PLEX_MIGRATE_FROM_CMDLINE}" ]]; then
+  PLEX_MIGRATE_FROM="${PLEX_MIGRATE_FROM:-}"
+else
+  PLEX_MIGRATE_FROM="${PLEX_MIGRATE_FROM_CMDLINE}"
+fi
 
 # Set default Plex server name to hostname if not specified via command line
 if [[ -z "${PLEX_SERVER_NAME}" ]]; then
@@ -136,6 +158,155 @@ confirm() {
     [[ ${REPLY} =~ ^[Yy]$ ]]
   else
     return 0
+  fi
+}
+
+# Function to discover Plex servers on the network
+discover_plex_servers() {
+  log "Discovering Plex servers on the network..."
+
+  # Use timeout to limit dns-sd search time, capture output first
+  local dns_output
+  dns_output=$(timeout 3 dns-sd -B _plexmediasvr._tcp 2>/dev/null)
+
+  # Process the captured output
+  local servers
+  servers=$(echo "${dns_output}" | grep "Add" | awk '{print $NF}' | sort -u)
+
+  if [[ -n "${servers}" ]]; then
+    log "Found Plex servers:"
+    echo "${servers}" | while read -r server; do
+      log "  - ${server}"
+    done
+    echo "${servers}"
+  else
+    log "No Plex servers found on the network"
+    return 1
+  fi
+}
+
+# Function to test SSH connectivity to a host
+test_ssh_connection() {
+  local host="$1"
+  log "Testing SSH connection to ${host}..."
+
+  if ssh -o ConnectTimeout=5 -o BatchMode=yes "${host}" 'echo "SSH_OK"' >/dev/null 2>&1; then
+    log "✅ SSH connection to ${host} successful"
+    return 0
+  else
+    log "❌ SSH connection to ${host} failed"
+    return 1
+  fi
+}
+
+# Function to get migration size estimate
+get_migration_size_estimate() {
+  local source_host="$1"
+  local plex_path="Library/Application Support/Plex Media Server/"
+
+  log "Getting migration size estimate from ${source_host}..."
+
+  # Get total size
+  local total_size
+  total_size=$(ssh -o ConnectTimeout=10 "${source_host}" "du -sh '${plex_path}' 2>/dev/null | cut -f1" 2>/dev/null)
+
+  # Get file count
+  local file_count
+  file_count=$(ssh -o ConnectTimeout=10 "${source_host}" "ls -fR '${plex_path}' 2>/dev/null | wc -l" 2>/dev/null)
+
+  # Get directory count
+  local dir_count
+  dir_count=$(ssh -o ConnectTimeout=10 "${source_host}" "find '${plex_path}' -type d -not -name '.' -not -name '..' 2>/dev/null | wc -l" 2>/dev/null)
+
+  if [[ -n "${total_size}" && -n "${file_count}" && -n "${dir_count}" ]]; then
+    log "Migration size estimate:"
+    log "  Total size: ${total_size// /}"
+    log "  Files: ${file_count// /}"
+    log "  Directories: ${dir_count// /}"
+    log "⚠️  Large migrations may take 30+ minutes depending on network speed"
+    return 0
+  else
+    log "⚠️  Could not get size estimate from source server"
+    return 1
+  fi
+}
+
+# Function to perform automated Plex migration
+migrate_plex_from_host() {
+  local source_host="$1"
+
+  log "Starting Plex migration from ${source_host}"
+
+  # Test SSH connectivity first
+  # shellcheck disable=2310
+  if ! test_ssh_connection "${source_host}"; then
+    log "Cannot proceed with migration - SSH connection failed"
+    return 1
+  fi
+
+  # Get size estimate
+  get_migration_size_estimate "${source_host}"
+
+  # Create migration directory
+  log "Creating migration directory: ${PLEX_MIGRATION_DIR}"
+  mkdir -p "${PLEX_MIGRATION_DIR}"
+
+  # Define source paths
+  local plex_config_source="${source_host}:Library/Application\ Support/Plex\ Media\ Server/"
+  local plex_plist_source="${source_host}:Library/Preferences/com.plexapp.plexmediaserver.plist"
+
+  log "Migrating Plex configuration from ${source_host}..."
+  log "This may take several minutes depending on the size of your Plex database"
+
+  # Use rsync with progress for the main config
+  if command -v rsync >/dev/null 2>&1; then
+    # Use rsync with progress but limit output noise
+    log "Starting rsync migration (excluding Cache directory)..."
+    if rsync -aH --progress --compress --whole-file --exclude='Cache' \
+      "${plex_config_source}" "${PLEX_MIGRATION_DIR}/" 2>&1 \
+      | grep -E "(receiving|sent|total size)" | while read -r line; do
+      # shellcheck disable=2310
+      log "  ${line}"
+    done; then
+      log "✅ Plex configuration migrated successfully"
+    else
+      log "❌ Plex configuration migration failed"
+      return 1
+    fi
+  else
+    log "rsync not available, using scp for migration..."
+    if scp -r "${source_host}:Library/Application Support/Plex Media Server" "${PLEX_MIGRATION_DIR}/"; then
+      log "✅ Plex configuration migrated with scp"
+      # Remove Cache directory if it was copied
+      if [[ -d "${PLEX_MIGRATION_DIR}/Plex Media Server/Cache" ]]; then
+        log "Removing Cache directory from migrated config..."
+        rm -rf "${PLEX_MIGRATION_DIR}/Plex Media Server/Cache"
+      fi
+    else
+      log "❌ Plex configuration migration failed with scp"
+      return 1
+    fi
+  fi
+
+  # Copy the plist file
+  log "Copying Plex preferences file..."
+  if scp "${plex_plist_source}" "${PLEX_MIGRATION_DIR}/" >/dev/null 2>&1; then
+    log "✅ Plex preferences file copied to ${PLEX_OLD_PLIST}"
+  else
+    log "⚠️  Could not copy Plex preferences file (this is optional)"
+  fi
+
+  # Verify migration
+  if [[ -d "${PLEX_OLD_CONFIG}" ]]; then
+    log "✅ Migration completed successfully"
+    log "Migrated config available at: ${PLEX_OLD_CONFIG}"
+    if [[ -f "${PLEX_OLD_PLIST}" ]]; then
+      log "Migrated plist available at: ${PLEX_OLD_PLIST}"
+    fi
+    return 0
+  else
+    log "❌ Migration verification failed"
+    return 1
   fi
 }
 
@@ -239,11 +410,86 @@ fi
 if [[ "${SKIP_MIGRATION}" = false ]]; then
   section "Plex Configuration Migration"
 
+  # Check if we already have migrated config
   if [[ -d "${PLEX_OLD_CONFIG}" ]]; then
     log "Found existing Plex configuration at ${PLEX_OLD_CONFIG}"
-
     # shellcheck disable=2310
-    if confirm "Migrate existing Plex configuration?"; then
+    if confirm "Use existing migrated Plex configuration?"; then
+      log "Using existing migration at ${PLEX_OLD_CONFIG}"
+    else
+      log "Removing existing migration to start fresh..."
+      rm -rf "${PLEX_MIGRATION_DIR}"
+      PLEX_MIGRATE_FROM="" # Force re-prompt
+    fi
+  fi
+
+  # Determine migration source if not already migrated
+  if [[ ! -d "${PLEX_OLD_CONFIG}" ]]; then
+    # If no migration source specified, ask user
+    if [[ -z "${PLEX_MIGRATE_FROM}" ]]; then
+      # shellcheck disable=2310
+      if confirm "Do you want to migrate from an existing Plex server?"; then
+        # Try to discover Plex servers
+        log "Scanning for Plex servers on the network..."
+        discovered_servers=$(discover_plex_servers)
+
+        if [[ -n "${discovered_servers}" ]]; then
+          # Present discovered servers to user
+          log "Select a Plex server to migrate from:"
+          server_array=()
+          index=1
+          while IFS= read -r server; do
+            log "  ${index}. ${server}.local"
+            server_array+=("${server}.local")
+            ((index++))
+          done <<<"${discovered_servers}"
+
+          log "  ${index}. Other (enter manually)"
+
+          # Get user selection
+          read -rp "Enter selection (1-${index}): " selection
+          if [[ "${selection}" -ge 1 && "${selection}" -lt "${index}" ]]; then
+            PLEX_MIGRATE_FROM="${server_array[$((selection - 1))]}"
+            log "Selected: ${PLEX_MIGRATE_FROM}"
+          else
+            read -rp "Enter hostname of source Plex server: " PLEX_MIGRATE_FROM
+          fi
+        else
+          read -rp "Enter hostname of source Plex server (e.g., old-server.local): " PLEX_MIGRATE_FROM
+        fi
+      else
+        log "Skipping migration - will start with fresh Plex installation"
+      fi
+    fi
+
+    # Perform migration if source is specified
+    if [[ -n "${PLEX_MIGRATE_FROM}" ]]; then
+      log "Migrating Plex configuration from ${PLEX_MIGRATE_FROM}"
+
+      # shellcheck disable=2310
+      if confirm "Proceed with migration from ${PLEX_MIGRATE_FROM}?"; then
+        if migrate_plex_from_host "${PLEX_MIGRATE_FROM}"; then
+          log "✅ Automated migration completed successfully"
+        else
+          log "❌ Automated migration failed"
+          # shellcheck disable=2310
+          if confirm "Continue with fresh Plex installation?"; then
+            log "Continuing with fresh installation..."
+          else
+            log "Migration failed and user chose to exit"
+            exit 1
+          fi
+        fi
+      else
+        log "Migration cancelled by user"
+      fi
+    fi
+  fi
+
+  # Process migrated config if available
+  if [[ -d "${PLEX_OLD_CONFIG}" ]]; then
+    # shellcheck disable=2310
+    if confirm "Apply migrated Plex configuration to Docker container?"; then
       log "Stopping any existing Plex container..."
       docker stop "${PLEX_CONTAINER_NAME}" 2>/dev/null || true
       docker rm "${PLEX_CONTAINER_NAME}" 2>/dev/null || true
@@ -256,34 +502,21 @@ if [[ "${SKIP_MIGRATION}" = false ]]; then
         mkdir -p "${PLEX_CONFIG_DIR}"
       fi
 
-      log "Copying Plex configuration (excluding Cache directory)..."
-      # Use rsync to exclude Cache directory as recommended by Plex
+      log "Applying migrated configuration to Docker setup..."
+      # Copy the already-migrated config (Cache already excluded)
       if command -v rsync >/dev/null 2>&1; then
-        rsync -av --exclude='Cache' "${PLEX_OLD_CONFIG}/" "${PLEX_CONFIG_DIR}/"
+        rsync -av "${PLEX_OLD_CONFIG}/" "${PLEX_CONFIG_DIR}/"
       else
-        # Fallback to cp, but warn about Cache directory
         cp -R "${PLEX_OLD_CONFIG}"/* "${PLEX_CONFIG_DIR}/"
-        if [[ -d "${PLEX_CONFIG_DIR}/Cache" ]]; then
-          log "⚠️  Cache directory copied - consider removing for better performance"
-          log "   You can safely delete: ${PLEX_CONFIG_DIR}/Cache"
-        fi
       fi
-      check_success "Plex configuration migration"
-
-      # Handle macOS plist file if present
-      if [[ -f "${PLEX_OLD_PLIST}" ]]; then
-        log "Processing macOS preferences file..."
-        log "⚠️  Note: macOS plist preferences are not directly usable in Docker"
-        log "   Container will use environment variables instead"
-        log "   Original plist preserved at: ${PLEX_OLD_PLIST}"
-      fi
+      check_success "Plex configuration application"
 
       # Set proper ownership
       log "Setting proper ownership on config files..."
       chown -R "${IDU}:${IDG}" "${PLEX_CONFIG_DIR}"
       check_success "Config ownership setup"
 
-      log "✅ Plex configuration migrated successfully"
+      log "✅ Migrated configuration applied successfully"
       log ""
       log "📝 Post-migration steps required:"
       log "   1. Start the container and access the web interface"
@@ -291,11 +524,10 @@ if [[ "${SKIP_MIGRATION}" = false ]]; then
       log "   3. Scan libraries to re-associate media files"
       log "   4. Verify all libraries are working correctly"
     else
-      log "Skipping configuration migration"
+      log "Skipping application of migrated config - will start fresh"
     fi
   else
-    log "No existing Plex configuration found at ${PLEX_OLD_CONFIG}"
-    log "Will start with fresh Plex installation"
+    log "No migrated configuration available - will start with fresh Plex installation"
   fi
 else
   log "Skipping configuration migration (--skip-migration specified)"

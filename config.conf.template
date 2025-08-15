@@ -21,6 +21,11 @@ NAS_HOSTNAME="nas.local"
 NAS_USERNAME="plex"
 NAS_SHARE_NAME="Media"
 
+# Plex migration configuration (optional)
+# If migrating from an existing Plex server, specify the source hostname
+# Leave empty to prompt during setup or use --migrate-from command line option
+PLEX_MIGRATE_FROM=""  # e.g., "old-server.local"
+
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME
 DOCKER_NETWORK_OVERRIDE=""  # If different from SERVER_NAME-network
