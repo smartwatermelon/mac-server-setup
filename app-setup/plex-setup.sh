@@ -51,22 +51,7 @@ DOCKER_NETWORK="${DOCKER_NETWORK_OVERRIDE:-${HOSTNAME_LOWER}-network}"
 LOG_DIR="${HOME}/.local/state"
 LOG_FILE="${LOG_DIR}/${HOSTNAME_LOWER}-apps.log"
 
-# Set default Plex server name to hostname if not specified
-if [[ -z "${PLEX_SERVER_NAME:-}" ]]; then
-  PLEX_SERVER_NAME="${HOSTNAME}"
-fi
-
-# Plex-specific configuration
-PLEX_CONFIG_DIR="${HOME}/Docker/plex/config"
-PLEX_MEDIA_MOUNT="/Volumes/${NAS_SHARE_NAME}"
-PLEX_MIGRATION_DIR="${HOME}/plex-migration"
-PLEX_OLD_CONFIG="${PLEX_MIGRATION_DIR}/Plex Media Server"
-PLEX_OLD_PLIST="${PLEX_MIGRATION_DIR}/com.plexapp.plexmediaserver.plist"
-PLEX_CONTAINER_NAME="${HOSTNAME_LOWER}-plex"
-PLEX_TIMEZONE="$(readlink /etc/localtime | sed 's|.*/zoneinfo/||')"
-NAS_SMB_URL="smb://${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
-
-# Parse command line arguments
+# Parse command line arguments (must come before setting defaults)
 FORCE=false
 SKIP_MIGRATION=false
 SKIP_MOUNT=false
@@ -96,6 +81,21 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Set default Plex server name to hostname if not specified via command line
+if [[ -z "${PLEX_SERVER_NAME}" ]]; then
+  PLEX_SERVER_NAME="${HOSTNAME}"
+fi
+
+# Plex-specific configuration
+PLEX_CONFIG_DIR="${HOME}/Docker/plex/config"
+PLEX_MEDIA_MOUNT="/Volumes/${NAS_SHARE_NAME}"
+PLEX_MIGRATION_DIR="${HOME}/plex-migration"
+PLEX_OLD_CONFIG="${PLEX_MIGRATION_DIR}/Plex Media Server"
+PLEX_OLD_PLIST="${PLEX_MIGRATION_DIR}/com.plexapp.plexmediaserver.plist"
+PLEX_CONTAINER_NAME="${HOSTNAME_LOWER}-plex"
+PLEX_TIMEZONE="$(readlink /etc/localtime | sed 's|.*/zoneinfo/||')"
+NAS_SMB_URL="smb://${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
 
 # Function to log messages to both console and log file
 log() {
