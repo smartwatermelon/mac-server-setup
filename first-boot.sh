@@ -811,15 +811,6 @@ log "Ensuring SSH is allowed through firewall"
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/sbin/sshd
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/sbin/sshd
 
-# Create scripts directory
-section "Setting Up Scripts Directory"
-SCRIPTS_DIR="/Users/${ADMIN_USERNAME}/${HOSTNAME_LOWER}-scripts"
-if [[ ! -d "${SCRIPTS_DIR}" ]]; then
-  log "Creating scripts directory"
-  mkdir -p "${SCRIPTS_DIR}"
-  check_success "Scripts directory creation"
-fi
-
 # Configure security settings
 section "Configuring Security Settings"
 
@@ -1258,12 +1249,11 @@ show_log "You can now set up individual applications with scripts in: ${APP_SETU
 show_log ""
 show_log "Next steps:"
 show_log "1. Set up applications: cd ${APP_SETUP_DIR} && ./plex-setup.sh"
-show_log "2. Configure monitoring: ~/${HOSTNAME_LOWER}-scripts/monitoring-setup.sh"
-show_log "3. Test SSH access from your dev machine:"
+show_log "2. Test SSH access from your dev machine:"
 show_log "   ssh ${ADMIN_USERNAME}@${HOSTNAME_LOWER}.local"
 show_log "   ssh operator@${HOSTNAME_LOWER}.local"
 show_log ""
-show_log "4. After completing app setup, reboot to enable operator auto-login:"
+show_log "3. After completing app setup, reboot to enable operator auto-login:"
 show_log "   - Rebooting will automatically log in as '${OPERATOR_USERNAME}'"
 show_log "   - Run dock-cleanup.command from the desktop to clean up the dock"
 show_log "   - Configure any additional operator-specific settings"
