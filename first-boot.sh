@@ -673,6 +673,52 @@ else
     sudo dseditgroup -o edit -a "${OPERATOR_USERNAME}" -t user com.apple.access_ssh
     check_success "Operator SSH group membership"
   fi
+
+  # Set up Colima auto-start for operator user
+  log "Setting up Colima auto-start for operator user"
+  OPERATOR_LAUNCHAGENT_DIR="/Users/${OPERATOR_USERNAME}/Library/LaunchAgents"
+  COLIMA_LAUNCHAGENT_PLIST="${OPERATOR_LAUNCHAGENT_DIR}/local.colima.docker.plist"
+
+  sudo -u "${OPERATOR_USERNAME}" mkdir -p "${OPERATOR_LAUNCHAGENT_DIR}"
+
+  # Create Colima launch agent plist
+  sudo -u "${OPERATOR_USERNAME}" tee "${COLIMA_LAUNCHAGENT_PLIST}" >/dev/null <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.colima.docker</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/opt/homebrew/bin/colima</string>
+        <string>start</string>
+        <string>--cpu</string>
+        <string>2</string>
+        <string>--memory</string>
+        <string>4</string>
+        <string>--disk</string>
+        <string>20</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/Users/${OPERATOR_USERNAME}/.local/state/colima-autostart.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/${OPERATOR_USERNAME}/.local/state/colima-autostart.log</string>
+</dict>
+</plist>
+EOF
+
+  check_success "Colima launch agent creation"
+
+  # Load the launch agent for the operator user
+  log "Loading Colima launch agent for operator user..."
+  sudo -u "${OPERATOR_USERNAME}" launchctl load "${COLIMA_LAUNCHAGENT_PLIST}" 2>/dev/null || {
+    log "Colima launch agent will be loaded when operator user logs in"
+  }
 fi
 
 # Fast User Switching
@@ -1038,6 +1084,39 @@ section "Reload Profile"
 # shellcheck source=/dev/null
 source ~/.zprofile
 check_success "Reload profile"
+
+#
+# COLIMA SETUP
+#
+section "Setting Up Colima (Docker Alternative)"
+
+# Check if Colima is available
+if command -v colima &>/dev/null; then
+  log "Colima is installed, configuring for server use"
+
+  # Initialize Colima with server-appropriate settings
+  log "Starting Colima for the first time..."
+  if colima start --cpu 2 --memory 4 --disk 20; then
+    check_success "Colima initialization"
+
+    # Verify Docker is working
+    if docker info &>/dev/null; then
+      log "✅ Docker is working through Colima"
+    else
+      log "❌ Docker not responding after Colima start"
+    fi
+
+    # Stop Colima for now - it will be auto-started by operator
+    log "Stopping Colima (will be auto-started by operator)"
+    colima stop
+    check_success "Colima stop"
+  else
+    log "❌ Failed to initialize Colima"
+  fi
+else
+  log "Colima not found - skipping Docker setup"
+  log "Install Colima manually: brew install colima"
+fi
 
 #
 # CLEAN UP DOCK

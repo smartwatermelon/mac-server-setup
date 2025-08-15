@@ -7,8 +7,6 @@ blockblock
 catch
 coconutbattery
 coconutid
-docker
-docker-desktop
 dropbox
 filebot
 font-inconsolata

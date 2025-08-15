@@ -347,7 +347,10 @@ fi
 # Check if Docker is running
 section "Checking Docker"
 if ! docker info &>/dev/null; then
-  log "Docker is not running. Please start Docker Desktop first."
+  log "Docker is not running. Please start Colima first:"
+  log "  colima start"
+  log "Or if using Docker Desktop instead of Colima:"
+  log "  Open Docker Desktop application"
   exit 1
 fi
 log "Docker is running"

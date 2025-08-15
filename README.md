@@ -109,6 +109,17 @@ ONEPASSWORD_APPLEID_ITEM="Apple"
 MONITORING_EMAIL="your-email@example.com"
 ```
 
+## Docker Support
+
+This project uses **Colima** instead of Docker Desktop for containerized applications:
+
+- **Headless operation** - No GUI required, perfect for server use
+- **Lightweight** - Much smaller resource footprint than Docker Desktop
+- **Auto-start** - Automatically starts when operator logs in
+- **Drop-in replacement** - Compatible with all Docker commands and scripts
+
+Colima is automatically installed and configured during setup. Docker Desktop can still be used if preferred, but Colima is recommended for server deployments.
+
 ## Security Features
 
 - **SSH key-based authentication** with password fallback disabled
@@ -129,6 +140,8 @@ MONITORING_EMAIL="your-email@example.com"
 **Homebrew not found**: Source shell environment or restart Terminal session.
 
 **1Password items not found**: Verify vault name and item titles match configuration.
+
+**Docker/Colima not working**: Check if Colima is running with `colima status`. Start manually with `colima start` if needed.
 
 ### Logs
 
