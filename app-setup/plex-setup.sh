@@ -403,19 +403,28 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
 
     # Mount the SMB share
     log "Mounting SMB share..."
-    if confirm "Mount NAS share now? (You may be prompted for NAS credentials)"; then
-      # Use osascript to show GUI dialog for credentials if needed
-      log "Attempting to mount ${NAS_SMB_URL}"
-      open "${NAS_SMB_URL}" 2>/dev/null || {
-        log "GUI mount failed, trying command line mount..."
-        log "Command line mount requires administrator privileges - you may be prompted for your user password"
-        sudo mount -t smbfs "${NAS_SMB_URL}" "${PLEX_MEDIA_MOUNT}"
-      }
-      check_success "NAS mount"
+    if confirm "Mount NAS share now? (You'll be prompted for NAS password)"; then
+      log "Mounting ${NAS_SMB_URL} at ${PLEX_MEDIA_MOUNT}"
+      log "You'll be prompted for the NAS password for user '${NAS_USERNAME}'"
 
-      # Verify mount succeeded
+      # Use mount_smbfs directly with username prompt for password
+      if sudo mount -t smbfs "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}"; then
+        log "✅ NAS mounted successfully"
+      else
+        log "❌ NAS mount failed"
+        log "Please verify:"
+        log "  - NAS hostname is reachable: ${NAS_HOSTNAME}"
+        log "  - Share exists: ${NAS_SHARE_NAME}"
+        log "  - Username is correct: ${NAS_USERNAME}"
+        log "  - Password is correct"
+        if ! confirm "Continue without NAS mount? (You can mount manually later)"; then
+          exit 1
+        fi
+      fi
+
+      # Verify mount succeeded and test access
       if mount | grep -q "${PLEX_MEDIA_MOUNT}"; then
-        log "NAS successfully mounted at ${PLEX_MEDIA_MOUNT}"
+        log "✅ NAS successfully mounted at ${PLEX_MEDIA_MOUNT}"
         log "Testing media access..."
         if ls "${PLEX_MEDIA_MOUNT}" >/dev/null 2>&1; then
           log "✅ Media directory is accessible"
@@ -423,7 +432,7 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
           log "⚠️  Media directory mounted but not accessible"
         fi
       else
-        log "❌ Mount verification failed"
+        log "❌ Mount verification failed - mount may not have succeeded"
       fi
     else
       log "Skipping NAS mount - you'll need to mount manually later"
