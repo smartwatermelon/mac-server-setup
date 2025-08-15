@@ -261,14 +261,31 @@ migrate_plex_from_host() {
   if command -v rsync >/dev/null 2>&1; then
     # Use rsync with progress but limit output noise
     log "Starting rsync migration (excluding Cache directory)..."
+    log "This may take several minutes - progress will be shown periodically"
+
+    # Run rsync and capture output to a temp file for processing
+    local rsync_log="/tmp/plex_rsync_$$.log"
     if rsync -aH --progress --compress --whole-file --exclude='Cache' \
       "${plex_config_source}" "${PLEX_MIGRATION_DIR}/" 2>&1 \
-      | grep -E "(receiving|sent|total size)" | while read -r line; do
-      log "  ${line}"
-    done; then
+      | tee "${rsync_log}" \
+      | grep --line-buffered -E "(receiving|sent|total size|\s+[0-9]+%)" \
+      | while IFS= read -r line; do
+        # Only log percentage updates and summary lines to reduce noise
+        if [[ "${line}" =~ [0-9]+% ]] || [[ "${line}" =~ (receiving|sent|total) ]]; then
+          log "  ${line// */}" # Remove extra whitespace
+        fi
+      done; then
       log "✅ Plex configuration migrated successfully"
+      rm -f "${rsync_log}"
     else
       log "❌ Plex configuration migration failed"
+      if [[ -f "${rsync_log}" ]]; then
+        log "Last few lines of rsync output:"
+        tail -5 "${rsync_log}" | while IFS= read -r line; do
+          log "  ${line}"
+        done
+        rm -f "${rsync_log}"
+      fi
       return 1
     fi
   else
