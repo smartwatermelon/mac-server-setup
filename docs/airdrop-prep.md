@@ -135,33 +135,35 @@ macmini-setup/
 │   └── operator_authorized_keys  # Operator SSH access
 ├── scripts/
 │   ├── first-boot.sh            # Main setup script
+│   ├── dock-cleanup.command     # Operator dock script
 │   └── app-setup/               # Application installers
 ├── lists/
 │   ├── formulae.txt             # Homebrew packages
 │   └── casks.txt                # Homebrew applications
 ├── pam.d/
 │   └── sudo_local               # TouchID sudo config
-├── wifi/
-│   └── network.conf             # WiFi credentials (if applicable)
-├── URLs/
-│   └── apple_id_password.url    # One-time Apple ID link
-├── operator_password            # Operator account password
-├── timemachine.conf            # Backup configuration
-├── config.conf                 # Server settings
-├── dev_fingerprint.conf        # Safety check data
-├── dock-cleanup.command        # Operator dock script
-└── README.md                   # Setup instructions
+├── config/
+│   ├── config.conf              # Server settings
+│   ├── dev_fingerprint.conf     # Safety check data
+│   ├── operator_password        # Operator account password
+│   ├── timemachine.conf         # Backup configuration
+│   ├── plex_nas.conf            # Plex NAS credentials
+│   ├── apple_id_password.url    # One-time Apple ID link
+│   └── wifi_network.conf        # WiFi credentials (only if script-based config)
+└── README.md                    # Setup instructions
 ```
 
 ## Security Features
 
 **Development Machine Fingerprint**: Prevents accidental execution of setup scripts on your development Mac.
 
-**Credential Encryption**: Sensitive data is stored with restrictive permissions (600).
+**Credential Encryption**: Sensitive data is stored with restrictive permissions (600) in the `config/` directory.
 
 **One-time URLs**: Apple ID password uses 1Password's view-once sharing feature.
 
 **SSH Key Isolation**: Separate key files for admin and operator accounts.
+
+**Conditional Components**: WiFi configuration is only included when using script-based WiFi configuration (not Migration Assistant).
 
 ## Transfer to Mac Mini
 

@@ -30,14 +30,14 @@ ADMIN_USERNAME=$(whoami)                                     # Set this once and
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" # Directory where AirDropped files are located
 SSH_KEY_SOURCE="${SETUP_DIR}/ssh_keys"
 PAM_D_SOURCE="${SETUP_DIR}/pam.d"
-WIFI_CONFIG_FILE="${SETUP_DIR}/wifi/network.conf"
+WIFI_CONFIG_FILE="${SETUP_DIR}/config/wifi_network.conf"
 FORMULAE_FILE="${SETUP_DIR}/lists/formulae.txt"
 CASKS_FILE="${SETUP_DIR}/lists/casks.txt"
 RERUN_AFTER_FDA=false
 NEED_SYSTEMUI_RESTART=false
 NEED_CONTROLCENTER_RESTART=false
 # Safety: Development machine fingerprint (to prevent accidental execution)
-DEV_FINGERPRINT_FILE="${SETUP_DIR}/dev_fingerprint.conf"
+DEV_FINGERPRINT_FILE="${SETUP_DIR}/config/dev_fingerprint.conf"
 DEV_MACHINE_FINGERPRINT="" # Default blank - will be populated from file
 
 # Parse command line arguments
@@ -71,7 +71,7 @@ for arg in "$@"; do
 done
 
 # Load configuration
-CONFIG_FILE="${SETUP_DIR}/config.conf"
+CONFIG_FILE="${SETUP_DIR}/config/config.conf"
 
 if [[ -f "${CONFIG_FILE}" ]]; then
   # shellcheck source=/dev/null
@@ -541,7 +541,7 @@ fi
 # Only prompt for Apple ID setup if not already configured
 if [[ "${APPLE_ID_CONFIGURED}" != true ]]; then
   # Open Apple ID one-time password link if available
-  APPLE_ID_URL_FILE="${SETUP_DIR}/URLs/apple_id_password.url"
+  APPLE_ID_URL_FILE="${SETUP_DIR}/config/apple_id_password.url"
   if [[ -f "${APPLE_ID_URL_FILE}" ]]; then
     log "Opening Apple ID one-time password link"
     open "${APPLE_ID_URL_FILE}"
@@ -620,7 +620,7 @@ else
   log "Creating operator account"
 
   # Read the password from the transferred file
-  OPERATOR_PASSWORD_FILE="${SETUP_DIR}/operator_password"
+  OPERATOR_PASSWORD_FILE="${SETUP_DIR}/config/operator_password"
   if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
     OPERATOR_PASSWORD=$(<"${OPERATOR_PASSWORD_FILE}")
     log "Using password from 1Password (${ONEPASSWORD_OPERATOR_ITEM})"
@@ -722,7 +722,7 @@ sudo -iu "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.controlcen
 # Configure automatic login for operator account (whether new or existing)
 section "Automatic login for operator account"
 log "Configuring automatic login for operator account"
-OPERATOR_PASSWORD_FILE="${SETUP_DIR}/operator_password"
+OPERATOR_PASSWORD_FILE="${SETUP_DIR}/config/operator_password"
 if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
   OPERATOR_PASSWORD=$(<"${OPERATOR_PASSWORD_FILE}")
 
@@ -1137,12 +1137,12 @@ fi
 # Setup operator dock cleanup script
 section "Setting Up Operator Dock Cleanup Script"
 
-if [[ -f "${SETUP_DIR}/dock-cleanup.command" ]] && dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
+if [[ -f "${SETUP_DIR}/scripts/dock-cleanup.command" ]] && dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
   log "Installing operator dock cleanup script on desktop"
   DOCK_SCRIPT="/Users/${OPERATOR_USERNAME}/Desktop/dock-cleanup.command"
 
   # Copy script to operator's desktop
-  sudo cp "${SETUP_DIR}/dock-cleanup.command" "/Users/${OPERATOR_USERNAME}/Desktop/"
+  sudo cp "${SETUP_DIR}/scripts/dock-cleanup.command" "/Users/${OPERATOR_USERNAME}/Desktop/"
   sudo chown "${OPERATOR_USERNAME}:staff" "${DOCK_SCRIPT}"
   sudo chmod +x "${DOCK_SCRIPT}"
   sudo xattr -d com.apple.quarantine "${DOCK_SCRIPT}" || true
@@ -1226,7 +1226,7 @@ fi
 section "Configuring Time Machine"
 
 # Check if Time Machine configuration is available
-TIMEMACHINE_CONFIG_FILE="${SETUP_DIR}/timemachine.conf"
+TIMEMACHINE_CONFIG_FILE="${SETUP_DIR}/config/timemachine.conf"
 if [[ -f "${TIMEMACHINE_CONFIG_FILE}" ]]; then
   # Source the Time Machine configuration
   # shellcheck source=/dev/null

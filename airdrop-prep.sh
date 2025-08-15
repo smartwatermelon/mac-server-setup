@@ -76,15 +76,14 @@ mkdir -p "${OUTPUT_PATH}/scripts"
 mkdir -p "${OUTPUT_PATH}/scripts/app-setup"
 mkdir -p "${OUTPUT_PATH}/lists"
 mkdir -p "${OUTPUT_PATH}/pam.d"
-mkdir -p "${OUTPUT_PATH}/wifi"
-mkdir -p "${OUTPUT_PATH}/URLs"
+mkdir -p "${OUTPUT_PATH}/config"
 
 # Generate development machine fingerprint to prevent accidental execution
 DEV_FINGERPRINT=$(system_profiler SPHardwareDataType | grep "Hardware UUID" | awk '{print $3}')
 if [[ -n "${DEV_FINGERPRINT}" ]]; then
   echo "Development machine fingerprint: ${DEV_FINGERPRINT}"
-  echo "DEV_MACHINE_FINGERPRINT=\"${DEV_FINGERPRINT}\"" >"${OUTPUT_PATH}/dev_fingerprint.conf"
-  chmod 600 "${OUTPUT_PATH}/dev_fingerprint.conf"
+  echo "DEV_MACHINE_FINGERPRINT=\"${DEV_FINGERPRINT}\"" >"${OUTPUT_PATH}/config/dev_fingerprint.conf"
+  chmod 600 "${OUTPUT_PATH}/config/dev_fingerprint.conf"
   echo "Development fingerprint saved to prevent accidental execution on this machine"
 else
   echo "❌ Could not generate development machine fingerprint"
@@ -154,13 +153,13 @@ if [[ ${WIFI_STRATEGY} =~ ^[Nn]$ ]]; then
     if [[ -n "${WIFI_PASSWORD}" ]]; then
       echo "WiFi password retrieved successfully."
 
-      # Save WiFi information securely
-      cat >"${OUTPUT_PATH}/wifi/network.conf" <<EOF
+      # Save WiFi information securely in config directory
+      cat >"${OUTPUT_PATH}/config/wifi_network.conf" <<EOF
 WIFI_SSID="${CURRENT_SSID}"
 WIFI_PASSWORD="${WIFI_PASSWORD}"
 EOF
-      chmod 600 "${OUTPUT_PATH}/wifi/network.conf"
-      echo "WiFi network configuration saved to wifi/network.conf"
+      chmod 600 "${OUTPUT_PATH}/config/wifi_network.conf"
+      echo "WiFi network configuration saved to config/wifi_network.conf"
     else
       echo "Error: Could not retrieve WiFi password."
       echo "WiFi network configuration will not be automated."
@@ -200,8 +199,8 @@ fi
 
 # Retrieve the operator password and save it for transfer
 echo "Retrieving operator password from 1Password..."
-op read "op://${ONEPASSWORD_VAULT}/${ONEPASSWORD_OPERATOR_ITEM}/password" >"${OUTPUT_PATH}/operator_password"
-chmod 600 "${OUTPUT_PATH}/operator_password"
+op read "op://${ONEPASSWORD_VAULT}/${ONEPASSWORD_OPERATOR_ITEM}/password" >"${OUTPUT_PATH}/config/operator_password"
+chmod 600 "${OUTPUT_PATH}/config/operator_password"
 echo "✅ Operator password saved for transfer"
 
 # Set up Time Machine credentials using 1Password
@@ -223,12 +222,12 @@ else
   TM_URL=$(echo "${TM_JSON}" | jq -r '.urls[0].href')
 
   # Create Time Machine configuration file
-  cat >"${OUTPUT_PATH}/timemachine.conf" <<EOF
+  cat >"${OUTPUT_PATH}/config/timemachine.conf" <<EOF
 TM_USERNAME="${TM_USERNAME}"
 TM_PASSWORD="${TM_PASSWORD}"
 TM_URL="${TM_URL}"
 EOF
-  chmod 600 "${OUTPUT_PATH}/timemachine.conf"
+  chmod 600 "${OUTPUT_PATH}/config/timemachine.conf"
   echo "✅ Time Machine configuration saved for transfer"
 fi
 
@@ -274,12 +273,12 @@ APPLE_ID_ITEM="$(op item list --categories Login --vault "${ONEPASSWORD_VAULT}" 
 ONE_TIME_URL="$(op item share "${APPLE_ID_ITEM}" --view-once)"
 if [[ -n "${ONE_TIME_URL}" ]]; then
   # Create the .url file with the correct format
-  cat >"${OUTPUT_PATH}/URLs/apple_id_password.url" <<EOF
+  cat >"${OUTPUT_PATH}/config/apple_id_password.url" <<EOF
 [InternetShortcut]
 URL=${ONE_TIME_URL}
 EOF
-  chmod 600 "${OUTPUT_PATH}/URLs/apple_id_password.url"
-  echo "✅ Apple ID one-time password link saved to URLs/apple_id_password.url"
+  chmod 600 "${OUTPUT_PATH}/config/apple_id_password.url"
+  echo "✅ Apple ID one-time password link saved to config/apple_id_password.url"
 else
   echo "⚠️ No URL provided, skipping Apple ID password link creation"
 fi
@@ -287,8 +286,8 @@ fi
 # Copy dock cleanup script for operator
 if [[ -f "${SCRIPT_SOURCE_DIR}/dock-cleanup.command" ]]; then
   echo "Copying operator dock cleanup script"
-  cp "${SCRIPT_SOURCE_DIR}/dock-cleanup.command" "${OUTPUT_PATH}/"
-  chmod +x "${OUTPUT_PATH}/dock-cleanup.command"
+  cp "${SCRIPT_SOURCE_DIR}/dock-cleanup.command" "${OUTPUT_PATH}/scripts/"
+  chmod +x "${OUTPUT_PATH}/scripts/dock-cleanup.command"
 fi
 
 # Copy from local script source directory
@@ -303,7 +302,7 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
 
   # Copy configuration file if it exists
   if [[ -f "${CONFIG_FILE}" ]]; then
-    cp "${CONFIG_FILE}" "${OUTPUT_PATH}/"
+    cp "${CONFIG_FILE}" "${OUTPUT_PATH}/config/"
     echo "Configuration file copied to setup package"
   fi
 
@@ -325,8 +324,7 @@ fi
 
 echo "Setting file permissions..."
 chmod -R 755 "${OUTPUT_PATH}/scripts"
-chmod 600 "${OUTPUT_PATH}/wifi/network.conf" 2>/dev/null || true
-chmod 600 "${OUTPUT_PATH}/operator_password" 2>/dev/null || true
+chmod 600 "${OUTPUT_PATH}/config/"* 2>/dev/null || true
 
 echo "====== Setup Files Preparation Complete ======"
 echo "The setup files at ${OUTPUT_PATH} are now ready for AirDrop."
