@@ -490,44 +490,32 @@ fi
 # Configure Screen Sharing and Remote Management
 section "Configuring Screen Sharing and Remote Management"
 
-# Enable Screen Sharing first (foundation for Remote Management)
-log "Enabling Screen Sharing"
+# Enable Screen Sharing service
+log "Enabling Screen Sharing service"
 sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
 check_success "Screen Sharing service enabled"
 
-# Now enable Remote Management on top of Screen Sharing
-log "Enabling Remote Management for Apple Remote Desktop access"
-
-# Enable Remote Management service
+# Activate and configure Remote Management service
+log "Activating Remote Management for Apple Remote Desktop access"
 sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
   -activate \
-  -configure -allowAccessFor -specifiedUsers
+  -configure -allowAccessFor -specifiedUsers \
+  -restart -agent
 
 check_success "Remote Management service activation"
 
 # Configure full privileges for admin user
+log "Configuring Remote Management privileges for admin user"
 sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
   -configure -users "${ADMIN_USERNAME}" \
   -access -on \
-  -privs -DeleteFiles -ControlObserve -TextMessages -OpenQuitApps \
-  -GenerateReports -RestartShutDown -SendFiles -ChangeSettings
+  -privs -all
 
 check_success "Admin Remote Management privileges"
 
-# Configure full privileges for operator user
-sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-  -configure -users "${OPERATOR_USERNAME}" \
-  -access -on \
-  -privs -DeleteFiles -ControlObserve -TextMessages -OpenQuitApps \
-  -GenerateReports -RestartShutDown -SendFiles -ChangeSettings
-
-check_success "Operator Remote Management privileges"
-
-# Restart the agent to apply changes
-sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-  -restart -agent
-
-show_log "✅ Screen Sharing and Remote Management enabled for both admin and operator accounts"
+# Note: Operator user will be configured after account creation
+show_log "✅ Screen Sharing and Remote Management enabled for admin user"
+log "Note: Operator user privileges will be configured after account creation"
 
 # Configure Apple ID
 section "Apple ID Configuration"
@@ -707,6 +695,16 @@ else
   check_success "Colima auto-start configuration"
 
   log "✅ Colima will now start automatically when ${OPERATOR_USERNAME} logs in"
+
+  # Configure Remote Management for operator user (now that account exists)
+  log "Configuring Remote Management privileges for operator user"
+  sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+    -configure -users "${OPERATOR_USERNAME}" \
+    -access -on \
+    -privs -all
+
+  check_success "Operator Remote Management privileges"
+  show_log "✅ Remote Management configured for operator user"
 fi
 
 # Fast User Switching
