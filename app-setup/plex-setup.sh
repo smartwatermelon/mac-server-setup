@@ -238,7 +238,6 @@ migrate_plex_from_host() {
   log "Starting Plex migration from ${source_host}"
 
   # Test SSH connectivity first
-  # shellcheck disable=2310
   if ! test_ssh_connection "${source_host}"; then
     log "Cannot proceed with migration - SSH connection failed"
     return 1
@@ -265,7 +264,6 @@ migrate_plex_from_host() {
     if rsync -aH --progress --compress --whole-file --exclude='Cache' \
       "${plex_config_source}" "${PLEX_MIGRATION_DIR}/" 2>&1 \
       | grep -E "(receiving|sent|total size)" | while read -r line; do
-      # shellcheck disable=2310
       log "  ${line}"
     done; then
       log "✅ Plex configuration migrated successfully"
