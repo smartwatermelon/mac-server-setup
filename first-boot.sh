@@ -1154,6 +1154,15 @@ else
   log "No application setup scripts found in ${SETUP_DIR}/scripts/app-setup"
 fi
 
+# Copy config.conf for application setup scripts
+if [[ -f "${CONFIG_FILE}" ]]; then
+  log "Copying config.conf to app-setup directory"
+  cp "${CONFIG_FILE}" "${APP_SETUP_DIR}/config.conf"
+  check_success "Config file copy"
+else
+  log "No config.conf found - application setup scripts will use defaults"
+fi
+
 # Configure Time Machine backup
 section "Configuring Time Machine"
 
