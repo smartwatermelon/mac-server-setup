@@ -1275,20 +1275,11 @@ show_log "2. Configure monitoring: ~/${HOSTNAME_LOWER}-scripts/monitoring-setup.
 show_log "3. Test SSH access from your dev machine:"
 show_log "   ssh ${ADMIN_USERNAME}@${HOSTNAME_LOWER}.local"
 show_log "   ssh operator@${HOSTNAME_LOWER}.local"
-
-# Optional reboot
-if [[ "${FORCE}" = false ]]; then
-  echo
-  read -p "Reboot now to apply all changes? (y/N) " -n 1 -r
-  echo
-  if [[ ${REPLY} =~ ^[Yy]$ ]]; then
-    show_log "Initiating system reboot..."
-    osascript -e 'tell app "System Events" to restart'
-  else
-    show_log "Reboot skipped. You may want to reboot manually later to ensure all changes take effect."
-  fi
-else
-  log "Force mode enabled - skipping reboot prompt"
-fi
+show_log ""
+show_log "4. After completing app setup, reboot to enable operator auto-login:"
+show_log "   - Rebooting will automatically log in as '${OPERATOR_USERNAME}'"
+show_log "   - Run dock-cleanup.command from the desktop to clean up the dock"
+show_log "   - Configure any additional operator-specific settings"
+show_log "   - Test that all applications are accessible as the operator"
 
 exit 0
