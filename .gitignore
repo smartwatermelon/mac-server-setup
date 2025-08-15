@@ -85,3 +85,6 @@ Brewfile.lock.json
 no.tgz
 no/
 to-rsync.rtf
+
+# Development session notes
+plan.md
