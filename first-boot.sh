@@ -31,8 +31,8 @@ SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" # Directory where A
 SSH_KEY_SOURCE="${SETUP_DIR}/ssh_keys"
 PAM_D_SOURCE="${SETUP_DIR}/pam.d"
 WIFI_CONFIG_FILE="${SETUP_DIR}/wifi/network.conf"
-FORMULAE_FILE="/Users/${ADMIN_USERNAME}/formulae.txt"
-CASKS_FILE="/Users/${ADMIN_USERNAME}/casks.txt"
+FORMULAE_FILE="${SETUP_DIR}/lists/formulae.txt"
+CASKS_FILE="${SETUP_DIR}/lists/casks.txt"
 RERUN_AFTER_FDA=false
 NEED_SYSTEMUI_RESTART=false
 NEED_CONTROLCENTER_RESTART=false
@@ -818,19 +818,6 @@ if [[ ! -d "${SCRIPTS_DIR}" ]]; then
   log "Creating scripts directory"
   mkdir -p "${SCRIPTS_DIR}"
   check_success "Scripts directory creation"
-fi
-
-# Copy package lists if available
-if [[ -f "${SETUP_DIR}/lists/formulae.txt" ]]; then
-  log "Copying formulae list from setup directory"
-  cp "${SETUP_DIR}/lists/formulae.txt" "/Users/${ADMIN_USERNAME}/"
-  check_success "Formulae list copy"
-fi
-
-if [[ -f "${SETUP_DIR}/lists/casks.txt" ]]; then
-  log "Copying casks list from setup directory"
-  cp "${SETUP_DIR}/lists/casks.txt" "/Users/${ADMIN_USERNAME}/"
-  check_success "Casks list copy"
 fi
 
 # Configure security settings
