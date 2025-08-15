@@ -202,8 +202,33 @@ mkdir -p "${LOG_DIR}"
 touch "${LOG_FILE}"
 chmod 644 "${LOG_FILE}"
 
-# Tail log in separate window
-osascript -e 'tell application "Terminal" to do script "printf \"\\e]0;Setup Log\\a\"; tail -F '"${LOG_FILE}"'"' || echo "oops, no tail"
+# Function to check if a Terminal window with specific title exists
+check_terminal_window_exists() {
+  local window_title="$1"
+  osascript -e "
+    tell application \"Terminal\"
+      set window_exists to false
+      try
+        repeat with w in windows
+          if (name of w) contains \"${window_title}\" then
+            set window_exists to true
+            exit repeat
+          end if
+        end repeat
+      end try
+      return window_exists
+    end tell
+  " 2>/dev/null
+}
+
+# Tail log in separate window (only if one doesn't already exist)
+window_exists=$(check_terminal_window_exists "Setup Log")
+if [[ "${window_exists}" == "true" ]]; then
+  log "Found existing Setup Log window - reusing it"
+else
+  log "Opening new Setup Log window"
+  osascript -e 'tell application "Terminal" to do script "printf \"\\e]0;Setup Log\\a\"; tail -F '"${LOG_FILE}"'"' || echo "oops, no tail"
+fi
 
 # Print header
 section "Starting Mac Mini M2 '${SERVER_NAME}' Server Setup"
