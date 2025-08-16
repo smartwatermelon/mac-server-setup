@@ -259,7 +259,7 @@ setup_autofs_mount() {
     log "autofs already configured in ${auto_master}"
   else
     log "Adding autofs configuration to ${auto_master}..."
-    echo "${autofs_line}" | sudo tee -a "${auto_master}" >/dev/null
+    echo "${autofs_line}" | sudo -p "Enter your '${USER}' password to configure autofs: " tee -a "${auto_master}" >/dev/null
     log "✅ Added autofs configuration"
   fi
 
@@ -270,22 +270,22 @@ setup_autofs_mount() {
   # Create or update auto_smb file
   if [[ -f "${auto_smb}" ]]; then
     if ! grep -q "${PLEX_MEDIA_MOUNT}" "${auto_smb}" 2>/dev/null; then
-      echo "${autofs_mount_line}" | sudo tee -a "${auto_smb}" >/dev/null
+      echo "${autofs_mount_line}" | sudo -p "Enter your '${USER}' password to update autofs SMB config: " tee -a "${auto_smb}" >/dev/null
       log "✅ Added mount configuration to existing ${auto_smb}"
     else
       log "Mount already configured in ${auto_smb}"
     fi
   else
-    echo "${autofs_mount_line}" | sudo tee "${auto_smb}" >/dev/null
+    echo "${autofs_mount_line}" | sudo -p "Enter your '${USER}' password to create autofs SMB config: " tee "${auto_smb}" >/dev/null
     log "✅ Created ${auto_smb} with mount configuration"
   fi
 
   # Set proper permissions
-  sudo chmod 644 "${auto_smb}"
+  sudo -p "Enter your '${USER}' password to set autofs config permissions: " chmod 644 "${auto_smb}"
 
   # Restart autofs
   log "Restarting autofs service..."
-  if sudo automount -cv >/dev/null 2>&1; then
+  if sudo -p "Enter your '${USER}' password to restart autofs service: " automount -cv >/dev/null 2>&1; then
     log "✅ autofs restarted successfully"
     log "The NAS will automatically mount when accessed: ${PLEX_MEDIA_MOUNT}"
     log ""
