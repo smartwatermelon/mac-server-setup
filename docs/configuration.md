@@ -77,6 +77,9 @@ All credential management relies on 1Password items. The configuration specifies
 - **Purpose**: Provides automated SMB mounting for Plex media storage
 - **Fallback**: If not found, uses interactive password prompt with GUI dialog
 - **Example**: `ONEPASSWORD_PLEX_NAS_ITEM="Synology Plex"`
+- **Special Character Handling**: Passwords with @ symbols are automatically URL-encoded
+- **Username Processing**: Usernames are converted to lowercase for SMB compatibility
+- **autofs Integration**: Credentials used to configure macOS autofs for automatic mounting
 
 **ONEPASSWORD_APPLEID_ITEM**: Login item for Apple ID credentials
 

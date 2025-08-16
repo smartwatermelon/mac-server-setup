@@ -184,11 +184,14 @@ After script execution:
 ### Phase 2: NAS Mount Setup
 
 1. **Check Existing Mount**: Verifies if NAS already mounted at `/Volumes/${NAS_SHARE_NAME}`
-2. **Create Mount Point**: Creates directory if needed
+2. **Create Mount Point**: Creates directory with proper ownership if needed
 3. **Mount SMB Share**:
-   - Attempts GUI mount via `open smb://...`
-   - Falls back to command-line mount if GUI fails
-4. **Verify Access**: Tests read access to mounted directory
+   - Uses 1Password credentials if available (with URL encoding for special characters)
+   - Falls back to interactive mount prompt if 1Password fails
+   - Utilizes `mount_smbfs` with proper permission flags (`-f 0777 -d 0777`)
+   - Converts usernames to lowercase for SMB compatibility
+4. **Verify Access**: Tests read access to mounted directory with detailed debugging
+5. **Configure autofs**: Sets up macOS native autofs for automatic mounting on boot
 
 ### Phase 3: Docker Network Setup
 
@@ -200,7 +203,7 @@ After script execution:
 **Automated Migration** (new in v2.0):
 
 1. **Source Detection**: Checks for migration source from config file or command line
-2. **Interactive Discovery**: Scans network for existing Plex servers using `dns-sd`
+2. **Interactive Discovery**: Scans network for existing Plex servers using `dns-sd` with clean server list display
 3. **SSH Connectivity**: Tests SSH connection to source server
 4. **Size Estimation**: Provides migration size estimates (total size, files, directories)
 5. **Automated Transfer**: Uses `rsync` with progress indication to transfer config
@@ -291,6 +294,49 @@ After script execution:
 - Colima starts automatically via `brew services` when operator logs in
 - Docker daemon starts with Colima
 - Containers with restart policy start automatically
+
+### Automatic NAS Mounting with autofs
+
+**Method**: macOS native autofs subsystem
+
+**Purpose**: Automatically mount NAS share when accessed, survives reboots
+
+**Configuration Files**:
+
+- `/etc/auto_master`: Main autofs configuration
+- `/etc/auto_smb`: SMB share definitions
+
+**Setup Process**:
+
+1. **autofs Master Configuration**: Adds `/-  auto_smb  -nosuid,noowners` to `/etc/auto_master`
+2. **SMB Configuration**: Creates `/etc/auto_smb` with mount definition:
+   ```
+   /Volumes/DSMedia  -fstype=smbfs,soft,noowners,nosuid,rw ://username:password@hostname/share
+   ```
+3. **Service Restart**: Reloads autofs configuration with `automount -cv`
+4. **Credential Handling**: 
+   - Uses 1Password credentials when available
+   - URL-encodes passwords to handle special characters (e.g., @ symbols)
+   - Falls back to interactive prompts if credentials unavailable
+
+**Behavior**:
+
+- Mount triggered automatically when directory is accessed
+- Unmounts automatically after period of inactivity
+- Survives system reboots and network reconnections
+- No manual mounting required
+
+**Benefits over LaunchAgents**:
+
+- Uses built-in macOS functionality
+- More reliable than custom scripts
+- Better network handling and reconnection
+- Lower system overhead
+
+**Limitations**:
+
+- Configuration may be reset during major macOS system updates
+- Requires re-running setup after system upgrades if mounting fails
 
 ### Manual Container Management
 
@@ -401,6 +447,7 @@ The migration process implements recommendations from Plex's official documentat
 
 - "Mount verification failed" message
 - Cannot access media files
+- Exit code 68 (authentication failure)
 
 **Solutions**:
 
@@ -408,19 +455,43 @@ The migration process implements recommendations from Plex's official documentat
 # Check current mounts
 mount | grep ${NAS_SHARE_NAME}
 
-# Manual SMB mount (adjust values per your config.conf)
-sudo mount -t smbfs smb://${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME} /Volumes/${NAS_SHARE_NAME}
+# Manual SMB mount with proper syntax (adjust values per your config.conf)
+sudo mkdir -p /Volumes/${NAS_SHARE_NAME}
+sudo chown $(whoami):staff /Volumes/${NAS_SHARE_NAME}
+mount_smbfs -f 0777 -d 0777 //${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME} /Volumes/${NAS_SHARE_NAME}
 
 # Test NAS connectivity
 ping ${NAS_HOSTNAME}
 
 # Check SMB service on NAS
 telnet ${NAS_HOSTNAME} 445
+
+# Check autofs configuration
+sudo cat /etc/auto_master | grep auto_smb
+sudo cat /etc/auto_smb
+
+# Restart autofs if needed
+sudo automount -cv
 ```
+
+**Common Mount Issues**:
+
+- **Authentication failure (exit code 68)**: 
+  - Username case sensitivity (try lowercase username)
+  - Password contains special characters (@ symbols need URL encoding)
+  - Incorrect credentials in 1Password
+- **Permission denied after successful mount**:
+  - Mount point ownership incorrect
+  - Missing permission flags in mount command
+- **autofs configuration reset**:
+  - macOS system update may have reset `/etc/auto_master`
+  - Re-run `plex-setup.sh` to reconfigure autofs
 
 **Credential Issues**:
 
 - Verify NAS user exists and has access to media share (check config.conf values)
+- Check 1Password item for correct username/password format
+- Username should typically be lowercase for SMB compatibility
 - Try mounting with different credentials
 - Check NAS SMB/CIFS service is running
 

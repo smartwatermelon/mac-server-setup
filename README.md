@@ -10,6 +10,27 @@ This project provides a complete automation framework for setting up an Apple Si
 - **Central home server** with minimal maintenance requirements
 - **Stable, secure, and recoverable system**
 
+## Recent Improvements (v2.0)
+
+### Enhanced Plex Setup with Robust SMB Mounting
+
+- **Reliable SMB Mounting**: Fixed authentication issues and improved mount reliability
+  - Username case conversion for SMB compatibility
+  - URL encoding for passwords with special characters
+  - Proper mount point ownership and permissions
+- **macOS Native autofs Integration**: Automatic NAS mounting using built-in macOS functionality
+  - Survives reboots and network reconnections
+  - More reliable than custom LaunchAgent scripts
+  - Uses `/etc/auto_master` and `/etc/auto_smb` configuration
+- **Improved Error Handling**: Clear sudo prompts and better debugging information
+- **Clean Server Discovery**: Fixed Plex server discovery display for migration setup
+
+### 1Password Credential Integration
+
+- **Automated Credential Retrieval**: NAS credentials automatically retrieved from 1Password
+- **Secure Credential Handling**: No plaintext passwords in scripts or logs
+- **Smart Fallbacks**: Interactive prompts when 1Password credentials unavailable
+
 ## Key Principles
 
 - **Separation of Concerns**: Base OS setup separate from containerized applications
