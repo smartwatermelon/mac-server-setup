@@ -163,8 +163,6 @@ confirm() {
 
 # Function to discover Plex servers on the network
 discover_plex_servers() {
-  log "Discovering Plex servers on the network..."
-
   # Use timeout to limit dns-sd search time, capture output first
   local dns_output
   dns_output=$(timeout 3 dns-sd -B _plexmediasvr._tcp 2>/dev/null)
@@ -174,13 +172,10 @@ discover_plex_servers() {
   servers=$(echo "${dns_output}" | grep "Add" | awk '{print $NF}' | sort -u)
 
   if [[ -n "${servers}" ]]; then
-    log "Found Plex servers:"
-    echo "${servers}" | while read -r server; do
-      log "  - ${server}"
-    done
+    # Only echo the servers to stdout (for capture), don't mix with log messages
     echo "${servers}"
+    return 0
   else
-    log "No Plex servers found on the network"
     return 1
   fi
 }
@@ -734,13 +729,21 @@ if [[ "${SKIP_MIGRATION}" = false ]]; then
         discovered_servers=$(discover_plex_servers)
 
         if [[ -n "${discovered_servers}" ]]; then
+          # Log what was found
+          log "Found Plex servers:"
+          echo "${discovered_servers}" | while IFS= read -r server; do
+            log "  - ${server}"
+          done
+
           # Present discovered servers to user
           log "Select a Plex server to migrate from:"
           server_array=()
           index=1
           while IFS= read -r server; do
-            log "  ${index}. ${server}.local"
-            server_array+=("${server}.local")
+            # Clean up the server name (remove any extra whitespace)
+            clean_server=$(echo "${server}" | tr -d '[:space:]')
+            log "  ${index}. ${clean_server}"
+            server_array+=("${clean_server}")
             ((index++))
           done <<<"${discovered_servers}"
 
