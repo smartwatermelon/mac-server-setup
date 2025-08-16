@@ -495,11 +495,13 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
         # Mount using credentials from 1Password
         # Use PLEX_NAS_HOSTNAME from credentials if available, fall back to config NAS_HOSTNAME
         MOUNT_HOSTNAME="${PLEX_NAS_HOSTNAME:-${NAS_HOSTNAME}}"
-        log "Attempting mount with: //${PLEX_NAS_USERNAME:-}@${MOUNT_HOSTNAME}/${NAS_SHARE_NAME}"
-        log "Using 1Password credentials for user: ${PLEX_NAS_USERNAME:-}"
+        # Convert username to lowercase for SMB compatibility
+        MOUNT_USERNAME=$(echo "${PLEX_NAS_USERNAME:-}" | tr '[:upper:]' '[:lower:]')
+        log "Attempting mount with: //${MOUNT_USERNAME}@${MOUNT_HOSTNAME}/${NAS_SHARE_NAME}"
+        log "Using 1Password credentials for user: ${PLEX_NAS_USERNAME:-} (converted to: ${MOUNT_USERNAME})"
         log "Target hostname: ${MOUNT_HOSTNAME}"
         # Use mount_smbfs with proper permissions flags as non-root user
-        MOUNT_OUTPUT=$(mount_smbfs -f 0777 -d 0777 "//${PLEX_NAS_USERNAME:-}:${PLEX_NAS_PASSWORD:-}@${MOUNT_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}" 2>&1)
+        MOUNT_OUTPUT=$(mount_smbfs -f 0777 -d 0777 "//${MOUNT_USERNAME}:${PLEX_NAS_PASSWORD:-}@${MOUNT_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}" 2>&1)
         MOUNT_EXIT_CODE=$?
         if [[ ${MOUNT_EXIT_CODE} -eq 0 ]]; then
           log "✅ NAS mounted successfully using 1Password credentials"
