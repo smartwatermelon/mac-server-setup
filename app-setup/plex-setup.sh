@@ -231,6 +231,80 @@ get_migration_size_estimate() {
   fi
 }
 
+# Function to setup autofs for automatic SMB mounting
+setup_autofs_mount() {
+  log "Configuring autofs for automatic SMB mounting..."
+
+  # Check if we have credentials
+  local mount_url
+  if [[ -f "${SCRIPT_DIR}/plex_nas.conf" ]]; then
+    # shellcheck source=/dev/null
+    source "${SCRIPT_DIR}/plex_nas.conf"
+    local mount_hostname="${PLEX_NAS_HOSTNAME:-${NAS_HOSTNAME}}"
+    mount_url="//${PLEX_NAS_USERNAME:-}:${PLEX_NAS_PASSWORD:-}@${mount_hostname}/${NAS_SHARE_NAME}"
+  else
+    # For autofs, we'll need to prompt for password or use keychain
+    log "⚠️  No 1Password credentials available for autofs setup"
+    log "You'll need to manually configure autofs or use Keychain Access for credentials"
+    mount_url="//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
+  fi
+
+  # Configure autofs
+  local auto_master="/etc/auto_master"
+  local auto_smb="/etc/auto_smb"
+  local autofs_line="/-          auto_smb    -nosuid,noowners"
+
+  # Check if autofs is already configured
+  if grep -q "auto_smb" "${auto_master}" 2>/dev/null; then
+    log "autofs already configured in ${auto_master}"
+  else
+    log "Adding autofs configuration to ${auto_master}..."
+    echo "${autofs_line}" | sudo tee -a "${auto_master}" >/dev/null
+    log "✅ Added autofs configuration"
+  fi
+
+  # Create auto_smb configuration
+  log "Creating autofs SMB configuration..."
+  local autofs_mount_line="${PLEX_MEDIA_MOUNT}    -fstype=smbfs,soft,noowners,nosuid,rw :${mount_url}"
+
+  # Create or update auto_smb file
+  if [[ -f "${auto_smb}" ]]; then
+    if ! grep -q "${PLEX_MEDIA_MOUNT}" "${auto_smb}" 2>/dev/null; then
+      echo "${autofs_mount_line}" | sudo tee -a "${auto_smb}" >/dev/null
+      log "✅ Added mount configuration to existing ${auto_smb}"
+    else
+      log "Mount already configured in ${auto_smb}"
+    fi
+  else
+    echo "${autofs_mount_line}" | sudo tee "${auto_smb}" >/dev/null
+    log "✅ Created ${auto_smb} with mount configuration"
+  fi
+
+  # Set proper permissions
+  sudo chmod 644 "${auto_smb}"
+
+  # Restart autofs
+  log "Restarting autofs service..."
+  if sudo automount -cv >/dev/null 2>&1; then
+    log "✅ autofs restarted successfully"
+    log "The NAS will automatically mount when accessed: ${PLEX_MEDIA_MOUNT}"
+    log ""
+    log "📝 Note: autofs configuration may be reset during macOS system updates"
+    log "   After major updates, you may need to re-run this setup"
+  else
+    log "⚠️  autofs restart may have failed - check logs if mounting issues occur"
+  fi
+
+  # Test the automount
+  log "Testing autofs mounting..."
+  if ls "${PLEX_MEDIA_MOUNT}" >/dev/null 2>&1; then
+    log "✅ autofs mount test successful"
+  else
+    log "⚠️  autofs mount test failed - manual setup may be required"
+    log "   Try accessing ${PLEX_MEDIA_MOUNT} manually to trigger autofs"
+  fi
+}
+
 # Function to perform automated Plex migration
 migrate_plex_from_host() {
   local source_host="$1"
@@ -399,6 +473,11 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
       log "This requires administrator privileges - you may be prompted for your user password"
       sudo -p "Enter your '${USER}' password to create mount point: " mkdir -p "${PLEX_MEDIA_MOUNT}"
       check_success "Mount point creation"
+
+      # Take ownership of the mount point
+      log "Setting ownership of mount point to current user"
+      sudo -p "Enter your '${USER}' password to set mount point ownership: " chown "${WHOAMI}:staff" "${PLEX_MEDIA_MOUNT}"
+      check_success "Mount point ownership setup"
     fi
 
     # Mount the SMB share
@@ -419,8 +498,8 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
         log "Attempting mount with: //${PLEX_NAS_USERNAME:-}@${MOUNT_HOSTNAME}/${NAS_SHARE_NAME}"
         log "Using 1Password credentials for user: ${PLEX_NAS_USERNAME:-}"
         log "Target hostname: ${MOUNT_HOSTNAME}"
-        # Capture mount output for better error reporting
-        MOUNT_OUTPUT=$(sudo -p "Enter your '${USER}' password to mount NAS (using 1Password credentials): " mount -t smbfs "//${PLEX_NAS_USERNAME:-}:${PLEX_NAS_PASSWORD:-}@${MOUNT_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}" 2>&1)
+        # Use mount_smbfs with proper permissions flags as non-root user
+        MOUNT_OUTPUT=$(mount_smbfs -f 0777 -d 0777 "//${PLEX_NAS_USERNAME:-}:${PLEX_NAS_PASSWORD:-}@${MOUNT_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}" 2>&1)
         MOUNT_EXIT_CODE=$?
         if [[ ${MOUNT_EXIT_CODE} -eq 0 ]]; then
           log "✅ NAS mounted successfully using 1Password credentials"
@@ -440,8 +519,8 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
           log "Falling back to interactive prompt..."
           log "⚠️  IMPORTANT: If running remotely (SSH/Screen Sharing), go to the desktop"
           log "   The password dialog will appear on the desktop, not in the terminal"
-          # Capture fallback mount output
-          FALLBACK_OUTPUT=$(sudo -p "Enter your '${USER}' password to mount NAS (fallback after 1Password failed): " mount -t smbfs "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}" 2>&1)
+          # Use mount_smbfs with proper permissions flags as non-root user
+          FALLBACK_OUTPUT=$(mount_smbfs -f 0777 -d 0777 "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}" 2>&1)
           FALLBACK_EXIT_CODE=$?
           if [[ ${FALLBACK_EXIT_CODE} -eq 0 ]]; then
             log "✅ NAS mounted successfully with interactive prompt"
@@ -461,8 +540,8 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
         log "   The password dialog will appear on the desktop, not in the terminal"
         log "You'll be prompted for the NAS password for user '${NAS_USERNAME}'"
 
-        # Use mount_smbfs directly with username prompt for password
-        NO_CREDS_OUTPUT=$(sudo -p "Enter your '${USER}' password to mount NAS (no 1Password credentials found): " mount -t smbfs "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}" 2>&1)
+        # Use mount_smbfs with proper permissions flags as non-root user
+        NO_CREDS_OUTPUT=$(mount_smbfs -f 0777 -d 0777 "//${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}" "${PLEX_MEDIA_MOUNT}" 2>&1)
         NO_CREDS_EXIT_CODE=$?
         if [[ ${NO_CREDS_EXIT_CODE} -eq 0 ]]; then
           log "✅ NAS mounted successfully"
@@ -499,6 +578,10 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
           # Show what's in the directory for verification
           ITEM_COUNT=$(find "${PLEX_MEDIA_MOUNT}" -maxdepth 1 -not -path "${PLEX_MEDIA_MOUNT}" 2>/dev/null | wc -l)
           log "Found ${ITEM_COUNT// /} items in media directory"
+
+          # Setup automatic mount on boot using autofs
+          log "Setting up automatic mount restoration using autofs..."
+          setup_autofs_mount
         else
           log "⚠️  Media directory mounted but not accessible"
           log "Debugging mount access issue..."
