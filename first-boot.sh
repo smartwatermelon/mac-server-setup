@@ -272,7 +272,12 @@ if [[ -d "${PAM_D_SOURCE}" ]]; then
       log "TouchID sudo is already properly configured"
     else
       # File doesn't exist OR exists but has different content - same action either way
-      show_log "TouchID sudo needs to be configured. We will ask for your user password."
+      # Check if TouchID is available before warning about password
+      if bioutil -rs 2>/dev/null | grep -q "Touch ID"; then
+        show_log "TouchID sudo needs to be configured. We will ask for your user password."
+      else
+        show_log "TouchID sudo needs to be configured (TouchID not available - will use password)."
+      fi
       sudo cp "${PAM_D_SOURCE}/sudo_local" "/etc/pam.d"
       check_success "TouchID sudo configuration"
 
