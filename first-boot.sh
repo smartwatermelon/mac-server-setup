@@ -694,14 +694,7 @@ else
     check_success "Operator SSH group membership"
   fi
 
-  # Set up Colima auto-start for operator user using brew services
-  log "Setting up Colima auto-start for operator user using brew services"
-
-  # Enable Colima auto-start using the recommended brew services approach
-  sudo -p "[Service setup] Enter password to configure Colima auto-start: " -u "${OPERATOR_USERNAME}" brew services start colima
-  check_success "Colima auto-start configuration"
-
-  log "✅ Colima will now start automatically when ${OPERATOR_USERNAME} logs in"
+  # Note: Colima auto-start will be configured after Homebrew installation
 
   # Configure Remote Management for operator user (now that account exists)
   log "Configuring Remote Management privileges for operator user"
@@ -1170,6 +1163,15 @@ if command -v colima &>/dev/null; then
     sudo find "${COLIMA_DIR}" -type f -exec chmod 644 {} \;
     check_success "Colima directory permissions setup"
   fi
+
+  # Set up Colima auto-start for operator user using brew services
+  log "Setting up Colima auto-start for operator user using brew services"
+
+  # Enable Colima auto-start using the recommended brew services approach
+  sudo -p "[Service setup] Enter password to configure Colima auto-start: " -u "${OPERATOR_USERNAME}" brew services start colima
+  check_success "Colima auto-start configuration"
+
+  log "✅ Colima will now start automatically when ${OPERATOR_USERNAME} logs in"
 else
   log "Colima not found - skipping Docker setup"
   log "Install Colima manually: brew install colima"
