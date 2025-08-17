@@ -4,11 +4,13 @@ This document describes the operation, configuration, and troubleshooting of the
 
 ## Overview
 
-The `plex-setup.sh` script automates the deployment of Plex Media Server in a Docker container with:
+The `plex-setup.sh` script automates the deployment of native Plex Media Server on macOS with:
 
-- SMB mount to NAS for media storage
-- Configuration migration from existing Plex server
-- Auto-start configuration for the operator user
+- Native Plex Media Server installation via official macOS installer
+- SMB mount to NAS for media storage via autofs
+- Shared configuration directory accessible to both admin and operator users
+- LaunchAgent configuration for automatic startup with operator login
+- Configuration migration from existing Plex servers
 - Integration with the server's configuration system
 
 ## Script Location and Usage
@@ -56,54 +58,50 @@ The script derives its configuration from multiple sources in the following prio
 
 ### 1. Server Configuration File
 
-**Source**: `config.conf` (in same directory as script)
+**Source**: `config.conf` (in parent directory of script)
 
 **Key Variables Used**:
 
 - `SERVER_NAME`: Primary server identifier
 - `OPERATOR_USERNAME`: Non-admin user account name
 - `NAS_HOSTNAME`: NAS hostname for SMB connection
-- `NAS_USERNAME`: Username for NAS access
+- `NAS_USERNAME`: Username for NAS access (deprecated, uses 1Password)
 - `NAS_SHARE_NAME`: Name of the media share on NAS
-- `PLEX_MIGRATE_FROM`: Source hostname for Plex migration (optional)
 - `HOSTNAME_OVERRIDE`: Custom hostname (optional)
-- `DOCKER_NETWORK_OVERRIDE`: Custom Docker network name (optional)
+- `ONEPASSWORD_NAS_ITEM`: 1Password item name for NAS credentials (default: plex-nas)
 
 **Derived Variables**:
 
 ```bash
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
-DOCKER_NETWORK="${DOCKER_NETWORK_OVERRIDE:-${HOSTNAME_LOWER}-network}"
 ```
 
 ### 2. Derived Script Configuration
 
 **NAS Configuration**:
 
-- `NAS_SMB_URL="smb://${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"`
-- `PLEX_MEDIA_MOUNT="/Volumes/${NAS_SHARE_NAME}"`
+- `PLEX_MEDIA_MOUNT="/Volumes/DSMedia"`
+- SMB credentials retrieved from 1Password
 
-**Docker Configuration**:
+**Native Application Configuration**:
 
-- `PLEX_CONTAINER_NAME="${HOSTNAME_LOWER}-plex"`
-- Docker image: `lscr.io/linuxserver/plex:latest`
-- Timezone: Auto-detected from system (`readlink /etc/localtime`)
-- Server name: `${PLEX_SERVER_NAME}` (--server-name option or hostname)
+- `PLEX_NEW_CONFIG="/Users/Shared/PlexMediaServer"` (shared directory)
+- Application: Native Plex Media Server for macOS
+- Server name: `${HOSTNAME} Plex` (customizable via --server-name option)
 
 **Directory Paths**:
 
-- `PLEX_CONFIG_DIR="${HOME}/Docker/plex/config"`
-- `PLEX_MIGRATION_DIR="${HOME}/plex-migration"`
+- `PLEX_OLD_CONFIG="${HOME}/plex-migration/Plex Media Server"` (migration source)
 - `LOG_FILE="${LOG_DIR}/${HOSTNAME_LOWER}-apps.log"`
 
 ### 3. Runtime Configuration
 
-**User Input** (when not using `--force`):
+**1Password Integration**:
 
-- Plex claim token (for fresh installations)
-- Confirmation prompts for each major operation (most default to Yes - just press Enter)
-- NAS mounting credentials (via macOS GUI when 1Password unavailable)
+- NAS credentials automatically retrieved from 1Password item
+- Fallback prompts if 1Password unavailable
+- Secure credential handling with temporary file cleanup
 
 ## Expected File Structure
 
@@ -120,7 +118,7 @@ If migrating from an existing Plex server, place files at:
 │   ├── Logs/
 │   ├── Cache/                  # Will be excluded during migration
 │   └── ... (all other subdirectories)
-└── com.plexapp.plexmediaserver.plist   # macOS preferences file
+└── com.plexapp.plexmediaserver.plist   # macOS preferences file (optional)
 ```
 
 **Migration follows official Plex guidelines**: This process is based on Plex's official documentation:
@@ -140,7 +138,7 @@ If migrating from an existing Plex server, place files at:
    # On the old server, copy main directory excluding Cache (recommended by Plex)
    rsync -av --exclude='Cache' "~/Library/Application Support/Plex Media Server/" ~/migration-backup/
    
-   # Copy the macOS preferences file
+   # Copy the macOS preferences file (optional)
    cp "~/Library/Preferences/com.plexapp.plexmediaserver.plist" ~/migration-backup/
    
    # Transfer to new server at ~/plex-migration/
@@ -154,149 +152,148 @@ If migrating from an existing Plex server, place files at:
    cp "~/Library/Preferences/com.plexapp.plexmediaserver.plist" ~/migration-backup/
    ```
 
-**Important**: The Cache directory can be large and is not needed for migration. The setup script will automatically exclude it during the migration process using rsync when available.
+**Important**: The Cache directory can be large and is not needed for migration. The setup script will automatically exclude it during the migration process.
 
 ### Generated Directory Structure
 
 After script execution:
 
 ```plaintext
-~/Docker/plex/
-└── config/                     # Plex configuration (mapped to container)
+/Users/Shared/PlexMediaServer/
+└── Plex Media Server/          # Plex configuration (shared access)
     ├── Library/                # Plex application data
     ├── Logs/                   # Plex logs
     └── ... (Plex directory structure)
 
-# No LaunchAgents needed - auto-start handled by Docker restart policy
+/Users/${OPERATOR_USERNAME}/Library/LaunchAgents/
+└── com.plexapp.plexmediaserver.plist  # Auto-start configuration
 
 ~/.local/state/
-└── ${HOSTNAME_LOWER}-apps.log  # Script execution log
+└── ${HOSTNAME_LOWER}-apps.log         # Script execution log
 ```
 
 ## Operation Flow
 
 ### Phase 1: Initialization
 
-1. **Load Configuration**: Sources `config.conf` from script directory and derives variables
+1. **Load Configuration**: Sources `config.conf` from parent directory and derives variables
 2. **Parse Arguments**: Processes command-line flags
-3. **Validate Prerequisites**: Checks Docker availability
+3. **Validate Prerequisites**: Checks 1Password CLI availability
 4. **User Confirmation**: Prompts for operation confirmation with sensible defaults (unless `--force`):
    - Setup operations default to **Yes** - press Enter to continue
    - Destructive operations default to **No** - requires explicit confirmation
 
-### Phase 2: NAS Mount Setup
+### Phase 2: SMB Mount Setup
 
-1. **Check Existing Mount**: Verifies if NAS already mounted at `/Volumes/${NAS_SHARE_NAME}`
-2. **Create Mount Point**: Creates directory with proper ownership if needed
-3. **Mount SMB Share**:
-   - Uses 1Password credentials if available (with URL encoding for special characters)
-   - Falls back to interactive mount prompt if 1Password fails
-   - Utilizes `mount_smbfs` with proper permission flags (`-f 0777 -d 0777`)
-   - Converts usernames to lowercase for SMB compatibility
-4. **Verify Access**: Tests read access to mounted directory with detailed debugging
-5. **Configure autofs**: Sets up macOS native autofs for automatic mounting on boot
+1. **1Password Credential Retrieval**: Securely retrieves NAS credentials from specified vault item
+2. **autofs Configuration**: Configures macOS native autofs for automatic mounting
+3. **Mount Point Creation**: Creates `/Volumes/DSMedia` with proper permissions
+4. **Automatic Mounting**: Sets up autofs rules for on-demand mounting
+5. **Service Restart**: Reloads autofs configuration for immediate effect
 
-### Phase 3: Docker Network Setup
+### Phase 3: Native Application Installation
 
-1. **Network Creation**: Creates or verifies Docker network exists
-2. **Network Naming**: Uses `${HOSTNAME_LOWER}-network` pattern
+1. **Application Check**: Verifies if Plex Media Server is already installed
+2. **Download**: Downloads latest Plex Media Server for macOS from official source
+3. **Installation**: Mounts DMG and copies application to `/Applications/`
+4. **Cleanup**: Removes temporary installation files
 
-### Phase 4: Configuration Migration
+### Phase 4: Shared Configuration Setup
 
-**Automated Migration** (new in v2.0):
+1. **Shared Directory Creation**: Creates `/Users/Shared/PlexMediaServer` with proper ownership
+2. **Permission Configuration**: Sets `admin:staff` ownership with `775` permissions
+3. **Staff Group Membership**: Ensures operator user is member of staff group for access
+4. **Access Validation**: Verifies both admin and operator can access configuration directory
 
-1. **Source Detection**: Checks for migration source from config file or command line
-2. **Interactive Discovery**: Scans network for existing Plex servers using `dns-sd` with clean server list display
-3. **SSH Connectivity**: Tests SSH connection to source server
-4. **Size Estimation**: Provides migration size estimates (total size, files, directories)
-5. **Automated Transfer**: Uses `rsync` with progress indication to transfer config
-6. **Plist Handling**: Copies macOS preferences file for reference
+### Phase 5: Configuration Migration
 
-**Local Migration** (existing):
+**Local Migration**:
 
 1. **Migration Check**: Looks for existing config at `~/plex-migration/`
-2. **Backup Creation**: Backs up any existing Docker config with timestamp
+2. **Backup Creation**: Backs up any existing shared config with timestamp
 3. **Smart File Copy** (following [Plex best practices](https://support.plex.tv/articles/201370363-move-an-install-to-another-system/)):
-   - Uses `rsync --exclude='Cache'` when available (recommended by Plex)
-   - Falls back to `cp` with Cache directory warning if rsync unavailable
    - Preserves all settings, libraries, and metadata
-4. **macOS Preferences Handling**:
-   - Detects and acknowledges `com.plexapp.plexmediaserver.plist`
-   - Notes that plist preferences don't apply to Docker containers
-   - Container uses environment variables instead
-5. **Ownership Setup**: Sets proper file ownership for container access
-6. **Post-Migration Guidance**: Provides specific steps for completing the migration
-
-### Phase 5: Container Deployment
-
-1. **Container Check**: Verifies if container already exists
-2. **Container Creation**: Deploys new container with LinuxServer.io image
-3. **Configuration**: Sets environment variables, volume mounts, port mappings
-4. **Startup**: Starts container with restart policy
+   - Handles permission setup for shared directory
+4. **Ownership Setup**: Sets proper file ownership for multi-user access
+5. **Post-Migration Guidance**: Provides specific steps for completing the migration
 
 ### Phase 6: Auto-Start Configuration
 
-1. **Docker Restart Policy**: Container configured with --restart=unless-stopped
-2. **Colima Integration**: When Colima starts via brew services, Docker starts
-3. **Automatic Container Start**: Docker automatically starts containers with restart policy
+1. **LaunchAgent Creation**: Creates operator-specific LaunchAgent in `~/Library/LaunchAgents/`
+2. **Environment Setup**: Configures `PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR` for shared config
+3. **Agent Loading**: Loads LaunchAgent for immediate and future startup
+4. **Automatic Startup**: Configures Plex to start with operator login
 
-### Phase 7: Verification
+### Phase 7: Application Startup
 
-1. **Container Status**: Verifies container is running
-2. **Service Access**: Provides access URLs
+1. **Initial Launch**: Starts Plex with shared configuration environment
+2. **Process Verification**: Confirms Plex Media Server is running
+3. **Access URLs**: Provides local and network access information
+
+### Phase 8: Verification
+
+1. **Service Status**: Verifies Plex is running and accessible
+2. **Configuration Access**: Confirms shared directory is properly accessible
 3. **Final Instructions**: Displays post-setup guidance
 
-## Docker Container Configuration
+## Native Application Configuration
+
+### Shared Configuration Directory
+
+**Location**: `/Users/Shared/PlexMediaServer/`
+
+**Access Control**:
+
+- **Ownership**: `admin:staff`
+- **Permissions**: `775` (owner+group read/write, others read)
+- **Group Membership**: Operator automatically added to staff group
+
+**Benefits**:
+
+- Administrator installs and configures applications
+- Operator can access and modify configurations
+- Single source of truth for application settings
+- Survives user account changes
 
 ### Environment Variables
 
-- `TZ=${PLEX_TIMEZONE}`: Timezone setting
-- `PUID=$(id -u)`: User ID for file permissions  
-- `PGID=$(id -g)`: Group ID for file permissions
-- `HOSTNAME=${PLEX_SERVER_NAME}`: Container hostname (customizable via --server-name)
-- `PLEX_CLAIM=${PLEX_CLAIM_TOKEN}`: Initial server claim (optional)
+The LaunchAgent configures:
+
+- `PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=/Users/Shared/PlexMediaServer`: Directs Plex to use shared config location
 
 ### Volume Mounts
 
-- `${PLEX_CONFIG_DIR}:/config`: Plex configuration and database
-- `${PLEX_MEDIA_MOUNT}:/media`: NAS media files (read-only recommended)
+- `${PLEX_MEDIA_MOUNT}`: NAS media files via autofs (automatic mounting)
 
-### Port Mappings
+### Process Management
 
-- `32400:32400/tcp`: Main Plex web interface
-- `3005:3005/tcp`: Plex Home Theater via Plex Companion
-- `8324:8324/tcp`: Roku via Plex Companion
-- `32469:32469/tcp`: Plex DLNA Server
-- `1900:1900/udp`: Plex DLNA Server
-- `32410:32410/udp`: GDM network discovery
-- `32412:32412/udp`: GDM network discovery  
-- `32413:32413/udp`: GDM network discovery
-- `32414:32414/udp`: GDM network discovery
-
-### Restart Policy
-
-- `--restart=unless-stopped`: Automatic restart except when manually stopped
+- **Process Owner**: Operator user (runs under operator account)
+- **Configuration Access**: Shared directory with multi-user permissions
+- **Startup**: Automatic via LaunchAgent when operator logs in
 
 ## Auto-Start Configuration
 
-### Docker Restart Policy
+### LaunchAgent Method
 
-**Method**: Docker's built-in `--restart=unless-stopped` policy
+**Method**: macOS native LaunchAgent in operator's `~/Library/LaunchAgents/`
 
-**Purpose**: Automatically starts Plex container when Docker daemon starts
+**Purpose**: Automatically starts Plex when operator logs in
+
+**Configuration File**: `com.plexapp.plexmediaserver.plist`
 
 **Behavior**:
 
-- Starts when Docker daemon starts (via Colima)
-- Restarts if container crashes
-- Does not restart if manually stopped
-- No additional configuration needed
+- Starts when operator logs in
+- Restarts if application crashes
+- Uses shared configuration directory
+- Runs under operator account
 
-**Integration with Colima**:
+**LaunchAgent Features**:
 
-- Colima starts automatically via `brew services` when operator logs in
-- Docker daemon starts with Colima
-- Containers with restart policy start automatically
+- `RunAtLoad`: Starts immediately when loaded
+- `KeepAlive`: Automatically restarts on crash
+- Custom environment variables for shared config access
+- Standard output/error logging to `/tmp/`
 
 ### Automatic NAS Mounting with autofs
 
@@ -311,18 +308,18 @@ After script execution:
 
 **Setup Process**:
 
-1. **autofs Master Configuration**: Adds `/-  auto_smb  -nosuid,noowners` to `/etc/auto_master`
+1. **autofs Master Configuration**: Adds `/Volumes auto_smb -nobrowse,nosuid` to `/etc/auto_master`
 2. **SMB Configuration**: Creates `/etc/auto_smb` with mount definition:
 
    ```bash
-   /Volumes/DSMedia  -fstype=smbfs,soft,noowners,nosuid,rw ://username:password@hostname/share
+   DSMedia -fstype=smbfs,soft ://username:password@hostname/share
    ```
 
 3. **Service Restart**: Reloads autofs configuration with `automount -cv`
 4. **Credential Handling**:
-   - Uses 1Password credentials when available
-   - URL-encodes passwords to handle special characters (e.g., @ symbols)
-   - Falls back to interactive prompts if credentials unavailable
+   - Uses 1Password credentials for secure storage
+   - Handles special characters in passwords properly
+   - No plaintext credentials in configuration files
 
 **Behavior**:
 
@@ -331,29 +328,28 @@ After script execution:
 - Survives system reboots and network reconnections
 - No manual mounting required
 
-**Benefits over LaunchAgents**:
+**Benefits over Manual Mounting**:
 
 - Uses built-in macOS functionality
 - More reliable than custom scripts
 - Better network handling and reconnection
 - Lower system overhead
+- Integrated with macOS security model
 
-**Limitations**:
-
-- Configuration may be reset during major macOS system updates
-- Requires re-running setup after system upgrades if mounting fails
-
-### Manual Container Management
+### Manual Application Management
 
 ```bash
-# Start container manually
-docker start ${HOSTNAME_LOWER}-plex
+# Start Plex manually
+launchctl start com.plexapp.plexmediaserver
 
-# Stop container (will not restart until manually started or Docker restarts)
-docker stop ${HOSTNAME_LOWER}-plex
+# Stop Plex (will restart on next login or crash)
+launchctl stop com.plexapp.plexmediaserver
 
-# Check container status
-docker ps -a | grep plex
+# Check LaunchAgent status
+launchctl list | grep com.plexapp.plexmediaserver
+
+# View process status
+ps aux | grep "Plex Media Server"
 ```
 
 ## Logging
@@ -373,20 +369,29 @@ docker ps -a | grep plex
 [YYYY-MM-DD HH:MM:SS] ❌ Error message
 ```
 
-### Auto-Start Log
+### Application Logs
 
-**Location**: `/Users/${OPERATOR_USERNAME}/.local/state/plex-autostart.log`
+**LaunchAgent Logs**:
 
-**Content**: Launch agent execution output
+- **Standard Output**: `/tmp/plex-out.log`
+- **Standard Error**: `/tmp/plex-error.log`
 
-### Container Logs
+**Plex Application Logs**:
+
+- **Location**: `/Users/Shared/PlexMediaServer/Plex Media Server/Logs/`
+- **Access**: Available to both admin and operator users
+
+**Viewing Logs**:
 
 ```bash
-# View Plex container logs
-docker logs ${HOSTNAME_LOWER}-plex
+# Script execution log
+tail -f ~/.local/state/${HOSTNAME_LOWER}-apps.log
 
-# Follow logs in real-time
-docker logs -f ${HOSTNAME_LOWER}-plex
+# LaunchAgent output
+tail -f /tmp/plex-out.log /tmp/plex-error.log
+
+# Plex application logs
+ls -la "/Users/Shared/PlexMediaServer/Plex Media Server/Logs/"
 ```
 
 ## Migration Best Practices
@@ -401,18 +406,17 @@ The migration process implements recommendations from Plex's official documentat
 ### Migration Process Details
 
 1. **Cache Directory Handling**:
-   - Automatically excluded using `rsync --exclude='Cache'` (Plex recommendation)
-   - Fallback to `cp` with warning if rsync unavailable
+   - Automatically excluded during migration (Plex recommendation)
    - Cache rebuilds automatically and safely after migration
+   - Reduces migration time and storage requirements
 
-2. **macOS Preferences (plist) File**:
-   - Detected and preserved for reference
-   - Not directly usable in Docker environment
-   - Container uses environment variables instead
-   - Original settings may need manual reconfiguration
+2. **Shared Directory Migration**:
+   - Copies configuration to shared location for multi-user access
+   - Preserves all settings, libraries, and metadata
+   - Sets proper permissions for both admin and operator access
 
 3. **Post-Migration Requirements**:
-   - Library paths must be updated from old paths to `/media/` container paths
+   - Library paths may need updating from old paths to new media mount paths
    - Library scanning required to re-associate media files
    - All libraries should be verified for proper operation
 
@@ -428,23 +432,22 @@ The migration process implements recommendations from Plex's official documentat
 
 ### Common Issues
 
-#### 1. Docker Not Running
+#### 1. 1Password CLI Not Available
 
-**Symptoms**: Script exits with "Docker is not running" message
+**Symptoms**: Script exits with "1Password CLI not found" message
 
 **Solutions**:
 
-- **Using Colima (recommended for servers)**:
+```bash
+# Install 1Password CLI
+brew install --cask 1password-cli
 
-  ```bash
-  colima start
-  ```
+# Sign in to 1Password
+op signin
 
-- **Using Docker Desktop**:
-  - Start Docker Desktop application
-  - Check Docker Desktop is signed in and licensed
-- **Verify Docker daemon is running**: `docker info`
-- **Check status**: `colima status` (if using Colima)
+# Verify access
+op whoami
+```
 
 #### 2. NAS Mount Failures
 
@@ -452,24 +455,21 @@ The migration process implements recommendations from Plex's official documentat
 
 - "Mount verification failed" message
 - Cannot access media files
-- Exit code 68 (authentication failure)
+- autofs configuration errors
 
 **Solutions**:
 
 ```bash
 # Check current mounts
-mount | grep ${NAS_SHARE_NAME}
+mount | grep DSMedia
 
-# Manual SMB mount with proper syntax (adjust values per your config.conf)
-sudo mkdir -p /Volumes/${NAS_SHARE_NAME}
-sudo chown $(whoami):staff /Volumes/${NAS_SHARE_NAME}
-mount_smbfs -f 0777 -d 0777 //${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME} /Volumes/${NAS_SHARE_NAME}
+# Manual SMB mount test (adjust values per your config.conf)
+sudo mkdir -p /Volumes/DSMedia
+sudo chown $(whoami):staff /Volumes/DSMedia
+mount_smbfs -f 0777 -d 0777 //${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME} /Volumes/DSMedia
 
 # Test NAS connectivity
 ping ${NAS_HOSTNAME}
-
-# Check SMB service on NAS
-telnet ${NAS_HOSTNAME} 445
 
 # Check autofs configuration
 sudo cat /etc/auto_master | grep auto_smb
@@ -481,92 +481,83 @@ sudo automount -cv
 
 **Common Mount Issues**:
 
-- **Authentication failure (exit code 68)**:
-  - Username case sensitivity (try lowercase username)
-  - Password contains special characters (@ symbols need URL encoding)
-  - Incorrect credentials in 1Password
+- **1Password authentication failure**:
+  - Verify 1Password CLI is signed in: `op whoami`
+  - Check NAS credentials in 1Password item
+  - Verify item name matches `ONEPASSWORD_NAS_ITEM` config
 - **Permission denied after successful mount**:
   - Mount point ownership incorrect
-  - Missing permission flags in mount command
+  - Check autofs configuration syntax
 - **autofs configuration reset**:
   - macOS system update may have reset `/etc/auto_master`
   - Re-run `plex-setup.sh` to reconfigure autofs
 
-**Credential Issues**:
-
-- Verify NAS user exists and has access to media share (check config.conf values)
-- Check 1Password item for correct username/password format
-- Username should typically be lowercase for SMB compatibility
-- Try mounting with different credentials
-- Check NAS SMB/CIFS service is running
-
-#### 3. Configuration Migration Failures
+#### 3. Shared Configuration Access Issues
 
 **Symptoms**:
 
-- Migration files not found
-- Permission errors during copy
+- Permission errors accessing `/Users/Shared/PlexMediaServer/`
+- Operator cannot modify Plex configuration
 
 **Solutions**:
 
 ```bash
-# Verify migration files exist
-ls -la ~/plex-migration/
+# Check directory permissions
+ls -la /Users/Shared/PlexMediaServer/
 
-# Check permissions
-ls -la "~/plex-migration/Plex Media Server/"
+# Verify group membership
+groups
+groups ${OPERATOR_USERNAME}
 
-# Manual permission fix
-chown -R $(id -u):$(id -g) "~/plex-migration/"
+# Fix permissions if needed (run as admin)
+sudo chown -R admin:staff /Users/Shared/PlexMediaServer/
+sudo chmod -R 775 /Users/Shared/PlexMediaServer/
 
-# Manual migration
-cp -R "~/plex-migration/Plex Media Server"/* "~/Docker/plex/config/"
+# Add operator to staff group if missing
+sudo dseditgroup -o edit -a ${OPERATOR_USERNAME} -t user staff
 ```
 
-#### 4. Container Creation Failures
-
-**Symptoms**: Docker container fails to start
-
-**Debugging**:
-
-```bash
-# Check container status
-docker ps -a | grep plex
-
-# View container logs
-docker logs ${HOSTNAME_LOWER}-plex
-
-# Try manual container creation
-docker run -it --rm lscr.io/linuxserver/plex:latest /bin/bash
-```
-
-**Common Causes**:
-
-- Port conflicts (another service using port 32400)
-- Volume mount issues (path doesn't exist or no permissions)
-- Network conflicts
-
-#### 5. Auto-Start Not Working
+#### 4. LaunchAgent Issues
 
 **Symptoms**: Plex doesn't start when operator logs in
 
-**Debugging**:
+**Solutions**:
 
 ```bash
-# Check if Colima is running
-colima status
+# Check LaunchAgent status
+launchctl list | grep com.plexapp.plexmediaserver
 
-# Check if Docker is running
-docker info
+# View LaunchAgent file
+cat ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist
 
-# Check container status and restart policy
-docker inspect ${HOSTNAME_LOWER}-plex | grep -A5 RestartPolicy
+# Reload LaunchAgent
+launchctl unload ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist
+launchctl load ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist
 
-# Check Colima auto-start service
-brew services list | grep colima
+# Check LaunchAgent logs
+tail -f /tmp/plex-out.log /tmp/plex-error.log
 
-# Manually start Colima if needed
-colima start
+# Test environment variable
+echo $PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR
+```
+
+#### 5. Application Installation Failures
+
+**Symptoms**: Plex Media Server installation fails
+
+**Solutions**:
+
+```bash
+# Check if already installed
+ls -la "/Applications/Plex Media Server.app"
+
+# Manual download and installation
+curl -L -o ~/Downloads/PlexMediaServer.dmg "https://downloads.plex.tv/plex-media-server-new/1.40.4.8679-424562606/macos/PlexMediaServer-1.40.4.8679-424562606-universal.dmg"
+
+# Mount and install manually
+hdiutil attach ~/Downloads/PlexMediaServer.dmg
+cp -R "/Volumes/Plex Media Server/Plex Media Server.app" /Applications/
+hdiutil detach "/Volumes/Plex Media Server"
 ```
 
 #### 6. Network Access Issues
@@ -576,17 +567,17 @@ colima start
 **Solutions**:
 
 ```bash
-# Check if Plex is listening
-netstat -an | grep 32400
+# Check if Plex is running
+ps aux | grep "Plex Media Server"
 
 # Test local access
 curl -I http://localhost:32400/web
 
-# Check firewall settings
-sudo pfctl -sr | grep 32400
+# Check network binding
+netstat -an | grep 32400
 
-# Verify container networking
-docker network inspect ${HOSTNAME_LOWER}-network
+# Verify hostname resolution
+ping macmini.local
 ```
 
 ### Advanced Troubleshooting
@@ -594,13 +585,16 @@ docker network inspect ${HOSTNAME_LOWER}-network
 #### Reset Plex Configuration
 
 ```bash
-# Stop and remove container
-docker stop ${HOSTNAME_LOWER}-plex
-docker rm ${HOSTNAME_LOWER}-plex
+# Stop Plex
+launchctl stop com.plexapp.plexmediaserver
 
-# Backup and clear config
-mv ~/Docker/plex/config ~/Docker/plex/config.backup.$(date +%Y%m%d)
-mkdir -p ~/Docker/plex/config
+# Backup current config
+sudo mv /Users/Shared/PlexMediaServer "/Users/Shared/PlexMediaServer.backup.$(date +%Y%m%d)"
+
+# Create fresh config directory
+sudo mkdir -p /Users/Shared/PlexMediaServer
+sudo chown admin:staff /Users/Shared/PlexMediaServer
+sudo chmod 775 /Users/Shared/PlexMediaServer
 
 # Re-run setup script
 ./app-setup/plex-setup.sh --skip-migration
@@ -609,103 +603,106 @@ mkdir -p ~/Docker/plex/config
 #### Clean Complete Reinstall
 
 ```bash
-# Remove everything
-docker stop ${HOSTNAME_LOWER}-plex
-docker rm ${HOSTNAME_LOWER}-plex
-rm -rf ~/Docker/plex/
+# Remove Plex application
+sudo rm -rf "/Applications/Plex Media Server.app"
 
-# Stop Colima auto-start if needed
-brew services stop colima
+# Remove configuration
+sudo rm -rf /Users/Shared/PlexMediaServer
+
+# Remove LaunchAgent
+rm -f ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist
 
 # Unmount NAS
-sudo umount /Volumes/${NAS_SHARE_NAME}
+sudo umount /Volumes/DSMedia
 
 # Re-run full setup
 ./app-setup/plex-setup.sh
 ```
 
-#### Manual Container Creation
+#### Manual LaunchAgent Creation
 
-If the script fails, you can manually create the container:
+If the script fails to create the LaunchAgent, you can create it manually:
 
 ```bash
-docker run -d \
-  --name=${HOSTNAME_LOWER}-plex \
-  --network=${HOSTNAME_LOWER}-network \
-  --restart=unless-stopped \
-  -e TZ=America/Los_Angeles \
-  -e PUID=$(id -u) \
-  -e PGID=$(id -g) \
-  -e HOSTNAME=${HOSTNAME}-PLEX \
-  -p 32400:32400/tcp \
-  -p 3005:3005/tcp \
-  -p 8324:8324/tcp \
-  -p 32469:32469/tcp \
-  -p 1900:1900/udp \
-  -p 32410:32410/udp \
-  -p 32412:32412/udp \
-  -p 32413:32413/udp \
-  -p 32414:32414/udp \
-  -v ~/Docker/plex/config:/config \
-  -v /Volumes/${NAS_SHARE_NAME}:/media \
-  lscr.io/linuxserver/plex:latest
+# Create LaunchAgent directory
+mkdir -p ~/Library/LaunchAgents
+
+# Create plist file
+cat > ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.plexapp.plexmediaserver</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Applications/Plex Media Server.app/Contents/MacOS/Plex Media Server</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR</key>
+        <string>/Users/Shared/PlexMediaServer</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardErrorPath</key>
+    <string>/tmp/plex-error.log</string>
+    <key>StandardOutPath</key>
+    <string>/tmp/plex-out.log</string>
+</dict>
+</plist>
+EOF
+
+# Load the LaunchAgent
+launchctl load ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist
 ```
-
-#### Interactive Prompts
-
-**Default Behavior**: The script uses sensible defaults for all confirmation prompts:
-
-- **Setup Operations** (Y/n): Default to Yes - press Enter to proceed
-  - Continue with Plex setup
-  - Start Colima/Docker
-  - Mount NAS share
-  - Use existing configurations
-  - Apply migrations
-
-- **Safety Prompts** (y/N): Default to No - requires explicit 'y' + Enter
-  - Continue without NAS mount (after mount failure)
-  - Get Plex claim token (optional step)
-
-**Unattended Operation**: Use `--force` flag to automatically accept all defaults and skip prompts entirely.
 
 ## Security Considerations
 
 ### File Permissions
 
-- Plex config files owned by admin user
-- Container runs with admin user's UID/GID
-- NAS mount accessible to admin user
+- Plex config files accessible to both admin and operator
+- Application runs with operator user privileges
+- NAS mount accessible to operator user
+- Shared configuration uses staff group for controlled access
 
 ### Network Security
 
-- Container attached to isolated Docker network
-- Ports exposed only as needed for Plex functionality
-- No SSH or shell access to container
+- Application runs as standard user (not root)
+- Standard Plex ports exposed for functionality
+- No additional network services required
+- Native macOS application security model
 
 ### Credential Storage
 
-- NAS credentials handled via macOS Keychain
+- NAS credentials stored securely in 1Password
 - No plaintext passwords in scripts or logs
-- Plex claim tokens are temporary (4-minute expiry)
+- Temporary credential files cleaned up automatically
+- 1Password CLI handles secure credential retrieval
 
 ## Performance Optimization
 
 ### Transcoding
 
-- Hardware transcoding available with Plex Pass
-- Transcoding occurs in container's `/tmp` (memory-backed)
-- Consider mounting additional volume for transcoding if needed
+- Hardware transcoding available with Plex Pass on Apple Silicon
+- Transcoding occurs in application's temporary directory
+- Native application benefits from macOS system optimizations
 
 ### Media Access
 
-- NAS connection via gigabit Ethernet recommended
-- SMB3 protocol used for better performance
-- Consider NFS if supported by NAS for better performance
+- NAS connection via autofs for optimal performance
+- SMB3 protocol used for better performance and security
+- Automatic mounting reduces overhead
 
-### Container Resources
+### Native Application Benefits
 
-- No explicit resource limits set (uses host resources)
-- Consider Docker resource constraints for shared systems
+- No containerization overhead
+- Direct access to macOS hardware acceleration
+- Optimal memory management through macOS
+- Better integration with system services
 
 ## Integration with Server Setup
 
@@ -715,20 +712,30 @@ The script inherits configuration from the main server setup:
 
 - Server naming conventions
 - User account structure  
-- Docker network topology
 - Logging patterns
+- 1Password integration
 
 ### Compatibility
 
 - Designed to run after `first-boot.sh` completion
-- Requires Docker daemon (Colima recommended, Docker Desktop also supported)
-- Compatible with existing Docker networks and containers
-- Colima auto-starts when operator user logs in (if configured during setup)
+- Requires 1Password CLI setup
+- Compatible with macOS security model
+- Operator account automatically configured for access
+
+### Multi-User Architecture
+
+The script implements the administrator-centric setup pattern:
+
+- **Administrator**: Installs and configures applications
+- **Operator**: Consumes pre-configured applications with shared access
+- **Shared Resources**: Configuration directories accessible to both users
+- **Security**: Controlled access via macOS group membership
 
 ### Future Applications
 
-The script pattern can be adapted for other containerized applications:
+The script pattern can be adapted for other native macOS applications:
 
-- Similar configuration derivation
+- Similar shared configuration approach
 - Consistent logging and error handling
-- Standard auto-start mechanisms
+- Standard LaunchAgent mechanisms
+- 1Password integration for secure credential management

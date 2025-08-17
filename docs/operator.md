@@ -48,8 +48,8 @@ The dock cleanup adds iTerm to the dock. **Switch from Terminal to iTerm** for b
 
 - **SSH Key Authentication**: Same SSH keys as admin account
 - **Homebrew Access**: Full access to package management
-- **Docker Access**: Member of docker group (after application setup)
-- **Application Management**: Designed for running containerized services
+- **Application Access**: Access to shared application configurations via staff group membership
+- **Native Application Management**: Designed for running native macOS applications with shared configuration access
 
 ### Administrative Tasks
 
@@ -60,13 +60,14 @@ The operator account can perform most server management tasks:
 brew install <package>
 brew update && brew upgrade
 
-# Service management (after app setup)
-docker-compose up -d
-docker-compose restart plex
+# Native application management (after app setup)
+launchctl list | grep plex
+launchctl stop com.plexapp.plexmediaserver
+launchctl start com.plexapp.plexmediaserver
 
 # System monitoring
 brew services list
-docker ps
+ps aux | grep "Plex Media Server"
 ```
 
 ### Switching to Admin Account
@@ -80,7 +81,7 @@ For system-level changes that require the original admin account:
 
 ### Application Setup Directory
 
-The first-boot setup created `~/app-setup/` with scripts for containerized applications:
+The first-boot setup created `~/app-setup/` with scripts for native macOS applications:
 
 ```bash
 cd ~/app-setup
@@ -89,7 +90,7 @@ ls -la *.sh
 
 Common application setup scripts:
 
-- `plex-setup.sh` - Plex Media Server
+- `plex-setup.sh` - Native Plex Media Server installation and configuration
 - `caddy-setup.sh` - Web server/reverse proxy (planned)
 
 ### Running Application Installers
@@ -110,6 +111,7 @@ chmod +x ~/app-setup/*.sh
 
 - Most prompts default to Yes (Y/n) - press Enter to proceed
 - Use `--force` flag to skip all prompts: `./plex-setup.sh --force`
+- **Note**: Application setup scripts run as administrator and configure shared access for operator
 
 ## Customizing the Environment
 
@@ -139,8 +141,55 @@ Host macmini
 # Add to ~/.bash_profile
 alias ll='ls -la'
 alias logs='tail -f ~/.local/state/macmini-setup.log'
-alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
+alias plex-status='ps aux | grep "Plex Media Server" | grep -v grep'
+alias plex-logs='tail -f /tmp/plex-out.log /tmp/plex-error.log'
 ```
+
+## Application Configuration Access
+
+### Shared Configuration Directory
+
+Native applications store their configurations in shared directories accessible to both admin and operator users:
+
+**Plex Media Server Configuration**:
+
+- **Location**: `/Users/Shared/PlexMediaServer/`
+- **Access**: Read/write access via staff group membership
+- **Ownership**: `admin:staff` with `775` permissions
+
+**Accessing Shared Configurations**:
+
+```bash
+# View Plex configuration directory
+ls -la /Users/Shared/PlexMediaServer/
+
+# Check your group membership (should include 'staff')
+groups
+
+# View application-specific configs
+ls -la /Users/Shared/PlexMediaServer/Plex\ Media\ Server/
+```
+
+### Application Management
+
+**Launch Agents**: Applications are configured to start automatically with operator login via LaunchAgents in `~/Library/LaunchAgents/`:
+
+```bash
+# View configured launch agents
+ls -la ~/Library/LaunchAgents/
+
+# Check Plex launch agent status
+launchctl list | grep com.plexapp.plexmediaserver
+
+# Manually start/stop applications
+launchctl stop com.plexapp.plexmediaserver
+launchctl start com.plexapp.plexmediaserver
+```
+
+**Accessing Applications**:
+
+- **Plex Web Interface**: `http://macmini.local:32400/web`
+- **Direct access**: Applications run under operator account with shared config access
 
 ## Monitoring and Maintenance
 
@@ -170,8 +219,9 @@ ssh admin@macmini.local 'echo SSH working'
 ### Log Files
 
 - **Setup logs**: `~/.local/state/macmini-setup.log`
-- **Application logs**: `~/app-setup/logs/` (created by app installers)
-- **System logs**: Use Console.app or `log show --predicate 'processImagePath contains "your-app"'`
+- **Application setup logs**: `~/.local/state/macmini-apps.log`
+- **Plex logs**: `/tmp/plex-out.log` and `/tmp/plex-error.log`
+- **System logs**: Use Console.app or `log show --predicate 'processImagePath contains "Plex Media Server"'`
 
 ### Time Machine Verification
 
@@ -217,18 +267,19 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --listapps
 2. **✅ Verify SSH access**  
 3. **Run application setup scripts** as needed
 4. **Configure additional services** as needed
-5. **Test containerized applications** after setup
+5. **Test native applications** after setup (check LaunchAgent status)
 
 ### Ongoing Maintenance
 
 - **Weekly**: Check for Homebrew updates (`brew update && brew upgrade`)
 - **Monthly**: Review system logs and disk usage
-- **As needed**: Update application containers and configurations
+- **As needed**: Update native applications and shared configurations
 
 ### Getting Help
 
-- **Logs**: Most issues are logged in `~/.local/state/macmini-setup.log`
+- **Logs**: Most issues are logged in `~/.local/state/macmini-setup.log` and `~/.local/state/macmini-apps.log`
 - **SSH troubleshooting**: Test from development Mac first
-- **Application issues**: Check individual app setup logs in `~/app-setup/logs/`
+- **Application issues**: Check LaunchAgent status and application-specific logs
+- **Shared config issues**: Verify staff group membership and directory permissions
 
 The operator account is now ready for production server management and application deployment.
