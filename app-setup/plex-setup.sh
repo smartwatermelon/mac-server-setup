@@ -492,7 +492,7 @@ fi
 # Helper function to run Docker commands in the appropriate context
 docker_cmd() {
   if [[ "${USE_OPERATOR_CONTEXT:-false}" == "true" ]]; then
-    sudo -u "${OPERATOR_USERNAME}" docker "$@"
+    sudo -iu "${OPERATOR_USERNAME}" docker "$@"
   else
     docker "$@"
   fi
