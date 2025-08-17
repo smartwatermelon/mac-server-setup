@@ -845,6 +845,17 @@ log "Ensuring SSH is allowed through firewall"
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/sbin/sshd
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/sbin/sshd
 
+# Add limactl to firewall allowed services for Colima containers
+LIMACTL_PATH="$(brew --prefix)/bin/limactl"
+if [[ -f "${LIMACTL_PATH}" ]]; then
+  log "Allowing limactl through firewall for container networking"
+  sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add "${LIMACTL_PATH}"
+  sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp "${LIMACTL_PATH}"
+  check_success "limactl firewall configuration"
+else
+  log "limactl not found at ${LIMACTL_PATH} - will be configured during package installation"
+fi
+
 # Configure security settings
 section "Configuring Security Settings"
 
@@ -1063,6 +1074,17 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
   brew doctor >"${BREW_DOCTOR_OUTPUT}" 2>&1 || true
   log "Brew doctor output saved to: ${BREW_DOCTOR_OUTPUT}"
   check_success "Brew doctor diagnostic"
+
+  # Configure limactl firewall permissions (now that packages are installed)
+  LIMACTL_PATH="$(brew --prefix)/bin/limactl"
+  if [[ -f "${LIMACTL_PATH}" ]]; then
+    log "Configuring limactl firewall permissions for container networking"
+    sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add "${LIMACTL_PATH}" 2>/dev/null || true
+    sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp "${LIMACTL_PATH}" 2>/dev/null || true
+    check_success "limactl firewall configuration"
+  else
+    log "limactl not installed - skipping firewall configuration"
+  fi
 fi
 
 #
@@ -1081,6 +1103,27 @@ section "Setting Up Colima (Docker Alternative)"
 # Check if Colima is available
 if command -v colima &>/dev/null; then
   log "Colima is installed, configuring for server use"
+
+  # Configure Docker config to prevent credential store issues
+  log "Configuring Docker config for Colima compatibility"
+  DOCKER_CONFIG_DIR="${HOME}/.docker"
+  DOCKER_CONFIG_FILE="${DOCKER_CONFIG_DIR}/config.json"
+
+  mkdir -p "${DOCKER_CONFIG_DIR}"
+
+  # Check if config exists and contains credsStore
+  if [[ -f "${DOCKER_CONFIG_FILE}" ]] && grep -q '"credsStore"' "${DOCKER_CONFIG_FILE}"; then
+    log "Removing incompatible Docker credential store configuration"
+    # Remove the credsStore line to prevent desktop credential helper errors
+    sed -i '' '/"credsStore":/d' "${DOCKER_CONFIG_FILE}"
+    check_success "Docker credential store configuration fix"
+  elif [[ ! -f "${DOCKER_CONFIG_FILE}" ]]; then
+    log "Creating basic Docker config file"
+    echo '{}' >"${DOCKER_CONFIG_FILE}"
+    check_success "Docker config file creation"
+  else
+    log "Docker config file already properly configured"
+  fi
 
   # Initialize Colima with server-appropriate settings
   log "Starting Colima for the first time..."

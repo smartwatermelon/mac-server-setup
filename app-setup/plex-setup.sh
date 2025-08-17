@@ -936,12 +936,9 @@ sleep 10
 if docker ps --format '{{.Names}}' | grep -q "^${PLEX_CONTAINER_NAME}$"; then
   log "✅ Plex container is running"
 
-  # Get the server's IP address
-  SERVER_IP=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "localhost")
-
   log "Access your Plex server at:"
   log "  Local: http://localhost:32400/web"
-  log "  Network: http://${SERVER_IP}:32400/web"
+  log "  Network: http://${HOSTNAME_LOWER}.local:32400/web"
 
   if [[ -z "${PLEX_CLAIM_TOKEN}" ]] && [[ "${SKIP_MIGRATION}" = true ]]; then
     log ""
