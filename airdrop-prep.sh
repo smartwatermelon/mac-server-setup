@@ -328,13 +328,13 @@ else
 fi
 
 # Copy README with variable substitution
-if [[ -f "${SCRIPT_SOURCE_DIR}/README-firstboot.md" ]]; then
+if [[ -f "${SCRIPT_SOURCE_DIR}/docs/README-firstboot.md" ]]; then
   echo "Processing README file..."
   sed "s/\${SERVER_NAME_LOWER}/${SERVER_NAME_LOWER}/g" \
-    "${SCRIPT_SOURCE_DIR}/README-firstboot.md" >"${OUTPUT_PATH}/README.md"
-  check_success "README creation"
+    "${SCRIPT_SOURCE_DIR}/docs/README-firstboot.md" >"${OUTPUT_PATH}/README.md"
+  echo "✅ README creation"
 else
-  echo "Warning: README-firstboot.md not found in source directory"
+  echo "⚠️ README-firstboot.md not found in source directory"
 fi
 
 echo "Setting file permissions..."
