@@ -29,4 +29,3 @@ PLEX_MIGRATE_FROM=""  # e.g., "old-server.local"
 
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME
-DOCKER_NETWORK_OVERRIDE=""  # If different from SERVER_NAME-network

@@ -1,12 +1,12 @@
 # Mac Mini M2 Server Setup
 
-Automated setup scripts for configuring an Apple Silicon Mac Mini as a home server with containerized applications.
+Automated setup scripts for configuring an Apple Silicon Mac Mini as a home server with native macOS applications.
 
 ## Project Overview
 
 This project provides a complete automation framework for setting up an Apple Silicon Mac Mini server that functions as:
 
-- **Containerized application host** (Plex, torrent tools, web services)
+- **Native application host** (Plex Media Server, web services, system utilities)
 - **Central home server** with minimal maintenance requirements
 - **Stable, secure, and recoverable system**
 
@@ -34,7 +34,7 @@ This project provides a complete automation framework for setting up an Apple Si
 
 ## Key Principles
 
-- **Separation of Concerns**: Base OS setup separate from containerized applications
+- **Separation of Concerns**: Base OS setup separate from native application deployment
 - **Automation First**: Minimal human intervention throughout lifecycle
 - **Idempotency**: Scripts can be run multiple times safely
 - **Security**: Hardening and isolation best practices
@@ -53,9 +53,9 @@ The setup process consists of two main phases:
 
 2. **Application Setup** (separate scripts in `app-setup/`)
 
-   - Containerized application deployment
-   - Service configuration
-   - Monitoring setup
+   - Native macOS application installation and configuration
+   - Shared configuration directory setup
+   - LaunchAgent auto-start configuration
 
 ## Quick Start
 
@@ -131,16 +131,16 @@ ONEPASSWORD_APPLEID_ITEM="Apple"
 MONITORING_EMAIL="your-email@example.com"
 ```
 
-## Docker Support
+## Native Application Architecture
 
-This project uses **Colima** instead of Docker Desktop for containerized applications:
+This project uses **native macOS applications** instead of containerized solutions:
 
-- **Headless operation** - No GUI required, perfect for server use
-- **Lightweight** - Much smaller resource footprint than Docker Desktop
-- **Auto-start** - Automatically starts when operator logs in
-- **Drop-in replacement** - Compatible with all Docker commands and scripts
+- **Optimal performance** - Direct access to macOS hardware acceleration
+- **Shared configuration** - Multi-user access via `/Users/Shared/` directories
+- **LaunchAgent integration** - Applications start automatically with operator login
+- **macOS security model** - Applications run under standard user privileges
 
-Colima is automatically installed and configured during setup. Docker Desktop can still be used if preferred, but Colima is recommended for server deployments.
+Applications are installed by the administrator and configured for shared access by the operator account.
 
 ## Security Features
 
@@ -163,7 +163,7 @@ Colima is automatically installed and configured during setup. Docker Desktop ca
 
 **1Password items not found**: Verify vault name and item titles match configuration.
 
-**Docker/Colima not working**: Check if Colima is running with `colima status`. Start manually with `colima start` if needed.
+**Application not starting**: Check LaunchAgent status with `launchctl list | grep <app>`. Verify shared configuration directory permissions.
 
 ### Logs
 

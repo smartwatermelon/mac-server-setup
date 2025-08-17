@@ -25,7 +25,6 @@ MONITORING_EMAIL="your-email@example.com"
 
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""
-DOCKER_NETWORK_OVERRIDE=""
 ```
 
 ## Core Configuration Parameters
@@ -96,12 +95,6 @@ All credential management relies on 1Password items. The configuration specifies
 - **When to use**: When you want a different network hostname
 - **Example**: `HOSTNAME_OVERRIDE="media-server"`
 
-**DOCKER_NETWORK_OVERRIDE**: Custom Docker network name
-
-- **Default**: Empty (uses "${SERVER_NAME}-network")
-- **When to use**: To integrate with existing Docker infrastructure
-- **Example**: `DOCKER_NETWORK_OVERRIDE="homelab-network"`
-
 **MONITORING_EMAIL**: Email address for system notifications
 
 - **Default**: "<andrew.rich@gmail.com>" (should be customized)
@@ -120,7 +113,7 @@ The setup scripts automatically calculate additional variables based on your con
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 ```
 
-**HOSTNAME_LOWER**: Lowercase version for file paths and Docker networks
+**HOSTNAME_LOWER**: Lowercase version for file paths and system naming
 
 ```bash  
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
@@ -183,7 +176,6 @@ For integration with existing home lab infrastructure:
 ```bash
 SERVER_NAME="HOMELAB"
 HOSTNAME_OVERRIDE="mac-mini-01"
-DOCKER_NETWORK_OVERRIDE="homelab-network"
 MONITORING_EMAIL="homelab@yourdomain.local"
 ```
 
@@ -337,7 +329,6 @@ cp config-production.conf config.conf
 The configuration system supports future extension points:
 
 **MONITORING_EMAIL**: Reserved for future monitoring system integration
-**DOCKER_NETWORK_OVERRIDE**: Allows integration with existing Docker infrastructure  
 **Custom variables**: Add your own variables to config.conf for use in custom scripts
 
 ## Migration and Backup
