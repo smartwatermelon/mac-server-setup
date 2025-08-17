@@ -843,16 +843,7 @@ log "Ensuring SSH is allowed through firewall"
 sudo -p "[Firewall setup] Enter password to configure SSH firewall access: " /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/sbin/sshd
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/sbin/sshd
 
-# Add limactl to firewall allowed services for Colima containers
-LIMACTL_PATH="$(brew --prefix)/bin/limactl"
-if [[ -f "${LIMACTL_PATH}" ]]; then
-  log "Allowing limactl through firewall for container networking"
-  sudo -p "[Firewall setup] Enter password to configure limactl firewall access: " /usr/libexec/ApplicationFirewall/socketfilterfw --add "${LIMACTL_PATH}"
-  sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp "${LIMACTL_PATH}"
-  check_success "limactl firewall configuration"
-else
-  log "limactl not found at ${LIMACTL_PATH} - will be configured during package installation"
-fi
+# Note: limactl firewall configuration will be handled after package installation
 
 # Configure security settings
 section "Configuring Security Settings"
