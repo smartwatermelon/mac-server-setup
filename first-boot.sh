@@ -278,13 +278,13 @@ if [[ -d "${PAM_D_SOURCE}" ]]; then
       else
         show_log "TouchID sudo needs to be configured (TouchID not available - will use password)."
       fi
-      sudo cp "${PAM_D_SOURCE}/sudo_local" "/etc/pam.d"
+      sudo -p "[TouchID setup] Enter password to configure TouchID for sudo: " cp "${PAM_D_SOURCE}/sudo_local" "/etc/pam.d"
       check_success "TouchID sudo configuration"
 
       # Test TouchID configuration
       log "Testing TouchID sudo configuration..."
       sudo -k
-      sudo -v
+      sudo -p "[TouchID test] Enter password to test TouchID sudo configuration: " -v
       check_success "TouchID sudo test"
     fi
   else
@@ -386,9 +386,9 @@ if [[ "$(hostname || true)" = "${HOSTNAME}" ]]; then
   log "Hostname is already set to ${HOSTNAME}"
 else
   log "Setting hostname to ${HOSTNAME}"
-  sudo scutil --set ComputerName "${HOSTNAME}"
-  sudo scutil --set LocalHostName "${HOSTNAME}"
-  sudo scutil --set HostName "${HOSTNAME}"
+  sudo -p "[System setup] Enter password to set computer hostname: " scutil --set ComputerName "${HOSTNAME}"
+  sudo -p "[System setup] Enter password to set local hostname: " scutil --set LocalHostName "${HOSTNAME}"
+  sudo -p "[System setup] Enter password to set system hostname: " scutil --set HostName "${HOSTNAME}"
   check_success "Hostname configuration"
 fi
 log "Renaming HD"
@@ -418,12 +418,12 @@ fi
 section "Configuring SSH Access"
 
 # 1. Check if remote login is already enabled
-if sudo systemsetup -getremotelogin 2>/dev/null | grep -q "On"; then
+if sudo -p "[SSH check] Enter password to check SSH status: " systemsetup -getremotelogin 2>/dev/null | grep -q "On"; then
   log "SSH is already enabled"
 else
   # 2. Try to enable it directly first
   log "Attempting to enable SSH..."
-  if sudo systemsetup -setremotelogin on; then
+  if sudo -p "[SSH setup] Enter password to enable SSH access: " systemsetup -setremotelogin on; then
     # 3.a Success case - it worked directly
     show_log "✅ SSH has been enabled successfully"
   else
@@ -498,12 +498,12 @@ section "Configuring Screen Sharing and Remote Management"
 
 # Enable Screen Sharing service
 log "Enabling Screen Sharing service"
-sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
+sudo -p "[Screen sharing] Enter password to enable screen sharing service: " launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
 check_success "Screen Sharing service enabled"
 
 # Activate and configure Remote Management service
 log "Activating Remote Management for Apple Remote Desktop access"
-sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+sudo -p "[Remote management] Enter password to activate Remote Management: " /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
   -activate \
   -configure -allowAccessFor -specifiedUsers \
   -restart -agent
@@ -512,7 +512,7 @@ check_success "Remote Management service activation"
 
 # Configure full privileges for admin user
 log "Configuring Remote Management privileges for admin user"
-sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+sudo -p "[Remote management] Enter password to configure admin privileges: " /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
   -configure -users "${ADMIN_USERNAME}" \
   -access -on \
   -privs -all
@@ -637,7 +637,7 @@ else
   fi
 
   # Create the operator account
-  sudo sysadminctl -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${OPERATOR_PASSWORD}" -hint "See 1Password ${ONEPASSWORD_OPERATOR_ITEM} for password" 2>/dev/null
+  sudo -p "[Account setup] Enter password to create operator account: " sysadminctl -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${OPERATOR_PASSWORD}" -hint "See 1Password ${ONEPASSWORD_OPERATOR_ITEM} for password" 2>/dev/null
   check_success "Operator account creation"
 
   # Verify the password works
@@ -680,7 +680,7 @@ else
     OPERATOR_SSH_DIR="/Users/${OPERATOR_USERNAME}/.ssh"
     log "Setting up SSH keys for operator account"
 
-    sudo mkdir -p "${OPERATOR_SSH_DIR}"
+    sudo -p "[SSH setup] Enter password to configure operator SSH keys: " mkdir -p "${OPERATOR_SSH_DIR}"
     sudo cp "${SSH_KEY_SOURCE}/operator_authorized_keys" "${OPERATOR_SSH_DIR}/authorized_keys"
     sudo chmod 700 "${OPERATOR_SSH_DIR}"
     sudo chmod 600 "${OPERATOR_SSH_DIR}/authorized_keys"
@@ -690,7 +690,7 @@ else
 
     # Add operator to SSH access group
     log "Adding operator to SSH access group"
-    sudo dseditgroup -o edit -a "${OPERATOR_USERNAME}" -t user com.apple.access_ssh
+    sudo -p "[SSH setup] Enter password to add operator to SSH access group: " dseditgroup -o edit -a "${OPERATOR_USERNAME}" -t user com.apple.access_ssh
     check_success "Operator SSH group membership"
   fi
 
@@ -698,14 +698,14 @@ else
   log "Setting up Colima auto-start for operator user using brew services"
 
   # Enable Colima auto-start using the recommended brew services approach
-  sudo -u "${OPERATOR_USERNAME}" brew services start colima
+  sudo -p "[Service setup] Enter password to configure Colima auto-start: " -u "${OPERATOR_USERNAME}" brew services start colima
   check_success "Colima auto-start configuration"
 
   log "✅ Colima will now start automatically when ${OPERATOR_USERNAME} logs in"
 
   # Configure Remote Management for operator user (now that account exists)
   log "Configuring Remote Management privileges for operator user"
-  sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+  sudo -p "[Remote management] Enter password to configure operator privileges: " /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
     -configure -users "${OPERATOR_USERNAME}" \
     -access -on \
     -privs -all
@@ -717,14 +717,14 @@ fi
 # Fast User Switching
 section "Enabling Fast User Switching"
 log "Configuring Fast User Switching for multi-user access"
-sudo defaults write /Library/Preferences/.GlobalPreferences MultipleSessionEnabled -bool true
+sudo -p "[System setup] Enter password to enable multiple user sessions: " defaults write /Library/Preferences/.GlobalPreferences MultipleSessionEnabled -bool true
 check_success "Fast User Switching configuration"
 
 # Fast User Switching menu bar style and visibility
-defaults write .GlobalPreferences userMenuExtraStyle -int 1                                             # username
-sudo -iu "${OPERATOR_USERNAME}" defaults write .GlobalPreferences userMenuExtraStyle -int 1             # username
-defaults -currentHost write com.apple.controlcenter UserSwitcher -int 2                                 # menubar
-sudo -iu "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.controlcenter UserSwitcher -int 2 # menubar
+defaults write .GlobalPreferences userMenuExtraStyle -int 1                                                                                                     # username
+sudo -p "[User setup] Enter password to configure operator menu style: " -iu "${OPERATOR_USERNAME}" defaults write .GlobalPreferences userMenuExtraStyle -int 1 # username
+defaults -currentHost write com.apple.controlcenter UserSwitcher -int 2                                                                                         # menubar
+sudo -iu "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.controlcenter UserSwitcher -int 2                                                         # menubar
 
 # Configure automatic login for operator account (whether new or existing)
 section "Automatic login for operator account"
@@ -735,12 +735,12 @@ if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
 
   # Create the encoded password file that macOS uses for auto-login
   ENCODED_PASSWORD=$(echo "${OPERATOR_PASSWORD}" | openssl enc -base64)
-  echo "${ENCODED_PASSWORD}" | sudo tee /etc/kcpassword >/dev/null
+  echo "${ENCODED_PASSWORD}" | sudo -p "[Auto-login] Enter password to configure automatic login: " tee /etc/kcpassword >/dev/null
   sudo chmod 600 /etc/kcpassword
   check_success "Create auto-login password file"
 
   # Set the auto-login user
-  sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser "${OPERATOR_USERNAME}"
+  sudo -p "[Auto-login] Enter password to set auto-login user: " defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser "${OPERATOR_USERNAME}"
   check_success "Set auto-login user"
 
   show_log "✅ Automatic login configured for ${OPERATOR_USERNAME}"
@@ -754,12 +754,12 @@ section "Configuring sudo access for operator"
 log "Adding operator account to sudoers"
 
 # Add operator to admin group for sudo access
-sudo dseditgroup -o edit -a "${OPERATOR_USERNAME}" -t user admin
+sudo -p "[Account setup] Enter password to add operator to admin group: " dseditgroup -o edit -a "${OPERATOR_USERNAME}" -t user admin
 check_success "Operator admin group membership"
 
 # Verify sudo access works for operator
 log "Verifying sudo access for operator"
-if sudo -u "${OPERATOR_USERNAME}" sudo -n true 2>/dev/null; then
+if sudo -p "[Account setup] Enter password to verify operator sudo access: " -u "${OPERATOR_USERNAME}" sudo -n true 2>/dev/null; then
   show_log "✅ Operator sudo access verified (passwordless test)"
 else
   # This is expected - they'll need to enter password for sudo
@@ -770,7 +770,7 @@ fi
 section "Fix scroll setting"
 log "Fixing Apple's default scroll setting"
 defaults write -g com.apple.swipescrolldirection -bool false
-sudo -iu "${OPERATOR_USERNAME}" defaults write -g com.apple.swipescrolldirection -bool false
+sudo -p "[User setup] Enter password to configure operator scroll direction: " -iu "${OPERATOR_USERNAME}" defaults write -g com.apple.swipescrolldirection -bool false
 check_success "Fix scroll setting"
 
 # Configure power management settings
@@ -786,27 +786,27 @@ CURRENT_AUTORESTART=$(pmset -g 2>/dev/null | grep -E "^[ ]*autorestart" | awk '{
 
 # Apply settings only if they differ from current
 if [[ "${CURRENT_SLEEP}" != "0" ]]; then
-  sudo pmset -a sleep 0
+  sudo -p "[Power management] Enter password to disable system sleep: " pmset -a sleep 0
   log "Disabled system sleep"
 fi
 
 if [[ "${CURRENT_DISPLAYSLEEP}" != "60" ]]; then
-  sudo pmset -a displaysleep 60 # Display sleeps after 1 hour
+  sudo -p "[Power management] Enter password to configure display sleep: " pmset -a displaysleep 60 # Display sleeps after 1 hour
   log "Set display sleep to 60 minutes"
 fi
 
 if [[ "${CURRENT_DISKSLEEP}" != "0" ]]; then
-  sudo pmset -a disksleep 0
+  sudo -p "[Power management] Enter password to disable disk sleep: " pmset -a disksleep 0
   log "Disabled disk sleep"
 fi
 
 if [[ "${CURRENT_WOMP}" != "1" ]]; then
-  sudo pmset -a womp 1 # Enable wake on network access
+  sudo -p "[Power management] Enter password to enable wake on network: " pmset -a womp 1 # Enable wake on network access
   log "Enabled Wake on Network Access"
 fi
 
 if [[ "${CURRENT_AUTORESTART}" != "1" ]]; then
-  sudo pmset -a autorestart 1 # Restart on power failure
+  sudo -p "[Power management] Enter password to enable auto-restart: " pmset -a autorestart 1 # Restart on power failure
   log "Enabled automatic restart after power failure"
 fi
 
@@ -816,7 +816,7 @@ check_success "Power management configuration"
 section "Configuring screen saver password requirement"
 defaults -currentHost write com.apple.screensaver askForPassword -int 1
 defaults -currentHost write com.apple.screensaver askForPasswordDelay -int 0
-sudo -u "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.screensaver askForPassword -int 1
+sudo -p "[Security setup] Enter password to configure operator screen saver security: " -u "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.screensaver askForPassword -int 1
 sudo -u "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.screensaver askForPasswordDelay -int 0
 log "Enabled immediate password requirement after screen saver"
 
@@ -831,7 +831,7 @@ if [[ "${SKIP_UPDATE}" = false ]]; then
     log "System is up to date"
   else
     log "Installing software updates in background mode"
-    sudo softwareupdate -i -a --background
+    sudo -p "[System update] Enter password to install software updates: " softwareupdate -i -a --background
     check_success "Initiating background software update"
   fi
 else
@@ -843,18 +843,18 @@ section "Configuring Firewall"
 
 # Ensure it's on
 log "Ensuring firewall is enabled"
-sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
+sudo -p "[Firewall setup] Enter password to enable application firewall: " /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
 
 # Add SSH to firewall allowed services
 log "Ensuring SSH is allowed through firewall"
-sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/sbin/sshd
+sudo -p "[Firewall setup] Enter password to configure SSH firewall access: " /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/sbin/sshd
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/sbin/sshd
 
 # Add limactl to firewall allowed services for Colima containers
 LIMACTL_PATH="$(brew --prefix)/bin/limactl"
 if [[ -f "${LIMACTL_PATH}" ]]; then
   log "Allowing limactl through firewall for container networking"
-  sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add "${LIMACTL_PATH}"
+  sudo -p "[Firewall setup] Enter password to configure limactl firewall access: " /usr/libexec/ApplicationFirewall/socketfilterfw --add "${LIMACTL_PATH}"
   sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp "${LIMACTL_PATH}"
   check_success "limactl firewall configuration"
 else
@@ -1107,36 +1107,47 @@ section "Setting Up Colima (Docker Alternative)"
 
 # Check if Colima is available
 if command -v colima &>/dev/null; then
-  log "Colima is installed, configuring for server use"
+  log "Colima is installed, configuring for shared access"
 
-  # Configure Docker config to prevent credential store issues
-  log "Configuring Docker config for Colima compatibility"
-  DOCKER_CONFIG_DIR="${HOME}/.docker"
+  # Create shared Docker configuration that both administrator and operator can use
+  log "Configuring shared Docker config for Colima compatibility"
+
+  # Configure Docker config in operator's home (since Colima will run as operator)
+  OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
+  DOCKER_CONFIG_DIR="${OPERATOR_HOME}/.docker"
   DOCKER_CONFIG_FILE="${DOCKER_CONFIG_DIR}/config.json"
 
-  mkdir -p "${DOCKER_CONFIG_DIR}"
+  # Create operator's Docker config directory with proper permissions
+  sudo -p "[Docker setup] Enter password to create operator Docker config: " -u "${OPERATOR_USERNAME}" mkdir -p "${DOCKER_CONFIG_DIR}"
 
   # Check if config exists and contains credsStore
   if [[ -f "${DOCKER_CONFIG_FILE}" ]] && grep -q '"credsStore"' "${DOCKER_CONFIG_FILE}"; then
     log "Removing incompatible Docker credential store configuration"
     # Remove the credsStore line to prevent desktop credential helper errors
-    sed -i '' '/"credsStore":/d' "${DOCKER_CONFIG_FILE}"
+    sudo -p "[Docker setup] Enter password to fix Docker credential store: " sed -i '' '/"credsStore":/d' "${DOCKER_CONFIG_FILE}"
     check_success "Docker credential store configuration fix"
   elif [[ ! -f "${DOCKER_CONFIG_FILE}" ]]; then
     log "Creating basic Docker config file"
-    echo '{}' >"${DOCKER_CONFIG_FILE}"
+    echo '{}' | sudo -p "[Docker setup] Enter password to create Docker config: " -u "${OPERATOR_USERNAME}" tee "${DOCKER_CONFIG_FILE}" >/dev/null
     check_success "Docker config file creation"
   else
     log "Docker config file already properly configured"
   fi
 
-  # Initialize Colima with server-appropriate settings
-  log "Starting Colima for the first time..."
-  if colima start --cpu 2 --memory 4 --disk 20; then
+  # Set permissions for shared access - administrator can read/manage operator's Docker config
+  log "Setting permissions for shared Docker access"
+  sudo -p "[Docker setup] Enter password to set Docker config permissions: " chmod 755 "${OPERATOR_HOME}" # Allow admin to traverse to .docker
+  sudo chmod 755 "${DOCKER_CONFIG_DIR}"                                                                   # Allow admin to access .docker directory
+  sudo chmod 644 "${DOCKER_CONFIG_FILE}"                                                                  # Allow admin to read Docker config
+  check_success "Docker config permissions setup"
+
+  # Initialize Colima with server-appropriate settings as operator
+  log "Initializing Colima with server settings..."
+  if sudo -p "[Colima setup] Enter password to initialize Colima: " -u "${OPERATOR_USERNAME}" colima start --cpu 2 --memory 4 --disk 20; then
     check_success "Colima initialization"
 
     # Verify Docker is working
-    if docker info &>/dev/null; then
+    if sudo -p "[Colima setup] Enter password to test Docker access: " -u "${OPERATOR_USERNAME}" docker info &>/dev/null; then
       log "✅ Docker is working through Colima"
     else
       log "❌ Docker not responding after Colima start"
@@ -1144,10 +1155,20 @@ if command -v colima &>/dev/null; then
 
     # Stop Colima for now - it will be auto-started by operator via brew services
     log "Stopping Colima (will be auto-started by operator via brew services)"
-    colima stop
+    sudo -p "[Colima setup] Enter password to stop Colima: " -u "${OPERATOR_USERNAME}" colima stop
     check_success "Colima stop"
   else
     log "❌ Failed to initialize Colima"
+  fi
+
+  # Set up Colima directory permissions for shared access
+  COLIMA_DIR="${OPERATOR_HOME}/.colima"
+  if [[ -d "${COLIMA_DIR}" ]]; then
+    log "Setting permissions for shared Colima access"
+    sudo -p "[Colima setup] Enter password to set Colima permissions: " chmod 755 "${COLIMA_DIR}"
+    sudo find "${COLIMA_DIR}" -type d -exec chmod 755 {} \;
+    sudo find "${COLIMA_DIR}" -type f -exec chmod 644 {} \;
+    check_success "Colima directory permissions setup"
   fi
 else
   log "Colima not found - skipping Docker setup"
@@ -1192,7 +1213,7 @@ if [[ -f "${SETUP_DIR}/scripts/dock-cleanup.command" ]] && dscl . -list /Users 2
   DOCK_SCRIPT="/Users/${OPERATOR_USERNAME}/Desktop/dock-cleanup.command"
 
   # Copy script to operator's desktop
-  sudo cp "${SETUP_DIR}/scripts/dock-cleanup.command" "/Users/${OPERATOR_USERNAME}/Desktop/"
+  sudo -p "[Setup completion] Enter password to install dock cleanup script: " cp "${SETUP_DIR}/scripts/dock-cleanup.command" "/Users/${OPERATOR_USERNAME}/Desktop/"
   sudo chown "${OPERATOR_USERNAME}:staff" "${DOCK_SCRIPT}"
   sudo chmod +x "${DOCK_SCRIPT}"
   sudo xattr -d com.apple.quarantine "${DOCK_SCRIPT}" || true
@@ -1217,7 +1238,7 @@ if [[ -f "${HOMEBREW_BASH}" ]]; then
   # Add to /etc/shells if not already present
   if ! grep -q "${HOMEBREW_BASH}" /etc/shells; then
     log "Adding Homebrew bash to /etc/shells"
-    echo "${HOMEBREW_BASH}" | sudo tee -a /etc/shells
+    echo "${HOMEBREW_BASH}" | sudo -p "[Shell setup] Enter password to add Homebrew bash to allowed shells: " tee -a /etc/shells
     check_success "Add Homebrew bash to /etc/shells"
   else
     log "Homebrew bash already in /etc/shells"
@@ -1225,13 +1246,13 @@ if [[ -f "${HOMEBREW_BASH}" ]]; then
 
   # Change shell for admin user to Homebrew bash
   log "Setting shell to Homebrew bash for admin user"
-  sudo chsh -s "${HOMEBREW_BASH}" "${ADMIN_USERNAME}"
+  sudo -p "[Shell setup] Enter password to change admin shell: " chsh -s "${HOMEBREW_BASH}" "${ADMIN_USERNAME}"
   check_success "Admin user shell change"
 
   # Change shell for operator user if it exists
   if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
     log "Setting shell to Homebrew bash for operator user"
-    sudo chsh -s "${HOMEBREW_BASH}" "${OPERATOR_USERNAME}"
+    sudo -p "[Shell setup] Enter password to change operator shell: " chsh -s "${HOMEBREW_BASH}" "${OPERATOR_USERNAME}"
     check_success "Operator user shell change"
   fi
 else
@@ -1319,11 +1340,11 @@ if [[ -f "${TIMEMACHINE_CONFIG_FILE}" ]]; then
       # Construct the full SMB URL with credentials
       TIMEMACHINE_URL="smb://${TM_USERNAME}:${TM_PASSWORD}@${TM_URL#*://}"
 
-      if sudo tmutil setdestination -a "${TIMEMACHINE_URL}"; then
+      if sudo -p "[Time Machine] Enter password to set backup destination: " tmutil setdestination -a "${TIMEMACHINE_URL}"; then
         check_success "Time Machine destination configuration"
 
         log "Enabling Time Machine"
-        if sudo tmutil enable; then
+        if sudo -p "[Time Machine] Enter password to enable backups: " tmutil enable; then
           show_log "✅ Time Machine backup configured and enabled"
           check_success "Time Machine enable"
 

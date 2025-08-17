@@ -431,24 +431,46 @@ else
   exit 0
 fi
 
-# Check if Docker is running
-section "Checking Docker"
-if ! docker info &>/dev/null; then
-  log "Docker is not running"
+# Check Docker configuration and access
+section "Checking Docker Access"
 
-  # Check if Colima is available
+# Set up Docker environment to use operator's configuration
+OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
+export DOCKER_CONFIG="${OPERATOR_HOME}/.docker"
+
+if [[ ! -d "${DOCKER_CONFIG}" ]]; then
+  log "❌ Docker configuration not found at ${DOCKER_CONFIG}"
+  log "Run first-boot.sh to set up Docker/Colima configuration"
+  exit 1
+fi
+
+# Check if we can access Docker (might need to use operator's context)
+if ! docker info &>/dev/null; then
+  log "Docker is not running or not accessible"
+
+  # Check if Colima is available and try to start as operator
   if command -v colima &>/dev/null; then
-    log "Colima is available but not running"
-    if confirm "Start Colima now?" "y"; then
-      log "Starting Colima..."
-      if colima start; then
+    log "Colima is available but Docker not accessible"
+    if confirm "Start Colima as operator?" "y"; then
+      log "Starting Colima as operator user..."
+      if sudo -p "[Colima setup] Enter password to start Colima as operator: " -u "${OPERATOR_USERNAME}" colima start; then
         log "✅ Colima started successfully"
-        # Verify Docker is now working
-        if docker info &>/dev/null; then
-          log "✅ Docker is now running"
+        # Brief wait for Docker socket to be ready
+        sleep 3
+        # Verify Docker is now working (test as administrator with operator's config)
+        if docker_cmd info &>/dev/null; then
+          log "✅ Docker is now accessible"
         else
           log "❌ Docker still not responding after Colima start"
-          exit 1
+          log "Trying to use Docker through operator context..."
+          if sudo -p "[Docker test] Enter password to test Docker access as operator: " -u "${OPERATOR_USERNAME}" docker info &>/dev/null; then
+            log "✅ Docker accessible through operator context"
+            log "Administrator will use sudo -u ${OPERATOR_USERNAME} for Docker commands"
+            USE_OPERATOR_CONTEXT=true
+          else
+            log "❌ Docker not accessible in any context"
+            exit 1
+          fi
         fi
       else
         log "❌ Failed to start Colima"
@@ -456,25 +478,30 @@ if ! docker info &>/dev/null; then
       fi
     else
       log "Please start Colima manually and run the script again:"
-      log "  colima start"
+      log "  sudo -p '[Colima setup] Enter password to start Colima: ' -u ${OPERATOR_USERNAME} colima start"
       exit 1
     fi
   else
-    log "Colima not found. Please install and start Colima:"
-    log "  brew install colima"
-    log "  colima start"
-    log "Or if using Docker Desktop instead:"
-    log "  Open Docker Desktop application"
+    log "Colima not found. Install with first-boot.sh"
     exit 1
   fi
 else
-  log "Docker is running"
+  log "✅ Docker is accessible"
 fi
+
+# Helper function to run Docker commands in the appropriate context
+docker_cmd() {
+  if [[ "${USE_OPERATOR_CONTEXT:-false}" == "true" ]]; then
+    sudo -u "${OPERATOR_USERNAME}" docker "$@"
+  else
+    docker "$@"
+  fi
+}
 
 # Configure Colima mounts for Plex requirements
 section "Configuring Colima Mounts"
 if command -v colima &>/dev/null; then
-  COLIMA_CONFIG="${HOME}/.colima/default/colima.yaml"
+  COLIMA_CONFIG="${OPERATOR_HOME}/.colima/default/colima.yaml"
 
   if [[ -f "${COLIMA_CONFIG}" ]]; then
     log "Checking Colima mount configuration..."
@@ -543,7 +570,7 @@ if command -v colima &>/dev/null; then
           log "✅ Colima restarted successfully"
 
           # Verify Docker is still working
-          if docker info &>/dev/null; then
+          if docker_cmd info &>/dev/null; then
             log "✅ Docker is running after Colima restart"
           else
             log "❌ Docker not responding after Colima restart"
@@ -824,9 +851,9 @@ fi
 
 # Create Docker network if it doesn't exist
 section "Setting Up Docker Network"
-if ! docker network inspect "${DOCKER_NETWORK}" &>/dev/null; then
+if ! docker_cmd network inspect "${DOCKER_NETWORK}" &>/dev/null; then
   log "Creating Docker network: ${DOCKER_NETWORK}"
-  docker network create "${DOCKER_NETWORK}"
+  docker_cmd network create "${DOCKER_NETWORK}"
   check_success "Docker network creation"
 else
   log "Docker network ${DOCKER_NETWORK} already exists"
@@ -930,8 +957,8 @@ if [[ "${SKIP_MIGRATION}" = false ]]; then
   if [[ -d "${PLEX_OLD_CONFIG}" ]]; then
     if confirm "Apply migrated Plex configuration to Docker container?" "y"; then
       log "Stopping any existing Plex container..."
-      docker stop "${PLEX_CONTAINER_NAME}" 2>/dev/null || true
-      docker rm "${PLEX_CONTAINER_NAME}" 2>/dev/null || true
+      docker_cmd stop "${PLEX_CONTAINER_NAME}" 2>/dev/null || true
+      docker_cmd rm "${PLEX_CONTAINER_NAME}" 2>/dev/null || true
 
       log "Backing up any existing config..."
       if [[ -d "${PLEX_CONFIG_DIR}" ]]; then
@@ -976,12 +1003,12 @@ fi
 section "Setting Up Plex Container"
 
 # Check if container already exists
-if docker ps -a --format '{{.Names}}' | grep -q "^${PLEX_CONTAINER_NAME}$"; then
+if docker_cmd ps -a --format '{{.Names}}' | grep -q "^${PLEX_CONTAINER_NAME}$"; then
   log "Plex container already exists"
 
-  if ! docker ps --format '{{.Names}}' | grep -q "^${PLEX_CONTAINER_NAME}$"; then
+  if ! docker_cmd ps --format '{{.Names}}' | grep -q "^${PLEX_CONTAINER_NAME}$"; then
     log "Starting existing Plex container"
-    docker start "${PLEX_CONTAINER_NAME}"
+    docker_cmd start "${PLEX_CONTAINER_NAME}"
     check_success "Plex container start"
   else
     log "Plex container is already running"
@@ -999,7 +1026,7 @@ else
 
   # Build docker run command
   DOCKER_CMD=(
-    "docker" "run" "-d"
+    "run" "-d"
     "--name=${PLEX_CONTAINER_NAME}"
     "--network=${DOCKER_NETWORK}"
     "--restart=unless-stopped"
@@ -1030,7 +1057,7 @@ else
 
   # Run the container
   log "Starting Plex container with LinuxServer.io image..."
-  "${DOCKER_CMD[@]}"
+  docker_cmd "${DOCKER_CMD[@]}"
   check_success "Plex container creation"
 fi
 
@@ -1053,7 +1080,7 @@ log "Waiting for Plex to initialize..."
 sleep 10
 
 # Check if Plex is responding
-if docker ps --format '{{.Names}}' | grep -q "^${PLEX_CONTAINER_NAME}$"; then
+if docker_cmd ps --format '{{.Names}}' | grep -q "^${PLEX_CONTAINER_NAME}$"; then
   log "✅ Plex container is running"
 
   log "Access your Plex server at:"
@@ -1081,7 +1108,7 @@ if docker ps --format '{{.Names}}' | grep -q "^${PLEX_CONTAINER_NAME}$"; then
 
 else
   log "❌ Plex container failed to start properly"
-  log "Check logs with: docker logs ${PLEX_CONTAINER_NAME}"
+  log "Check logs with: docker_cmd logs ${PLEX_CONTAINER_NAME}"
 fi
 
 exit 0
