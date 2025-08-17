@@ -1127,11 +1127,11 @@ if command -v colima &>/dev/null; then
 
   # Initialize Colima with server-appropriate settings as operator
   log "Initializing Colima with server settings..."
-  if sudo -p "[Colima setup] Enter password to initialize Colima: " -u "${OPERATOR_USERNAME}" colima start --cpu 2 --memory 4 --disk 20; then
+  if sudo -p "[Colima setup] Enter password to initialize Colima: " -iu "${OPERATOR_USERNAME}" colima start --cpu 2 --memory 4 --disk 20; then
     check_success "Colima initialization"
 
     # Verify Docker is working
-    if sudo -p "[Colima setup] Enter password to test Docker access: " -u "${OPERATOR_USERNAME}" docker info &>/dev/null; then
+    if sudo -p "[Colima setup] Enter password to test Docker access: " -iu "${OPERATOR_USERNAME}" docker info &>/dev/null; then
       log "✅ Docker is working through Colima"
     else
       log "❌ Docker not responding after Colima start"
@@ -1139,7 +1139,7 @@ if command -v colima &>/dev/null; then
 
     # Stop Colima for now - it will be auto-started by operator via brew services
     log "Stopping Colima (will be auto-started by operator via brew services)"
-    sudo -p "[Colima setup] Enter password to stop Colima: " -u "${OPERATOR_USERNAME}" colima stop
+    sudo -p "[Colima setup] Enter password to stop Colima: " -iu "${OPERATOR_USERNAME}" colima stop
     check_success "Colima stop"
   else
     log "❌ Failed to initialize Colima"
@@ -1159,7 +1159,7 @@ if command -v colima &>/dev/null; then
   log "Setting up Colima auto-start for operator user using brew services"
 
   # Enable Colima auto-start using the recommended brew services approach
-  sudo -p "[Service setup] Enter password to configure Colima auto-start: " -u "${OPERATOR_USERNAME}" brew services start colima
+  sudo -p "[Service setup] Enter password to configure Colima auto-start: " -iu "${OPERATOR_USERNAME}" brew services start colima
   check_success "Colima auto-start configuration"
 
   log "✅ Colima will now start automatically when ${OPERATOR_USERNAME} logs in"
