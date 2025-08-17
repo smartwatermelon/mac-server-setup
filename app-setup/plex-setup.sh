@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # plex-setup.sh - Plex Media Server setup script for Mac Mini M2 server
 #
@@ -140,7 +140,7 @@ check_success() {
   else
     log "❌ $1 failed"
     if [[ "${FORCE}" = false ]]; then
-      read -p "Continue anyway? (y/n) " -n 1 -r
+      read -p "Continue anyway? (y/N) " -n 1 -r
       echo
       if [[ ! ${REPLY} =~ ^[Yy]$ ]]; then
         log "Exiting due to error"
@@ -150,12 +150,31 @@ check_success() {
   fi
 }
 
-# Function to prompt for confirmation
+# Function to prompt for confirmation with default
+# Usage: confirm "message" [default]
+#   default: "y" for Yes default (Y/n), "n" for No default (y/N)
+#   if no default specified, uses "y" for Yes default
 confirm() {
   if [[ "${FORCE}" = false ]]; then
-    read -p "$1 (y/n) " -n 1 -r
+    local message="$1"
+    local default="${2:-y}" # Default to Yes if not specified
+    local prompt
+
+    if [[ "${default}" = "y" ]]; then
+      prompt="${message} (Y/n) "
+    else
+      prompt="${message} (y/N) "
+    fi
+
+    read -p "${prompt}" -n 1 -r
     echo
-    [[ ${REPLY} =~ ^[Yy]$ ]]
+
+    # If user just pressed Enter (empty response), use default
+    if [[ -z "${REPLY}" ]]; then
+      [[ "${default}" = "y" ]]
+    else
+      [[ ${REPLY} =~ ^[Yy]$ ]]
+    fi
   else
     return 0
   fi
@@ -405,7 +424,7 @@ log "Plex server name: ${PLEX_SERVER_NAME}"
 log "Operator username: ${OPERATOR_USERNAME}"
 
 # Confirm operation if not forced
-if confirm "This script will set up Plex Media Server in a Docker container. Continue?"; then
+if confirm "This script will set up Plex Media Server in a Docker container. Continue?" "y"; then
   log "Proceeding with Plex setup"
 else
   log "Setup cancelled by user"
@@ -420,7 +439,7 @@ if ! docker info &>/dev/null; then
   # Check if Colima is available
   if command -v colima &>/dev/null; then
     log "Colima is available but not running"
-    if confirm "Start Colima now?"; then
+    if confirm "Start Colima now?" "y"; then
       log "Starting Colima..."
       if colima start; then
         log "✅ Colima started successfully"
@@ -477,7 +496,7 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
 
     # Mount the SMB share
     log "Mounting SMB share..."
-    if confirm "Mount NAS share now?"; then
+    if confirm "Mount NAS share now?" "y"; then
       log "Mounting ${NAS_SMB_URL} at ${PLEX_MEDIA_MOUNT}"
 
       # Check for Plex NAS credentials file from airdrop-prep
@@ -562,7 +581,7 @@ if [[ "${SKIP_MOUNT}" = false ]]; then
         log "  - Username is correct: ${NAS_USERNAME}"
         log "  - Password is correct"
         log "  - You entered the password in the desktop dialog (if running remotely)"
-        if ! confirm "Continue without NAS mount? (You can mount manually later)"; then
+        if ! confirm "Continue without NAS mount? (You can mount manually later)" "n"; then
           exit 1
         fi
       fi
@@ -710,7 +729,7 @@ if [[ "${SKIP_MIGRATION}" = false ]]; then
   # Check if we already have migrated config
   if [[ -d "${PLEX_OLD_CONFIG}" ]]; then
     log "Found existing Plex configuration at ${PLEX_OLD_CONFIG}"
-    if confirm "Use existing migrated Plex configuration?"; then
+    if confirm "Use existing migrated Plex configuration?" "y"; then
       log "Using existing migration at ${PLEX_OLD_CONFIG}"
     else
       log "Removing existing migration to start fresh..."
@@ -723,7 +742,7 @@ if [[ "${SKIP_MIGRATION}" = false ]]; then
   if [[ ! -d "${PLEX_OLD_CONFIG}" ]]; then
     # If no migration source specified, ask user
     if [[ -z "${PLEX_MIGRATE_FROM}" ]]; then
-      if confirm "Do you want to migrate from an existing Plex server?"; then
+      if confirm "Do you want to migrate from an existing Plex server?" "y"; then
         # Try to discover Plex servers
         log "Scanning for Plex servers on the network..."
         discovered_servers=$(discover_plex_servers)
@@ -769,12 +788,12 @@ if [[ "${SKIP_MIGRATION}" = false ]]; then
     if [[ -n "${PLEX_MIGRATE_FROM}" ]]; then
       log "Migrating Plex configuration from ${PLEX_MIGRATE_FROM}"
 
-      if confirm "Proceed with migration from ${PLEX_MIGRATE_FROM}?"; then
+      if confirm "Proceed with migration from ${PLEX_MIGRATE_FROM}?" "y"; then
         if migrate_plex_from_host "${PLEX_MIGRATE_FROM}"; then
           log "✅ Automated migration completed successfully"
         else
           log "❌ Automated migration failed"
-          if confirm "Continue with fresh Plex installation?"; then
+          if confirm "Continue with fresh Plex installation?" "y"; then
             log "Continuing with fresh installation..."
           else
             log "Migration failed and user chose to exit"
@@ -789,7 +808,7 @@ if [[ "${SKIP_MIGRATION}" = false ]]; then
 
   # Process migrated config if available
   if [[ -d "${PLEX_OLD_CONFIG}" ]]; then
-    if confirm "Apply migrated Plex configuration to Docker container?"; then
+    if confirm "Apply migrated Plex configuration to Docker container?" "y"; then
       log "Stopping any existing Plex container..."
       docker stop "${PLEX_CONTAINER_NAME}" 2>/dev/null || true
       docker rm "${PLEX_CONTAINER_NAME}" 2>/dev/null || true
@@ -852,7 +871,7 @@ else
 
   # Get Plex claim token if not migrating
   PLEX_CLAIM_TOKEN=""
-  if [[ "${SKIP_MIGRATION}" = true ]] && confirm "Get Plex claim token for initial setup?"; then
+  if [[ "${SKIP_MIGRATION}" = true ]] && confirm "Get Plex claim token for initial setup?" "n"; then
     echo "Get a claim token from https://www.plex.tv/claim/"
     echo "It expires after 4 minutes, so be ready to use it immediately"
     read -rp "Enter your Plex claim token (or press Enter to skip): " PLEX_CLAIM_TOKEN

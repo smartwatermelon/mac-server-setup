@@ -30,6 +30,7 @@ This project provides a complete automation framework for setting up an Apple Si
 - **Automated Credential Retrieval**: NAS credentials automatically retrieved from 1Password
 - **Secure Credential Handling**: No plaintext passwords in scripts or logs
 - **Smart Fallbacks**: Interactive prompts when 1Password credentials unavailable
+- **Intuitive Confirmations**: Sensible defaults for all prompts (Y/n for proceed, y/N for destructive)
 
 ## Key Principles
 

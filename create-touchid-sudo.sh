@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # create-touchid-sudo.sh - Script to create TouchID sudo configuration file on Mac
 #

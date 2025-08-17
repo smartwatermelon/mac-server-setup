@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # airdrop-prep.sh - Script to prepare a directory with necessary files for Mac Mini M2 server setup
 #
@@ -49,7 +49,7 @@ OP_PLEX_NAS_ENTRY="${ONEPASSWORD_PLEX_NAS_ITEM}"
 if [[ -d "${OUTPUT_PATH}" ]]; then
   echo "Output directory already exists: ${OUTPUT_PATH}"
   echo "This directory contains files from a previous preparation run."
-  read -p "Remove existing directory and recreate? (y/n) " -n 1 -r
+  read -p "Remove existing directory and recreate? (y/N) " -n 1 -r
   echo
   if [[ ${REPLY} =~ ^[Yy]$ ]]; then
     echo "Removing existing directory..."

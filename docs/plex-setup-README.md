@@ -25,6 +25,7 @@ The `plex-setup.sh` script automates the deployment of Plex Media Server in a Do
 **Command Line Options**:
 
 - `--force`: Skip all confirmation prompts (unattended installation)
+- **Default behavior**: Interactive prompts with sensible defaults (Y/n for proceed, y/N for destructive actions)
 - `--skip-migration`: Skip Plex configuration migration
 - `--skip-mount`: Skip SMB mount setup
 - `--server-name NAME`: Set Plex server name (default: hostname)
@@ -101,8 +102,8 @@ DOCKER_NETWORK="${DOCKER_NETWORK_OVERRIDE:-${HOSTNAME_LOWER}-network}"
 **User Input** (when not using `--force`):
 
 - Plex claim token (for fresh installations)
-- Confirmation prompts for each major operation
-- NAS mounting credentials (via macOS GUI)
+- Confirmation prompts for each major operation (most default to Yes - just press Enter)
+- NAS mounting credentials (via macOS GUI when 1Password unavailable)
 
 ## Expected File Structure
 
@@ -179,7 +180,9 @@ After script execution:
 1. **Load Configuration**: Sources `config.conf` from script directory and derives variables
 2. **Parse Arguments**: Processes command-line flags
 3. **Validate Prerequisites**: Checks Docker availability
-4. **User Confirmation**: Prompts for operation confirmation (unless `--force`)
+4. **User Confirmation**: Prompts for operation confirmation with sensible defaults (unless `--force`):
+   - Setup operations default to **Yes** - press Enter to continue
+   - Destructive operations default to **No** - requires explicit confirmation
 
 ### Phase 2: NAS Mount Setup
 
@@ -310,11 +313,13 @@ After script execution:
 
 1. **autofs Master Configuration**: Adds `/-  auto_smb  -nosuid,noowners` to `/etc/auto_master`
 2. **SMB Configuration**: Creates `/etc/auto_smb` with mount definition:
-   ```
+
+   ```bash
    /Volumes/DSMedia  -fstype=smbfs,soft,noowners,nosuid,rw ://username:password@hostname/share
    ```
+
 3. **Service Restart**: Reloads autofs configuration with `automount -cv`
-4. **Credential Handling**: 
+4. **Credential Handling**:
    - Uses 1Password credentials when available
    - URL-encodes passwords to handle special characters (e.g., @ symbols)
    - Falls back to interactive prompts if credentials unavailable
@@ -476,7 +481,7 @@ sudo automount -cv
 
 **Common Mount Issues**:
 
-- **Authentication failure (exit code 68)**: 
+- **Authentication failure (exit code 68)**:
   - Username case sensitivity (try lowercase username)
   - Password contains special characters (@ symbols need URL encoding)
   - Incorrect credentials in 1Password
@@ -645,6 +650,23 @@ docker run -d \
   -v /Volumes/${NAS_SHARE_NAME}:/media \
   lscr.io/linuxserver/plex:latest
 ```
+
+#### Interactive Prompts
+
+**Default Behavior**: The script uses sensible defaults for all confirmation prompts:
+
+- **Setup Operations** (Y/n): Default to Yes - press Enter to proceed
+  - Continue with Plex setup
+  - Start Colima/Docker
+  - Mount NAS share
+  - Use existing configurations
+  - Apply migrations
+
+- **Safety Prompts** (y/N): Default to No - requires explicit 'y' + Enter
+  - Continue without NAS mount (after mount failure)
+  - Get Plex claim token (optional step)
+
+**Unattended Operation**: Use `--force` flag to automatically accept all defaults and skip prompts entirely.
 
 ## Security Considerations
 

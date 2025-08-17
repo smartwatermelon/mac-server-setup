@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # first-boot.sh - Complete setup script for Mac Mini M2 server
 #
@@ -143,7 +143,7 @@ check_success() {
   else
     show_log "❌ $1 failed"
     if [[ "${FORCE}" = false ]]; then
-      read -p "Continue anyway? (y/n) " -n 1 -r
+      read -p "Continue anyway? (y/N) " -n 1 -r
       echo
       if [[ ! ${REPLY} =~ ^[Yy]$ ]]; then
         log "Exiting due to error"
@@ -248,9 +248,10 @@ fi
 
 # Confirm operation if not forced
 if [[ "${FORCE}" = false ]] && [[ "${RERUN_AFTER_FDA}" = false ]]; then
-  read -p "This script will configure your Mac Mini server. Continue? (y/n) " -n 1 -r
+  read -p "This script will configure your Mac Mini server. Continue? (Y/n) " -n 1 -r
   echo
-  if [[ ! ${REPLY} =~ ^[Yy]$ ]]; then
+  # Default to Yes if Enter pressed (empty REPLY)
+  if [[ -n "${REPLY}" ]] && [[ ! ${REPLY} =~ ^[Yy]$ ]]; then
     log "Setup cancelled by user"
     exit 0
   fi
@@ -549,9 +550,10 @@ if [[ "${APPLE_ID_CONFIGURED}" != true ]]; then
 
     # Ask user to confirm they've retrieved the password
     if [[ "${FORCE}" = false ]]; then
-      read -rp "Have you retrieved your Apple ID password? (y/n) " -n 1 -r
+      read -rp "Have you retrieved your Apple ID password? (Y/n) " -n 1 -r
       echo
-      if [[ ! ${REPLY} =~ ^[Yy]$ ]]; then
+      # Default to Yes if Enter pressed (empty REPLY)
+      if [[ -n "${REPLY}" ]] && [[ ! ${REPLY} =~ ^[Yy]$ ]]; then
         show_log "Please retrieve your Apple ID password before continuing"
         open "${APPLE_ID_URL_FILE}"
         read -p "Press any key to continue once you have your password... " -n 1 -r

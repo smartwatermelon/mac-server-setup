@@ -90,9 +90,7 @@ ls -la *.sh
 Common application setup scripts:
 
 - `plex-setup.sh` - Plex Media Server
-- `transmission-setup.sh` - BitTorrent client  
-- `monitoring-setup.sh` - System monitoring
-- `caddy-setup.sh` - Web server/reverse proxy
+- `caddy-setup.sh` - Web server/reverse proxy (planned)
 
 ### Running Application Installers
 
@@ -106,10 +104,12 @@ chmod +x ~/app-setup/*.sh
 
 ```bash
 ./plex-setup.sh
-./transmission-setup.sh
 ```
 
-**Follow prompts** for application-specific configuration.
+**Follow prompts** for application-specific configuration:
+
+- Most prompts default to Yes (Y/n) - press Enter to proceed
+- Use `--force` flag to skip all prompts: `./plex-setup.sh --force`
 
 ## Customizing the Environment
 
@@ -216,7 +216,7 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --listapps
 1. **✅ Run dock-cleanup.command**
 2. **✅ Verify SSH access**  
 3. **Run application setup scripts** as needed
-4. **Configure monitoring** with monitoring-setup.sh
+4. **Configure additional services** as needed
 5. **Test containerized applications** after setup
 
 ### Ongoing Maintenance

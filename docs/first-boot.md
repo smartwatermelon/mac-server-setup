@@ -47,7 +47,10 @@ chmod +x first-boot.sh
 ./first-boot.sh
 ```
 
-The script runs interactively, prompting for confirmation at key steps.
+The script runs interactively, prompting for confirmation at key steps with sensible defaults:
+
+* **Setup operations**: Default to Yes (Y/n) - press Enter to continue
+* **Error recovery**: Default to No (y/N) - requires explicit confirmation to proceed
 
 ### Command Line Options
 
@@ -151,9 +154,13 @@ The script automatically opens a second Terminal window showing live setup logs:
 
 ### User Confirmations
 
-**WiFi Configuration**: Confirm network setup if manual configuration needed.
+**Setup Continuation** (Y/n): Press Enter to proceed with server configuration.
 
-**Apple ID Setup**: Confirm when Apple ID configuration is complete.
+**WiFi Configuration** (Y/n): Confirm network setup if manual configuration needed - defaults to Yes.
+
+**Apple ID Setup** (Y/n): Confirm when Apple ID configuration is complete - defaults to Yes.
+
+**Error Recovery** (y/N): After failures, choose whether to continue - defaults to No for safety.
 
 **Reboot Decision**: Choose whether to reboot immediately after setup.
 
@@ -231,6 +238,14 @@ This means you're trying to run the script on your development Mac instead of th
 
 * **Review**: Check `brew doctor` output in logs for issues
 * **Retry**: Run `brew install <package-name>` manually later
+
+### Confirmation Prompt Behavior
+
+**Quick Setup**: Most prompts default to Yes (Y/n) - just press Enter to continue with recommended actions.
+
+**Safety Prompts**: Error recovery prompts default to No (y/N) - type 'y' and Enter to proceed after failures.
+
+**Force Mode**: Use `--force` flag to skip all prompts for completely unattended installation.
 
 ### Apple ID Verification Issues
 
