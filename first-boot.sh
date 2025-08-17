@@ -1127,7 +1127,34 @@ if command -v colima &>/dev/null; then
 
   # Initialize Colima with server-appropriate settings as operator
   log "Initializing Colima with server settings..."
-  if sudo -p "[Colima setup] Enter password to initialize Colima: " -iu "${OPERATOR_USERNAME}" colima start --cpu 2 --memory 4 --disk 20; then
+  log "Note: First-time Colima initialization may take several minutes..."
+
+  # Try Colima initialization with timeout and fallback strategies
+  COLIMA_INIT_SUCCESS=false
+
+  # First attempt: Standard initialization
+  log "Attempting Colima initialization (attempt 1/2)..."
+  if timeout 300 sudo -p "[Colima setup] Enter password to initialize Colima: " -iu "${OPERATOR_USERNAME}" colima start --cpu 2 --memory 4 --disk 20 --vm-type=vz --mount-type=virtiofs; then
+    log "✅ Colima initialized successfully"
+    COLIMA_INIT_SUCCESS=true
+  else
+    log "⚠️  First initialization attempt failed or timed out"
+
+    # Clean up any partial state
+    log "Cleaning up partial Colima state..."
+    sudo -iu "${OPERATOR_USERNAME}" colima delete --force 2>/dev/null || true
+
+    # Second attempt: Alternative configuration
+    log "Attempting Colima initialization with alternative settings (attempt 2/2)..."
+    if timeout 300 sudo -p "[Colima setup] Enter password for second initialization attempt: " -iu "${OPERATOR_USERNAME}" colima start --cpu 2 --memory 4 --disk 20 --vm-type=qemu; then
+      log "✅ Colima initialized successfully with alternative settings"
+      COLIMA_INIT_SUCCESS=true
+    else
+      log "❌ Both Colima initialization attempts failed"
+    fi
+  fi
+
+  if [[ "${COLIMA_INIT_SUCCESS}" == "true" ]]; then
     check_success "Colima initialization"
 
     # Verify Docker is working
@@ -1142,7 +1169,9 @@ if command -v colima &>/dev/null; then
     sudo -p "[Colima setup] Enter password to stop Colima: " -iu "${OPERATOR_USERNAME}" colima stop
     check_success "Colima stop"
   else
-    log "❌ Failed to initialize Colima"
+    log "❌ Failed to initialize Colima after multiple attempts"
+    log "Colima can be manually initialized later with: colima start"
+    log "Consider trying: colima start --vm-type=qemu or colima start --vm-type=vz"
   fi
 
   # Set up Colima directory permissions for shared access
