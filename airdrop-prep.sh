@@ -118,14 +118,29 @@ else
   echo "Private key will not be available on the server"
 fi
 
-# Check for TouchID sudo file and copy if exists
-if [[ -f "/etc/pam.d/sudo_local" ]]; then
-  echo "Copying TouchID sudo file..."
-  cp "/etc/pam.d/sudo_local" "${OUTPUT_PATH}/pam.d/"
-  chmod +w "${OUTPUT_PATH}/pam.d/sudo_local"
+# TouchID sudo configuration setup
+echo ""
+echo "====== TouchID Sudo Configuration ======"
+read -p "Enable TouchID for sudo authentication on the server? (Y/n) " -n 1 -r TOUCHID_CHOICE
+echo ""
+
+if [[ -z "${TOUCHID_CHOICE}" ]] || [[ ${TOUCHID_CHOICE} =~ ^[Yy]$ ]]; then
+  echo "Creating TouchID sudo configuration file for server setup..."
+  cat >"${OUTPUT_PATH}/pam.d/sudo_local" <<'EOF'
+# sudo_local: PAM configuration for enabling TouchID for sudo
+#
+# This file enables the use of TouchID as an authentication method for sudo
+# commands on macOS. It is used in addition to the standard sudo configuration.
+#
+# Format: auth sufficient pam_tid.so
+
+# Allow TouchID authentication for sudo
+auth       sufficient     pam_tid.so
+EOF
+  chmod 644 "${OUTPUT_PATH}/pam.d/sudo_local"
+  echo "✅ TouchID sudo configuration created for transfer"
 else
-  echo "Warning: TouchID sudo file not found at /etc/pam.d/sudo_local"
-  echo "TouchID sudo will not be configured on the server"
+  echo "Skipping TouchID sudo setup - standard password authentication will be used"
 fi
 
 # WiFi Configuration Strategy Selection

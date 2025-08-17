@@ -104,7 +104,7 @@ The setup process consists of two main phases:
 ├── config.conf                 # Configuration parameters
 ├── airdrop-prep.sh             # Setup package preparation
 ├── first-boot.sh               # Main setup script
-├── create-touchid-sudo.sh      # TouchID sudo enablement
+├── dock-cleanup.command        # Dock cleanup for operator
 ├── dock-cleanup.command        # Operator dock cleanup
 ├── formulae.txt                # Homebrew formulae list
 ├── casks.txt                   # Homebrew casks list

@@ -79,15 +79,11 @@ If this item is not found, the Plex setup will fall back to an interactive passw
 >
 > **Password**: Your Apple ID password
 
-### TouchID Sudo (Optional)
+### TouchID Sudo Configuration
 
-If you want TouchID sudo on the Mac Mini, first enable it on your development Mac:
+During the airdrop preparation process, you'll be prompted whether to enable TouchID authentication for sudo commands on the Mac Mini. Choose "Yes" (the default) to enable convenient TouchID authentication for administrative tasks on the server.
 
-```bash
-./create-touchid-sudo.sh
-```
-
-This creates `/etc/pam.d/sudo_local` which will be copied to the Mac Mini during setup.
+This creates the necessary `sudo_local` file for transfer without modifying your development Mac.
 
 ## Running AirDrop Prep
 
@@ -219,14 +215,8 @@ op item list --vault "personal"
 op item get "operator" --vault "personal"
 ```
 
-### TouchID Sudo Missing
+### TouchID Sudo Troubleshooting
 
-If you want TouchID sudo but the prep script reports it's missing:
+The TouchID sudo configuration is now handled automatically during the airdrop preparation process. You'll be prompted whether to enable it, and the script will create the necessary file for transfer to the server.
 
-```bash
-# Check if file exists
-ls -la /etc/pam.d/sudo_local
-
-# Create it if needed
-./create-touchid-sudo.sh
-```
+No manual setup is required on your development machine.
