@@ -471,6 +471,126 @@ else
   log "Docker is running"
 fi
 
+# Configure Colima mounts for Plex requirements
+section "Configuring Colima Mounts"
+if command -v colima &>/dev/null; then
+  COLIMA_CONFIG="${HOME}/.colima/default/colima.yaml"
+
+  if [[ -f "${COLIMA_CONFIG}" ]]; then
+    log "Checking Colima mount configuration..."
+
+    # Check if required mounts are configured
+    VOLUMES_MOUNT_CONFIGURED=false
+    CONFIG_MOUNT_CONFIGURED=false
+
+    if grep -q "location: /Volumes" "${COLIMA_CONFIG}"; then
+      VOLUMES_MOUNT_CONFIGURED=true
+      log "✅ /Volumes mount already configured"
+    fi
+
+    if grep -q "location: ${PLEX_CONFIG_DIR%/*}" "${COLIMA_CONFIG}" || grep -q "location: ${HOME}/Docker" "${COLIMA_CONFIG}"; then
+      CONFIG_MOUNT_CONFIGURED=true
+      log "✅ Config directory mount already configured"
+    fi
+
+    # If mounts are missing, configure them
+    if [[ "${VOLUMES_MOUNT_CONFIGURED}" = false ]] || [[ "${CONFIG_MOUNT_CONFIGURED}" = false ]]; then
+      log "Colima mount configuration needs updating..."
+
+      if confirm "Update Colima configuration to add required mounts?" "y"; then
+        # Backup current config
+        backup_timestamp=$(date +%Y%m%d_%H%M%S)
+        cp "${COLIMA_CONFIG}" "${COLIMA_CONFIG}.backup.${backup_timestamp}"
+        log "✅ Backed up current Colima configuration"
+
+        # Check if mounts section exists and is empty
+        if grep -q "mounts: \[\]" "${COLIMA_CONFIG}"; then
+          log "Adding mount configuration to empty mounts section..."
+          sed -i '' 's/mounts: \[\]/mounts:\
+  - location: \/Volumes\
+    writable: true\
+  - location: '"${HOME//\//\\\/}"'\/Docker\
+    writable: true/' "${COLIMA_CONFIG}"
+        elif grep -q "^mounts:" "${COLIMA_CONFIG}"; then
+          log "Adding to existing mounts section..."
+          # Add missing mounts to existing section
+          if [[ "${VOLUMES_MOUNT_CONFIGURED}" = false ]]; then
+            sed -i '' '/^mounts:/a\
+  - location: /Volumes\
+    writable: true' "${COLIMA_CONFIG}"
+          fi
+          if [[ "${CONFIG_MOUNT_CONFIGURED}" = false ]]; then
+            sed -i '' '/^mounts:/a\
+  - location: '"${HOME}"'/Docker\
+    writable: true' "${COLIMA_CONFIG}"
+          fi
+        else
+          log "❌ Could not find mounts section in Colima config"
+          log "Please manually add these mounts to ${COLIMA_CONFIG}:"
+          log "  mounts:"
+          log "    - location: /Volumes"
+          log "      writable: true"
+          log "    - location: ${HOME}/Docker"
+          log "      writable: true"
+          exit 1
+        fi
+
+        log "✅ Updated Colima configuration"
+
+        # Restart Colima to apply changes
+        log "Restarting Colima to apply mount configuration..."
+        if colima stop && colima start; then
+          log "✅ Colima restarted successfully"
+
+          # Verify Docker is still working
+          if docker info &>/dev/null; then
+            log "✅ Docker is running after Colima restart"
+          else
+            log "❌ Docker not responding after Colima restart"
+            exit 1
+          fi
+        else
+          log "❌ Failed to restart Colima"
+          log "Please restart manually: colima stop && colima start"
+          exit 1
+        fi
+      else
+        log "⚠️  Continuing without mount configuration - Docker volumes may not work"
+      fi
+    fi
+
+    # Verify mounts are working
+    log "Verifying Colima VM mount accessibility..."
+
+    # Test /Volumes mount
+    if colima ssh -- test -d /Volumes 2>/dev/null; then
+      log "✅ /Volumes accessible in Colima VM"
+    else
+      log "❌ /Volumes not accessible in Colima VM"
+      log "This will prevent SMB mount access in containers"
+    fi
+
+    # Test config directory mount
+    if colima ssh -- test -d "${HOME}/Docker" 2>/dev/null; then
+      log "✅ ${HOME}/Docker accessible in Colima VM"
+    else
+      log "⚠️  ${HOME}/Docker not accessible in Colima VM"
+      log "Creating directory and testing access..."
+      mkdir -p "${HOME}/Docker"
+      if colima ssh -- test -d "${HOME}/Docker" 2>/dev/null; then
+        log "✅ ${HOME}/Docker now accessible"
+      else
+        log "❌ ${HOME}/Docker still not accessible"
+        log "Docker volume mounts may fail"
+      fi
+    fi
+  else
+    log "No Colima configuration found - using defaults"
+  fi
+else
+  log "Colima not found - assuming Docker Desktop or other Docker runtime"
+fi
+
 # Setup SMB mount to NAS
 if [[ "${SKIP_MOUNT}" = false ]]; then
   section "Setting Up NAS Media Mount"
