@@ -1020,8 +1020,30 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
   install_cask() {
     if ! brew list --cask "$1" &>/dev/null; then
       log "Installing cask: $1"
+
+      # Capture /Applications before installation
+      local before_apps
+      before_apps=$(find /Applications -maxdepth 1 -type d -name "*.app" 2>/dev/null | sort)
+
       if brew install --cask "$1"; then
         log "✅ Cask installation: $1"
+
+        # Capture /Applications after installation
+        local after_apps
+        after_apps=$(find /Applications -maxdepth 1 -type d -name "*.app" 2>/dev/null | sort)
+
+        # Find newly installed apps and remove quarantine attributes
+        local new_apps
+        new_apps=$(comm -13 <(echo "${before_apps}") <(echo "${after_apps}"))
+
+        if [[ -n "${new_apps}" ]]; then
+          while IFS= read -r app_path; do
+            if [[ -n "${app_path}" ]]; then
+              log "Removing quarantine attribute from: $(basename "${app_path}")"
+              xattr -d com.apple.quarantine "${app_path}" 2>/dev/null || true
+            fi
+          done <<<"${new_apps}"
+        fi
       else
         log "❌ Cask installation failed: $1"
         # Continue instead of exiting
