@@ -284,6 +284,10 @@ setup_persistent_smb_mount() {
 </plist>
 EOF
 
+  # Remove existing mount if necessary
+  sudo launchctl unload "${plist_file}" &>/dev/null || true
+  sudo umount "${PLEX_MEDIA_MOUNT}" &>/dev/null || true
+
   # Set proper plist permissions
   sudo chmod 644 "${plist_file}"
   sudo chown root:wheel "${plist_file}"
@@ -291,8 +295,6 @@ EOF
 
   # Step 3: Load and start the LaunchDaemon
   log "Loading LaunchDaemon for immediate mount"
-  sudo launchctl unload "${plist_file}" || true
-  sudo umount "${PLEX_MEDIA_MOUNT}" || true
   sudo launchctl load "${plist_file}"
   check_success "LaunchDaemon load"
 

@@ -123,49 +123,78 @@ mount_smb_share() {
   fi
 }
 
-# Main execution
+# Main execution - idempotent mounting process
 main() {
-  log "Starting NAS media mount process"
+  log "Starting idempotent NAS media mount process"
   log "Target: ${PLEX_MEDIA_MOUNT}"
   log "Source: //${PLEX_NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
 
-  # Check if already mounted
-  if is_already_mounted; then
-    log "✅ SMB share already mounted at ${PLEX_MEDIA_MOUNT}"
-    return 0
-  fi
-
-  # Wait for network
+  # Wait for network connectivity first
   if ! wait_for_network; then
     log "❌ Cannot proceed without network connectivity"
     exit 1
   fi
 
-  # Create mount point
-  create_mount_point
+  # Step 1: Unmount existing mount (ignore failures)
+  log "Step 1: Unmounting any existing mount..."
+  umount "${PLEX_MEDIA_MOUNT}" 2>/dev/null || true
+  log "✅ Unmount completed (or was not mounted)"
 
-  # Attempt mount with retry logic
-  local max_mount_attempts=3
-  local mount_attempt=1
+  # Step 2: Remove mount point (ignore failures)
+  log "Step 2: Removing existing mount point..."
+  rmdir "${PLEX_MEDIA_MOUNT}" 2>/dev/null || true
+  log "✅ Mount point removal completed (or didn't exist)"
 
-  while [[ ${mount_attempt} -le ${max_mount_attempts} ]]; do
-    log "Mount attempt ${mount_attempt}/${max_mount_attempts}"
+  # Step 3: Create mount point with proper ownership and permissions
+  log "Step 3: Creating mount point with proper permissions..."
+  mkdir -p "${PLEX_MEDIA_MOUNT}"
+  chown root:staff "${PLEX_MEDIA_MOUNT}"
+  chmod 775 "${PLEX_MEDIA_MOUNT}"
+  log "✅ Mount point created: ${PLEX_MEDIA_MOUNT} (root:staff 775)"
 
-    if mount_smb_share; then
-      log "✅ NAS media mount completed successfully"
-      exit 0
-    fi
+  # Step 4: Mount the SMB share
+  log "Step 4: Mounting SMB share..."
+  local encoded_password
+  encoded_password=$(printf '%s' "${PLEX_NAS_PASSWORD}" | sed 's/@/%40/g; s/:/%3A/g; s/ /%20/g; s/#/%23/g; s/?/%3F/g; s/&/%26/g')
+  local mount_url="//${PLEX_NAS_USERNAME}:${encoded_password}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
 
-    if [[ ${mount_attempt} -lt ${max_mount_attempts} ]]; then
-      log "   Retrying in 10 seconds..."
-      sleep 10
-    fi
+  if mount -t smbfs -o soft,nobrowse,noowners,file_mode=0664,dir_mode=0775 "${mount_url}" "${PLEX_MEDIA_MOUNT}"; then
+    log "✅ SMB mount successful"
+  else
+    log "❌ SMB mount failed"
+    exit 1
+  fi
 
-    ((mount_attempt++))
-  done
+  # Step 5: Test read/write access for all users
+  log "Step 5: Testing read/write access..."
 
-  log "❌ Failed to mount NAS media after ${max_mount_attempts} attempts"
-  exit 1
+  # Test basic mount verification
+  if ! mount | grep -q "${PLEX_MEDIA_MOUNT}"; then
+    log "❌ Mount not visible in system mount table"
+    exit 1
+  fi
+
+  # Test read access
+  if ! ls "${PLEX_MEDIA_MOUNT}" >/dev/null 2>&1; then
+    log "❌ Cannot read mount directory"
+    exit 1
+  fi
+
+  local file_count
+  file_count=$(find "${PLEX_MEDIA_MOUNT}" -maxdepth 1 -type f -o -type d | tail -n +2 | wc -l 2>/dev/null || echo "0")
+  log "✅ Read access confirmed - found ${file_count} items"
+
+  # Test write access with timestamped test file
+  local test_file
+  test_file="${PLEX_MEDIA_MOUNT}/mount-test-$(date +%Y%m%d-%H%M%S)"
+  if touch "${test_file}" 2>/dev/null; then
+    log "✅ Write access confirmed"
+    rm -f "${test_file}" 2>/dev/null || log "⚠️  Could not clean up test file ${test_file}"
+  else
+    log "⚠️  Write access failed - mount may be read-only"
+  fi
+
+  log "✅ NAS media mount process completed successfully"
 }
 
 # Execute main function
