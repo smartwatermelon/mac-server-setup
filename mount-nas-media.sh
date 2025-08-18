@@ -76,8 +76,8 @@ main() {
   # Step 3: Create mount point with proper ownership and permissions
   log "Step 3: Creating mount point with proper permissions..."
   mkdir -p "${PLEX_MEDIA_MOUNT}"
-  chown root:staff "${PLEX_MEDIA_MOUNT}"
-  chmod 775 "${PLEX_MEDIA_MOUNT}"
+  sudo chown root:staff "${PLEX_MEDIA_MOUNT}"
+  sudo chmod 775 "${PLEX_MEDIA_MOUNT}"
   log "✅ Mount point created: ${PLEX_MEDIA_MOUNT} (root:staff 775)"
 
   # Step 4: Mount the SMB share
@@ -86,7 +86,7 @@ main() {
   encoded_password=$(printf '%s' "${PLEX_NAS_PASSWORD}" | sed 's/@/%40/g; s/:/%3A/g; s/ /%20/g; s/#/%23/g; s/?/%3F/g; s/&/%26/g')
   local mount_url="//${PLEX_NAS_USERNAME}:${encoded_password}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
 
-  if mount -t smbfs -o soft,nobrowse,noowners,filemode=0664,dirmode=0775 "${mount_url}" "${PLEX_MEDIA_MOUNT}"; then
+  if mount_smbfs -o soft,nobrowse,noowners -f 0664 -d 0775 "${mount_url}" "${PLEX_MEDIA_MOUNT}"; then
     log "✅ SMB mount successful"
   else
     log "❌ SMB mount failed"
