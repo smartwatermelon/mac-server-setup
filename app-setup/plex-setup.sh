@@ -291,6 +291,7 @@ EOF
 
   # Step 3: Load and start the LaunchDaemon
   log "Loading LaunchDaemon for immediate mount"
+  sudo launchctl unload "${plist_file}" || true
   sudo launchctl load "${plist_file}"
   check_success "LaunchDaemon load"
 

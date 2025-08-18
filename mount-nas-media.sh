@@ -81,7 +81,7 @@ mount_smb_share() {
 
   local mount_url="//${PLEX_NAS_USERNAME}:${encoded_password}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
 
-  if mount -t smbfs -o soft,nobrowse,noowners "${mount_url}" "${PLEX_MEDIA_MOUNT}" 2>/dev/null; then
+  if mount -t smbfs -o soft,nobrowse,noowners,file_mode=0664,dir_mode=0775 "${mount_url}" "${PLEX_MEDIA_MOUNT}" 2>/dev/null; then
     log "✅ SMB mount successful"
 
     # Verify mount and test access
