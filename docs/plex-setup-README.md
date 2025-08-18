@@ -7,10 +7,11 @@ This document describes the operation, configuration, and troubleshooting of the
 The `plex-setup.sh` script automates the deployment of native Plex Media Server on macOS with:
 
 - Native Plex Media Server installation via official macOS installer
-- SMB mount to NAS for media storage via autofs
+- **Direct SMB mounting** for reliable NAS media storage access (autofs removed)
 - Shared configuration directory accessible to both admin and operator users
 - LaunchAgent configuration for automatic startup with operator login
-- Configuration migration from existing Plex servers
+- **SSH-based remote migration** from existing Plex servers with server discovery
+- **Enhanced security**: Firewall configuration, permission grants, credential protection
 - Integration with the server's configuration system
 
 ## Script Location and Usage
@@ -183,20 +184,23 @@ After script execution:
    - Setup operations default to **Yes** - press Enter to continue
    - Destructive operations default to **No** - requires explicit confirmation
 
-### Phase 2: SMB Mount Setup
+### Phase 2: Direct SMB Mount Setup
 
-1. **1Password Credential Retrieval**: Securely retrieves NAS credentials from specified vault item
-2. **autofs Configuration**: Configures macOS native autofs for automatic mounting
-3. **Mount Point Creation**: Creates `/Volumes/${NAS_SHARE_NAME}` with proper permissions
-4. **Automatic Mounting**: Sets up autofs rules for on-demand mounting
-5. **Service Restart**: Reloads autofs configuration for immediate effect
+1. **Local Credential Loading**: Loads NAS credentials from `plex_nas.conf` file
+2. **Safety Validation**: Critical checks prevent dangerous `/Volumes` root mounting  
+3. **Mount Point Preparation**: Creates mount directory and sets proper ownership (`user:staff`)
+4. **Direct SMB Mount**: Uses `mount -t smbfs` with optimal options (`soft,nobrowse,noowners`)
+5. **Mount Verification**: Tests mount success and directory accessibility
 
 ### Phase 3: Native Application Installation
 
 1. **Application Check**: Verifies if Plex Media Server is already installed
 2. **Download**: Downloads latest Plex Media Server for macOS from official source
 3. **Installation**: Mounts DMG and copies application to `/Applications/`
-4. **Cleanup**: Removes temporary installation files
+4. **Quarantine Removal**: Removes Apple quarantine attribute for seamless operation
+5. **Firewall Configuration**: Pre-configures firewall permissions for Plex
+6. **Network Permissions**: Grants network volume access via tccutil
+7. **Cleanup**: Removes temporary installation files
 
 ### Phase 4: Shared Configuration Setup
 
@@ -207,13 +211,20 @@ After script execution:
 
 ### Phase 5: Configuration Migration
 
+**Remote Migration (New)**:
+
+1. **Migration Prompt**: Interactive selection to migrate from existing Plex server
+2. **Server Discovery**: Automatic discovery of Plex servers on local network via DNS-SD
+3. **SSH Connectivity Test**: Validates connection to source server
+4. **Size Estimation**: Calculates migration size and time estimates
+5. **Remote Transfer**: Uses rsync (preferred) or scp fallback for config transfer
+6. **Progress Reporting**: Real-time migration progress with error handling
+
 **Local Migration**:
 
 1. **Migration Check**: Looks for existing config at `~/plex-migration/`
-2. **Backup Creation**: Backs up any existing shared config with timestamp
-3. **Smart File Copy** (following [Plex best practices](https://support.plex.tv/articles/201370363-move-an-install-to-another-system/)):
-   - Preserves all settings, libraries, and metadata
-   - Handles permission setup for shared directory
+2. **Backup Creation**: Backs up any existing shared config with timestamp  
+3. **Smart File Copy**: Preserves all settings, libraries, and metadata
 4. **Ownership Setup**: Sets proper file ownership for multi-user access
 5. **Post-Migration Guidance**: Provides specific steps for completing the migration
 

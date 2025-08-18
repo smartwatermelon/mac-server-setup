@@ -10,27 +10,30 @@ This project provides a complete automation framework for setting up an Apple Si
 - **Central home server** with minimal maintenance requirements
 - **Stable, secure, and recoverable system**
 
-## Recent Improvements (v2.0)
+## Recent Improvements (v3.0 - Major Overhaul)
 
-### Enhanced Plex Setup with Robust SMB Mounting
+### Direct SMB Mounting with Enhanced Reliability (2025-08-17)
 
-- **Reliable SMB Mounting**: Fixed authentication issues and improved mount reliability
-  - Username case conversion for SMB compatibility
-  - URL encoding for passwords with special characters
-  - Proper mount point ownership and permissions
-- **macOS Native autofs Integration**: Automatic NAS mounting using built-in macOS functionality
-  - Survives reboots and network reconnections
-  - More reliable than custom LaunchAgent scripts
-  - Uses `/etc/auto_master` and `/etc/auto_smb` configuration
-- **Improved Error Handling**: Clear sudo prompts and better debugging information
-- **Clean Server Discovery**: Fixed Plex server discovery display for migration setup
+- **Eliminated unreliable autofs**: Replaced complex autofs implementation with simple direct mounting
+  - Proper 4-step mount sequence: mkdir, chown, mount, verify
+  - Critical safety checks prevent dangerous `/Volumes` root mounting
+  - Uses proper `mount -t smbfs` command with optimal options (`soft,nobrowse,noowners`)
+- **Enhanced Security and UX**: Comprehensive improvements for production use
+  - Password masking in logs prevents credential exposure
+  - Automatic firewall configuration for Plex Media Server
+  - Network volume permissions pre-granted via tccutil
+  - Application quarantine removal for seamless operation
+- **Restored Migration Features**: Full SSH-based remote migration capability
+  - Automatic Plex server discovery on network
+  - Remote configuration transfer with rsync/scp fallback
+  - Migration size estimation and progress reporting
+- **Production-Ready Reliability**: Robust error handling and fallback mechanisms
 
-### 1Password Credential Integration
+### Previous Improvements (v2.0)
 
-- **Automated Credential Retrieval**: NAS credentials automatically retrieved from 1Password
-- **Secure Credential Handling**: No plaintext passwords in scripts or logs
-- **Smart Fallbacks**: Interactive prompts when 1Password credentials unavailable
-- **Intuitive Confirmations**: Sensible defaults for all prompts (Y/n for proceed, y/N for destructive)
+- **1Password Credential Integration**: Automated credential retrieval with secure handling
+- **Smart Fallbacks**: Interactive prompts when credentials unavailable  
+- **Intuitive Confirmations**: Sensible defaults for all prompts
 
 ## Key Principles
 
@@ -133,14 +136,15 @@ MONITORING_EMAIL="your-email@example.com"
 
 ## Native Application Architecture
 
-This project uses **native macOS applications** instead of containerized solutions:
+This project uses **native macOS applications** with **direct SMB mounting**:
 
-- **Optimal performance** - Direct access to macOS hardware acceleration
+- **Optimal performance** - Direct access to macOS hardware acceleration and native mount handling
 - **Shared configuration** - Multi-user access via `/Users/Shared/` directories
 - **LaunchAgent integration** - Applications start automatically with operator login
-- **macOS security model** - Applications run under standard user privileges
+- **Direct SMB mounting** - Reliable mount process without complex autofs dependencies
+- **Administrator-centric setup** - Complete configuration by admin, consumption by operator
 
-Applications are installed by the administrator and configured for shared access by the operator account.
+Key improvements eliminate previous autofs reliability issues and provide robust, debuggable mounting.
 
 ## Security Features
 

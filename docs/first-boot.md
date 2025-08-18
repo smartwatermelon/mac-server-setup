@@ -35,7 +35,7 @@ The script performs these major configuration steps:
 * **Network Configuration**: WiFi connection, hostname setting
 * **Power Management**: Server-optimized power settings
 * **Package Installation**: Homebrew, essential tools and applications
-* **Application Preparation**: Setup directory structure for containerized apps
+* **Application Preparation**: Setup directory structure for native applications
 
 ## Running First Boot Setup
 
@@ -140,7 +140,7 @@ The script automatically opens a second Terminal window showing live setup logs:
 
 **Phase 3**: Application preparation (2-5 minutes)
 
-* Directory setup, dock cleanup, final configuration
+* Directory setup for native applications, dock cleanup, final configuration
 
 ## Expected Prompts and Interactions
 
@@ -270,4 +270,4 @@ After successful first boot setup:
 3. **Follow [Operator Setup Instructions](operator.md)**
 4. **Run application setup scripts** in `~/app-setup/`
 
-The Mac Mini is now ready for containerized application deployment and service configuration.
+The Mac Mini is now ready for native application deployment and service configuration.

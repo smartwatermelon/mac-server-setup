@@ -50,6 +50,7 @@ The dock cleanup adds iTerm to the dock. **Switch from Terminal to iTerm** for b
 - **Homebrew Access**: Full access to package management
 - **Application Access**: Access to shared application configurations via staff group membership
 - **Native Application Management**: Designed for running native macOS applications with shared configuration access
+- **Direct SMB Access**: Access to mounted network shares for media management
 
 ### Administrative Tasks
 

@@ -73,12 +73,12 @@ All credential management relies on 1Password items. The configuration specifies
 
 - **Default**: "Plex NAS"
 - **Requirements**: Login item with username, password, and URL field (optional)
-- **Purpose**: Provides automated SMB mounting for Plex media storage
-- **Fallback**: If not found, uses interactive password prompt with GUI dialog
+- **Purpose**: Provides automated SMB mounting for Plex media storage via direct mounting
+- **Fallback**: If not found, loads credentials from plex_nas.conf file
 - **Example**: `ONEPASSWORD_PLEX_NAS_ITEM="Synology Plex"`
-- **Special Character Handling**: Passwords with @ symbols are automatically URL-encoded
-- **Username Processing**: Usernames are converted to lowercase for SMB compatibility
-- **autofs Integration**: Credentials used to configure macOS autofs for automatic mounting
+- **Special Character Handling**: Passwords with @ symbols are automatically URL-encoded for SMB URLs
+- **Username Processing**: Usernames are used as provided for SMB authentication
+- **Direct SMB Integration**: Credentials used for direct SMB mount commands with safety checks
 
 **ONEPASSWORD_APPLEID_ITEM**: Login item for Apple ID credentials
 
@@ -198,8 +198,8 @@ op item get "${ONEPASSWORD_OPERATOR_ITEM}" --vault "${ONEPASSWORD_VAULT}" || ech
 # Verify Time Machine item exists
 op item get "${ONEPASSWORD_TIMEMACHINE_ITEM}" --vault "${ONEPASSWORD_VAULT}"
 
-# Verify Plex NAS item exists (optional - will fall back to interactive prompt)
-op item get "${ONEPASSWORD_PLEX_NAS_ITEM}" --vault "${ONEPASSWORD_VAULT}" || echo "Will use interactive password prompt"
+# Verify Plex NAS item exists (optional - will fall back to plex_nas.conf file)
+op item get "${ONEPASSWORD_PLEX_NAS_ITEM}" --vault "${ONEPASSWORD_VAULT}" || echo "Will use plex_nas.conf file"
 
 # Verify Apple ID item exists  
 op item get "${ONEPASSWORD_APPLEID_ITEM}" --vault "${ONEPASSWORD_VAULT}"
