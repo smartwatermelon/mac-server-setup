@@ -176,6 +176,41 @@ discover_plex_servers() {
 setup_smb_mount() {
   section "Setting Up SMB Mount for Media Storage"
 
+  # Critical safety checks for mount path
+  if [[ -z "${NAS_SHARE_NAME}" ]]; then
+    log "❌ CRITICAL ERROR: NAS_SHARE_NAME is empty or not set"
+    log "   This would result in mounting to /Volumes directly, which is extremely dangerous"
+    exit 1
+  fi
+
+  if [[ "${NAS_SHARE_NAME}" == "." || "${NAS_SHARE_NAME}" == ".." ]]; then
+    log "❌ CRITICAL ERROR: NAS_SHARE_NAME cannot be '.' or '..'"
+    log "   This would result in dangerous mount behavior"
+    exit 1
+  fi
+
+  if [[ "${PLEX_MEDIA_MOUNT}" == "/Volumes" || "${PLEX_MEDIA_MOUNT}" == "/Volumes/" ]]; then
+    log "❌ CRITICAL ERROR: Mount target resolves to /Volumes root directory"
+    log "   Mounting to /Volumes directly would destroy the system volume directory"
+    log "   Current values:"
+    log "     NAS_SHARE_NAME='${NAS_SHARE_NAME}'"
+    log "     PLEX_MEDIA_MOUNT='${PLEX_MEDIA_MOUNT}'"
+    exit 1
+  fi
+
+  # Verify mount path has proper structure
+  local expected_mount="/Volumes/${NAS_SHARE_NAME}"
+  if [[ "${PLEX_MEDIA_MOUNT}" != "${expected_mount}" ]]; then
+    log "❌ ERROR: Mount path mismatch"
+    log "   Expected: ${expected_mount}"
+    log "   Actual: ${PLEX_MEDIA_MOUNT}"
+    exit 1
+  fi
+
+  log "✅ Mount safety checks passed:"
+  log "   NAS_SHARE_NAME: '${NAS_SHARE_NAME}'"
+  log "   Mount target: '${PLEX_MEDIA_MOUNT}'"
+
   # Load NAS credentials from plex_nas.conf
   local nas_config="${SCRIPT_DIR}/plex_nas.conf"
   if [[ -f "${nas_config}" ]]; then
@@ -208,10 +243,18 @@ setup_smb_mount() {
 
   # Create or update auto_smb file
   local mount_hostname="${NAS_HOSTNAME}"
-  # URL-encode password to handle special characters like @
+  # URL-encode password to handle special characters
   local encoded_password
-  encoded_password=$(printf '%s' "${PLEX_NAS_PASSWORD}" | sed 's/@/%40/g')
-  local autofs_mount_line="${PLEX_MEDIA_MOUNT}    -fstype=smbfs,soft,noowners,nosuid,rw ://${PLEX_NAS_USERNAME}:${encoded_password}@${mount_hostname}/${NAS_SHARE_NAME}"
+  encoded_password=$(printf '%s' "${PLEX_NAS_PASSWORD}" | sed 's/@/%40/g; s/:/%3A/g; s/ /%20/g; s/#/%23/g; s/?/%3F/g; s/&/%26/g')
+
+  # Final safety check before creating autofs mount line
+  if [[ "${PLEX_MEDIA_MOUNT}" =~ ^/Volumes/?$ ]]; then
+    log "❌ CRITICAL ERROR: autofs mount line would target /Volumes root"
+    log "   This would be catastrophic - aborting"
+    exit 1
+  fi
+
+  local autofs_mount_line="${PLEX_MEDIA_MOUNT}    -fstype=smbfs,soft,nobrowse,noowners,nosuid,rw ://${PLEX_NAS_USERNAME}:${encoded_password}@${mount_hostname}/${NAS_SHARE_NAME}"
 
   if [[ -f "${auto_smb}" ]]; then
     if ! grep -q "${PLEX_MEDIA_MOUNT}" "${auto_smb}"; then
@@ -243,6 +286,13 @@ setup_smb_mount() {
     else
       log "⚠️  autofs mount test failed - trying direct SMB mount as fallback"
 
+      # Double-check mount safety before direct mount attempt
+      if [[ "${PLEX_MEDIA_MOUNT}" == "/Volumes" || "${PLEX_MEDIA_MOUNT}" == "/Volumes/" ]]; then
+        log "❌ CRITICAL ERROR: Refusing to mount to /Volumes root directory"
+        log "   This would be catastrophic for the system"
+        exit 1
+      fi
+
       # Create mount point manually
       sudo -p "Enter your '${USER}' password to create mount directory: " mkdir -p "${PLEX_MEDIA_MOUNT}"
 
@@ -250,7 +300,7 @@ setup_smb_mount() {
       local mount_url="//${PLEX_NAS_USERNAME}:${encoded_password}@${mount_hostname}/${NAS_SHARE_NAME}"
       log "Attempting direct SMB mount: ${mount_url}"
 
-      if sudo -p "Enter your '${USER}' password for direct SMB mount: " mount_smbfs "${mount_url}" "${PLEX_MEDIA_MOUNT}"; then
+      if sudo -p "Enter your '${USER}' password for direct SMB mount: " mount -t smbfs -o soft,nobrowse,noowners "${mount_url}" "${PLEX_MEDIA_MOUNT}"; then
         log "✅ Direct SMB mount successful"
         log "⚠️  Note: This mount won't auto-reconnect after reboot"
         log "   Consider setting up automatic mounting via LaunchAgent"
@@ -740,7 +790,7 @@ main() {
     log "The media directory should auto-mount when accessed"
     log ""
     log "SMB Mount troubleshooting:"
-    log "  - Manual mount: sudo mount_smbfs '//${PLEX_NAS_USERNAME}:<password>@${NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
+    log "  - Manual mount: sudo mount -t smbfs -o soft,nobrowse,noowners '//${PLEX_NAS_USERNAME}:<password>@${NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
     log "  - Check mounts: mount | grep ${NAS_SHARE_NAME}"
     log "  - Unmount: sudo umount '${PLEX_MEDIA_MOUNT}'"
     log "  - 'Too many users' error indicates SMB connection limit reached"
