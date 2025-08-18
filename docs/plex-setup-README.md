@@ -81,7 +81,7 @@ HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 
 **NAS Configuration**:
 
-- `PLEX_MEDIA_MOUNT="/Volumes/DSMedia"`
+- `PLEX_MEDIA_MOUNT="/Volumes/${NAS_SHARE_NAME}"` (derived from config.conf)
 - SMB credentials retrieved from 1Password
 
 **Native Application Configuration**:
@@ -187,7 +187,7 @@ After script execution:
 
 1. **1Password Credential Retrieval**: Securely retrieves NAS credentials from specified vault item
 2. **autofs Configuration**: Configures macOS native autofs for automatic mounting
-3. **Mount Point Creation**: Creates `/Volumes/DSMedia` with proper permissions
+3. **Mount Point Creation**: Creates `/Volumes/${NAS_SHARE_NAME}` with proper permissions
 4. **Automatic Mounting**: Sets up autofs rules for on-demand mounting
 5. **Service Restart**: Reloads autofs configuration for immediate effect
 
@@ -312,7 +312,7 @@ The LaunchAgent configures:
 2. **SMB Configuration**: Creates `/etc/auto_smb` with mount definition:
 
    ```bash
-   DSMedia -fstype=smbfs,soft ://username:password@hostname/share
+   ${NAS_SHARE_NAME} -fstype=smbfs,soft ://username:password@hostname/share
    ```
 
 3. **Service Restart**: Reloads autofs configuration with `automount -cv`
@@ -461,12 +461,12 @@ op whoami
 
 ```bash
 # Check current mounts
-mount | grep DSMedia
+mount | grep ${NAS_SHARE_NAME}
 
 # Manual SMB mount test (adjust values per your config.conf)
-sudo mkdir -p /Volumes/DSMedia
-sudo chown $(whoami):staff /Volumes/DSMedia
-mount_smbfs -f 0777 -d 0777 //${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME} /Volumes/DSMedia
+sudo mkdir -p /Volumes/${NAS_SHARE_NAME}
+sudo chown $(whoami):staff /Volumes/${NAS_SHARE_NAME}
+mount_smbfs -f 0777 -d 0777 //${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME} /Volumes/${NAS_SHARE_NAME}
 
 # Test NAS connectivity
 ping ${NAS_HOSTNAME}
@@ -613,7 +613,7 @@ sudo rm -rf /Users/Shared/PlexMediaServer
 rm -f ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist
 
 # Unmount NAS
-sudo umount /Volumes/DSMedia
+sudo umount /Volumes/${NAS_SHARE_NAME}
 
 # Re-run full setup
 ./app-setup/plex-setup.sh

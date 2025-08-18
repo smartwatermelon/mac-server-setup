@@ -30,7 +30,7 @@ set -euo pipefail
 
 # Load server configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="${SCRIPT_DIR}/../config.conf"
+CONFIG_FILE="${SCRIPT_DIR}/config.conf"
 
 if [[ -f "${CONFIG_FILE}" ]]; then
   # shellcheck source=/dev/null
@@ -49,8 +49,8 @@ HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 
 # Plex configuration
-PLEX_MEDIA_MOUNT="/Volumes/DSMedia"
-PLEX_SERVER_NAME="${PLEX_SERVER_NAME_OVERRIDE:-${HOSTNAME} Plex}"
+PLEX_MEDIA_MOUNT="/Volumes/${NAS_SHARE_NAME}"
+PLEX_SERVER_NAME="${PLEX_SERVER_NAME_OVERRIDE:-${HOSTNAME}}"
 
 # Migration settings
 PLEX_OLD_CONFIG="${HOME}/plex-migration/Plex Media Server"
@@ -153,32 +153,42 @@ confirm() {
   esac
 }
 
+# Function to discover Plex servers on the network
+discover_plex_servers() {
+  # Use timeout to limit dns-sd search time, capture output first
+  local dns_output
+  dns_output=$(timeout 3 dns-sd -B _plexmediasvr._tcp 2>/dev/null)
+
+  # Process the captured output
+  local servers
+  servers=$(echo "${dns_output}" | grep "Add" | awk '{print $NF}' | sort -u)
+
+  if [[ -n "${servers}" ]]; then
+    # Only echo the servers to stdout (for capture), don't mix with log messages
+    echo "${servers}"
+    return 0
+  else
+    return 1
+  fi
+}
+
 # SMB Mount Setup (autofs-based)
 setup_smb_mount() {
   section "Setting Up SMB Mount for Media Storage"
 
-  # Check if we have 1Password CLI access
-  if ! command -v op &>/dev/null; then
-    log "❌ 1Password CLI not found. Install with: brew install --cask 1password-cli"
+  # Load NAS credentials from plex_nas.conf
+  local nas_config="${SCRIPT_DIR}/plex_nas.conf"
+  if [[ -f "${nas_config}" ]]; then
+    log "Loading NAS credentials from ${nas_config}"
+    # shellcheck source=/dev/null
+    source "${nas_config}"
+  else
+    log "❌ NAS configuration file not found: ${nas_config}"
     exit 1
   fi
-
-  # Test 1Password access
-  if ! op whoami &>/dev/null; then
-    log "❌ Not signed in to 1Password CLI. Run: op signin"
-    exit 1
-  fi
-
-  # Get NAS credentials from 1Password
-  log "Retrieving NAS credentials from 1Password..."
-  PLEX_NAS_USERNAME=""
-  PLEX_NAS_PASSWORD=""
-
-  PLEX_NAS_USERNAME=$(op item get "${ONEPASSWORD_NAS_ITEM:-plex-nas}" --fields username 2>/dev/null || echo "")
-  PLEX_NAS_PASSWORD=$(op item get "${ONEPASSWORD_NAS_ITEM:-plex-nas}" --fields password 2>/dev/null || echo "")
 
   if [[ -z "${PLEX_NAS_USERNAME}" || -z "${PLEX_NAS_PASSWORD}" ]]; then
-    log "❌ Could not retrieve NAS credentials from 1Password item: ${ONEPASSWORD_NAS_ITEM:-plex-nas}"
+    log "❌ NAS credentials not found in ${nas_config}"
     exit 1
   fi
 
@@ -187,7 +197,7 @@ setup_smb_mount() {
 
   local auto_master="/etc/auto_master"
   local auto_smb="/etc/auto_smb"
-  local autofs_line="/Volumes  auto_smb  -nobrowse,nosuid"
+  local autofs_line="/-          auto_smb    -nosuid,noowners"
 
   # Add autofs line to auto_master if not present
   if ! grep -q "auto_smb" "${auto_master}"; then
@@ -198,16 +208,19 @@ setup_smb_mount() {
 
   # Create or update auto_smb file
   local mount_hostname="${NAS_HOSTNAME}"
-  local autofs_mount_line="DSMedia  -fstype=smbfs,soft ://${PLEX_NAS_USERNAME}:${PLEX_NAS_PASSWORD}@${mount_hostname}/${NAS_SHARE_NAME}"
+  # URL-encode password to handle special characters like @
+  local encoded_password
+  encoded_password=$(printf '%s' "${PLEX_NAS_PASSWORD}" | sed 's/@/%40/g')
+  local autofs_mount_line="${PLEX_MEDIA_MOUNT}    -fstype=smbfs,soft,noowners,nosuid,rw ://${PLEX_NAS_USERNAME}:${encoded_password}@${mount_hostname}/${NAS_SHARE_NAME}"
 
   if [[ -f "${auto_smb}" ]]; then
-    if ! grep -q "DSMedia" "${auto_smb}"; then
-      log "Adding DSMedia mount to existing ${auto_smb}"
+    if ! grep -q "${PLEX_MEDIA_MOUNT}" "${auto_smb}"; then
+      log "Adding ${PLEX_MEDIA_MOUNT} mount to existing ${auto_smb}"
       echo "${autofs_mount_line}" | sudo -p "Enter your '${USER}' password to update autofs SMB config: " tee -a "${auto_smb}" >/dev/null
       check_success "autofs SMB mount addition"
     fi
   else
-    log "Creating ${auto_smb} with DSMedia mount"
+    log "Creating ${auto_smb} with ${NAS_SHARE_NAME} mount"
     echo "${autofs_mount_line}" | sudo -p "Enter your '${USER}' password to create autofs SMB config: " tee "${auto_smb}" >/dev/null
     check_success "autofs SMB config creation"
   fi
@@ -287,6 +300,27 @@ install_plex() {
   rm -rf "${TEMP_DIR}"
 
   log "✅ Plex Media Server installed successfully"
+}
+
+# Configure firewall for Plex
+configure_plex_firewall() {
+  section "Configuring Firewall for Plex Media Server"
+
+  local plex_app="/Applications/Plex Media Server.app"
+
+  if [[ -d "${plex_app}" ]]; then
+    log "Adding Plex Media Server to firewall allowlist..."
+    sudo -p "[Firewall setup] Enter password to allow Plex through firewall: " /usr/libexec/ApplicationFirewall/socketfilterfw --add "${plex_app}"
+    check_success "Plex firewall addition"
+
+    sudo -p "[Firewall setup] Enter password to unblock Plex: " /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp "${plex_app}"
+    check_success "Plex firewall unblock"
+
+    log "✅ Plex Media Server configured in firewall"
+  else
+    log "❌ Plex application not found at ${plex_app}"
+    exit 1
+  fi
 }
 
 # Create shared Plex configuration directory
@@ -451,6 +485,51 @@ main() {
     exit 0
   fi
 
+  # Handle migration setup if not already specified
+  if [[ "${SKIP_MIGRATION}" != "true" && -z "${MIGRATE_FROM}" ]]; then
+    if confirm "Do you want to migrate from an existing Plex server?" "y"; then
+      # Try to discover Plex servers
+      log "Scanning for Plex servers on the network..."
+      discovered_servers=$(discover_plex_servers)
+
+      if [[ -n "${discovered_servers}" ]]; then
+        # Log what was found
+        log "Found Plex servers:"
+        echo "${discovered_servers}" | while IFS= read -r server; do
+          log "  - ${server}"
+        done
+
+        # Present discovered servers to user
+        log "Select a Plex server to migrate from:"
+        server_array=()
+        index=1
+        while IFS= read -r server; do
+          # Clean up the server name (remove any extra whitespace)
+          clean_server=$(echo "${server}" | tr -d '[:space:]')
+          log "  ${index}. ${clean_server}"
+          server_array+=("${clean_server}")
+          ((index++))
+        done <<<"${discovered_servers}"
+
+        log "  ${index}. Other (enter manually)"
+
+        # Get user selection
+        read -rp "Enter selection (1-${index}): " selection
+        if [[ "${selection}" -ge 1 && "${selection}" -lt "${index}" ]]; then
+          MIGRATE_FROM="${server_array[$((selection - 1))]}"
+          log "Selected: ${MIGRATE_FROM}"
+        else
+          read -rp "Enter hostname of source Plex server: " MIGRATE_FROM
+        fi
+      else
+        read -rp "Enter hostname of source Plex server (e.g., old-server.local): " MIGRATE_FROM
+      fi
+    else
+      SKIP_MIGRATION=true
+      log "Skipping migration - will start with fresh Plex configuration"
+    fi
+  fi
+
   # Setup SMB mount if not skipped
   if [[ "${SKIP_MOUNT}" != "true" ]]; then
     setup_smb_mount
@@ -460,6 +539,9 @@ main() {
 
   # Install Plex
   install_plex
+
+  # Configure firewall for Plex
+  configure_plex_firewall
 
   # Setup shared configuration directory
   setup_shared_config
