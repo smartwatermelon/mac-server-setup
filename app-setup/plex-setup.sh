@@ -49,7 +49,7 @@ HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 
 # Plex configuration
-PLEX_MEDIA_MOUNT="/Volumes/${NAS_SHARE_NAME}"
+PLEX_MEDIA_MOUNT="/mnt/${NAS_SHARE_NAME}"
 PLEX_SERVER_NAME="${PLEX_SERVER_NAME_OVERRIDE:-${HOSTNAME}}"
 
 # Migration settings
@@ -189,9 +189,9 @@ setup_persistent_smb_mount() {
     exit 1
   fi
 
-  if [[ "${PLEX_MEDIA_MOUNT}" == "/Volumes" || "${PLEX_MEDIA_MOUNT}" == "/Volumes/" ]]; then
-    log "❌ CRITICAL ERROR: Mount target resolves to /Volumes root directory"
-    log "   Mounting to /Volumes directly would destroy the system volume directory"
+  if [[ "${PLEX_MEDIA_MOUNT}" == "/mnt" || "${PLEX_MEDIA_MOUNT}" == "/mnt/" ]]; then
+    log "❌ CRITICAL ERROR: Mount target resolves to /mnt root directory"
+    log "   Mounting to /mnt directly would be dangerous"
     log "   Current values:"
     log "     NAS_SHARE_NAME='${NAS_SHARE_NAME}'"
     log "     PLEX_MEDIA_MOUNT='${PLEX_MEDIA_MOUNT}'"
@@ -199,7 +199,7 @@ setup_persistent_smb_mount() {
   fi
 
   # Verify mount path has proper structure
-  local expected_mount="/Volumes/${NAS_SHARE_NAME}"
+  local expected_mount="/mnt/${NAS_SHARE_NAME}"
   if [[ "${PLEX_MEDIA_MOUNT}" != "${expected_mount}" ]]; then
     log "❌ ERROR: Mount path mismatch"
     log "   Expected: ${expected_mount}"
