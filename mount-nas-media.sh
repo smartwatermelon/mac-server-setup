@@ -78,7 +78,7 @@ main() {
   # Ensure /usr/local/mnt directory exists first
   mkdir -p "/usr/local/mnt"
   chown root:staff "/usr/local/mnt"
-  chmod 755 "/usr/local/mnt"
+  chmod 775 "/usr/local/mnt"
 
   # Create the specific mount point
   mkdir -p "${PLEX_MEDIA_MOUNT}"
