@@ -17,6 +17,7 @@ knockknock
 lulu
 no-ip-duc
 notunes
+plex-media-server
 stats
 taskexplorer
 transmission

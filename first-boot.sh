@@ -91,7 +91,6 @@ fi
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 OPERATOR_FULLNAME="${SERVER_NAME} Operator"
-# DOCKER_NETWORK="${DOCKER_NETWORK_OVERRIDE:-${HOSTNAME_LOWER}-network}"
 
 export LOG_DIR
 LOG_DIR="${HOME}/.local/state" # XDG_STATE_HOME
@@ -694,8 +693,6 @@ else
     check_success "Operator SSH group membership"
   fi
 
-  # Note: Colima auto-start will be configured after Homebrew installation
-
   # Configure Remote Management for operator user (now that account exists)
   log "Configuring Remote Management privileges for operator user"
   sudo -p "[Remote management] Enter password to configure operator privileges: " /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
@@ -842,8 +839,6 @@ sudo -p "[Firewall setup] Enter password to enable application firewall: " /usr/
 log "Ensuring SSH is allowed through firewall"
 sudo -p "[Firewall setup] Enter password to configure SSH firewall access: " /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/sbin/sshd
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/sbin/sshd
-
-# Note: limactl firewall configuration will be handled after package installation
 
 # Configure security settings
 section "Configuring Security Settings"
@@ -1064,16 +1059,6 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
   log "Brew doctor output saved to: ${BREW_DOCTOR_OUTPUT}"
   check_success "Brew doctor diagnostic"
 
-  # Configure limactl firewall permissions (now that packages are installed)
-  LIMACTL_PATH="$(brew --prefix)/bin/limactl"
-  if [[ -f "${LIMACTL_PATH}" ]]; then
-    log "Configuring limactl firewall permissions for container networking"
-    sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add "${LIMACTL_PATH}" 2>/dev/null || true
-    sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp "${LIMACTL_PATH}" 2>/dev/null || true
-    check_success "limactl firewall configuration"
-  else
-    log "limactl not installed - skipping firewall configuration"
-  fi
 fi
 
 #
@@ -1083,119 +1068,6 @@ section "Reload Profile"
 # shellcheck source=/dev/null
 source ~/.zprofile
 check_success "Reload profile"
-
-#
-# COLIMA SETUP
-#
-section "Setting Up Colima (Docker Alternative)"
-
-# Check if Colima is available
-if command -v colima &>/dev/null; then
-  log "Colima is installed, configuring for shared access"
-
-  # Create shared Docker configuration that both administrator and operator can use
-  log "Configuring shared Docker config for Colima compatibility"
-
-  # Configure Docker config in operator's home (since Colima will run as operator)
-  OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
-  DOCKER_CONFIG_DIR="${OPERATOR_HOME}/.docker"
-  DOCKER_CONFIG_FILE="${DOCKER_CONFIG_DIR}/config.json"
-
-  # Create operator's Docker config directory with proper permissions
-  sudo -p "[Docker setup] Enter password to create operator Docker config: " -u "${OPERATOR_USERNAME}" mkdir -p "${DOCKER_CONFIG_DIR}"
-
-  # Check if config exists and contains credsStore
-  if [[ -f "${DOCKER_CONFIG_FILE}" ]] && grep -q '"credsStore"' "${DOCKER_CONFIG_FILE}"; then
-    log "Removing incompatible Docker credential store configuration"
-    # Remove the credsStore line to prevent desktop credential helper errors
-    sudo -p "[Docker setup] Enter password to fix Docker credential store: " sed -i '' '/"credsStore":/d' "${DOCKER_CONFIG_FILE}"
-    check_success "Docker credential store configuration fix"
-  elif [[ ! -f "${DOCKER_CONFIG_FILE}" ]]; then
-    log "Creating basic Docker config file"
-    echo '{}' | sudo -p "[Docker setup] Enter password to create Docker config: " -u "${OPERATOR_USERNAME}" tee "${DOCKER_CONFIG_FILE}" >/dev/null
-    check_success "Docker config file creation"
-  else
-    log "Docker config file already properly configured"
-  fi
-
-  # Set permissions for shared access - administrator can read/manage operator's Docker config
-  log "Setting permissions for shared Docker access"
-  sudo -p "[Docker setup] Enter password to set Docker config permissions: " chmod 755 "${OPERATOR_HOME}" # Allow admin to traverse to .docker
-  sudo chmod 755 "${DOCKER_CONFIG_DIR}"                                                                   # Allow admin to access .docker directory
-  sudo chmod 644 "${DOCKER_CONFIG_FILE}"                                                                  # Allow admin to read Docker config
-  check_success "Docker config permissions setup"
-
-  # Initialize Colima with server-appropriate settings as operator
-  log "Initializing Colima with server settings..."
-  log "Note: First-time Colima initialization may take several minutes..."
-
-  # Try Colima initialization with timeout and fallback strategies
-  COLIMA_INIT_SUCCESS=false
-
-  # First attempt: Standard initialization
-  log "Attempting Colima initialization (attempt 1/2)..."
-  if timeout 300 sudo -p "[Colima setup] Enter password to initialize Colima: " -iu "${OPERATOR_USERNAME}" colima start --cpu 2 --memory 4 --disk 20 --vm-type=vz --mount-type=virtiofs; then
-    log "✅ Colima initialized successfully"
-    COLIMA_INIT_SUCCESS=true
-  else
-    log "⚠️  First initialization attempt failed or timed out"
-
-    # Clean up any partial state
-    log "Cleaning up partial Colima state..."
-    sudo -iu "${OPERATOR_USERNAME}" colima delete --force 2>/dev/null || true
-
-    # Second attempt: Alternative configuration
-    log "Attempting Colima initialization with alternative settings (attempt 2/2)..."
-    if timeout 300 sudo -p "[Colima setup] Enter password for second initialization attempt: " -iu "${OPERATOR_USERNAME}" colima start --cpu 2 --memory 4 --disk 20 --vm-type=qemu; then
-      log "✅ Colima initialized successfully with alternative settings"
-      COLIMA_INIT_SUCCESS=true
-    else
-      log "❌ Both Colima initialization attempts failed"
-    fi
-  fi
-
-  if [[ "${COLIMA_INIT_SUCCESS}" == "true" ]]; then
-    check_success "Colima initialization"
-
-    # Verify Docker is working
-    if sudo -p "[Colima setup] Enter password to test Docker access: " -iu "${OPERATOR_USERNAME}" docker info &>/dev/null; then
-      log "✅ Docker is working through Colima"
-    else
-      log "❌ Docker not responding after Colima start"
-    fi
-
-    # Stop Colima for now - it will be auto-started by operator via brew services
-    log "Stopping Colima (will be auto-started by operator via brew services)"
-    sudo -p "[Colima setup] Enter password to stop Colima: " -iu "${OPERATOR_USERNAME}" colima stop
-    check_success "Colima stop"
-  else
-    log "❌ Failed to initialize Colima after multiple attempts"
-    log "Colima can be manually initialized later with: colima start"
-    log "Consider trying: colima start --vm-type=qemu or colima start --vm-type=vz"
-  fi
-
-  # Set up Colima directory permissions for shared access
-  COLIMA_DIR="${OPERATOR_HOME}/.colima"
-  if [[ -d "${COLIMA_DIR}" ]]; then
-    log "Setting permissions for shared Colima access"
-    sudo -p "[Colima setup] Enter password to set Colima permissions: " chmod 755 "${COLIMA_DIR}"
-    sudo find "${COLIMA_DIR}" -type d -exec chmod 755 {} \;
-    sudo find "${COLIMA_DIR}" -type f -exec chmod 644 {} \;
-    check_success "Colima directory permissions setup"
-  fi
-
-  # Set up Colima auto-start for operator user using brew services
-  log "Setting up Colima auto-start for operator user using brew services"
-
-  # Enable Colima auto-start using the recommended brew services approach
-  sudo -p "[Service setup] Enter password to configure Colima auto-start: " -iu "${OPERATOR_USERNAME}" brew services start colima
-  check_success "Colima auto-start configuration"
-
-  log "✅ Colima will now start automatically when ${OPERATOR_USERNAME} logs in"
-else
-  log "Colima not found - skipping Docker setup"
-  log "Install Colima manually: brew install colima"
-fi
 
 #
 # CLEAN UP DOCK
