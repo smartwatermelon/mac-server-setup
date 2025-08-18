@@ -11,7 +11,7 @@ NAS_HOSTNAME="__NAS_HOSTNAME__"
 NAS_SHARE_NAME="__NAS_SHARE_NAME__"
 PLEX_NAS_USERNAME="__PLEX_NAS_USERNAME__"
 PLEX_NAS_PASSWORD="__PLEX_NAS_PASSWORD__"
-PLEX_MEDIA_MOUNT="/mnt/__NAS_SHARE_NAME__"
+PLEX_MEDIA_MOUNT="/usr/local/mnt/__NAS_SHARE_NAME__"
 SERVER_NAME="__SERVER_NAME__"
 
 # Logging configuration
@@ -75,10 +75,10 @@ main() {
 
   # Step 3: Create mount point with proper ownership and permissions
   log "Step 3: Creating mount point with proper permissions..."
-  # Ensure /mnt directory exists first
-  mkdir -p "/mnt"
-  chown root:staff "/mnt"
-  chmod 755 "/mnt"
+  # Ensure /usr/local/mnt directory exists first
+  mkdir -p "/usr/local/mnt"
+  chown root:staff "/usr/local/mnt"
+  chmod 755 "/usr/local/mnt"
 
   # Create the specific mount point
   mkdir -p "${PLEX_MEDIA_MOUNT}"

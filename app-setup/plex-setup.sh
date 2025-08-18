@@ -49,7 +49,7 @@ HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 
 # Plex configuration
-PLEX_MEDIA_MOUNT="/mnt/${NAS_SHARE_NAME}"
+PLEX_MEDIA_MOUNT="/usr/local/mnt/${NAS_SHARE_NAME}"
 PLEX_SERVER_NAME="${PLEX_SERVER_NAME_OVERRIDE:-${HOSTNAME}}"
 
 # Migration settings
@@ -189,9 +189,9 @@ setup_persistent_smb_mount() {
     exit 1
   fi
 
-  if [[ "${PLEX_MEDIA_MOUNT}" == "/mnt" || "${PLEX_MEDIA_MOUNT}" == "/mnt/" ]]; then
-    log "❌ CRITICAL ERROR: Mount target resolves to /mnt root directory"
-    log "   Mounting to /mnt directly would be dangerous"
+  if [[ "${PLEX_MEDIA_MOUNT}" == "/usr/local/mnt" || "${PLEX_MEDIA_MOUNT}" == "/usr/local/mnt/" ]]; then
+    log "❌ CRITICAL ERROR: Mount target resolves to /usr/local/mnt root directory"
+    log "   Mounting to /usr/local/mnt directly would be dangerous"
     log "   Current values:"
     log "     NAS_SHARE_NAME='${NAS_SHARE_NAME}'"
     log "     PLEX_MEDIA_MOUNT='${PLEX_MEDIA_MOUNT}'"
@@ -199,7 +199,7 @@ setup_persistent_smb_mount() {
   fi
 
   # Verify mount path has proper structure
-  local expected_mount="/mnt/${NAS_SHARE_NAME}"
+  local expected_mount="/usr/local/mnt/${NAS_SHARE_NAME}"
   if [[ "${PLEX_MEDIA_MOUNT}" != "${expected_mount}" ]]; then
     log "❌ ERROR: Mount path mismatch"
     log "   Expected: ${expected_mount}"
@@ -317,7 +317,7 @@ EOF
     fi
   else
     log "❌ Mount verification failed"
-    log "   Check LaunchDaemon logs: sudo tail -f /var/log/${plist_name}.log"
+    log "   Check LaunchDaemon logs: sudo tail -F /var/log/${plist_name}.log"
 
     if ! confirm "Continue without NAS mount? (You can troubleshoot later)" "n"; then
       exit 1
