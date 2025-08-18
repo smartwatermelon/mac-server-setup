@@ -256,7 +256,7 @@ setup_simple_smb_mount() {
         log "✅ Media directory is accessible"
         # Show what's available for verification
         local file_count
-        file_count=$(ls -1 "${PLEX_MEDIA_MOUNT}" | wc -l 2>/dev/null || echo "0")
+        file_count=$(find "${PLEX_MEDIA_MOUNT}" -maxdepth 1 -type f -o -type d | tail -n +2 | wc -l 2>/dev/null || echo "0")
         log "   Found ${file_count} items in media directory"
       else
         log "⚠️  Mount succeeded but directory not accessible"
