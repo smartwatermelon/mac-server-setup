@@ -243,7 +243,7 @@ setup_simple_smb_mount() {
 
   # Step 3: Mount SMB share for administrator
   local mount_url="//${PLEX_NAS_USERNAME}:${encoded_password}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
-  log "Mounting SMB share: ${mount_url}"
+  log "Mounting SMB share: //${PLEX_NAS_USERNAME}:***@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
 
   if mount -t smbfs -o soft,nobrowse,noowners "${mount_url}" "${PLEX_MEDIA_MOUNT}" 2>/dev/null; then
     log "✅ SMB mount successful"
