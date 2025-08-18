@@ -740,7 +740,7 @@ main() {
     log "The media directory should auto-mount when accessed"
     log ""
     log "SMB Mount troubleshooting:"
-    log "  - Manual mount: sudo mount_smbfs '//${PLEX_NAS_USERNAME}:<password>@${PLEX_NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
+    log "  - Manual mount: sudo mount_smbfs '//${PLEX_NAS_USERNAME}:<password>@${NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
     log "  - Check mounts: mount | grep ${NAS_SHARE_NAME}"
     log "  - Unmount: sudo umount '${PLEX_MEDIA_MOUNT}'"
     log "  - 'Too many users' error indicates SMB connection limit reached"
