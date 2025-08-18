@@ -241,8 +241,31 @@ setup_smb_mount() {
     if timeout 10 ls "${PLEX_MEDIA_MOUNT}" >/dev/null 2>&1; then
       log "✅ autofs mount test successful"
     else
-      log "⚠️  autofs mount test failed - manual setup may be required"
-      log "   Try accessing ${PLEX_MEDIA_MOUNT} manually to trigger autofs"
+      log "⚠️  autofs mount test failed - trying direct SMB mount as fallback"
+
+      # Create mount point manually
+      sudo -p "Enter your '${USER}' password to create mount directory: " mkdir -p "${PLEX_MEDIA_MOUNT}"
+
+      # Try direct SMB mount
+      local mount_url="//${PLEX_NAS_USERNAME}:${encoded_password}@${mount_hostname}/${NAS_SHARE_NAME}"
+      log "Attempting direct SMB mount: ${mount_url}"
+
+      if sudo -p "Enter your '${USER}' password for direct SMB mount: " mount_smbfs "${mount_url}" "${PLEX_MEDIA_MOUNT}"; then
+        log "✅ Direct SMB mount successful"
+        log "⚠️  Note: This mount won't auto-reconnect after reboot"
+        log "   Consider setting up automatic mounting via LaunchAgent"
+      else
+        log "❌ Direct SMB mount also failed"
+        log "   Possible issues:"
+        log "   - SMB share connection limit reached ('Too many users')"
+        log "   - Incorrect credentials or hostname"
+        log "   - Network connectivity issues"
+        log "   You may need to mount manually: sudo mount_smbfs '${mount_url}' '${PLEX_MEDIA_MOUNT}'"
+
+        if ! confirm "Continue without NAS mount? (You can mount manually later)" "n"; then
+          exit 1
+        fi
+      fi
     fi
   else
     log "❌ Failed to restart autofs service"
@@ -569,10 +592,21 @@ EOF
 
   check_success "Plex LaunchAgent creation"
 
-  # Load the LaunchAgent for the operator user
-  log "Loading Plex LaunchAgent for operator user..."
-  sudo -u "${OPERATOR_USERNAME}" launchctl load "${PLIST_FILE}"
-  check_success "Plex LaunchAgent loading"
+  # Test if we can access the operator user context
+  log "Testing access to operator user context..."
+  if sudo -u "${OPERATOR_USERNAME}" whoami >/dev/null 2>&1; then
+    # Load the LaunchAgent for the operator user
+    log "Loading Plex LaunchAgent for operator user..."
+    if sudo -u "${OPERATOR_USERNAME}" launchctl load "${PLIST_FILE}" 2>/dev/null; then
+      log "✅ Plex LaunchAgent loaded successfully"
+    else
+      log "⚠️  LaunchAgent load failed - this is normal if operator hasn't logged in yet"
+      log "   The LaunchAgent will auto-load when ${OPERATOR_USERNAME} first logs in"
+    fi
+  else
+    log "⚠️  Cannot access operator user context yet"
+    log "   LaunchAgent will be available when ${OPERATOR_USERNAME} first logs in"
+  fi
 
   log "✅ Plex configured to start automatically for ${OPERATOR_USERNAME}"
 }
@@ -703,7 +737,13 @@ main() {
   log "Media directory: ${PLEX_MEDIA_MOUNT}"
 
   if [[ "${SKIP_MOUNT}" != "true" ]]; then
-    log "The media directory will auto-mount when accessed"
+    log "The media directory should auto-mount when accessed"
+    log ""
+    log "SMB Mount troubleshooting:"
+    log "  - Manual mount: sudo mount_smbfs '//${PLEX_NAS_USERNAME}:<password>@${PLEX_NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
+    log "  - Check mounts: mount | grep ${NAS_SHARE_NAME}"
+    log "  - Unmount: sudo umount '${PLEX_MEDIA_MOUNT}'"
+    log "  - 'Too many users' error indicates SMB connection limit reached"
   fi
 
   # Show migration-specific guidance if migration was performed
