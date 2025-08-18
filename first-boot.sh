@@ -500,6 +500,18 @@ log "Enabling Screen Sharing service"
 sudo -p "[Screen sharing] Enter password to enable screen sharing service: " launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
 check_success "Screen Sharing service enabled"
 
+# Configure sharing preferences extension (replicates System Preferences behavior)
+log "Configuring sharing preferences to match System Preferences state"
+sudo -p "[Screen sharing] Enter password to configure sharing preferences: " defaults write /var/root/Library/Preferences/com.apple.preferences.sharing.SharingPrefsExtension homeSharingUIStatus -int 0 2>/dev/null || true
+sudo -p "[Screen sharing] Enter password to configure sharing preferences: " defaults write /var/root/Library/Preferences/com.apple.preferences.sharing.SharingPrefsExtension legacySharingUIStatus -int 0 2>/dev/null || true
+sudo -p "[Screen sharing] Enter password to configure sharing preferences: " defaults write /var/root/Library/Preferences/com.apple.preferences.sharing.SharingPrefsExtension mediaSharingUIStatus -int 0 2>/dev/null || true
+check_success "Sharing preferences configuration"
+
+# Activate SSMenuAgent (screen sharing menu agent)
+log "Activating screen sharing menu agent"
+sudo -p "[Screen sharing] Enter password to activate menu agent: " defaults write /var/root/Library/Preferences/com.apple.SSMenuAgent -dict 2>/dev/null || true
+check_success "Screen sharing menu agent activation"
+
 # Activate and configure Remote Management service
 log "Activating Remote Management for Apple Remote Desktop access"
 sudo -p "[Remote management] Enter password to activate Remote Management: " /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
