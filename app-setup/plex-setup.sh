@@ -626,9 +626,9 @@ configure_plex_autostart() {
   PLIST_FILE="${LAUNCH_AGENTS_DIR}/com.plexapp.plexmediaserver.plist"
 
   log "Creating LaunchAgent for Plex auto-start..."
-  sudo -u "${OPERATOR_USERNAME}" mkdir -p "${LAUNCH_AGENTS_DIR}"
+  sudo -iu "${OPERATOR_USERNAME}" mkdir -p "${LAUNCH_AGENTS_DIR}"
 
-  cat <<EOF | sudo -u "${OPERATOR_USERNAME}" tee "${PLIST_FILE}" >/dev/null
+  cat <<EOF | sudo -iu "${OPERATOR_USERNAME}" tee "${PLIST_FILE}" >/dev/null
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -660,10 +660,10 @@ EOF
 
   # Test if we can access the operator user context
   log "Testing access to operator user context..."
-  if sudo -u "${OPERATOR_USERNAME}" whoami >/dev/null 2>&1; then
+  if sudo -iu "${OPERATOR_USERNAME}" whoami >/dev/null 2>&1; then
     # Load the LaunchAgent for the operator user
     log "Loading Plex LaunchAgent for operator user..."
-    if sudo -u "${OPERATOR_USERNAME}" launchctl load "${PLIST_FILE}" 2>/dev/null; then
+    if sudo -iu "${OPERATOR_USERNAME}" launchctl load "${PLIST_FILE}" 2>/dev/null; then
       log "✅ Plex LaunchAgent loaded successfully"
     else
       log "⚠️  LaunchAgent load failed - this is normal if operator hasn't logged in yet"
