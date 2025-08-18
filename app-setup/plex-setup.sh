@@ -172,9 +172,9 @@ discover_plex_servers() {
   fi
 }
 
-# Simple SMB Mount Setup (direct mount - replacing autofs)
-setup_simple_smb_mount() {
-  section "Setting Up Direct SMB Mount for Media Storage"
+# Persistent SMB Mount Setup (LaunchDaemon-based)
+setup_persistent_smb_mount() {
+  section "Setting Up Persistent SMB Mount for Media Storage"
 
   # Critical safety checks for mount path
   if [[ -z "${NAS_SHARE_NAME}" ]]; then
@@ -227,65 +227,106 @@ setup_simple_smb_mount() {
     exit 1
   fi
 
-  # URL-encode password to handle special characters
-  local encoded_password
-  encoded_password=$(printf '%s' "${PLEX_NAS_PASSWORD}" | sed 's/@/%40/g; s/:/%3A/g; s/ /%20/g; s/#/%23/g; s/?/%3F/g; s/&/%26/g')
+  # Step 1: Configure mount script with credentials
+  local mount_script="/usr/local/bin/mount-nas-media.sh"
+  log "Configuring persistent mount script at ${mount_script}"
 
-  # Step 1: Create mount point
-  log "Creating mount point: ${PLEX_MEDIA_MOUNT}"
-  sudo -p "Enter your '${USER}' password to create mount point: " mkdir -p "${PLEX_MEDIA_MOUNT}"
-  check_success "Mount point creation"
+  # Verify mount script was installed by first-boot.sh
+  if [[ ! -f "${mount_script}" ]]; then
+    log "❌ Mount script not found at ${mount_script}"
+    log "   The script should have been installed by first-boot.sh"
+    exit 1
+  fi
 
-  # Step 2: Set proper ownership
-  log "Setting ownership of mount point to current user"
-  sudo -p "Enter your '${USER}' password to set mount point ownership: " chown "${USER}:staff" "${PLEX_MEDIA_MOUNT}"
-  check_success "Mount point ownership setup"
+  # Replace placeholders with actual values
+  sudo sed -i '' \
+    -e "s|__NAS_HOSTNAME__|${NAS_HOSTNAME}|g" \
+    -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
+    -e "s|__PLEX_NAS_USERNAME__|${PLEX_NAS_USERNAME}|g" \
+    -e "s|__PLEX_NAS_PASSWORD__|${PLEX_NAS_PASSWORD}|g" \
+    -e "s|__PLEX_MEDIA_MOUNT__|${PLEX_MEDIA_MOUNT}|g" \
+    -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
+    "${mount_script}"
 
-  # Step 3: Mount SMB share for administrator
-  local mount_url="//${PLEX_NAS_USERNAME}:${encoded_password}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
-  log "Mounting SMB share: //${PLEX_NAS_USERNAME}:***@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
+  # Set proper permissions for security
+  sudo chmod 700 "${mount_script}"
+  sudo chown root:wheel "${mount_script}"
+  check_success "Mount script installation"
 
-  if mount -t smbfs -o soft,nobrowse,noowners "${mount_url}" "${PLEX_MEDIA_MOUNT}" 2>/dev/null; then
-    log "✅ SMB mount successful"
+  # Step 2: Create LaunchDaemon plist
+  local plist_name="com.${HOSTNAME_LOWER}.mount-nas-media"
+  local plist_file="/Library/LaunchDaemons/${plist_name}.plist"
+  log "Creating LaunchDaemon: ${plist_file}"
 
-    # Step 4: Verify mount and test access
-    if mount | grep -q "${PLEX_MEDIA_MOUNT}"; then
-      log "✅ Mount verified in system mount table"
-      log "Testing media access..."
-      if ls "${PLEX_MEDIA_MOUNT}" >/dev/null 2>&1; then
-        log "✅ Media directory is accessible"
-        # Show what's available for verification
-        local file_count
-        file_count=$(find "${PLEX_MEDIA_MOUNT}" -maxdepth 1 -type f -o -type d | tail -n +2 | wc -l 2>/dev/null || echo "0")
-        log "   Found ${file_count} items in media directory"
-      else
-        log "⚠️  Mount succeeded but directory not accessible"
-      fi
+  sudo -p "Enter your '${USER}' password to create LaunchDaemon: " tee "${plist_file}" >/dev/null <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${plist_name}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${mount_script}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/var/log/${plist_name}.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/${plist_name}.log</string>
+</dict>
+</plist>
+EOF
+
+  # Set proper plist permissions
+  sudo chmod 644 "${plist_file}"
+  sudo chown root:wheel "${plist_file}"
+  check_success "LaunchDaemon plist creation"
+
+  # Step 3: Load and start the LaunchDaemon
+  log "Loading LaunchDaemon for immediate mount"
+  sudo launchctl load "${plist_file}"
+  check_success "LaunchDaemon load"
+
+  # Give it a moment to start
+  sleep 3
+
+  # Step 4: Verify the mount worked
+  if mount | grep -q "${PLEX_MEDIA_MOUNT}"; then
+    log "✅ Persistent SMB mount successful"
+    log "✅ Mount verified in system mount table"
+
+    # Test accessibility
+    if ls "${PLEX_MEDIA_MOUNT}" >/dev/null 2>&1; then
+      local file_count
+      file_count=$(find "${PLEX_MEDIA_MOUNT}" -maxdepth 1 -type f -o -type d | tail -n +2 | wc -l 2>/dev/null || echo "0")
+      log "✅ Media directory accessible with ${file_count} items"
+      log "✅ Mount will persist across reboots and user switches"
     else
-      log "⚠️  Mount command succeeded but mount not visible in system"
+      log "⚠️  Mount succeeded but directory not accessible"
     fi
   else
-    log "❌ SMB mount failed"
-    log "   Possible issues:"
-    log "   - SMB share connection limit reached ('Too many users')"
-    log "   - Incorrect credentials or hostname"
-    log "   - Network connectivity issues"
+    log "❌ Mount verification failed"
+    log "   Check LaunchDaemon logs: sudo tail -f /var/log/${plist_name}.log"
 
-    if ! confirm "Continue without NAS mount? (You can mount manually later)" "n"; then
+    if ! confirm "Continue without NAS mount? (You can troubleshoot later)" "n"; then
       exit 1
     fi
   fi
 
   log ""
-  log "📋 TODO: Operator Mount Setup"
-  log "   The ${OPERATOR_USERNAME} user will need access to the mounted share."
-  log "   Consider adding mount commands to operator's login scripts or LaunchAgent."
-  log ""
-  log "📋 TODO: Automatic Remounting"
-  log "   This mount won't survive reboots. Consider creating:"
-  log "   - LaunchAgent for automatic mounting at login"
-  log "   - Login script for ${OPERATOR_USERNAME}"
-  log "   - System LaunchDaemon for boot-time mounting"
+  log "✅ Persistent Mount Configuration Complete"
+  log "   Mount script: ${mount_script}"
+  log "   LaunchDaemon: ${plist_file}"
+  log "   Logs: /var/log/${plist_name}.log"
+  log "   The mount will automatically restore after reboots"
+  log "   Both admin and operator users can access ${PLEX_MEDIA_MOUNT}"
 }
 
 # Download and install Plex Media Server
@@ -723,7 +764,7 @@ main() {
 
   # Setup SMB mount if not skipped
   if [[ "${SKIP_MOUNT}" != "true" ]]; then
-    setup_simple_smb_mount
+    setup_persistent_smb_mount
   else
     log "Skipping SMB mount setup (--skip-mount specified)"
   fi
