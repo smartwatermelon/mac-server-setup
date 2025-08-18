@@ -82,7 +82,7 @@ HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 
 **NAS Configuration**:
 
-- `PLEX_MEDIA_MOUNT="/Volumes/${NAS_SHARE_NAME}"` (derived from config.conf)
+- `PLEX_MEDIA_MOUNT="/usr/local/mnt/${NAS_SHARE_NAME}"` (derived from config.conf)
 - SMB credentials retrieved from 1Password
 
 **Native Application Configuration**:
@@ -187,7 +187,7 @@ After script execution:
 ### Phase 2: Direct SMB Mount Setup
 
 1. **Local Credential Loading**: Loads NAS credentials from `plex_nas.conf` file
-2. **Safety Validation**: Critical checks prevent dangerous `/Volumes` root mounting  
+2. **Safety Validation**: Critical checks prevent dangerous mount directory issues  
 3. **Mount Point Preparation**: Creates mount directory and sets proper ownership (`user:staff`)
 4. **Direct SMB Mount**: Uses `mount -t smbfs` with optimal options (`soft,nobrowse,noowners`)
 5. **Mount Verification**: Tests mount success and directory accessibility
@@ -319,7 +319,7 @@ The LaunchAgent configures:
 
 **Setup Process**:
 
-1. **autofs Master Configuration**: Adds `/Volumes auto_smb -nobrowse,nosuid` to `/etc/auto_master`
+1. **LaunchDaemon Configuration**: Creates persistent mounting service via LaunchDaemon
 2. **SMB Configuration**: Creates `/etc/auto_smb` with mount definition:
 
    ```bash
@@ -475,9 +475,9 @@ op whoami
 mount | grep ${NAS_SHARE_NAME}
 
 # Manual SMB mount test (adjust values per your config.conf)
-sudo mkdir -p /Volumes/${NAS_SHARE_NAME}
-sudo chown $(whoami):staff /Volumes/${NAS_SHARE_NAME}
-mount_smbfs -f 0777 -d 0777 //${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME} /Volumes/${NAS_SHARE_NAME}
+sudo mkdir -p /usr/local/mnt/${NAS_SHARE_NAME}
+sudo chown root:staff /usr/local/mnt/${NAS_SHARE_NAME}
+sudo mount_smbfs -f 0664 -d 0775 //${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME} /usr/local/mnt/${NAS_SHARE_NAME}
 
 # Test NAS connectivity
 ping ${NAS_HOSTNAME}
@@ -624,7 +624,7 @@ sudo rm -rf /Users/Shared/PlexMediaServer
 rm -f ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist
 
 # Unmount NAS
-sudo umount /Volumes/${NAS_SHARE_NAME}
+sudo umount /usr/local/mnt/${NAS_SHARE_NAME}
 
 # Re-run full setup
 ./app-setup/plex-setup.sh

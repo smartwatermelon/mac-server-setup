@@ -16,7 +16,7 @@ This project provides a complete automation framework for setting up an Apple Si
 
 - **Eliminated unreliable autofs**: Replaced complex autofs implementation with simple direct mounting
   - Proper 4-step mount sequence: mkdir, chown, mount, verify
-  - Critical safety checks prevent dangerous `/Volumes` root mounting
+  - Critical safety checks prevent dangerous mount directory issues
   - Uses proper `mount -t smbfs` command with optimal options (`soft,nobrowse,noowners`)
 - **Enhanced Security and UX**: Comprehensive improvements for production use
   - Password masking in logs prevents credential exposure

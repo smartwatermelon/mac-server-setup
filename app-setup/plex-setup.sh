@@ -179,7 +179,7 @@ setup_persistent_smb_mount() {
   # Critical safety checks for mount path
   if [[ -z "${NAS_SHARE_NAME}" ]]; then
     log "❌ CRITICAL ERROR: NAS_SHARE_NAME is empty or not set"
-    log "   This would result in mounting to /Volumes directly, which is extremely dangerous"
+    log "   This would result in mounting to /usr/local/mnt directly, which would be dangerous"
     exit 1
   fi
 
