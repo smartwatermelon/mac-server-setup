@@ -292,6 +292,7 @@ EOF
   # Step 3: Load and start the LaunchDaemon
   log "Loading LaunchDaemon for immediate mount"
   sudo launchctl unload "${plist_file}" || true
+  sudo umount "${PLEX_MEDIA_MOUNT}" || true
   sudo launchctl load "${plist_file}"
   check_success "LaunchDaemon load"
 
@@ -659,23 +660,8 @@ EOF
 
   check_success "Plex LaunchAgent creation"
 
-  # Test if we can access the operator user context
-  log "Testing access to operator user context..."
-  if sudo -iu "${OPERATOR_USERNAME}" whoami >/dev/null 2>&1; then
-    # Load the LaunchAgent for the operator user
-    log "Loading Plex LaunchAgent for operator user..."
-    if sudo -iu "${OPERATOR_USERNAME}" launchctl load "${PLIST_FILE}" 2>/dev/null; then
-      log "✅ Plex LaunchAgent loaded successfully"
-    else
-      log "⚠️  LaunchAgent load failed - this is normal if operator hasn't logged in yet"
-      log "   The LaunchAgent will auto-load when ${OPERATOR_USERNAME} first logs in"
-    fi
-  else
-    log "⚠️  Cannot access operator user context yet"
-    log "   LaunchAgent will be available when ${OPERATOR_USERNAME} first logs in"
-  fi
-
   log "✅ Plex configured to start automatically for ${OPERATOR_USERNAME}"
+  log "   LaunchAgent will auto-load when ${OPERATOR_USERNAME} logs in"
 }
 
 # Start Plex Media Server
