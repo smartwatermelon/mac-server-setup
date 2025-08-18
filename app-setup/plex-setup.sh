@@ -235,6 +235,15 @@ setup_smb_mount() {
     check_success "autofs restart"
     log "✅ SMB mount configured successfully"
     log "The NAS will automatically mount when accessed: ${PLEX_MEDIA_MOUNT}"
+
+    # Test autofs mount
+    log "Testing autofs mount by accessing ${PLEX_MEDIA_MOUNT}..."
+    if timeout 10 ls "${PLEX_MEDIA_MOUNT}" >/dev/null 2>&1; then
+      log "✅ autofs mount test successful"
+    else
+      log "⚠️  autofs mount test failed - manual setup may be required"
+      log "   Try accessing ${PLEX_MEDIA_MOUNT} manually to trigger autofs"
+    fi
   else
     log "❌ Failed to restart autofs service"
     exit 1
@@ -299,6 +308,11 @@ install_plex() {
   hdiutil detach "${MOUNT_POINT}" >/dev/null 2>&1 || true
   rm -rf "${TEMP_DIR}"
 
+  # Remove quarantine attribute from Plex application
+  log "Removing quarantine attribute from Plex application..."
+  xattr -d com.apple.quarantine "/Applications/Plex Media Server.app" 2>/dev/null || true
+  check_success "Plex quarantine removal"
+
   log "✅ Plex Media Server installed successfully"
 }
 
@@ -321,6 +335,124 @@ configure_plex_firewall() {
     log "❌ Plex application not found at ${plex_app}"
     exit 1
   fi
+}
+
+# Function to test SSH connectivity to a host
+test_ssh_connection() {
+  local host="$1"
+  log "Testing SSH connection to ${host}..."
+
+  if ssh -o ConnectTimeout=5 -o BatchMode=yes "${host}" 'echo "SSH_OK"' >/dev/null 2>&1; then
+    log "✅ SSH connection to ${host} successful"
+    return 0
+  else
+    log "❌ SSH connection to ${host} failed"
+    return 1
+  fi
+}
+
+# Function to get migration size estimate
+get_migration_size_estimate() {
+  local source_host="$1"
+  local plex_path="Library/Application Support/Plex Media Server/"
+
+  log "Getting migration size estimate from ${source_host}..."
+
+  # Get total size
+  local total_size
+  total_size=$(ssh -o ConnectTimeout=10 "${source_host}" "du -sh '${plex_path}' 2>/dev/null | cut -f1" 2>/dev/null)
+
+  # Get file count
+  local file_count
+  file_count=$(ssh -o ConnectTimeout=10 "${source_host}" "ls -fR '${plex_path}' 2>/dev/null | wc -l" 2>/dev/null)
+
+  if [[ -n "${total_size}" && -n "${file_count}" ]]; then
+    log "Migration size estimate:"
+    log "  Total size: ${total_size}"
+    log "  Approximate files: ${file_count}"
+    log "  Estimated time: 5-30 minutes (depends on network speed)"
+  else
+    log "⚠️  Could not estimate migration size - proceeding anyway"
+  fi
+}
+
+# Function to migrate Plex configuration from remote host
+migrate_plex_from_host() {
+  local source_host="$1"
+
+  log "Starting Plex migration from ${source_host}"
+
+  # Test SSH connectivity first
+  if ! test_ssh_connection "${source_host}"; then
+    log "Cannot proceed with migration - SSH connection failed"
+    return 1
+  fi
+
+  # Get size estimate
+  get_migration_size_estimate "${source_host}"
+
+  # Create migration directory
+  log "Creating migration directory: ${PLEX_OLD_CONFIG%/*}"
+  mkdir -p "${PLEX_OLD_CONFIG%/*}"
+
+  # Define source paths
+  local plex_config_source="${source_host}:Library/Application\ Support/Plex\ Media\ Server/"
+  local plex_plist_source="${source_host}:Library/Preferences/com.plexapp.plexmediaserver.plist"
+
+  log "Migrating Plex configuration from ${source_host}..."
+  log "This may take several minutes depending on the size of your Plex database"
+
+  # Use rsync with progress for the main config
+  if command -v rsync >/dev/null 2>&1; then
+    # Use rsync with progress but limit output noise
+    log "Starting rsync migration (excluding Cache directory)..."
+    log "This may take several minutes - progress will be shown periodically"
+
+    # Run rsync and capture output to a temp file for processing
+    local rsync_log="/tmp/plex_rsync_$$.log"
+    if rsync -aH --progress --compress --whole-file --exclude='Cache' \
+      "${plex_config_source}" "${PLEX_OLD_CONFIG%/*}/" 2>&1 \
+      | tee "${rsync_log}" \
+      | grep --line-buffered -E "(receiving|sent|total size|\s+[0-9]+%)" \
+      | while IFS= read -r line; do
+        # Only log percentage updates and summary lines to reduce noise
+        if [[ "${line}" =~ [0-9]+% ]] || [[ "${line}" =~ (receiving|sent|total) ]]; then
+          log "  ${line// */}" # Remove extra whitespace
+        fi
+      done; then
+      log "✅ Plex configuration migrated successfully"
+      rm -f "${rsync_log}"
+    else
+      log "❌ Plex configuration migration failed"
+      if [[ -f "${rsync_log}" ]]; then
+        log "Last few lines of rsync output:"
+        tail -5 "${rsync_log}" | while IFS= read -r line; do
+          log "  ${line}"
+        done
+        rm -f "${rsync_log}"
+      fi
+      return 1
+    fi
+  else
+    # Fallback to scp if rsync not available
+    log "rsync not available, using scp (no progress indication)..."
+    if scp -r "${plex_config_source}" "${PLEX_OLD_CONFIG%/*}/"; then
+      log "✅ Plex configuration migrated successfully"
+    else
+      log "❌ Plex configuration migration failed"
+      return 1
+    fi
+  fi
+
+  # Migrate preferences file
+  log "Migrating Plex preferences..."
+  if scp "${plex_plist_source}" "${PLEX_OLD_CONFIG%/*}/"; then
+    log "✅ Plex preferences migrated successfully"
+  else
+    log "⚠️  Could not migrate Plex preferences (this is optional)"
+  fi
+
+  return 0
 }
 
 # Create shared Plex configuration directory
@@ -546,7 +678,17 @@ main() {
   # Setup shared configuration directory
   setup_shared_config
 
-  # Migrate configuration if available
+  # Perform remote migration if specified
+  if [[ -n "${MIGRATE_FROM}" ]]; then
+    log "Remote migration source specified: ${MIGRATE_FROM}"
+    if migrate_plex_from_host "${MIGRATE_FROM}"; then
+      log "✅ Remote migration completed successfully"
+    else
+      log "❌ Remote migration failed - continuing with fresh installation"
+    fi
+  fi
+
+  # Migrate configuration if available (local migration)
   migrate_plex_config
 
   # Configure auto-start
@@ -562,6 +704,15 @@ main() {
 
   if [[ "${SKIP_MOUNT}" != "true" ]]; then
     log "The media directory will auto-mount when accessed"
+  fi
+
+  # Show migration-specific guidance if migration was performed
+  if [[ -n "${MIGRATE_FROM}" || -d "${PLEX_OLD_CONFIG}" ]]; then
+    log ""
+    log "Migration completed:"
+    log "  ✅ Configuration migrated successfully"
+    log "  ⚠️  You may need to update library paths in the web interface"
+    log "  ⚠️  Point libraries to ${PLEX_MEDIA_MOUNT} paths instead of old paths"
   fi
 }
 
