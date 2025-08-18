@@ -369,6 +369,16 @@ configure_plex_firewall() {
     check_success "Plex firewall unblock"
 
     log "✅ Plex Media Server configured in firewall"
+
+    # Grant network volume access permission to Plex
+    log "Granting network volume access permission to Plex Media Server..."
+    if sudo -p "[Privacy setup] Enter password to grant Plex network access: " tccutil reset NetworkVolumes "${plex_app}" 2>/dev/null; then
+      sudo tccutil insert NetworkVolumes "${plex_app}" 2>/dev/null || true
+      log "✅ Network volume access permission granted"
+    else
+      log "⚠️  Could not automatically grant network volume permission"
+      log "   You may see a permission prompt when Plex first accesses network files"
+    fi
   else
     log "❌ Plex application not found at ${plex_app}"
     exit 1
