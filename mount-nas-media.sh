@@ -158,7 +158,7 @@ main() {
   encoded_password=$(printf '%s' "${PLEX_NAS_PASSWORD}" | sed 's/@/%40/g; s/:/%3A/g; s/ /%20/g; s/#/%23/g; s/?/%3F/g; s/&/%26/g')
   local mount_url="//${PLEX_NAS_USERNAME}:${encoded_password}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
 
-  if mount -t smbfs -o soft,nobrowse,noowners,file_mode=0664,dir_mode=0775 "${mount_url}" "${PLEX_MEDIA_MOUNT}"; then
+  if mount -t smbfs -o soft,nobrowse,noowners,filemode=0664,dirmode=0775 "${mount_url}" "${PLEX_MEDIA_MOUNT}"; then
     log "✅ SMB mount successful"
   else
     log "❌ SMB mount failed"
