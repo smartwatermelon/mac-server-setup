@@ -172,7 +172,123 @@ discover_plex_servers() {
   fi
 }
 
-# SMB Mount Setup (autofs-based)
+# Simple SMB Mount Setup (direct mount - replacing autofs)
+setup_simple_smb_mount() {
+  section "Setting Up Direct SMB Mount for Media Storage"
+
+  # Critical safety checks for mount path
+  if [[ -z "${NAS_SHARE_NAME}" ]]; then
+    log "❌ CRITICAL ERROR: NAS_SHARE_NAME is empty or not set"
+    log "   This would result in mounting to /Volumes directly, which is extremely dangerous"
+    exit 1
+  fi
+
+  if [[ "${NAS_SHARE_NAME}" == "." || "${NAS_SHARE_NAME}" == ".." ]]; then
+    log "❌ CRITICAL ERROR: NAS_SHARE_NAME cannot be '.' or '..'"
+    log "   This would result in dangerous mount behavior"
+    exit 1
+  fi
+
+  if [[ "${PLEX_MEDIA_MOUNT}" == "/Volumes" || "${PLEX_MEDIA_MOUNT}" == "/Volumes/" ]]; then
+    log "❌ CRITICAL ERROR: Mount target resolves to /Volumes root directory"
+    log "   Mounting to /Volumes directly would destroy the system volume directory"
+    log "   Current values:"
+    log "     NAS_SHARE_NAME='${NAS_SHARE_NAME}'"
+    log "     PLEX_MEDIA_MOUNT='${PLEX_MEDIA_MOUNT}'"
+    exit 1
+  fi
+
+  # Verify mount path has proper structure
+  local expected_mount="/Volumes/${NAS_SHARE_NAME}"
+  if [[ "${PLEX_MEDIA_MOUNT}" != "${expected_mount}" ]]; then
+    log "❌ ERROR: Mount path mismatch"
+    log "   Expected: ${expected_mount}"
+    log "   Actual: ${PLEX_MEDIA_MOUNT}"
+    exit 1
+  fi
+
+  log "✅ Mount safety checks passed:"
+  log "   NAS_SHARE_NAME: '${NAS_SHARE_NAME}'"
+  log "   Mount target: '${PLEX_MEDIA_MOUNT}'"
+
+  # Load NAS credentials from plex_nas.conf
+  local nas_config="${SCRIPT_DIR}/plex_nas.conf"
+  if [[ -f "${nas_config}" ]]; then
+    log "Loading NAS credentials from ${nas_config}"
+    # shellcheck source=/dev/null
+    source "${nas_config}"
+  else
+    log "❌ NAS configuration file not found: ${nas_config}"
+    exit 1
+  fi
+
+  if [[ -z "${PLEX_NAS_USERNAME}" || -z "${PLEX_NAS_PASSWORD}" ]]; then
+    log "❌ NAS credentials not found in ${nas_config}"
+    exit 1
+  fi
+
+  # URL-encode password to handle special characters
+  local encoded_password
+  encoded_password=$(printf '%s' "${PLEX_NAS_PASSWORD}" | sed 's/@/%40/g; s/:/%3A/g; s/ /%20/g; s/#/%23/g; s/?/%3F/g; s/&/%26/g')
+
+  # Step 1: Create mount point
+  log "Creating mount point: ${PLEX_MEDIA_MOUNT}"
+  sudo -p "Enter your '${USER}' password to create mount point: " mkdir -p "${PLEX_MEDIA_MOUNT}"
+  check_success "Mount point creation"
+
+  # Step 2: Set proper ownership
+  log "Setting ownership of mount point to current user"
+  sudo -p "Enter your '${USER}' password to set mount point ownership: " chown "${USER}:staff" "${PLEX_MEDIA_MOUNT}"
+  check_success "Mount point ownership setup"
+
+  # Step 3: Mount SMB share for administrator
+  local mount_url="//${PLEX_NAS_USERNAME}:${encoded_password}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
+  log "Mounting SMB share: ${mount_url}"
+
+  if mount -t smbfs -o soft,nobrowse,noowners "${mount_url}" "${PLEX_MEDIA_MOUNT}" 2>/dev/null; then
+    log "✅ SMB mount successful"
+
+    # Step 4: Verify mount and test access
+    if mount | grep -q "${PLEX_MEDIA_MOUNT}"; then
+      log "✅ Mount verified in system mount table"
+      log "Testing media access..."
+      if ls "${PLEX_MEDIA_MOUNT}" >/dev/null 2>&1; then
+        log "✅ Media directory is accessible"
+        # Show what's available for verification
+        local file_count
+        file_count=$(ls -1 "${PLEX_MEDIA_MOUNT}" | wc -l 2>/dev/null || echo "0")
+        log "   Found ${file_count} items in media directory"
+      else
+        log "⚠️  Mount succeeded but directory not accessible"
+      fi
+    else
+      log "⚠️  Mount command succeeded but mount not visible in system"
+    fi
+  else
+    log "❌ SMB mount failed"
+    log "   Possible issues:"
+    log "   - SMB share connection limit reached ('Too many users')"
+    log "   - Incorrect credentials or hostname"
+    log "   - Network connectivity issues"
+
+    if ! confirm "Continue without NAS mount? (You can mount manually later)" "n"; then
+      exit 1
+    fi
+  fi
+
+  log ""
+  log "📋 TODO: Operator Mount Setup"
+  log "   The ${OPERATOR_USERNAME} user will need access to the mounted share."
+  log "   Consider adding mount commands to operator's login scripts or LaunchAgent."
+  log ""
+  log "📋 TODO: Automatic Remounting"
+  log "   This mount won't survive reboots. Consider creating:"
+  log "   - LaunchAgent for automatic mounting at login"
+  log "   - Login script for ${OPERATOR_USERNAME}"
+  log "   - System LaunchDaemon for boot-time mounting"
+}
+
+# SMB Mount Setup (direct mount)
 setup_smb_mount() {
   section "Setting Up SMB Mount for Media Storage"
 
@@ -748,7 +864,7 @@ main() {
 
   # Setup SMB mount if not skipped
   if [[ "${SKIP_MOUNT}" != "true" ]]; then
-    setup_smb_mount
+    setup_simple_smb_mount
   else
     log "Skipping SMB mount setup (--skip-mount specified)"
   fi
@@ -787,13 +903,18 @@ main() {
   log "Media directory: ${PLEX_MEDIA_MOUNT}"
 
   if [[ "${SKIP_MOUNT}" != "true" ]]; then
-    log "The media directory should auto-mount when accessed"
+    log "Media directory mounted for administrator"
     log ""
     log "SMB Mount troubleshooting:"
     log "  - Manual mount: sudo mount -t smbfs -o soft,nobrowse,noowners '//${PLEX_NAS_USERNAME}:<password>@${NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
     log "  - Check mounts: mount | grep ${NAS_SHARE_NAME}"
     log "  - Unmount: sudo umount '${PLEX_MEDIA_MOUNT}'"
     log "  - 'Too many users' error indicates SMB connection limit reached"
+    log ""
+    log "⚠️  Remember:"
+    log "  - This mount is only for administrator account"
+    log "  - Operator account needs separate mount setup"
+    log "  - Mount won't survive reboots without additional setup"
   fi
 
   # Show migration-specific guidance if migration was performed
