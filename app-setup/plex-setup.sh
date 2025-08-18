@@ -49,7 +49,7 @@ HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 
 # Plex configuration
-PLEX_MEDIA_MOUNT="/usr/local/mnt/${NAS_SHARE_NAME}"
+PLEX_MEDIA_MOUNT="${HOME}/.local/mnt/${NAS_SHARE_NAME}"
 PLEX_SERVER_NAME="${PLEX_SERVER_NAME_OVERRIDE:-${HOSTNAME}}"
 
 # Migration settings
@@ -172,44 +172,25 @@ discover_plex_servers() {
   fi
 }
 
-# Persistent SMB Mount Setup (LaunchDaemon-based)
+# Per-User SMB Mount Setup (LaunchAgent-based)
 setup_persistent_smb_mount() {
-  section "Setting Up Persistent SMB Mount for Media Storage"
+  section "Setting Up Per-User SMB Mount for Media Storage"
 
   # Critical safety checks for mount path
   if [[ -z "${NAS_SHARE_NAME}" ]]; then
     log "❌ CRITICAL ERROR: NAS_SHARE_NAME is empty or not set"
-    log "   This would result in mounting to /usr/local/mnt directly, which would be dangerous"
     exit 1
   fi
 
   if [[ "${NAS_SHARE_NAME}" == "." || "${NAS_SHARE_NAME}" == ".." ]]; then
     log "❌ CRITICAL ERROR: NAS_SHARE_NAME cannot be '.' or '..'"
-    log "   This would result in dangerous mount behavior"
-    exit 1
-  fi
-
-  if [[ "${PLEX_MEDIA_MOUNT}" == "/usr/local/mnt" || "${PLEX_MEDIA_MOUNT}" == "/usr/local/mnt/" ]]; then
-    log "❌ CRITICAL ERROR: Mount target resolves to /usr/local/mnt root directory"
-    log "   Mounting to /usr/local/mnt directly would be dangerous"
-    log "   Current values:"
-    log "     NAS_SHARE_NAME='${NAS_SHARE_NAME}'"
-    log "     PLEX_MEDIA_MOUNT='${PLEX_MEDIA_MOUNT}'"
-    exit 1
-  fi
-
-  # Verify mount path has proper structure
-  local expected_mount="/usr/local/mnt/${NAS_SHARE_NAME}"
-  if [[ "${PLEX_MEDIA_MOUNT}" != "${expected_mount}" ]]; then
-    log "❌ ERROR: Mount path mismatch"
-    log "   Expected: ${expected_mount}"
-    log "   Actual: ${PLEX_MEDIA_MOUNT}"
     exit 1
   fi
 
   log "✅ Mount safety checks passed:"
   log "   NAS_SHARE_NAME: '${NAS_SHARE_NAME}'"
-  log "   Mount target: '${PLEX_MEDIA_MOUNT}'"
+  log "   Admin mount: ${HOME}/.local/mnt/${NAS_SHARE_NAME}"
+  log "   Operator mount: /Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
 
   # Load NAS credentials from plex_nas.conf
   local nas_config="${SCRIPT_DIR}/plex_nas.conf"
@@ -227,38 +208,40 @@ setup_persistent_smb_mount() {
     exit 1
   fi
 
-  # Step 1: Configure mount script with credentials
-  local mount_script="/usr/local/bin/mount-nas-media.sh"
-  log "Configuring persistent mount script at ${mount_script}"
+  # Function to setup mount for a specific user
+  setup_user_mount() {
+    local target_user="$1"
+    local user_home="/Users/${target_user}"
 
-  # Verify mount script was installed by first-boot.sh
-  if [[ ! -f "${mount_script}" ]]; then
-    log "❌ Mount script not found at ${mount_script}"
-    log "   The script should have been installed by first-boot.sh"
-    exit 1
-  fi
+    log "Setting up SMB mount for user: ${target_user}"
 
-  # Replace placeholders with actual values
-  sudo sed -i '' \
-    -e "s|__NAS_HOSTNAME__|${NAS_HOSTNAME}|g" \
-    -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
-    -e "s|__PLEX_NAS_USERNAME__|${PLEX_NAS_USERNAME}|g" \
-    -e "s|__PLEX_NAS_PASSWORD__|${PLEX_NAS_PASSWORD}|g" \
-    -e "s|__PLEX_MEDIA_MOUNT__|${PLEX_MEDIA_MOUNT}|g" \
-    -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
-    "${mount_script}"
+    # Create user's script directory and copy mount script
+    local user_script_dir="${user_home}/.local/bin"
+    local user_script="${user_script_dir}/mount-nas-media.sh"
 
-  # Set proper permissions for security
-  sudo chmod 700 "${mount_script}"
-  sudo chown root:wheel "${mount_script}"
-  check_success "Mount script installation"
+    sudo -u "${target_user}" mkdir -p "${user_script_dir}"
+    sudo -u "${target_user}" cp "${SCRIPT_DIR}/../mount-nas-media.sh" "${user_script}"
 
-  # Step 2: Create LaunchDaemon plist
-  local plist_name="com.${HOSTNAME_LOWER}.mount-nas-media"
-  local plist_file="/Library/LaunchDaemons/${plist_name}.plist"
-  log "Creating LaunchDaemon: ${plist_file}"
+    # Replace placeholders with actual values in user's script
+    sudo -u "${target_user}" sed -i '' \
+      -e "s|__NAS_HOSTNAME__|${NAS_HOSTNAME}|g" \
+      -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
+      -e "s|__PLEX_NAS_USERNAME__|${PLEX_NAS_USERNAME}|g" \
+      -e "s|__PLEX_NAS_PASSWORD__|${PLEX_NAS_PASSWORD}|g" \
+      -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
+      "${user_script}"
 
-  sudo -p "Enter your '${USER}' password to create LaunchDaemon: " tee "${plist_file}" >/dev/null <<EOF
+    # Set proper permissions
+    chmod 700 "${user_script}"
+
+    # Create LaunchAgent plist for user
+    local user_agents_dir="${user_home}/Library/LaunchAgents"
+    local plist_name="com.${HOSTNAME_LOWER}.mount-nas-media"
+    local user_plist="${user_agents_dir}/${plist_name}.plist"
+
+    sudo -u "${target_user}" mkdir -p "${user_agents_dir}"
+
+    sudo -u "${target_user}" tee "${user_plist}" >/dev/null <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -267,70 +250,37 @@ setup_persistent_smb_mount() {
     <string>${plist_name}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>${mount_script}</string>
+        <string>${user_script}</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <dict>
-        <key>SuccessfulExit</key>
-        <false/>
-    </dict>
+    <true/>
     <key>StandardOutPath</key>
-    <string>/var/log/${plist_name}.log</string>
+    <string>${user_home}/.local/state/${plist_name}.log</string>
     <key>StandardErrorPath</key>
-    <string>/var/log/${plist_name}.log</string>
+    <string>${user_home}/.local/state/${plist_name}.log</string>
 </dict>
 </plist>
 EOF
 
-  # Remove existing mount if necessary
-  sudo launchctl unload "${plist_file}" &>/dev/null || true
-  sudo umount "${PLEX_MEDIA_MOUNT}" &>/dev/null || true
+    chmod 644 "${user_plist}"
+    log "✅ LaunchAgent created for ${target_user}: ${user_plist}"
+  }
 
-  # Set proper plist permissions
-  sudo chmod 644 "${plist_file}"
-  sudo chown root:wheel "${plist_file}"
-  check_success "LaunchDaemon plist creation"
+  # Setup mount for admin user (current user)
+  setup_user_mount "${USER}"
 
-  # Step 3: Load and start the LaunchDaemon
-  log "Loading LaunchDaemon for immediate mount"
-  sudo launchctl load "${plist_file}"
-  check_success "LaunchDaemon load"
-
-  # Give it a moment to start
-  sleep 3
-
-  # Step 4: Verify the mount worked
-  if mount | grep -q "${PLEX_MEDIA_MOUNT}"; then
-    log "✅ Persistent SMB mount successful"
-    log "✅ Mount verified in system mount table"
-
-    # Test accessibility
-    if ls "${PLEX_MEDIA_MOUNT}" >/dev/null 2>&1; then
-      local file_count
-      file_count=$(find "${PLEX_MEDIA_MOUNT}" -maxdepth 1 -type f -o -type d | tail -n +2 | wc -l 2>/dev/null || echo "0")
-      log "✅ Media directory accessible with ${file_count} items"
-      log "✅ Mount will persist across reboots and user switches"
-    else
-      log "⚠️  Mount succeeded but directory not accessible"
-    fi
-  else
-    log "❌ Mount verification failed"
-    log "   Check LaunchDaemon logs: sudo tail -F /var/log/${plist_name}.log"
-
-    if ! confirm "Continue without NAS mount? (You can troubleshoot later)" "n"; then
-      exit 1
-    fi
-  fi
+  # Setup mount for operator user
+  setup_user_mount "${OPERATOR_USERNAME}"
 
   log ""
-  log "✅ Persistent Mount Configuration Complete"
-  log "   Mount script: ${mount_script}"
-  log "   LaunchDaemon: ${plist_file}"
-  log "   Logs: /var/log/${plist_name}.log"
-  log "   The mount will automatically restore after reboots"
-  log "   Both admin and operator users can access ${PLEX_MEDIA_MOUNT}"
+  log "✅ Per-User SMB Mount Configuration Complete"
+  log "   Admin script: ${HOME}/.local/bin/mount-nas-media.sh"
+  log "   Operator script: /Users/${OPERATOR_USERNAME}/.local/bin/mount-nas-media.sh"
+  log "   Admin mount: ${HOME}/.local/mnt/${NAS_SHARE_NAME}"
+  log "   Operator mount: /Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
+  log "   LaunchAgents will auto-load when each user logs in"
 }
 
 # Download and install Plex Media Server
@@ -795,15 +745,15 @@ main() {
     log "Media directory mounted for administrator"
     log ""
     log "SMB Mount troubleshooting:"
-    log "  - Manual mount: sudo mount -t smbfs -o soft,nobrowse,noowners '//${PLEX_NAS_USERNAME}:<password>@${NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
+    log "  - Manual mount: mount_smbfs -o soft,nobrowse,noowners '//${PLEX_NAS_USERNAME}:<password>@${NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
     log "  - Check mounts: mount | grep ${NAS_SHARE_NAME}"
-    log "  - Unmount: sudo umount '${PLEX_MEDIA_MOUNT}'"
+    log "  - Unmount: umount '${PLEX_MEDIA_MOUNT}'"
     log "  - 'Too many users' error indicates SMB connection limit reached"
     log ""
     log "⚠️  Remember:"
-    log "  - This mount is only for administrator account"
-    log "  - Operator account needs separate mount setup"
-    log "  - Mount won't survive reboots without additional setup"
+    log "  - Each user has their own private mount in ~/.local/mnt/"
+    log "  - Mounts activate when users log in via LaunchAgent"
+    log "  - Both admin and operator share same SMB credentials"
   fi
 
   # Show migration-specific guidance if migration was performed

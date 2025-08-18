@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# mount-nas-media.sh - Persistent SMB mount script for NAS media access
-# This script is designed to be called by a LaunchDaemon at boot time
-# to provide persistent SMB mounting for both admin and operator users.
+# mount-nas-media.sh - User-specific SMB mount script for NAS media access
+# This script is designed to be called by a per-user LaunchAgent
+# to provide persistent SMB mounting for individual users.
 
 set -euo pipefail
 
@@ -11,16 +11,21 @@ NAS_HOSTNAME="__NAS_HOSTNAME__"
 NAS_SHARE_NAME="__NAS_SHARE_NAME__"
 PLEX_NAS_USERNAME="__PLEX_NAS_USERNAME__"
 PLEX_NAS_PASSWORD="__PLEX_NAS_PASSWORD__"
-PLEX_MEDIA_MOUNT="/usr/local/mnt/__NAS_SHARE_NAME__"
+PLEX_MEDIA_MOUNT="${HOME}/.local/mnt/__NAS_SHARE_NAME__"
 SERVER_NAME="__SERVER_NAME__"
 
 # Logging configuration
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
-LOG_FILE="/var/log/${HOSTNAME_LOWER}-mount.log"
+LOG_FILE="${HOME}/.local/state/${HOSTNAME_LOWER}-mount.log"
+
+# Ensure directories exist
+mkdir -p "${HOME}/.local/state"
+mkdir -p "${HOME}/.local/mnt"
 
 # Ensure log file exists with proper permissions
 touch "${LOG_FILE}"
 chmod 644 "${LOG_FILE}"
+truncate -s 0 "${LOG_FILE}" || true
 
 # Logging function
 log() {
@@ -75,16 +80,10 @@ main() {
 
   # Step 3: Create mount point with proper ownership and permissions
   log "Step 3: Creating mount point with proper permissions..."
-  # Ensure /usr/local/mnt directory exists first
-  mkdir -p "/usr/local/mnt"
-  chown root:staff "/usr/local/mnt"
-  chmod 775 "/usr/local/mnt"
-
-  # Create the specific mount point
+  # Create the specific mount point in user's home directory
   mkdir -p "${PLEX_MEDIA_MOUNT}"
-  chown root:staff "${PLEX_MEDIA_MOUNT}"
-  chmod 775 "${PLEX_MEDIA_MOUNT}"
-  log "✅ Mount point created: ${PLEX_MEDIA_MOUNT} (root:staff 775)"
+  chmod 755 "${PLEX_MEDIA_MOUNT}"
+  log "✅ Mount point created: ${PLEX_MEDIA_MOUNT} (user-owned 755)"
 
   # Step 4: Mount the SMB share
   log "Step 4: Mounting SMB share..."
