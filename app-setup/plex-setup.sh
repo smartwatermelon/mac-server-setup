@@ -281,7 +281,7 @@ setup_persistent_smb_mount() {
 </plist>
 EOF
 
-    chmod 644 "${user_plist}"
+    sudo -p "[Mount setup] Enter password to set permissions for ${target_user}'s copy of mount LaunchAgent': " -u "${target_user}" chmod 644 "${user_plist}"
     log "✅ LaunchAgent created for ${target_user}: ${user_plist}"
   }
 
