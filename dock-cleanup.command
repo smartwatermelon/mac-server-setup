@@ -13,7 +13,8 @@ killall Dock
 until pgrep Dock; do sleep 1; done
 
 # Wait for network mount
-until [[ $(find .local/mnt/DSMedia -maxdepth 1 -type d || true | wc -l || true) -gt 1 ]]; do sleep 1; done
+# shellcheck disable=SC2312
+until [[ $(find .local/mnt/DSMedia -mindepth 1 -maxdepth 1 -type d | wc -l) -gt 0 ]]; do sleep 1; done
 
 # Clean up dock, add iTerm, and restart Dock
 while /opt/homebrew/bin/dockutil --find Messages; do
