@@ -249,7 +249,7 @@ setup_persistent_smb_mount() {
     sudo -p "[Mount setup] Enter password to copy mount script for ${target_user}: " -u "${target_user}" cp "${configured_script}" "${user_script}"
 
     # Set proper permissions
-    chmod 700 "${user_script}"
+    sudo -p "[Mount setup] Enter password to set permissions for ${target_user}'s copy of mount script': " -u "${target_user}" chmod 700 "${user_script}"
 
     # Create LaunchAgent plist for user
     local user_agents_dir="${user_home}/Library/LaunchAgents"
