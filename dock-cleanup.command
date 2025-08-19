@@ -17,7 +17,8 @@ until pgrep Dock; do sleep 1; done
 until [[ $(find .local/mnt/DSMedia -mindepth 1 -maxdepth 1 -type d | wc -l) -gt 0 ]]; do sleep 1; done
 
 # Clean up dock, add iTerm, and restart Dock
-while /opt/homebrew/bin/dockutil --find Messages; do
+/opt/homebrew/bin/dockutil --remove System/Applications/Passwords.app &>/dev/null || true
+until /opt/homebrew/bin/dockutil --find Passwords; do
   /opt/homebrew/bin/dockutil \
     --remove Messages \
     --remove Mail \
