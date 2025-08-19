@@ -12,12 +12,13 @@ This project provides a complete automation framework for setting up an Apple Si
 
 ## Recent Improvements (v3.0 - Major Overhaul)
 
-### Direct SMB Mounting with Enhanced Reliability (2025-08-17)
+### Per-User SMB Mounting with Enhanced Reliability (2025-08-18)
 
-- **Eliminated unreliable autofs**: Replaced complex autofs implementation with simple direct mounting
-  - Proper 4-step mount sequence: mkdir, chown, mount, verify
-  - Critical safety checks prevent dangerous mount directory issues
-  - Uses proper `mount -t smbfs` command with optimal options (`soft,nobrowse,noowners`)
+- **Per-user LaunchAgent approach**: Replaced system-level LaunchDaemon with user-specific mounting
+  - Each user gets private mount in `~/.local/mnt/DSMedia`
+  - LaunchAgents activate on user login, no root permissions needed
+  - Same SMB credentials work for both admin and operator users
+  - Eliminates SIP restrictions and permission issues
 - **Enhanced Security and UX**: Comprehensive improvements for production use
   - Password masking in logs prevents credential exposure
   - Automatic firewall configuration for Plex Media Server

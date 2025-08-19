@@ -82,7 +82,7 @@ HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 
 **NAS Configuration**:
 
-- `PLEX_MEDIA_MOUNT="/usr/local/mnt/${NAS_SHARE_NAME}"` (derived from config.conf)
+- `PLEX_MEDIA_MOUNT="${HOME}/.local/mnt/${NAS_SHARE_NAME}"` (per-user mount)
 - SMB credentials retrieved from 1Password
 
 **Native Application Configuration**:
@@ -184,13 +184,13 @@ After script execution:
    - Setup operations default to **Yes** - press Enter to continue
    - Destructive operations default to **No** - requires explicit confirmation
 
-### Phase 2: Direct SMB Mount Setup
+### Phase 2: Per-User SMB Mount Setup
 
 1. **Local Credential Loading**: Loads NAS credentials from `plex_nas.conf` file
 2. **Safety Validation**: Critical checks prevent dangerous mount directory issues  
-3. **Mount Point Preparation**: Creates mount directory and sets proper ownership (`user:staff`)
-4. **Direct SMB Mount**: Uses `mount -t smbfs` with optimal options (`soft,nobrowse,noowners`)
-5. **Mount Verification**: Tests mount success and directory accessibility
+3. **Template Configuration**: Configures mount script template once with actual credentials
+4. **Per-User Deployment**: Deploys configured script to both admin and operator users
+5. **LaunchAgent Creation**: Creates per-user LaunchAgents for automatic mounting on login
 
 ### Phase 3: Native Application Installation
 
@@ -319,18 +319,11 @@ The LaunchAgent configures:
 
 **Setup Process**:
 
-1. **LaunchDaemon Configuration**: Creates persistent mounting service via LaunchDaemon
-2. **SMB Configuration**: Creates `/etc/auto_smb` with mount definition:
-
-   ```bash
-   ${NAS_SHARE_NAME} -fstype=smbfs,soft ://username:password@hostname/share
-   ```
-
-3. **Service Restart**: Reloads autofs configuration with `automount -cv`
-4. **Credential Handling**:
-   - Uses 1Password credentials for secure storage
-   - Handles special characters in passwords properly
-   - No plaintext credentials in configuration files
+1. **Template Configuration**: Configures mount script template with actual SMB credentials
+2. **Per-User Deployment**: Copies configured script to each user's `~/.local/bin/`
+3. **LaunchAgent Creation**: Creates user-specific LaunchAgents in `~/Library/LaunchAgents/`
+4. **Automatic Activation**: LaunchAgents auto-load when each user logs in
+5. **Private Mounts**: Each user gets mount at `~/.local/mnt/${NAS_SHARE_NAME}`
 
 **Behavior**:
 
@@ -475,19 +468,20 @@ op whoami
 mount | grep ${NAS_SHARE_NAME}
 
 # Manual SMB mount test (adjust values per your config.conf)
-sudo mkdir -p /usr/local/mnt/${NAS_SHARE_NAME}
-sudo chown root:staff /usr/local/mnt/${NAS_SHARE_NAME}
-sudo mount_smbfs -f 0664 -d 0775 //${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME} /usr/local/mnt/${NAS_SHARE_NAME}
+mkdir -p ~/.local/mnt/${NAS_SHARE_NAME}
+mount_smbfs -f 0664 -d 0775 //${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME} ~/.local/mnt/${NAS_SHARE_NAME}
 
 # Test NAS connectivity
 ping ${NAS_HOSTNAME}
 
-# Check autofs configuration
-sudo cat /etc/auto_master | grep auto_smb
-sudo cat /etc/auto_smb
+# Check LaunchAgent status
+launchctl list | grep mount-nas-media
 
-# Restart autofs if needed
-sudo automount -cv
+# Check mount logs
+tail -f ~/.local/state/${HOSTNAME_LOWER}-mount.log
+
+# Manually run mount script
+~/.local/bin/mount-nas-media.sh
 ```
 
 **Common Mount Issues**:
@@ -624,7 +618,7 @@ sudo rm -rf /Users/Shared/PlexMediaServer
 rm -f ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist
 
 # Unmount NAS
-sudo umount /usr/local/mnt/${NAS_SHARE_NAME}
+umount ~/.local/mnt/${NAS_SHARE_NAME}
 
 # Re-run full setup
 ./app-setup/plex-setup.sh
