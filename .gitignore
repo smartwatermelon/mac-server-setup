@@ -60,13 +60,10 @@ ENV/
 
 # Local configuration
 config/config.conf
-config.conf.txt
-config.conf.template.txt
 local_config.yaml
 user_settings.yaml
 
-# Claude Code project documentation
-CLAUDE.md
+# Claude Code runtime files
 .claude/
 
 # Compiled files
