@@ -15,7 +15,7 @@ This project provides a complete automation framework for setting up an Apple Si
 ### Per-User SMB Mounting with Enhanced Reliability (2025-08-18)
 
 - **Per-user LaunchAgent approach**: Replaced system-level LaunchDaemon with user-specific mounting
-  - Each user gets private mount in `~/.local/mnt/DSMedia`
+  - Each user gets private mount in `~/.local/mnt/MOUNT_POINT`
   - LaunchAgents activate on user login, no root permissions needed
   - Same SMB credentials work for both admin and operator users
   - Eliminates SIP restrictions and permission issues
