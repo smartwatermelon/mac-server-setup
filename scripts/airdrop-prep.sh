@@ -76,7 +76,6 @@ echo "Creating directory structure..."
 mkdir -p "${OUTPUT_PATH}/ssh_keys"
 mkdir -p "${OUTPUT_PATH}/scripts"
 mkdir -p "${OUTPUT_PATH}/scripts/app-setup"
-mkdir -p "${OUTPUT_PATH}/lists"
 mkdir -p "${OUTPUT_PATH}/pam.d"
 mkdir -p "${OUTPUT_PATH}/config"
 

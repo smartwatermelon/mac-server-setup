@@ -6,7 +6,6 @@ This directory contains all the necessary files for setting up the Mac Mini M2 s
 
 - `ssh_keys/`: SSH public keys for secure remote access
 - `scripts/`: Setup scripts for the server
-- `lists/`: Homebrew formulae and casks lists
 - `pam.d/`: TouchID sudo configuration
 - `URLs/`: Internet shortcuts used by Setup
 - `wifi/`: WiFi network configuration
