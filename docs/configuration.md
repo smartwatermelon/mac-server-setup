@@ -284,18 +284,18 @@ chmod 600 ~/macmini-setup/wifi/network.conf
 
 Modify the package installation by editing these files before running `airdrop-prep.sh`:
 
-**formulae.txt**: Command-line tools installed via Homebrew
-**casks.txt**: GUI applications installed via Homebrew
+**config/formulae.txt**: Command-line tools installed via Homebrew
+**config/casks.txt**: GUI applications installed via Homebrew
 
 Example customization:
 
 ```bash
-# Add to formulae.txt
+# Add to config/formulae.txt
 htop
 ncdu
 tree
 
-# Add to casks.txt  
+# Add to config/casks.txt  
 visual-studio-code
 firefox
 vlc
@@ -320,8 +320,8 @@ MONITORING_EMAIL="staging-alerts@company.com"
 Use with airdrop-prep.sh by copying the appropriate config:
 
 ```bash
-cp config-production.conf config.conf
-./airdrop-prep.sh
+cp config-production.conf config/config.conf
+./scripts/airdrop-prep.sh
 ```
 
 ### Integration Hooks

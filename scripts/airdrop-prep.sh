@@ -299,9 +299,9 @@ else
 fi
 
 # Copy dock cleanup script for operator
-if [[ -f "${SCRIPT_SOURCE_DIR}/dock-cleanup.command" ]]; then
+if [[ -f "${SCRIPT_SOURCE_DIR}/scripts/dock-cleanup.command" ]]; then
   echo "Copying operator dock cleanup script"
-  cp "${SCRIPT_SOURCE_DIR}/dock-cleanup.command" "${OUTPUT_PATH}/scripts/"
+  cp "${SCRIPT_SOURCE_DIR}/scripts/dock-cleanup.command" "${OUTPUT_PATH}/scripts/"
   chmod +x "${OUTPUT_PATH}/scripts/dock-cleanup.command"
 fi
 
@@ -310,8 +310,8 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   echo "Copying scripts from local source directory..."
 
   # Copy scripts
-  cp "${SCRIPT_SOURCE_DIR}/first-boot.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: first-boot.sh not found in source directory"
-  cp "${SCRIPT_SOURCE_DIR}/mount-nas-media.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: mount-nas-media.sh not found in source directory"
+  cp "${SCRIPT_SOURCE_DIR}/scripts/first-boot.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: first-boot.sh not found in source directory"
+  cp "${SCRIPT_SOURCE_DIR}/scripts/mount-nas-media.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: mount-nas-media.sh not found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/app-setup/"*.sh "${OUTPUT_PATH}/scripts/app-setup/" 2>/dev/null || echo "Warning: No app setup scripts found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/config/formulae.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: formulae.txt not found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/config/casks.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: casks.txt not found in source directory"
@@ -329,10 +329,10 @@ else
 fi
 
 # Copy README with variable substitution
-if [[ -f "${SCRIPT_SOURCE_DIR}/docs/README-firstboot.md" ]]; then
+if [[ -f "${SCRIPT_SOURCE_DIR}/docs/setup/README-firstboot.md" ]]; then
   echo "Processing README file..."
   sed "s/\${SERVER_NAME_LOWER}/${SERVER_NAME_LOWER}/g" \
-    "${SCRIPT_SOURCE_DIR}/docs/README-firstboot.md" >"${OUTPUT_PATH}/README.md"
+    "${SCRIPT_SOURCE_DIR}/docs/setup/README-firstboot.md" >"${OUTPUT_PATH}/README.md"
   echo "✅ README creation"
 else
   echo "⚠️ README-firstboot.md not found in source directory"

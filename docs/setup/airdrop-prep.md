@@ -133,19 +133,19 @@ macmini-setup/
 │   ├── first-boot.sh            # Main setup script
 │   ├── dock-cleanup.command     # Operator dock script
 │   └── app-setup/               # Application installers
-├── lists/
-│   ├── formulae.txt             # Homebrew packages
-│   └── casks.txt                # Homebrew applications
-├── pam.d/
-│   └── sudo_local               # TouchID sudo config
 ├── config/
 │   ├── config.conf              # Server settings
+│   ├── formulae.txt             # Homebrew packages
+│   ├── casks.txt                # Homebrew applications
 │   ├── dev_fingerprint.conf     # Safety check data
 │   ├── operator_password        # Operator account password
 │   ├── timemachine.conf         # Backup configuration
-│   ├── plex_nas.conf            # Plex NAS credentials
 │   ├── apple_id_password.url    # One-time Apple ID link
 │   └── wifi_network.conf        # WiFi credentials (only if script-based config)
+├── pam.d/
+│   └── sudo_local               # TouchID sudo config
+└── scripts/app-setup/
+    └── plex_nas.conf            # Plex NAS credentials
 └── README.md                    # Setup instructions
 ```
 
