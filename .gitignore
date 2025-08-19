@@ -63,6 +63,11 @@ config/config.conf
 local_config.yaml
 user_settings.yaml
 
+# Reference hardlinks
+config/config.conf.template.txt
+scripts/dock-cleanup.command.txt
+config/config.conf.txt
+
 # Claude Code runtime files
 .claude/
 CLAUDE.md
