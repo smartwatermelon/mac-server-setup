@@ -1212,17 +1212,8 @@ else
   log "No application setup scripts found in ${SETUP_DIR}/scripts/app-setup"
 fi
 
-# Install mount script to system location for later use
-if [[ -f "${SETUP_DIR}/scripts/mount-nas-media.sh" ]]; then
-  log "Installing mount script to system location"
-  sudo -p "[System setup] Enter password to install mount script: " mkdir -p /usr/local/bin
-  sudo cp "${SETUP_DIR}/scripts/mount-nas-media.sh" /usr/local/bin/
-  sudo chmod +x /usr/local/bin/mount-nas-media.sh
-  sudo chown root:wheel /usr/local/bin/mount-nas-media.sh
-  check_success "Mount script installation"
-else
-  log "No mount script found in ${SETUP_DIR}/scripts/"
-fi
+# Mount script template is now handled per-user by plex-setup.sh
+# No system-level installation needed
 
 # Copy config.conf for application setup scripts
 if [[ -f "${CONFIG_FILE}" ]]; then
