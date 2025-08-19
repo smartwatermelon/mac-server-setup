@@ -313,8 +313,8 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   cp "${SCRIPT_SOURCE_DIR}/first-boot.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: first-boot.sh not found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/mount-nas-media.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: mount-nas-media.sh not found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/app-setup/"*.sh "${OUTPUT_PATH}/scripts/app-setup/" 2>/dev/null || echo "Warning: No app setup scripts found in source directory"
-  cp "${SCRIPT_SOURCE_DIR}/formulae.txt" "${OUTPUT_PATH}/lists/" 2>/dev/null || echo "Warning: formulae.txt not found in source directory"
-  cp "${SCRIPT_SOURCE_DIR}/casks.txt" "${OUTPUT_PATH}/lists/" 2>/dev/null || echo "Warning: casks.txt not found in source directory"
+  cp "${SCRIPT_SOURCE_DIR}/config/formulae.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: formulae.txt not found in source directory"
+  cp "${SCRIPT_SOURCE_DIR}/config/casks.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: casks.txt not found in source directory"
 
   # Copy configuration file if it exists
   if [[ -f "${CONFIG_FILE}" ]]; then

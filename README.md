@@ -76,7 +76,7 @@ The setup process consists of two main phases:
 1. **Prepare setup package** on your development Mac:
 
    ```bash
-   ./airdrop-prep.sh
+   ./scripts/airdrop-prep.sh
    ```
 
 2. **Transfer to Mac Mini** via AirDrop (entire setup folder)
@@ -87,16 +87,16 @@ The setup process consists of two main phases:
 3. **Run initial setup** on Mac Mini:
 
    ```bash
-   cd ~/Downloads/MACMINI-setup/scripts # default name
-   ./first-boot.sh
+   cd ~/Downloads/MACMINI-setup # default name
+   ./scripts/first-boot.sh
    ```
 
 4. **Complete operator setup** after reboot (see [Operator Setup](docs/operator.md))
 
 ## Documentation
 
-- [AirDrop Prep Instructions](docs/airdrop-prep.md) - Preparing the setup package
-- [First Boot Instructions](docs/first-boot.md) - Running the initial setup
+- [AirDrop Prep Instructions](docs/setup/airdrop-prep.md) - Preparing the setup package
+- [First Boot Instructions](docs/setup/first-boot.md) - Running the initial setup
 - [Operator Setup](docs/operator.md) - Post-reboot configuration
 - [Configuration Reference](docs/configuration.md) - Customizing setup parameters
 
@@ -105,25 +105,29 @@ The setup process consists of two main phases:
 ```plaintext
 .
 ├── README.md                   # This file
-├── config.conf                 # Configuration parameters
-├── airdrop-prep.sh             # Setup package preparation
-├── first-boot.sh               # Main setup script
-├── dock-cleanup.command        # Dock cleanup for operator
-├── dock-cleanup.command        # Operator dock cleanup
-├── formulae.txt                # Homebrew formulae list
-├── casks.txt                   # Homebrew casks list
+├── scripts/                    # All executable scripts
+│   ├── airdrop-prep.sh        # Setup package preparation
+│   ├── first-boot.sh          # Main setup script
+│   ├── mount-nas-media.sh     # SMB mount script
+│   └── dock-cleanup.command   # Operator dock cleanup
+├── config/                     # Configuration files
+│   ├── config.conf.template   # Configuration template
+│   ├── formulae.txt           # Homebrew formulae list
+│   └── casks.txt              # Homebrew casks list
 ├── app-setup/                  # Application setup scripts
-│   └── *.sh                    # Individual app installers
+│   └── *.sh                   # Individual app installers
 └── docs/                       # Documentation
-    ├── airdrop-prep.md
-    ├── first-boot.md
+    ├── setup/                 # Setup documentation
+    │   ├── airdrop-prep.md
+    │   └── first-boot.md
+    ├── apps/                  # App-specific docs
     ├── operator.md
     └── configuration.md
 ```
 
 ## Configuration
 
-The system uses `config.conf` for customization:
+The system uses `config/config.conf` for customization:
 
 ```bash
 SERVER_NAME="YOUR_SERVER_NAME"

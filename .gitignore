@@ -59,7 +59,7 @@ venv/
 ENV/
 
 # Local configuration
-config.conf
+config/config.conf
 config.conf.txt
 config.conf.template.txt
 local_config.yaml
