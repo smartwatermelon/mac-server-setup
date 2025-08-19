@@ -12,6 +12,9 @@ echo "Cleaning up dock for operator account..."
 killall Dock
 until pgrep Dock; do sleep 1; done
 
+# Wait for network mount
+until [[ $(find .local/mnt/DSMedia -maxdepth 1 -type d || true | wc -l || true) -gt 1 ]]; do sleep 1; done
+
 # Clean up dock, add iTerm, and restart Dock
 while /opt/homebrew/bin/dockutil --find Messages; do
   /opt/homebrew/bin/dockutil \
@@ -29,7 +32,9 @@ while /opt/homebrew/bin/dockutil --find Messages; do
     --remove News \
     --remove 'iPhone Mirroring' \
     --remove /System/Applications/Utilities/Terminal.app \
+    --add '.local/mnt/DSMedia/Media' \
     --add /Applications/iTerm.app \
+    --add /Applications/Plex\ Media\ Server.app/ \
     --add /System/Applications/Passwords.app \
     2>/dev/null || true
   sleep 1
