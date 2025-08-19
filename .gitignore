@@ -65,6 +65,7 @@ user_settings.yaml
 
 # Claude Code runtime files
 .claude/
+CLAUDE.md
 
 # Compiled files
 *.o
