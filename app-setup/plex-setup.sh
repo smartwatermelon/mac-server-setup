@@ -30,7 +30,9 @@ set -euo pipefail
 
 # Load server configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="${SCRIPT_DIR}/config.conf"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+CONFIG_DIR="${PROJECT_ROOT}/config"
+CONFIG_FILE="${CONFIG_DIR}/config.conf"
 
 if [[ -f "${CONFIG_FILE}" ]]; then
   # shellcheck source=/dev/null
