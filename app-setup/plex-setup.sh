@@ -301,7 +301,7 @@ EOF
   log "   LaunchAgents will auto-load when each user logs in"
 }
 
-# Download and install Plex Media Server
+# Install Plex Media Server via Homebrew
 install_plex() {
   section "Installing Plex Media Server"
 
@@ -314,50 +314,24 @@ install_plex() {
 
   # Check if it was installed via Homebrew cask
   if command -v brew &>/dev/null && brew list --cask plex-media-server &>/dev/null; then
-    log "Plex Media Server is installed via Homebrew but not found in Applications"
-    log "This may indicate a Homebrew installation issue"
+    log "Plex Media Server is installed via Homebrew"
+    log "✅ Using existing Homebrew Plex installation"
+    return 0
   fi
 
-  log "Downloading Plex Media Server for macOS..."
-
-  # Create temporary directory for download
-  TEMP_DIR=$(mktemp -d)
-  PLEX_DMG="${TEMP_DIR}/PlexMediaServer.dmg"
-
-  # Download latest Plex Media Server
-  PLEX_DOWNLOAD_URL="https://downloads.plex.tv/plex-media-server-new/1.40.4.8679-424562606/macos/PlexMediaServer-1.40.4.8679-424562606-universal.dmg"
-
-  log "Downloading from: ${PLEX_DOWNLOAD_URL}"
-  if curl -L -o "${PLEX_DMG}" "${PLEX_DOWNLOAD_URL}"; then
-    check_success "Plex Media Server download"
-  else
-    log "❌ Failed to download Plex Media Server"
-    log "Please download manually from: https://www.plex.tv/media-server-downloads/"
+  # Verify Homebrew is available
+  if ! command -v brew &>/dev/null; then
+    log "❌ Homebrew not found - please install Homebrew first"
     exit 1
   fi
 
-  # Mount the DMG
-  log "Mounting Plex installer..."
-  MOUNT_POINT=$(hdiutil attach "${PLEX_DMG}" | grep "/Volumes/" | awk '{print $3}')
-
-  if [[ -z "${MOUNT_POINT}" ]]; then
-    log "❌ Failed to mount Plex installer DMG"
-    exit 1
-  fi
-
-  # Install Plex
-  log "Installing Plex Media Server..."
-  if cp -R "${MOUNT_POINT}/Plex Media Server.app" "/Applications/"; then
+  log "Installing Plex Media Server via Homebrew..."
+  if brew install --cask plex-media-server; then
     check_success "Plex Media Server installation"
   else
-    log "❌ Failed to install Plex Media Server"
-    hdiutil detach "${MOUNT_POINT}" >/dev/null 2>&1 || true
+    log "❌ Failed to install Plex Media Server via Homebrew"
     exit 1
   fi
-
-  # Clean up
-  hdiutil detach "${MOUNT_POINT}" >/dev/null 2>&1 || true
-  rm -rf "${TEMP_DIR}"
 
   # Remove quarantine attribute from Plex application
   log "Removing quarantine attribute from Plex application..."
