@@ -245,8 +245,8 @@ setup_persistent_smb_mount() {
     local user_script_dir="${user_home}/.local/bin"
     local user_script="${user_script_dir}/mount-nas-media.sh"
 
-    sudo -u "${target_user}" mkdir -p "${user_script_dir}"
-    sudo -u "${target_user}" cp "${configured_script}" "${user_script}"
+    sudo -p "[Mount setup] Enter password to create ${target_user} script directory: " -u "${target_user}" mkdir -p "${user_script_dir}"
+    sudo -p "[Mount setup] Enter password to copy mount script for ${target_user}: " -u "${target_user}" cp "${configured_script}" "${user_script}"
 
     # Set proper permissions
     chmod 700 "${user_script}"
@@ -256,9 +256,9 @@ setup_persistent_smb_mount() {
     local plist_name="com.${HOSTNAME_LOWER}.mount-nas-media"
     local user_plist="${user_agents_dir}/${plist_name}.plist"
 
-    sudo -u "${target_user}" mkdir -p "${user_agents_dir}"
+    sudo -p "[Mount setup] Enter password to create ${target_user} LaunchAgent directory: " -u "${target_user}" mkdir -p "${user_agents_dir}"
 
-    sudo -u "${target_user}" tee "${user_plist}" >/dev/null <<EOF
+    sudo -p "[Mount setup] Enter password to create ${target_user} LaunchAgent plist: " -u "${target_user}" tee "${user_plist}" >/dev/null <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
