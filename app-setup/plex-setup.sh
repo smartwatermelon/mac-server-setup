@@ -208,28 +208,45 @@ setup_persistent_smb_mount() {
     exit 1
   fi
 
-  # Function to setup mount for a specific user
-  setup_user_mount() {
+  # Step 1: Configure the template once with actual values
+  local template_script="${SCRIPT_DIR}/mount-nas-media.sh"
+  local configured_script="${SCRIPT_DIR}/mount-nas-media-configured.sh"
+
+  log "Configuring mount script template with credentials"
+
+  # Verify template exists
+  if [[ ! -f "${template_script}" ]]; then
+    log "❌ Mount script template not found at ${template_script}"
+    exit 1
+  fi
+
+  # Create configured version
+  cp "${template_script}" "${configured_script}"
+
+  # Replace placeholders with actual values (done once)
+  sed -i '' \
+    -e "s|__NAS_HOSTNAME__|${NAS_HOSTNAME}|g" \
+    -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
+    -e "s|__PLEX_NAS_USERNAME__|${PLEX_NAS_USERNAME}|g" \
+    -e "s|__PLEX_NAS_PASSWORD__|${PLEX_NAS_PASSWORD}|g" \
+    -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
+    "${configured_script}"
+
+  log "✅ Mount script configured with credentials"
+
+  # Function to deploy configured script to a specific user
+  deploy_user_mount() {
     local target_user="$1"
     local user_home="/Users/${target_user}"
 
-    log "Setting up SMB mount for user: ${target_user}"
+    log "Deploying SMB mount for user: ${target_user}"
 
-    # Create user's script directory and copy mount script
+    # Create user's script directory and copy configured script
     local user_script_dir="${user_home}/.local/bin"
     local user_script="${user_script_dir}/mount-nas-media.sh"
 
     sudo -u "${target_user}" mkdir -p "${user_script_dir}"
-    sudo -u "${target_user}" cp "${SCRIPT_DIR}/../mount-nas-media.sh" "${user_script}"
-
-    # Replace placeholders with actual values in user's script
-    sudo -u "${target_user}" sed -i '' \
-      -e "s|__NAS_HOSTNAME__|${NAS_HOSTNAME}|g" \
-      -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
-      -e "s|__PLEX_NAS_USERNAME__|${PLEX_NAS_USERNAME}|g" \
-      -e "s|__PLEX_NAS_PASSWORD__|${PLEX_NAS_PASSWORD}|g" \
-      -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
-      "${user_script}"
+    sudo -u "${target_user}" cp "${configured_script}" "${user_script}"
 
     # Set proper permissions
     chmod 700 "${user_script}"
@@ -268,11 +285,12 @@ EOF
     log "✅ LaunchAgent created for ${target_user}: ${user_plist}"
   }
 
-  # Setup mount for admin user (current user)
-  setup_user_mount "${USER}"
+  # Deploy to both users
+  deploy_user_mount "${USER}"
+  deploy_user_mount "${OPERATOR_USERNAME}"
 
-  # Setup mount for operator user
-  setup_user_mount "${OPERATOR_USERNAME}"
+  # Clean up temporary configured script
+  rm -f "${configured_script}"
 
   log ""
   log "✅ Per-User SMB Mount Configuration Complete"

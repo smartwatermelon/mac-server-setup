@@ -1212,8 +1212,14 @@ else
   log "No application setup scripts found in ${SETUP_DIR}/scripts/app-setup"
 fi
 
-# Mount script template is now handled per-user by plex-setup.sh
-# No system-level installation needed
+# Copy mount script template to app-setup directory for plex-setup.sh
+if [[ -f "${SETUP_DIR}/scripts/mount-nas-media.sh" ]]; then
+  log "Copying mount script template to app-setup directory"
+  cp "${SETUP_DIR}/scripts/mount-nas-media.sh" "${HOME}/app-setup/"
+  check_success "Mount script template copy"
+else
+  log "No mount script template found in ${SETUP_DIR}/scripts/"
+fi
 
 # Copy config.conf for application setup scripts
 if [[ -f "${CONFIG_FILE}" ]]; then
