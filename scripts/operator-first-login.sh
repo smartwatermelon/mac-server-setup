@@ -146,6 +146,9 @@ main() {
     exit 1
   fi
 
+  # Show setup notification to user
+  osascript -e 'display dialog "🔧 Setting up operator account...\n\nCustomizing dock and applications.\nThis will complete automatically in a few moments." buttons {"OK"} default button "OK" giving up after 8 with title "Mac Mini Setup"'
+
   # Run setup tasks
   setup_dock
 
