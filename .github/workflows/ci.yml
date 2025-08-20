@@ -184,9 +184,8 @@ jobs:
           echo "🔮 Future: Validate SSH key handling"
           echo "🔮 Future: Check for insecure shell patterns"
           # Basic check for obvious secrets (this could catch accidents)
-          # In the security-scanning job, replace the grep command:
-          if grep -r "password.*=" . --include="*.sh" --include="*.conf" | \\
-              grep -v "PASSWORD_FILE\\\\|1Password\\\\|#.*password\\\\|\\${.*PASSWORD.*}\\\\|encoded_password"; then
+          if grep -r "password.*=" . --include="*.sh" --include="*.conf" | \
+              grep -v "PASSWORD_FILE\|1Password\|#.*password\|\\\${.*PASSWORD.*}\|encoded_password"; then
             echo "⚠️  Warning: Found potential hardcoded passwords"
             exit 1
           fi
