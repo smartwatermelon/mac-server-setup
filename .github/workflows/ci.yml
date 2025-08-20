@@ -1,0 +1,195 @@
+---
+name: CI Tests
+
+"on":
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  detect-changes:
+    name: Detect File Changes
+    runs-on: ubuntu-latest
+    outputs:
+      shell-scripts: ${{ steps.changes.outputs.shell-scripts }}
+      markdown: ${{ steps.changes.outputs.markdown }}
+      yaml: ${{ steps.changes.outputs.yaml }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            shell-scripts:
+              - '**/*.sh'
+              - 'scripts/**'
+            markdown:
+              - '**/*.md'
+            yaml:
+              - '**/*.yml'
+              - '**/*.yaml'
+              - '.github/workflows/**'
+
+  shellcheck:
+    name: Shell Script Analysis
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shell-scripts == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Find and validate shell scripts
+        run: |
+          echo "=== Shell scripts found ==="
+          find . -name "*.sh" -type f
+          echo "=== Files with shell shebangs ==="
+          find . -type f -executable -exec grep -l '^#!/.*sh' {} \\; || true
+
+      - name: Run shellcheck
+        run: |
+          # Exit immediately if any shellcheck fails
+          set -e
+
+          # Check .sh files
+          if find . -name "*.sh" -type f | head -1 | read; then
+            echo "Checking .sh files..."
+            find . -name "*.sh" -type f -print0 | \\
+              xargs -0 shellcheck --rcfile=.shellcheckrc
+          fi
+
+          # Check executable files with shell shebangs
+          if find . -type f -executable \\
+              -exec grep -l '^#!/.*sh' {} \\; | head -1 | read; then
+            echo "Checking executable shell files..."
+            find . -type f -executable -exec grep -l '^#!/.*sh' {} \\; \\
+              -print0 | xargs -0 shellcheck --rcfile=.shellcheckrc
+          fi
+
+  shfmt:
+    name: Shell Script Formatting
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shell-scripts == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shfmt
+        run: |
+          SHFMT_VERSION="3.7.0"
+          curl -L \\
+            "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64" \\
+            -o shfmt
+          chmod +x shfmt
+          sudo mv shfmt /usr/local/bin/
+          shfmt --version
+
+      - name: Check formatting
+        run: |
+          set -e
+
+          # Check .sh files
+          if find . -name "*.sh" -type f | head -1 | read; then
+            echo "Checking .sh file formatting..."
+            find . -name "*.sh" -type f -print0 | \\
+              xargs -0 shfmt -d -i 2 -ci -bn
+          fi
+
+          # Check executable shell files
+          if find . -type f -executable \\
+              -exec grep -l '^#!/.*sh' {} \\; | head -1 | read; then
+            echo "Checking executable shell file formatting..."
+            find . -type f -executable -exec grep -l '^#!/.*sh' {} \\; \\
+              -print0 | xargs -0 shfmt -d -i 2 -ci -bn
+          fi
+
+  markdownlint:
+    name: Markdown Linting
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.markdown == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install markdownlint-cli
+        run: npm install -g markdownlint-cli
+
+      - name: Find markdown files
+        run: |
+          echo "=== Markdown files found ==="
+          find . -name "*.md" -type f
+
+      - name: Run markdownlint
+        run: |
+          find . -name "*.md" -type f -print0 | \\
+            xargs -0 markdownlint --disable=MD013
+
+  yamllint:
+    name: YAML Linting
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.yaml == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Find YAML files
+        run: |
+          echo "=== YAML files found ==="
+          find . -name "*.yml" -o -name "*.yaml" -type f
+
+      - name: Run yamllint
+        run: |
+          find . \\( -name "*.yml" -o -name "*.yaml" \\) -type f -print0 | \\
+            xargs -0 yamllint -d relaxed
+
+  # Future test placeholders
+  configuration-validation:
+    name: Configuration Validation (Future)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate configuration files
+        run: |
+          echo "🔮 Future: Validate config.conf syntax"
+          echo "🔮 Future: Validate 1Password item references"
+          echo "🔮 Future: Validate package lists (formulae.txt, casks.txt)"
+          # For now, just check files exist and are readable
+          test -r config/config.conf.template
+          test -r config/formulae.txt
+          test -r config/casks.txt
+
+  security-scanning:
+    name: Security Scanning (Future)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Security placeholder
+        run: |
+          echo "🔮 Future: Scan for hardcoded secrets"
+          echo "🔮 Future: Validate SSH key handling"
+          echo "🔮 Future: Check for insecure shell patterns"
+          # Basic check for obvious secrets (this could catch accidents)
+          if grep -r "password.*=" . --include="*.sh" --include="*.conf" | \\
+              grep -v "PASSWORD_FILE\\\\|1Password\\\\|#.*password"; then
+            echo "⚠️  Warning: Found potential hardcoded passwords"
+            exit 1
+          fi
