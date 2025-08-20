@@ -193,5 +193,3 @@ jobs:
             echo "⚠️  Warning: Found potential hardcoded passwords"
             exit 1
           fi
-
-
