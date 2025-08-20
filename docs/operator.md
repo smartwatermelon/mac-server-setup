@@ -8,19 +8,35 @@ After the first reboot, the Mac Mini automatically logs in as the **operator** u
 
 The system is configured to automatically log in as the operator user after reboot. You should see:
 
-- **Desktop with clean dock** (minimal applications)
-- **"dock-cleanup.command" file** on the desktop
+- **Automatic dock customization** (happens in background on first login)
+- **Desktop with clean dock** (iTerm, Plex, essential apps)
 - **Fast User Switching menu** in the menu bar (showing current user)
 
-## Required First Steps
+## Automatic Setup
 
-### 1. Clean Up Dock
+### 1. First-Login Customization
 
-**Double-click "dock-cleanup.command"** on the desktop to remove unnecessary applications from the dock.
+**Dock cleanup happens automatically** when you first log in as the operator. A LaunchAgent runs in the background to:
 
-This script removes messaging apps, media apps, and other consumer-focused applications that aren't needed on a server, while adding essential tools like iTerm and Passwords.
+- Remove unnecessary applications (Messages, Mail, Maps, etc.)
+- Add essential server tools (iTerm, Plex Media Server, Passwords)
+- Add network media folder (if SMB mount is available)
 
-### 2. Verify SSH Access
+You can monitor the setup progress in the logs:
+
+```bash
+tail -f ~/.local/state/*-operator-login.log
+```
+
+### 2. Manual Re-run (if needed)
+
+If you need to re-run the first-login customization:
+
+```bash
+~/.local/bin/operator-first-login.sh
+```
+
+### 3. Verify SSH Access
 
 Test SSH connectivity from your development Mac:
 
@@ -34,11 +50,11 @@ ssh admin@macmini.local
 
 Both accounts should accept SSH key authentication without password prompts.
 
-### 3. Switch to iTerm (Recommended)
+### 4. Switch to iTerm (Recommended)
 
-The dock cleanup adds iTerm to the dock. **Switch from Terminal to iTerm** for better server management:
+The automatic setup adds iTerm to the dock. **Switch from Terminal to iTerm** for better server management:
 
-- **Launch iTerm** from dock or Applications
+- **Launch iTerm** from dock (added automatically)
 - **Better color support** for logs and status messages
 - **Improved session management** for long-running tasks
 
@@ -264,9 +280,9 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --listapps
 
 ### Immediate Tasks
 
-1. **✅ Run dock-cleanup.command**
+1. **✅ Automatic dock customization** (happens on first login)
 2. **✅ Verify SSH access**  
-3. **Run application setup scripts** as needed
+3. **Run application setup scripts** as needed (as admin user)
 4. **Configure additional services** as needed
 5. **Test native applications** after setup (check LaunchAgent status)
 
