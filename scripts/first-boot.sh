@@ -1233,15 +1233,17 @@ OPERATOR_BIN_DIR="${OPERATOR_HOME}/.local/bin"
 if [[ -f "${CONFIG_FILE}" ]]; then
   log "Setting up operator configuration directory"
   sudo -p "[Operator setup] Enter password to create operator config directory: " -u "${OPERATOR_USERNAME}" mkdir -p "${OPERATOR_CONFIG_DIR}"
-  sudo -p "[Operator setup] Enter password to copy config.conf for operator: " -u "${OPERATOR_USERNAME}" cp "${CONFIG_FILE}" "${OPERATOR_CONFIG_DIR}/config.conf"
+  sudo -p "[Operator setup] Enter password to copy config.conf for operator: " cp "${CONFIG_FILE}" "${OPERATOR_CONFIG_DIR}/config.conf"
+  sudo -p "[Operator setup] Enter password to set config ownership: " chown "${OPERATOR_USERNAME}:staff" "${OPERATOR_CONFIG_DIR}/config.conf"
   check_success "Operator config.conf copy"
 fi
 
 if [[ -f "${SETUP_DIR}/scripts/operator-first-login.sh" ]]; then
   log "Setting up operator first-login script"
   sudo -p "[Operator setup] Enter password to create operator bin directory: " -u "${OPERATOR_USERNAME}" mkdir -p "${OPERATOR_BIN_DIR}"
-  sudo -p "[Operator setup] Enter password to copy first-login script: " -u "${OPERATOR_USERNAME}" cp "${SETUP_DIR}/scripts/operator-first-login.sh" "${OPERATOR_BIN_DIR}/"
-  sudo -p "[Operator setup] Enter password to make first-login script executable: " -u "${OPERATOR_USERNAME}" chmod 755 "${OPERATOR_BIN_DIR}/operator-first-login.sh"
+  sudo -p "[Operator setup] Enter password to copy first-login script: " cp "${SETUP_DIR}/scripts/operator-first-login.sh" "${OPERATOR_BIN_DIR}/"
+  sudo -p "[Operator setup] Enter password to set script ownership and permissions: " chown "${OPERATOR_USERNAME}:staff" "${OPERATOR_BIN_DIR}/operator-first-login.sh"
+  sudo -p "[Operator setup] Enter password to make first-login script executable: " chmod 755 "${OPERATOR_BIN_DIR}/operator-first-login.sh"
   check_success "Operator first-login script setup"
 
   # Add ~/.local/bin to operator's PATH in bash configuration
