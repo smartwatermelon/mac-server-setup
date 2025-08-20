@@ -131,7 +131,7 @@ macmini-setup/
 │   └── operator_authorized_keys  # Operator SSH access
 ├── scripts/
 │   ├── first-boot.sh            # Main setup script
-│   ├── dock-cleanup.command     # Operator dock script
+│   ├── operator-first-login.sh  # Operator customization (runs automatically)
 │   └── app-setup/               # Application installers
 ├── config/
 │   ├── config.conf              # Server settings

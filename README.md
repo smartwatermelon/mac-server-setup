@@ -109,7 +109,7 @@ The setup process consists of two main phases:
 │   ├── airdrop-prep.sh        # Setup package preparation
 │   ├── first-boot.sh          # Main setup script
 │   ├── mount-nas-media.sh     # SMB mount script
-│   └── dock-cleanup.command   # Operator dock cleanup
+│   └── operator-first-login.sh # Operator account customization (automatic via LaunchAgent)
 ├── config/                     # Configuration files
 │   ├── config.conf.template   # Configuration template
 │   ├── formulae.txt           # Homebrew formulae list

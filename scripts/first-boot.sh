@@ -1133,24 +1133,8 @@ else
   log "Could not locate dockutil"
 fi
 
-# Setup operator dock cleanup script
-section "Setting Up Operator Dock Cleanup Script"
-
-if [[ -f "${SETUP_DIR}/scripts/dock-cleanup.command" ]] && dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
-  log "Installing operator dock cleanup script on desktop"
-  DOCK_SCRIPT="/Users/${OPERATOR_USERNAME}/Desktop/dock-cleanup.command"
-
-  # Copy script to operator's desktop
-  sudo -p "[Setup completion] Enter password to install dock cleanup script: " cp "${SETUP_DIR}/scripts/dock-cleanup.command" "/Users/${OPERATOR_USERNAME}/Desktop/"
-  sudo chown "${OPERATOR_USERNAME}:staff" "${DOCK_SCRIPT}"
-  sudo chmod +x "${DOCK_SCRIPT}"
-  sudo xattr -d com.apple.quarantine "${DOCK_SCRIPT}" || true
-
-  check_success "Operator dock cleanup script setup"
-  show_log "✅ Dock cleanup script placed on operator desktop"
-else
-  log "Operator dock cleanup script not found or operator account doesn't exist"
-fi
+# Note: Operator first-login setup is now handled automatically via LaunchAgent
+# See the "Configuring operator account files" section above
 
 #
 # CHANGE DEFAULT SHELL TO HOMEBREW BASH
@@ -1394,7 +1378,7 @@ show_log "   ssh operator@${HOSTNAME_LOWER}.local"
 show_log ""
 show_log "3. After completing app setup, reboot to enable operator auto-login:"
 show_log "   - Rebooting will automatically log in as '${OPERATOR_USERNAME}'"
-show_log "   - Run dock-cleanup.command from the desktop to clean up the dock"
+show_log "   - Dock cleanup and operator customization will happen automatically"
 show_log "   - Configure any additional operator-specific settings"
 show_log "   - Test that all applications are accessible as the operator"
 

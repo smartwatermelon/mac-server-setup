@@ -299,11 +299,11 @@ else
   echo "⚠️ No URL provided, skipping Apple ID password link creation"
 fi
 
-# Copy dock cleanup script for operator
-if [[ -f "${SCRIPT_SOURCE_DIR}/scripts/dock-cleanup.command" ]]; then
-  echo "Copying operator dock cleanup script"
-  cp "${SCRIPT_SOURCE_DIR}/scripts/dock-cleanup.command" "${OUTPUT_PATH}/scripts/"
-  chmod +x "${OUTPUT_PATH}/scripts/dock-cleanup.command"
+# Copy operator first-login script
+if [[ -f "${SCRIPT_SOURCE_DIR}/scripts/operator-first-login.sh" ]]; then
+  echo "Copying operator first-login script"
+  cp "${SCRIPT_SOURCE_DIR}/scripts/operator-first-login.sh" "${OUTPUT_PATH}/scripts/"
+  chmod +x "${OUTPUT_PATH}/scripts/operator-first-login.sh"
 fi
 
 # Copy from local script source directory
