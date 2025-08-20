@@ -1230,6 +1230,71 @@ else
   log "No config.conf found - application setup scripts will use defaults"
 fi
 
+# Setup operator account files
+section "Configuring operator account files"
+OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
+OPERATOR_CONFIG_DIR="${OPERATOR_HOME}/.config/operator"
+OPERATOR_BIN_DIR="${OPERATOR_HOME}/.local/bin"
+
+if [[ -f "${CONFIG_FILE}" ]]; then
+  log "Setting up operator configuration directory"
+  sudo -p "[Operator setup] Enter password to create operator config directory: " -u "${OPERATOR_USERNAME}" mkdir -p "${OPERATOR_CONFIG_DIR}"
+  sudo -p "[Operator setup] Enter password to copy config.conf for operator: " -u "${OPERATOR_USERNAME}" cp "${CONFIG_FILE}" "${OPERATOR_CONFIG_DIR}/config.conf"
+  check_success "Operator config.conf copy"
+fi
+
+if [[ -f "${SETUP_DIR}/scripts/operator-first-login.sh" ]]; then
+  log "Setting up operator first-login script"
+  sudo -p "[Operator setup] Enter password to create operator bin directory: " -u "${OPERATOR_USERNAME}" mkdir -p "${OPERATOR_BIN_DIR}"
+  sudo -p "[Operator setup] Enter password to copy first-login script: " -u "${OPERATOR_USERNAME}" cp "${SETUP_DIR}/scripts/operator-first-login.sh" "${OPERATOR_BIN_DIR}/"
+  sudo -p "[Operator setup] Enter password to make first-login script executable: " -u "${OPERATOR_USERNAME}" chmod 755 "${OPERATOR_BIN_DIR}/operator-first-login.sh"
+  check_success "Operator first-login script setup"
+
+  # Add ~/.local/bin to operator's PATH in bash configuration
+  OPERATOR_BASHRC="${OPERATOR_HOME}/.bashrc"
+  if ! sudo -u "${OPERATOR_USERNAME}" test -f "${OPERATOR_BASHRC}" || ! sudo -u "${OPERATOR_USERNAME}" grep -q '/.local/bin' "${OPERATOR_BASHRC}"; then
+    log "Adding ~/.local/bin to operator's PATH"
+    sudo -p "[Operator setup] Enter password to configure operator PATH: " -u "${OPERATOR_USERNAME}" bash -c "echo '' >> '${OPERATOR_BASHRC}'"
+    sudo -p "[Operator setup] Enter password to add .local/bin to PATH: " -u "${OPERATOR_USERNAME}" bash -c "echo '# Add user local bin to PATH' >> '${OPERATOR_BASHRC}'"
+    sudo -p "[Operator setup] Enter password to set PATH: " -u "${OPERATOR_USERNAME}" bash -c "echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> '${OPERATOR_BASHRC}'"
+    check_success "Operator PATH configuration"
+  fi
+
+  # Create LaunchAgent for one-time execution on operator login
+  log "Setting up operator first-login LaunchAgent"
+  OPERATOR_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
+  OPERATOR_PLIST_NAME="com.${HOSTNAME_LOWER}.operator-first-login"
+  OPERATOR_PLIST="${OPERATOR_AGENTS_DIR}/${OPERATOR_PLIST_NAME}.plist"
+
+  sudo -p "[Operator setup] Enter password to create operator LaunchAgent directory: " -u "${OPERATOR_USERNAME}" mkdir -p "${OPERATOR_AGENTS_DIR}"
+
+  sudo -p "[Operator setup] Enter password to create operator first-login LaunchAgent: " -u "${OPERATOR_USERNAME}" tee "${OPERATOR_PLIST}" >/dev/null <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${OPERATOR_PLIST_NAME}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${OPERATOR_BIN_DIR}/operator-first-login.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>${OPERATOR_HOME}/.local/state/${OPERATOR_PLIST_NAME}.log</string>
+    <key>StandardErrorPath</key>
+    <string>${OPERATOR_HOME}/.local/state/${OPERATOR_PLIST_NAME}.log</string>
+</dict>
+</plist>
+EOF
+
+  sudo -p "[Operator setup] Enter password to set LaunchAgent permissions: " -u "${OPERATOR_USERNAME}" chmod 644 "${OPERATOR_PLIST}"
+  check_success "Operator first-login LaunchAgent setup"
+else
+  log "No operator-first-login.sh found in ${SETUP_DIR}/scripts/"
+fi
+
 # Configure Time Machine backup
 section "Configuring Time Machine"
 
