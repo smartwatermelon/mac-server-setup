@@ -47,26 +47,24 @@ jobs:
           echo "=== Shell scripts found ==="
           find . -name "*.sh" -type f
           echo "=== Files with shell shebangs ==="
-          find . -type f -executable -exec grep -l '^#!/.*sh' {} \\; || true
+          find . -type f -executable -exec grep -l '^#!/.*sh' {} + || true
 
       - name: Run shellcheck
         run: |
-          # Exit immediately if any shellcheck fails
           set -e
 
           # Check .sh files
           if find . -name "*.sh" -type f | head -1 | read; then
             echo "Checking .sh files..."
-            find . -name "*.sh" -type f -print0 | \\
+            find . -name "*.sh" -type f -print0 | \
               xargs -0 shellcheck --rcfile=.shellcheckrc
           fi
 
           # Check executable files with shell shebangs
-          if find . -type f -executable \\
-              -exec grep -l '^#!/.*sh' {} \\; | head -1 | read; then
+          if find . -type f -executable -exec grep -l '^#!/.*sh' {} + | head -1 | read; then
             echo "Checking executable shell files..."
-            find . -type f -executable -exec grep -l '^#!/.*sh' {} \\; \\
-              -print0 | xargs -0 shellcheck --rcfile=.shellcheckrc
+            find . -type f -executable -exec grep -l '^#!/.*sh' {} + -print0 | \
+              xargs -0 shellcheck --rcfile=.shellcheckrc
           fi
 
   shfmt:
@@ -80,8 +78,8 @@ jobs:
       - name: Install shfmt
         run: |
           SHFMT_VERSION="3.7.0"
-          curl -L \\
-            "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64" \\
+          curl -L \
+            "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64" \
             -o shfmt
           chmod +x shfmt
           sudo mv shfmt /usr/local/bin/
@@ -94,16 +92,15 @@ jobs:
           # Check .sh files
           if find . -name "*.sh" -type f | head -1 | read; then
             echo "Checking .sh file formatting..."
-            find . -name "*.sh" -type f -print0 | \\
+            find . -name "*.sh" -type f -print0 | \
               xargs -0 shfmt -d -i 2 -ci -bn
           fi
 
           # Check executable shell files
-          if find . -type f -executable \\
-              -exec grep -l '^#!/.*sh' {} \\; | head -1 | read; then
+          if find . -type f -executable -exec grep -l '^#!/.*sh' {} + | head -1 | read; then
             echo "Checking executable shell file formatting..."
-            find . -type f -executable -exec grep -l '^#!/.*sh' {} \\; \\
-              -print0 | xargs -0 shfmt -d -i 2 -ci -bn
+            find . -type f -executable -exec grep -l '^#!/.*sh' {} + -print0 | \
+              xargs -0 shfmt -d -i 2 -ci -bn
           fi
 
   markdownlint:
@@ -118,7 +115,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
 
       - name: Install markdownlint-cli
         run: npm install -g markdownlint-cli
@@ -130,7 +126,7 @@ jobs:
 
       - name: Run markdownlint
         run: |
-          find . -name "*.md" -type f -print0 | \\
+          find . -name "*.md" -type f -print0 | \
             xargs -0 markdownlint --disable=MD013
 
   yamllint:
@@ -156,7 +152,7 @@ jobs:
 
       - name: Run yamllint
         run: |
-          find . \\( -name "*.yml" -o -name "*.yaml" \\) -type f -print0 | \\
+          find . \( -name "*.yml" -o -name "*.yaml" \) -type f -print0 | \
             xargs -0 yamllint -d relaxed
 
   # Future test placeholders
@@ -188,8 +184,8 @@ jobs:
           echo "🔮 Future: Validate SSH key handling"
           echo "🔮 Future: Check for insecure shell patterns"
           # Basic check for obvious secrets (this could catch accidents)
-          if grep -r "password.*=" . --include="*.sh" --include="*.conf" | \\
-              grep -v "PASSWORD_FILE\\\\|1Password\\\\|#.*password"; then
+          if grep -r "password.*=" . --include="*.sh" --include="*.conf" | \
+              grep -v "PASSWORD_FILE\\|1Password\\|#.*password"; then
             echo "⚠️  Warning: Found potential hardcoded passwords"
             exit 1
           fi
