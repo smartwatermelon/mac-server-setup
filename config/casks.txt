@@ -5,7 +5,6 @@ backblaze
 bbedit
 blockblock
 catch
-coconutbattery
 coconutid
 dropbox
 filebot
