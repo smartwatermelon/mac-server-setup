@@ -24,12 +24,14 @@ jobs:
             shell-scripts:
               - '**/*.sh'
               - 'scripts/**'
+              - '.shellcheckrc'
             markdown:
               - '**/*.md'
             yaml:
               - '**/*.yml'
               - '**/*.yaml'
               - '.github/workflows/**'
+              - '.yamllint*'
 
   shellcheck:
     name: Shell Script Analysis
