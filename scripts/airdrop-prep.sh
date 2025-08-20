@@ -157,7 +157,7 @@ echo ""
 if [[ ${WIFI_STRATEGY} =~ ^[Nn]$ ]]; then
   echo "Selected: Script-based WiFi configuration"
   echo "Getting current WiFi network information..."
-  CURRENT_SSID=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}' || true)
+  CURRENT_SSID=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}' 2>/dev/null || echo "")
 
   if [[ -n "${CURRENT_SSID}" ]]; then
     echo "Current WiFi network SSID: ${CURRENT_SSID}"
@@ -285,7 +285,7 @@ EOF
 fi
 
 # Create and save one-time link for Apple ID password
-APPLE_ID_ITEM="$(op item list --categories Login --vault "${ONEPASSWORD_VAULT}" --favorite --format=json | jq -r '.[] | select(.title == "'"${ONEPASSWORD_APPLEID_ITEM}"'") | .id' || true)"
+APPLE_ID_ITEM="$(op item list --categories Login --vault "${ONEPASSWORD_VAULT}" --favorite --format=json 2>/dev/null | jq -r '.[] | select(.title == "'"${ONEPASSWORD_APPLEID_ITEM}"'") | .id' 2>/dev/null || echo "")"
 ONE_TIME_URL="$(op item share "${APPLE_ID_ITEM}" --view-once)"
 if [[ -n "${ONE_TIME_URL}" ]]; then
   # Create the .url file with the correct format

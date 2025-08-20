@@ -55,9 +55,13 @@ wait_for_network_mount() {
   log "Waiting for network mount at ${mount_path}..."
 
   while [[ ${elapsed} -lt ${timeout} ]]; do
-    if [[ -d "${mount_path}" ]] && [[ $(find "${mount_path}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l || true) -gt 0 ]]; then
-      log "Network mount ready"
-      return 0
+    if [[ -d "${mount_path}" ]]; then
+      local dir_count
+      dir_count=$(find "${mount_path}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
+      if [[ ${dir_count} -gt 0 ]]; then
+        log "Network mount ready"
+        return 0
+      fi
     fi
     sleep 1
     ((elapsed++))

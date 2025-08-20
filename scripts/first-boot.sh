@@ -381,7 +381,8 @@ fi
 
 # Set hostname and HD name
 section "Setting Hostname and HD volume name"
-if [[ "$(hostname || true)" = "${HOSTNAME}" ]]; then
+CURRENT_HOSTNAME=$(hostname)
+if [[ "${CURRENT_HOSTNAME}" = "${HOSTNAME}" ]]; then
   log "Hostname is already set to ${HOSTNAME}"
 else
   log "Setting hostname to ${HOSTNAME}"
@@ -671,7 +672,8 @@ else
   sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant SkipCloudSetup -bool true
   sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeePrivacy -bool true
   sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant GestureMovieSeen none
-  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant LastSeenCloudProductVersion "$(sw_vers -productVersion || true)"
+  PRODUCT_VERSION=$(sw_vers -productVersion)
+  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant LastSeenCloudProductVersion "${PRODUCT_VERSION}"
   sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.screensaver showClock -bool false
 
   # Screen Time and Apple Intelligence
@@ -1057,9 +1059,13 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
   if [[ -f "${FORMULAE_FILE}" ]]; then
     show_log "Installing formulae from ${FORMULAE_FILE}"
     formulae=()
-    while IFS= read -r line; do
-      formulae+=("${line}")
-    done < <(grep -v '^#' "${FORMULAE_FILE}" 2>/dev/null || true | grep -v '^$' || true)
+    if [[ -f "${FORMULAE_FILE}" ]]; then
+      while IFS= read -r line; do
+        if [[ -n "${line}" && ! "${line}" =~ ^# ]]; then
+          formulae+=("${line}")
+        fi
+      done <"${FORMULAE_FILE}"
+    fi
     for formula in "${formulae[@]}"; do
       install_formula "${formula}"
     done
@@ -1071,9 +1077,13 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
   if [[ -f "${CASKS_FILE}" ]]; then
     show_log "Installing casks from ${CASKS_FILE}"
     casks=()
-    while IFS= read -r line; do
-      casks+=("${line}")
-    done < <(grep -v '^#' "${CASKS_FILE}" 2>/dev/null || true | grep -v '^$' || true)
+    if [[ -f "${CASKS_FILE}" ]]; then
+      while IFS= read -r line; do
+        if [[ -n "${line}" && ! "${line}" =~ ^# ]]; then
+          casks+=("${line}")
+        fi
+      done <"${CASKS_FILE}"
+    fi
     for cask in "${casks[@]}"; do
       install_cask "${cask}"
     done
