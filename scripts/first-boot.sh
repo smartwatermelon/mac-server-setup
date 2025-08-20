@@ -1250,9 +1250,12 @@ if [[ -f "${SETUP_DIR}/scripts/operator-first-login.sh" ]]; then
   OPERATOR_BASHRC="${OPERATOR_HOME}/.bashrc"
   if ! sudo -u "${OPERATOR_USERNAME}" test -f "${OPERATOR_BASHRC}" || ! sudo -u "${OPERATOR_USERNAME}" grep -q '/.local/bin' "${OPERATOR_BASHRC}"; then
     log "Adding ~/.local/bin to operator's PATH"
-    sudo -p "[Operator setup] Enter password to configure operator PATH: " -u "${OPERATOR_USERNAME}" bash -c "echo '' >> '${OPERATOR_BASHRC}'"
-    sudo -p "[Operator setup] Enter password to add .local/bin to PATH: " -u "${OPERATOR_USERNAME}" bash -c "echo '# Add user local bin to PATH' >> '${OPERATOR_BASHRC}'"
-    sudo -p "[Operator setup] Enter password to set PATH: " -u "${OPERATOR_USERNAME}" bash -c "echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> '${OPERATOR_BASHRC}'"
+    sudo -p "[Operator setup] Enter password to configure operator PATH: " tee -a "${OPERATOR_BASHRC}" >/dev/null <<EOF
+
+# Add user local bin to PATH
+export PATH="\$HOME/.local/bin:\$PATH"
+EOF
+    sudo -p "[Operator setup] Enter password to set bashrc ownership: " chown "${OPERATOR_USERNAME}:staff" "${OPERATOR_BASHRC}"
     check_success "Operator PATH configuration"
   fi
 
