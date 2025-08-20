@@ -190,3 +190,5 @@ When modifying scripts:
 ## License
 
 1. MIT; see [LICENSE](license.md)
+
+[![CI Tests](https://github.com/smartwatermelon/mac-server-setup/workflows/CI%20Tests/badge.svg)](https://github.com/smartwatermelon/mac-server-setup/actions)
