@@ -292,6 +292,19 @@ EOF
   # Clean up temporary configured script
   rm -f "${configured_script}"
 
+  # Test immediate mount for current admin user
+  log "Testing immediate SMB mount for admin user..."
+  local admin_mount_script="${HOME}/.local/bin/mount-nas-media.sh"
+  if [[ -x "${admin_mount_script}" ]]; then
+    if "${admin_mount_script}"; then
+      log "✅ Admin SMB mount successful"
+    else
+      log "⚠️  Admin SMB mount failed - check credentials and network connectivity"
+    fi
+  else
+    log "❌ Admin mount script not found or not executable"
+  fi
+
   log ""
   log "✅ Per-User SMB Mount Configuration Complete"
   log "   Admin script: ${HOME}/.local/bin/mount-nas-media.sh"
@@ -359,12 +372,14 @@ configure_plex_firewall() {
 
     # Grant network volume access permission to Plex
     log "Granting network volume access permission to Plex Media Server..."
-    if sudo -p "[Privacy setup] Enter password to grant Plex network access: " tccutil reset NetworkVolumes "${plex_app}" 2>/dev/null; then
-      sudo tccutil insert NetworkVolumes "${plex_app}" 2>/dev/null || true
+    # Note: tccutil reset may fail on some systems, but insert might still work
+    sudo -p "[Privacy setup] Enter password to grant Plex network access: " tccutil reset NetworkVolumes "${plex_app}" 2>/dev/null || true
+    if sudo tccutil insert NetworkVolumes "${plex_app}" 2>/dev/null; then
       log "✅ Network volume access permission granted"
     else
       log "⚠️  Could not automatically grant network volume permission"
       log "   You may see a permission prompt when Plex first accesses network files"
+      log "   This is normal and can be approved when prompted"
     fi
   else
     log "❌ Plex application not found at ${plex_app}"
