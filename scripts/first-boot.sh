@@ -245,6 +245,15 @@ if [[ -f "/tmp/${HOSTNAME_LOWER}_fda_requested" ]]; then
   log "Detected re-run after Full Disk Access grant"
 fi
 
+# Configure sudo timeout to reduce password prompts during setup
+section "Configuring sudo timeout"
+log "Setting sudo timeout to 15 minutes for smoother setup experience"
+sudo -p "[System setup] Enter password to configure sudo timeout: " tee /etc/sudoers.d/10_setup_timeout >/dev/null <<EOF
+# Temporary sudo timeout extension for setup - 15 minutes
+Defaults timestamp_timeout=15
+EOF
+check_success "Sudo timeout configuration"
+
 # Confirm operation if not forced
 if [[ "${FORCE}" = false ]] && [[ "${RERUN_AFTER_FDA}" = false ]]; then
   read -p "This script will configure your Mac Mini server. Continue? (Y/n) " -n 1 -r
@@ -1396,5 +1405,9 @@ show_log "   - Rebooting will automatically log in as '${OPERATOR_USERNAME}'"
 show_log "   - Dock cleanup and operator customization will happen automatically"
 show_log "   - Configure any additional operator-specific settings"
 show_log "   - Test that all applications are accessible as the operator"
+
+# Clean up temporary sudo timeout configuration
+log "Removing temporary sudo timeout configuration"
+sudo rm -f /etc/sudoers.d/10_setup_timeout
 
 exit 0
