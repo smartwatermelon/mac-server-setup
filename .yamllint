@@ -1,5 +1,8 @@
 ---
+# .yamllint
+extends: relaxed
+
 rules:
   line-length:
-    max: 120  # More reasonable for CI files
-    level: warning
+    max: 120
+
