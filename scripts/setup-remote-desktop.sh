@@ -146,6 +146,10 @@ Please complete these steps:
 Click OK when you have completed the Screen Sharing setup." buttons {"Cancel", "OK"} default button "OK" with title "Remote Desktop Setup"
 EOF
     log "Screen Sharing configuration completed by user"
+
+    # Close System Settings now that user is done with configuration
+    log "Closing System Settings..."
+    osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
   else
     log "User cancelled Screen Sharing setup"
     return 1
@@ -195,6 +199,10 @@ Screen Sharing alone provides VNC access but not full ARD features.
 Click OK when you have completed the Remote Management setup." buttons {"Cancel", "OK"} default button "OK" with title "Remote Desktop Setup"
 EOF
     log "Remote Management configuration completed by user"
+
+    # Close System Settings now that user is done with configuration
+    log "Closing System Settings..."
+    osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
   else
     log "User cancelled Remote Management setup"
     return 1

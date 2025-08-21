@@ -398,6 +398,10 @@ elif [[ "${WIFI_CONFIGURED}" != true ]]; then
     show_log "Please configure WiFi in System Settings, then press any key to continue..."
     read -p "Press any key when WiFi is configured... " -n 1 -r
     echo
+
+    # Close System Settings now that user is done with WiFi configuration
+    show_log "Closing System Settings..."
+    osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
   else
     show_log "Force mode: continuing without WiFi - may affect subsequent steps"
   fi
@@ -616,6 +620,10 @@ if [[ "${APPLE_ID_CONFIGURED}" != true ]]; then
     # Give user time to add their Apple ID
     read -rp "Please configure your Apple ID in System Settings. Press any key when done... " -n 1 -r
     echo
+
+    # Close System Settings now that user is done with Apple ID configuration
+    show_log "Closing System Settings..."
+    osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
   fi
 fi
 
