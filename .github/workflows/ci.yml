@@ -56,18 +56,20 @@ jobs:
           set -e
 
           # Check .sh files (excluding .git directory)
-          if find . -name "*.sh" -type f -not -path './.git/*' | head -1 | read; then
-            echo "Checking .sh files..."
-            find . -name "*.sh" -type f -not -path './.git/*' -print0 | \
-              xargs -0 shellcheck
-          fi
+          find . -name "*.sh" -type f -not -path './.git/*' | while read -r file; do
+            if [[ -f "$file" && -r "$file" ]]; then
+              echo "Checking $file"
+              shellcheck "$file"
+            fi
+          done
 
           # Check executable files with shell shebangs (excluding .git directory)
-          if find . -type f -executable -not -path './.git/*' -exec grep -l '^#!/.*sh' {} + | head -1 | read; then
-            echo "Checking executable shell files..."
-            find . -type f -executable -not -path './.git/*' -exec grep -l '^#!/.*sh' {} + -print0 | \
-              xargs -0 shellcheck
-          fi
+          find . -type f -executable -not -path './.git/*' 2>/dev/null | while read -r file; do
+            if [[ -f "$file" && -r "$file" ]] && grep -q '^#!/.*sh' "$file" 2>/dev/null; then
+              echo "Checking executable $file"
+              shellcheck "$file"
+            fi
+          done
 
   shfmt:
     name: Shell Script Formatting
@@ -92,24 +94,20 @@ jobs:
           set -e
 
           # Check .sh files (excluding .git directory)
-          if find . -name "*.sh" -type f -not -path './.git/*' | head -1 | read; then
-            echo "Checking .sh file formatting..."
-            find . -name "*.sh" -type f -not -path './.git/*' | while read -r file; do
-              if [[ -f "$file" ]]; then
-                shfmt -d -i 2 -ci -bn "$file"
-              fi
-            done
-          fi
+          find . -name "*.sh" -type f -not -path './.git/*' | while read -r file; do
+            if [[ -f "$file" && -r "$file" ]]; then
+              echo "Checking $file formatting"
+              shfmt -d -i 2 -ci -bn "$file"
+            fi
+          done
 
-          # Check executable shell files (excluding .git directory)  
-          if find . -type f -executable -not -path './.git/*' -exec grep -l '^#!/.*sh' {} + 2>/dev/null | head -1 | read; then
-            echo "Checking executable shell file formatting..."
-            find . -type f -executable -not -path './.git/*' -exec grep -l '^#!/.*sh' {} + 2>/dev/null | while read -r file; do
-              if [[ -f "$file" ]]; then
-                shfmt -d -i 2 -ci -bn "$file"
-              fi
-            done
-          fi
+          # Check executable shell files (excluding .git directory)
+          find . -type f -executable -not -path './.git/*' 2>/dev/null | while read -r file; do
+            if [[ -f "$file" && -r "$file" ]] && grep -q '^#!/.*sh' "$file" 2>/dev/null; then
+              echo "Checking executable $file formatting"
+              shfmt -d -i 2 -ci -bn "$file"
+            fi
+          done
 
   markdownlint:
     name: Markdown Linting
