@@ -106,9 +106,12 @@ setup_screen_sharing() {
 
   # Show AppleScript dialog for user confirmation
   if osascript <<'EOF'; then
-display dialog "Screen Sharing Configuration
+display dialog "Screen Sharing Configuration - STEP 1
 
 System Settings should now be open to the Sharing page.
+
+IMPORTANT: Screen Sharing must be enabled FIRST, before Remote Management.
+Otherwise Remote Management will prevent you from enabling Screen Sharing.
 
 Please complete these steps:
 1. Find 'Screen Sharing' in the list
@@ -152,9 +155,11 @@ setup_remote_management() {
 
   # Show AppleScript dialog for user confirmation
   if osascript <<'EOF'; then
-display dialog "Remote Management Configuration
+display dialog "Remote Management Configuration - STEP 2
 
 System Settings should now be open to the Sharing page.
+
+Screen Sharing should now be ON and Remote Management will take control of it.
 
 Please complete these steps:
 1. Find 'Remote Management' in the list (in the Advanced section)
@@ -253,9 +258,10 @@ main() {
   if [[ "${force}" != "true" ]]; then
     echo "${LOG_PREFIX} This script will:"
     echo "${LOG_PREFIX} 1. Disable existing remote desktop services"
-    echo "${LOG_PREFIX} 2. Enable basic Remote Management service"
-    echo "${LOG_PREFIX} 3. Guide you through System Settings configuration"
-    echo "${LOG_PREFIX} 4. Verify the final setup"
+    echo "${LOG_PREFIX} 2. Guide you through enabling Screen Sharing first"
+    echo "${LOG_PREFIX} 3. Enable Remote Management service"
+    echo "${LOG_PREFIX} 4. Guide you through Remote Management configuration"
+    echo "${LOG_PREFIX} 5. Verify the final setup"
     echo ""
     echo "${LOG_PREFIX} This requires administrator privileges and user interaction."
     read -p "${LOG_PREFIX} Continue? (Y/n): " -r response
@@ -270,12 +276,17 @@ main() {
     esac
   fi
 
-  # Execute setup steps
+  # Execute setup steps in correct order
   disable_all_services
+
+  # CRITICAL: Screen Sharing must be enabled BEFORE Remote Management
+  # Otherwise Remote Management will control Screen Sharing and prevent user from enabling it
+  setup_screen_sharing
+
+  # Now enable Remote Management (which will take control of Screen Sharing)
   enable_remote_management_service
 
-  # Guide user through manual configuration
-  setup_screen_sharing
+  # Guide user through Remote Management configuration
   setup_remote_management
 
   # Verify final setup
