@@ -140,10 +140,12 @@ confirm() {
   local default="${2:-y}"
 
   if [[ "${default}" == "y" ]]; then
-    read -rp "${prompt} (Y/n): " response
+    read -rp "${prompt} (Y/n): " -n 1 response
+    echo
     response=${response:-y}
   else
-    read -rp "${prompt} (y/N): " response
+    read -rp "${prompt} (y/N): " -n 1 response
+    echo
     response=${response:-n}
   fi
 

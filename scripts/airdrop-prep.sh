@@ -313,6 +313,7 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
 
   # Copy scripts
   cp "${SCRIPT_SOURCE_DIR}/scripts/first-boot.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: first-boot.sh not found in source directory"
+  cp "${SCRIPT_SOURCE_DIR}/scripts/setup-remote-desktop.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: setup-remote-desktop.sh not found in source directory"
 
   # Copy template scripts
   cp "${SCRIPT_SOURCE_DIR}/templates/mount-nas-media.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: mount-nas-media.sh not found in templates directory"

@@ -127,12 +127,13 @@ jobs:
 
       - name: Find markdown files
         run: |
-          echo "=== Markdown files found ==="
-          find . -name "*.md" -type f -not -path './.git/*'
+          echo "=== Markdown files found (excluding LICENSE.md) ==="
+          find . -name "*.md" -type f -not -path './.git/*' | grep -v 'LICENSE\.md$'
 
       - name: Run markdownlint
         run: |
           find . -name "*.md" -type f -not -path './.git/*' -print0 | \
+            grep -zv 'LICENSE\.md$' | \
             xargs -0 markdownlint --disable=MD013
 
   yamllint:

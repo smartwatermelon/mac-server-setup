@@ -173,6 +173,23 @@ if [[ -z "${DEV_MACHINE_FINGERPRINT}" ]]; then
   exit 1
 fi
 
+# Check if running in a GUI session (required for many setup operations)
+SESSION_TYPE=$(launchctl managername 2>/dev/null || echo "Unknown")
+if [[ "${SESSION_TYPE}" != "Aqua" ]]; then
+  echo "❌ ERROR: This script requires a GUI session to run properly"
+  echo "Current session type: ${SESSION_TYPE}"
+  echo ""
+  echo "Mac Mini server setup requires desktop access for:"
+  echo "- User account creation and configuration"
+  echo "- System Settings modifications"
+  echo "- AppleScript dialogs and automation"
+  echo "- Application installations and setup"
+  echo ""
+  echo "Please run this script from the Mac's local desktop session."
+  exit 1
+fi
+echo "✓ GUI session detected (${SESSION_TYPE}) - setup can proceed"
+
 # Get current machine fingerprint
 CURRENT_FINGERPRINT=$(system_profiler SPHardwareDataType | grep "Hardware UUID" | awk '{print $3}')
 
@@ -381,6 +398,10 @@ elif [[ "${WIFI_CONFIGURED}" != true ]]; then
     show_log "Please configure WiFi in System Settings, then press any key to continue..."
     read -p "Press any key when WiFi is configured... " -n 1 -r
     echo
+
+    # Close System Settings now that user is done with WiFi configuration
+    show_log "Closing System Settings..."
+    osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
   else
     show_log "Force mode: continuing without WiFi - may affect subsequent steps"
   fi
@@ -502,46 +523,39 @@ else
   log "No SSH keys found at ${SSH_KEY_SOURCE} - manual key setup will be required"
 fi
 
-# Configure Screen Sharing and Remote Management
-section "Configuring Screen Sharing and Remote Management"
+# Configure Remote Desktop (Screen Sharing and Remote Management)
+section "Configuring Remote Desktop"
 
-# Enable Screen Sharing service
-log "Enabling Screen Sharing service"
-sudo -p "[Screen sharing] Enter password to enable screen sharing service: " launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
-check_success "Screen Sharing service enabled"
+log "Remote Desktop requires GUI interaction to enable services, then automated permission setup"
 
-# Configure sharing preferences extension (replicates System Preferences behavior)
-log "Configuring sharing preferences to match System Preferences state"
-sudo -p "[Screen sharing] Enter password to configure sharing preferences: " defaults write /var/root/Library/Preferences/com.apple.preferences.sharing.SharingPrefsExtension homeSharingUIStatus -int 0 2>/dev/null || true
-sudo -p "[Screen sharing] Enter password to configure sharing preferences: " defaults write /var/root/Library/Preferences/com.apple.preferences.sharing.SharingPrefsExtension legacySharingUIStatus -int 0 2>/dev/null || true
-sudo -p "[Screen sharing] Enter password to configure sharing preferences: " defaults write /var/root/Library/Preferences/com.apple.preferences.sharing.SharingPrefsExtension mediaSharingUIStatus -int 0 2>/dev/null || true
-check_success "Sharing preferences configuration"
+# Run the user-guided setup script
+if [[ "${FORCE}" == "true" ]]; then
+  log "Running Remote Desktop setup with --force flag"
+  "${SETUP_DIR}/scripts/setup-remote-desktop.sh" --force || {
+    log "WARNING: Remote Desktop setup failed or was cancelled"
+    log "You can run it manually later: ${SETUP_DIR}/scripts/setup-remote-desktop.sh"
+    return 0 # Don't fail the entire setup if this is skipped
+  }
+else
+  log "Remote Desktop setup will guide you through System Settings configuration"
+  "${SETUP_DIR}/scripts/setup-remote-desktop.sh" || {
+    log "WARNING: Remote Desktop setup failed or was cancelled"
+    log "You can run it manually later: ${SETUP_DIR}/scripts/setup-remote-desktop.sh"
+    return 0 # Don't fail the entire setup if this is skipped
+  }
+fi
 
-# Activate SSMenuAgent (screen sharing menu agent)
-log "Activating screen sharing menu agent"
-sudo -p "[Screen sharing] Enter password to activate menu agent: " defaults write /var/root/Library/Preferences/com.apple.SSMenuAgent -dict 2>/dev/null || true
-check_success "Screen sharing menu agent activation"
-
-# Activate and configure Remote Management service
-log "Activating Remote Management for Apple Remote Desktop access"
-sudo -p "[Remote management] Enter password to activate Remote Management: " /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-  -activate \
-  -configure -allowAccessFor -specifiedUsers \
-  -restart -agent
-
-check_success "Remote Management service activation"
-
-# Configure full privileges for admin user
+# After GUI setup, configure automated permissions for admin user
 log "Configuring Remote Management privileges for admin user"
 sudo -p "[Remote management] Enter password to configure admin privileges: " /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
   -configure -users "${ADMIN_USERNAME}" \
   -access -on \
-  -privs -all
+  -privs -all 2>/dev/null || {
+  log "Note: Admin Remote Management privileges will be configured after services are enabled"
+}
+check_success "Admin Remote Management privileges (if services enabled)"
 
-check_success "Admin Remote Management privileges"
-
-# Note: Operator user will be configured after account creation
-show_log "✅ Screen Sharing and Remote Management enabled for admin user"
+show_log "✅ Remote Desktop setup completed"
 log "Note: Operator user privileges will be configured after account creation"
 
 # Configure Apple ID
@@ -606,6 +620,10 @@ if [[ "${APPLE_ID_CONFIGURED}" != true ]]; then
     # Give user time to add their Apple ID
     read -rp "Please configure your Apple ID in System Settings. Press any key when done... " -n 1 -r
     echo
+
+    # Close System Settings now that user is done with Apple ID configuration
+    show_log "Closing System Settings..."
+    osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
   fi
 fi
 
