@@ -33,17 +33,19 @@ DESCRIPTION:
     that normally requires manual toggling in System Settings. It handles both
     service enablement and TCC permission configuration.
 
-    The script uses multiple methods to ensure reliable activation:
-    1. Direct service enablement via launchctl
-    2. System Settings automation via URL schemes
-    3. TCC permission configuration
-    4. Service verification and restart
+    The script uses a clean-slate approach for full idempotency:
+    1. Disables all existing remote desktop services first
+    2. Enables the desired service (Remote Management or Screen Sharing)
+    3. Configures TCC permissions for System Settings automation
+    4. Uses robust UI automation to toggle Screen Sharing
+    5. Verifies final configuration and provides connection info
 
 NOTES:
     - Requires administrator privileges
+    - Fully idempotent - works regardless of current state
     - Works around kickstart utility limitations in macOS 12.1+
     - Handles TCC permissions that prevent automated enablement
-    - Provides fallback methods for maximum compatibility
+    - Multiple fallback methods for UI automation compatibility
 
 EOF
 }
@@ -56,6 +58,27 @@ check_privileges() {
   fi
 }
 
+# Disable all remote desktop services (for clean slate)
+disable_all_services() {
+  log "Disabling existing remote desktop services for clean setup..."
+
+  # Disable Remote Management
+  sudo -p "${LOG_PREFIX} Enter password to disable existing services: " \
+    /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+    -deactivate -stop 2>/dev/null || true
+
+  # Disable Screen Sharing
+  sudo launchctl unload -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
+
+  # Clear any conflicting settings
+  sudo defaults delete /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing 2>/dev/null || true
+
+  # Wait for services to fully stop
+  sleep 2
+
+  log "Existing services disabled"
+}
+
 # Enable Screen Sharing service
 enable_screen_sharing_service() {
   log "Enabling Screen Sharing service..."
@@ -65,8 +88,7 @@ enable_screen_sharing_service() {
     launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
 
   # Alternative method using defaults
-  sudo -p "${LOG_PREFIX} Enter password to configure Screen Sharing settings: " \
-    defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist \
+  sudo defaults write /var/db/launchd.db/com.apple.launchd/overrides.plist \
     com.apple.screensharing -dict Disabled -bool false 2>/dev/null || true
 
   log "Screen Sharing service enabled"
@@ -124,36 +146,113 @@ open_screen_sharing_settings() {
 automate_screen_sharing_toggle() {
   log "Attempting to automate Screen Sharing toggle..."
 
-  # AppleScript to toggle Screen Sharing
-  # This simulates the manual toggle that makes Remote Desktop work
-  if ! osascript <<'EOF'; then
+  # AppleScript to toggle Screen Sharing - robust approach for macOS 15
+  if osascript <<'EOF' 2>/dev/null; then
 tell application "System Settings"
     activate
-    delay 1
+    delay 2
     
     try
         -- Navigate to Sharing settings
-        reveal anchor "Sharing" of pane id "com.apple.Sharing-Settings.extension"
-        delay 2
+        reveal pane id "com.apple.Sharing-Settings.extension"
+        delay 3
         
         -- Use UI scripting to toggle Screen Sharing
         tell application "System Events"
             tell process "System Settings"
-                -- Look for Screen Sharing checkbox and toggle it
+                -- Wait for window to be ready
+                repeat while not (exists window 1)
+                    delay 0.5
+                end repeat
+                delay 1
+                
+                -- Multiple attempts to find and enable Screen Sharing
+                set success to false
+                
+                -- Method 1: Look for Screen Sharing in the main list
                 try
-                    -- First try to find and click the Screen Sharing checkbox
-                    set screenSharingRow to first row of table 1 of scroll area 1 of group 1 of scroll area 1 of group 1 of group 2 of splitter group 1 of group 1 of window 1 whose value of static text 1 contains "Screen Sharing"
-                    click checkbox 1 of screenSharingRow
-                    delay 1
-                    -- Click again to ensure it's enabled
-                    if (value of checkbox 1 of screenSharingRow as boolean) is false then
-                        click checkbox 1 of screenSharingRow
+                    set screenSharingSwitch to switch "Screen Sharing" of group 1 of scroll area 1 of group 1 of group 2 of splitter group 1 of group 1 of window 1
+                    if value of screenSharingSwitch is 0 then
+                        click screenSharingSwitch
+                        delay 1
+                        set success to true
+                    else
+                        set success to true -- Already enabled
                     end if
                 on error
-                    -- Fallback: try different UI path
-                    click checkbox "Screen Sharing" of group 1 of scroll area 1 of group 1 of group 2 of splitter group 1 of group 1 of window 1
-                    delay 1
+                    -- Method failed, try next approach
                 end try
+                
+                -- Method 2: Look for checkbox in table/list view
+                if not success then
+                    try
+                        repeat with i from 1 to count of rows of table 1 of scroll area 1 of group 1 of scroll area 1 of group 1 of group 2 of splitter group 1 of group 1 of window 1
+                            set currentRow to row i of table 1 of scroll area 1 of group 1 of scroll area 1 of group 1 of group 2 of splitter group 1 of group 1 of window 1
+                            if exists static text 1 of currentRow then
+                                if value of static text 1 of currentRow contains "Screen Sharing" then
+                                    if exists checkbox 1 of currentRow then
+                                        if value of checkbox 1 of currentRow is 0 then
+                                            click checkbox 1 of currentRow
+                                            delay 1
+                                        end if
+                                        set success to true
+                                        exit repeat
+                                    end if
+                                end if
+                            end if
+                        end repeat
+                    on error
+                        -- This method also failed
+                    end try
+                end if
+                
+                -- Method 3: Direct click on Screen Sharing if it exists
+                if not success then
+                    try
+                        click button "Screen Sharing" of group 1 of scroll area 1 of group 1 of group 2 of splitter group 1 of group 1 of window 1
+                        delay 1
+                        set success to true
+                    on error
+                        -- This method also failed
+                    end try
+                end if
+                
+                -- If we found Screen Sharing, make sure it's actually enabled
+                if success then
+                    delay 2
+                    -- Check for configuration dialog and enable options
+                    try
+                        if exists sheet 1 of window 1 then
+                            -- Screen Sharing configuration sheet is open
+                            if exists checkbox "Anyone may request permission to control screen" of sheet 1 of window 1 then
+                                if value of checkbox "Anyone may request permission to control screen" of sheet 1 of window 1 is 0 then
+                                    click checkbox "Anyone may request permission to control screen" of sheet 1 of window 1
+                                    delay 0.5
+                                end if
+                            end if
+                            
+                            if exists checkbox "VNC viewers may control screen with password" of sheet 1 of window 1 then
+                                if value of checkbox "VNC viewers may control screen with password" of sheet 1 of window 1 is 0 then
+                                    click checkbox "VNC viewers may control screen with password" of sheet 1 of window 1
+                                    delay 0.5
+                                end if
+                            end if
+                            
+                            -- Click Done to close the configuration sheet
+                            if exists button "Done" of sheet 1 of window 1 then
+                                click button "Done" of sheet 1 of window 1
+                                delay 1
+                            end if
+                        end if
+                    on error
+                        -- Configuration failed, but Screen Sharing might still be enabled
+                    end try
+                end if
+                
+                if not success then
+                    error "Could not find Screen Sharing controls in System Settings"
+                end if
+                
             end tell
         end tell
         
@@ -163,14 +262,14 @@ tell application "System Settings"
     end try
     
     -- Keep System Settings open briefly to ensure changes apply
-    delay 3
+    delay 2
 end tell
 EOF
+    log "Screen Sharing automation completed"
+  else
     log "WARNING: AppleScript automation failed - manual toggle may be required"
     return 1
   fi
-
-  log "Screen Sharing automation completed"
 }
 
 # Verify Remote Desktop functionality
@@ -280,7 +379,9 @@ main() {
     esac
   fi
 
-  # Execute enablement steps
+  # Execute enablement steps with clean slate approach
+  disable_all_services
+
   if [[ "${enable_remote_mgmt}" == "true" ]]; then
     enable_remote_management_service
   else
