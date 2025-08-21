@@ -313,6 +313,7 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   # Copy scripts
   cp "${SCRIPT_SOURCE_DIR}/scripts/first-boot.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: first-boot.sh not found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/scripts/mount-nas-media.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: mount-nas-media.sh not found in source directory"
+  cp "${SCRIPT_SOURCE_DIR}/scripts/start-plex-with-mount.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: start-plex-with-mount.sh not found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/app-setup/"*.sh "${OUTPUT_PATH}/scripts/app-setup/" 2>/dev/null || echo "Warning: No app setup scripts found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/config/formulae.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: formulae.txt not found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/config/casks.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: casks.txt not found in source directory"

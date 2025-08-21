@@ -1215,13 +1215,21 @@ else
   log "No application setup scripts found in ${SETUP_DIR}/scripts/app-setup"
 fi
 
-# Copy mount script template to app-setup directory for plex-setup.sh
+# Copy script templates to app-setup directory for plex-setup.sh
 if [[ -f "${SETUP_DIR}/scripts/mount-nas-media.sh" ]]; then
   log "Copying mount script template to app-setup directory"
   cp "${SETUP_DIR}/scripts/mount-nas-media.sh" "${HOME}/app-setup/"
   check_success "Mount script template copy"
 else
   log "No mount script template found in ${SETUP_DIR}/scripts/"
+fi
+
+if [[ -f "${SETUP_DIR}/scripts/start-plex-with-mount.sh" ]]; then
+  log "Copying Plex startup script template to app-setup directory"
+  cp "${SETUP_DIR}/scripts/start-plex-with-mount.sh" "${HOME}/app-setup/"
+  check_success "Plex startup script template copy"
+else
+  log "No Plex startup script template found in ${SETUP_DIR}/scripts/"
 fi
 
 # Copy config.conf for application setup scripts

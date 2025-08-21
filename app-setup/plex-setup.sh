@@ -570,10 +570,34 @@ migrate_plex_config() {
 configure_plex_autostart() {
   section "Configuring Plex Auto-Start"
 
-  # Create a simple LaunchAgent for the operator user
+  # Deploy Plex startup wrapper script
   OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
+  WRAPPER_TEMPLATE="${SCRIPT_DIR}/start-plex-with-mount.sh"
+  WRAPPER_SCRIPT="${OPERATOR_HOME}/.local/bin/start-plex-with-mount.sh"
   LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
   PLIST_FILE="${LAUNCH_AGENTS_DIR}/com.plexapp.plexmediaserver.plist"
+
+  log "Deploying Plex startup wrapper script..."
+
+  # Verify template exists
+  if [[ ! -f "${WRAPPER_TEMPLATE}" ]]; then
+    log "❌ Plex wrapper script template not found at ${WRAPPER_TEMPLATE}"
+    exit 1
+  fi
+
+  # Create operator's script directory and copy template
+  sudo -p "[Plex setup] Enter password to create operator script directory: " -u "${OPERATOR_USERNAME}" mkdir -p "${OPERATOR_HOME}/.local/bin"
+  sudo -p "[Plex setup] Enter password to copy Plex wrapper script: " -u "${OPERATOR_USERNAME}" cp "${WRAPPER_TEMPLATE}" "${WRAPPER_SCRIPT}"
+
+  # Replace placeholders with actual values
+  sudo -p "[Plex setup] Enter password to configure Plex wrapper script: " -u "${OPERATOR_USERNAME}" sed -i '' \
+    -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
+    -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
+    "${WRAPPER_SCRIPT}"
+
+  # Set proper permissions
+  sudo -p "[Plex setup] Enter password to set Plex wrapper script permissions: " -u "${OPERATOR_USERNAME}" chmod 755 "${WRAPPER_SCRIPT}"
+  check_success "Plex wrapper script deployment"
 
   log "Creating LaunchAgent for Plex auto-start..."
   sudo -iu "${OPERATOR_USERNAME}" mkdir -p "${LAUNCH_AGENTS_DIR}"
@@ -587,7 +611,7 @@ configure_plex_autostart() {
     <string>com.plexapp.plexmediaserver</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Applications/Plex Media Server.app/Contents/MacOS/Plex Media Server</string>
+        <string>${WRAPPER_SCRIPT}</string>
     </array>
     <key>EnvironmentVariables</key>
     <dict>
@@ -597,11 +621,14 @@ configure_plex_autostart() {
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
     <key>StandardErrorPath</key>
-    <string>/tmp/plex-error.log</string>
+    <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-plex-launchagent.log</string>
     <key>StandardOutPath</key>
-    <string>/tmp/plex-out.log</string>
+    <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-plex-launchagent.log</string>
 </dict>
 </plist>
 EOF
@@ -609,7 +636,9 @@ EOF
   check_success "Plex LaunchAgent creation"
 
   log "✅ Plex configured to start automatically for ${OPERATOR_USERNAME}"
+  log "   Wrapper script: ${WRAPPER_SCRIPT}"
   log "   LaunchAgent will auto-load when ${OPERATOR_USERNAME} logs in"
+  log "   Plex will wait for SMB mount before starting"
 }
 
 # Start Plex Media Server
@@ -631,6 +660,15 @@ start_plex() {
   # Check if Plex is running
   if pgrep -f "Plex Media Server" >/dev/null; then
     log "✅ Plex Media Server is running"
+
+    # Fix permissions on Plex-created subdirectory
+    log "Ensuring proper permissions on Plex configuration directory..."
+    if [[ -d "${PLEX_NEW_CONFIG}/Plex Media Server" ]]; then
+      sudo -p "Enter your '${USER}' password to fix Plex config permissions: " chown -R "${USER}:staff" "${PLEX_NEW_CONFIG}/Plex Media Server"
+      sudo -p "Enter your '${USER}' password to set Plex config permissions: " chmod -R 775 "${PLEX_NEW_CONFIG}/Plex Media Server"
+      check_success "Plex configuration permissions fix"
+    fi
+
     log "Access your Plex server at:"
     log "  Local: http://localhost:32400/web"
     log "  Network: http://${HOSTNAME}.local:32400/web"
