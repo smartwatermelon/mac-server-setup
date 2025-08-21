@@ -98,6 +98,9 @@ main() {
     exit 1
   fi
 
+  # Wait a moment for mount to be fully accessible
+  sleep 2
+
   # Step 5: Test read/write access for all users
   log "Step 5: Testing read/write access..."
 
@@ -107,9 +110,20 @@ main() {
     exit 1
   fi
 
-  # Test read access
-  if ! ls "${PLEX_MEDIA_MOUNT}" >/dev/null 2>&1; then
-    log "❌ Cannot read mount directory"
+  # Test read access with retry logic
+  local read_attempts=0
+  local max_read_attempts=5
+  while [[ ${read_attempts} -lt ${max_read_attempts} ]]; do
+    if ls "${PLEX_MEDIA_MOUNT}" >/dev/null 2>&1; then
+      break
+    fi
+    ((read_attempts++))
+    log "Read test failed, retrying... (${read_attempts}/${max_read_attempts})"
+    sleep 1
+  done
+
+  if [[ ${read_attempts} -ge ${max_read_attempts} ]]; then
+    log "❌ Cannot read mount directory after ${max_read_attempts} attempts"
     exit 1
   fi
 
