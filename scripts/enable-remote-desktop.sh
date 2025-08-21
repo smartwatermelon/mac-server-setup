@@ -189,16 +189,83 @@ EOF
 
   sleep 2
   log "Permission dialog handling completed"
+
+  # Pause for user to manually approve the permission
+  log ""
+  log "IMPORTANT: You should now see a dialog asking for Screen Recording permission."
+  log "Please follow these steps to approve:"
+  log "1. Click 'Open System Settings' (if dialog appeared)"
+  log "2. In System Settings > Privacy & Security > Screen & System Audio Recording"
+  log "3. Find 'System Settings' and toggle it ON"
+  log "4. Return here and confirm completion"
+  log ""
+
+  read -p "${LOG_PREFIX} Have you granted Screen Recording permission to System Settings? (y/N): " -r permission_granted
+  case ${permission_granted} in
+    [yY] | [yY][eE][sS])
+      log "User confirmed permission granted. Testing permission..."
+      ;;
+    *)
+      log "Permission not granted. Script cannot proceed with UI automation."
+      log "You can still manually enable Screen Sharing in System Settings."
+      return 1
+      ;;
+  esac
+}
+
+# Test if Screen Recording permission is actually granted
+test_screen_recording_permission() {
+  log "Testing Screen Recording permission for System Settings..."
+
+  # Test by attempting to get window information
+  if osascript <<'EOF' 2>/dev/null; then
+tell application "System Settings"
+    activate
+    delay 1
+end tell
+
+tell application "System Events"
+    tell process "System Settings"
+        try
+            -- This should work if Screen Recording permission is granted
+            set windowCount to count of windows
+            if windowCount > 0 then
+                get position of window 1
+            end if
+            return true
+        on error
+            return false
+        end try
+    end tell
+end tell
+EOF
+    log "✓ Screen Recording permission verified - UI automation will work"
+    return 0
+  else
+    log "✗ Screen Recording permission test failed"
+    log "Please ensure System Settings has Screen Recording permission enabled"
+    log "Go to: System Settings > Privacy & Security > Screen & System Audio Recording"
+    return 1
+  fi
 }
 
 # Configure TCC permissions for Screen Sharing
 configure_tcc_permissions() {
   log "Configuring TCC permissions..."
 
-  # Force the Screen Recording permission dialog
-  force_screen_recording_permission
+  # Force the Screen Recording permission dialog and wait for user approval
+  if ! force_screen_recording_permission; then
+    log "Screen Recording permission setup failed. Skipping UI automation."
+    return 1
+  fi
 
-  # Try to automate the permission approval using tccutil
+  # Test that the permission was actually granted
+  if ! test_screen_recording_permission; then
+    log "Screen Recording permission test failed. Skipping UI automation."
+    return 1
+  fi
+
+  # Try to automate the permission approval using tccutil (optional - for completeness)
   log "Attempting to grant Screen Recording permission automatically..."
 
   # Method 1: Direct TCC database manipulation (requires SIP disabled)
@@ -501,13 +568,24 @@ main() {
     enable_screen_sharing_service
   fi
 
-  configure_tcc_permissions
-  open_screen_sharing_settings
+  # Configure TCC permissions (includes user interaction)
+  if configure_tcc_permissions; then
+    # Permissions are ready, proceed with automation
+    open_screen_sharing_settings
+    automate_screen_sharing_toggle
+  else
+    # Permissions not available, provide manual instructions
+    log ""
+    log "UI automation not available. Manual setup required:"
+    log "1. Open System Settings > General > Sharing"
+    log "2. Click the toggle next to 'Screen Sharing' to turn it ON"
+    log "3. Configure access settings as needed"
+    log "4. Click 'Done' if a configuration dialog appears"
+    log ""
 
-  # Attempt automation (may require user approval for TCC)
-  log "NOTE: System Settings may prompt for Screen Recording permission."
-  log "Please approve the permission if prompted to enable automation."
-  automate_screen_sharing_toggle
+    # Still try to open the settings for user convenience
+    open_screen_sharing_settings || true
+  fi
 
   restart_services
   verify_remote_desktop
