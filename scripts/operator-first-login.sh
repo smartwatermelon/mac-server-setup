@@ -49,7 +49,7 @@ log() {
 # Wait for network mount
 wait_for_network_mount() {
   local mount_path="${HOME}/.local/mnt/${NAS_SHARE_NAME}"
-  local timeout=30
+  local timeout=120
   local elapsed=0
 
   log "Waiting for network mount at ${mount_path}..."
@@ -59,10 +59,20 @@ wait_for_network_mount() {
       local dir_count
       dir_count=$(find "${mount_path}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
       if [[ ${dir_count} -gt 0 ]]; then
-        log "Network mount ready"
+        log "Network mount ready (found ${dir_count} directories)"
         return 0
+      else
+        log "Mount directory exists but no content found, waiting... (${elapsed}s/${timeout}s)"
       fi
+    else
+      log "Mount directory does not exist, waiting... (${elapsed}s/${timeout}s)"
     fi
+
+    # Show progress dialog every 10 seconds
+    if [[ $((elapsed % 10)) -eq 0 && ${elapsed} -gt 0 ]]; then
+      osascript -e "display dialog \"Waiting for network storage to be ready...\\n\\nElapsed: ${elapsed}s / ${timeout}s\" buttons {\"OK\"} default button \"OK\" giving up after 3 with title \"Mac Mini Setup\"" >/dev/null 2>&1 || true
+    fi
+
     sleep 1
     ((elapsed++))
   done
