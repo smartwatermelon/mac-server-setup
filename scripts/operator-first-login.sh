@@ -144,6 +144,16 @@ setup_dock() {
   log "Dock setup completed"
 }
 
+# Task: lock screen
+lock_screen_now() {
+  log "Setting up dock for operator account..."
+  if pmset displaysleepnow; then
+    log "Screen locked successfully"
+  else
+    log "Unable to lock screen, u r hax0r3d"
+  fi
+}
+
 # Main execution
 main() {
   log "=== Operator First-Login Setup Started ==="
@@ -161,6 +171,7 @@ main() {
 
   # Run setup tasks
   setup_dock
+  lock_screen_now
 
   log "=== Operator First-Login Setup Completed ==="
 }
