@@ -1191,6 +1191,37 @@ else
 fi
 
 #
+# LOG ROTATION SETUP
+#
+section "Configuring Log Rotation"
+
+# Copy logrotate configuration if available
+if [[ -f "${CONFIG_FILE%/*}/logrotate.conf" ]]; then
+  log "Installing logrotate configuration"
+
+  # Ensure logrotate config directory exists
+  LOGROTATE_CONFIG_DIR="/opt/homebrew/etc"
+  if [[ ! -d "${LOGROTATE_CONFIG_DIR}" ]]; then
+    sudo -p "[Logrotate setup] Enter password to create logrotate config directory: " mkdir -p "${LOGROTATE_CONFIG_DIR}"
+  fi
+
+  # Copy our logrotate configuration
+  sudo -p "[Logrotate setup] Enter password to install logrotate config: " cp "${CONFIG_FILE%/*}/logrotate.conf" "${LOGROTATE_CONFIG_DIR}/"
+  check_success "Logrotate configuration install"
+
+  # Start logrotate service system-wide
+  log "Starting system-wide logrotate service"
+  if sudo brew services start logrotate; then
+    check_success "Logrotate service start"
+    log "✅ Logrotate service started - logs will be rotated automatically"
+  else
+    log "⚠️  Failed to start logrotate service - logs will not be rotated"
+  fi
+else
+  log "No logrotate configuration found - skipping log rotation setup"
+fi
+
+#
 # APPLICATION SETUP PREPARATION
 #
 

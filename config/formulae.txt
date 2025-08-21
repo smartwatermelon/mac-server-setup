@@ -24,6 +24,7 @@ iproute2mac
 launchctl-completion
 less
 liquidprompt
+logrotate
 mas
 moreutils
 netcat
