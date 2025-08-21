@@ -55,17 +55,17 @@ jobs:
         run: |
           set -e
 
-          # Check .sh files
-          if find . -name "*.sh" -type f | head -1 | read; then
+          # Check .sh files (excluding .git directory)
+          if find . -name "*.sh" -type f -not -path './.git/*' | head -1 | read; then
             echo "Checking .sh files..."
-            find . -name "*.sh" -type f -print0 | \
+            find . -name "*.sh" -type f -not -path './.git/*' -print0 | \
               xargs -0 shellcheck --rcfile=.shellcheckrc
           fi
 
-          # Check executable files with shell shebangs
-          if find . -type f -executable -exec grep -l '^#!/.*sh' {} + | head -1 | read; then
+          # Check executable files with shell shebangs (excluding .git directory)
+          if find . -type f -executable -not -path './.git/*' -exec grep -l '^#!/.*sh' {} + | head -1 | read; then
             echo "Checking executable shell files..."
-            find . -type f -executable -exec grep -l '^#!/.*sh' {} + -print0 | \
+            find . -type f -executable -not -path './.git/*' -exec grep -l '^#!/.*sh' {} + -print0 | \
               xargs -0 shellcheck --rcfile=.shellcheckrc
           fi
 
@@ -91,17 +91,17 @@ jobs:
         run: |
           set -e
 
-          # Check .sh files
-          if find . -name "*.sh" -type f | head -1 | read; then
+          # Check .sh files (excluding .git directory)
+          if find . -name "*.sh" -type f -not -path './.git/*' | head -1 | read; then
             echo "Checking .sh file formatting..."
-            find . -name "*.sh" -type f -print0 | \
+            find . -name "*.sh" -type f -not -path './.git/*' -print0 | \
               xargs -0 shfmt -d -i 2 -ci -bn
           fi
 
-          # Check executable shell files
-          if find . -type f -executable -exec grep -l '^#!/.*sh' {} + | head -1 | read; then
+          # Check executable shell files (excluding .git directory)
+          if find . -type f -executable -not -path './.git/*' -exec grep -l '^#!/.*sh' {} + | head -1 | read; then
             echo "Checking executable shell file formatting..."
-            find . -type f -executable -exec grep -l '^#!/.*sh' {} + -print0 | \
+            find . -type f -executable -not -path './.git/*' -exec grep -l '^#!/.*sh' {} + -print0 | \
               xargs -0 shfmt -d -i 2 -ci -bn
           fi
 
@@ -124,11 +124,11 @@ jobs:
       - name: Find markdown files
         run: |
           echo "=== Markdown files found ==="
-          find . -name "*.md" -type f
+          find . -name "*.md" -type f -not -path './.git/*'
 
       - name: Run markdownlint
         run: |
-          find . -name "*.md" -type f -print0 | \
+          find . -name "*.md" -type f -not -path './.git/*' -print0 | \
             xargs -0 markdownlint --disable=MD013
 
   yamllint:
@@ -150,11 +150,11 @@ jobs:
       - name: Find YAML files
         run: |
           echo "=== YAML files found ==="
-          find . -name "*.yml" -o -name "*.yaml" -type f
+          find . \( -name "*.yml" -o -name "*.yaml" \) -type f -not -path './.git/*'
 
       - name: Run yamllint
         run: |
-          find . \( -name "*.yml" -o -name "*.yaml" \) -type f -print0 | \
+          find . \( -name "*.yml" -o -name "*.yaml" \) -type f -not -path './.git/*' -print0 | \
             xargs -0 yamllint -d relaxed
 
   # Future test placeholders
