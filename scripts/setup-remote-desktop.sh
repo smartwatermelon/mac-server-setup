@@ -284,9 +284,10 @@ main() {
     echo "${LOG_PREFIX} 5. Verify the final setup"
     echo ""
     echo "${LOG_PREFIX} This requires administrator privileges and user interaction."
-    read -p "${LOG_PREFIX} Continue? (Y/n): " -r response
+    read -p "${LOG_PREFIX} Continue? (Y/n): " -n 1 -r response
+    echo
     case ${response} in
-      [nN] | [nN][oO])
+      [nN])
         log "Operation cancelled by user"
         exit 0
         ;;
