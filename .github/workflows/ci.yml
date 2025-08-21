@@ -59,14 +59,14 @@ jobs:
           if find . -name "*.sh" -type f -not -path './.git/*' | head -1 | read; then
             echo "Checking .sh files..."
             find . -name "*.sh" -type f -not -path './.git/*' -print0 | \
-              xargs -0 shellcheck --rcfile=.shellcheckrc
+              xargs -0 shellcheck
           fi
 
           # Check executable files with shell shebangs (excluding .git directory)
           if find . -type f -executable -not -path './.git/*' -exec grep -l '^#!/.*sh' {} + | head -1 | read; then
             echo "Checking executable shell files..."
             find . -type f -executable -not -path './.git/*' -exec grep -l '^#!/.*sh' {} + -print0 | \
-              xargs -0 shellcheck --rcfile=.shellcheckrc
+              xargs -0 shellcheck
           fi
 
   shfmt:
@@ -94,15 +94,21 @@ jobs:
           # Check .sh files (excluding .git directory)
           if find . -name "*.sh" -type f -not -path './.git/*' | head -1 | read; then
             echo "Checking .sh file formatting..."
-            find . -name "*.sh" -type f -not -path './.git/*' -print0 | \
-              xargs -0 shfmt -d -i 2 -ci -bn
+            find . -name "*.sh" -type f -not -path './.git/*' | while read -r file; do
+              if [[ -f "$file" ]]; then
+                shfmt -d -i 2 -ci -bn "$file"
+              fi
+            done
           fi
 
-          # Check executable shell files (excluding .git directory)
-          if find . -type f -executable -not -path './.git/*' -exec grep -l '^#!/.*sh' {} + | head -1 | read; then
+          # Check executable shell files (excluding .git directory)  
+          if find . -type f -executable -not -path './.git/*' -exec grep -l '^#!/.*sh' {} + 2>/dev/null | head -1 | read; then
             echo "Checking executable shell file formatting..."
-            find . -type f -executable -not -path './.git/*' -exec grep -l '^#!/.*sh' {} + -print0 | \
-              xargs -0 shfmt -d -i 2 -ci -bn
+            find . -type f -executable -not -path './.git/*' -exec grep -l '^#!/.*sh' {} + 2>/dev/null | while read -r file; do
+              if [[ -f "$file" ]]; then
+                shfmt -d -i 2 -ci -bn "$file"
+              fi
+            done
           fi
 
   markdownlint:
