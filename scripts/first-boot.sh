@@ -173,6 +173,23 @@ if [[ -z "${DEV_MACHINE_FINGERPRINT}" ]]; then
   exit 1
 fi
 
+# Check if running in a GUI session (required for many setup operations)
+SESSION_TYPE=$(launchctl managername 2>/dev/null || echo "Unknown")
+if [[ "${SESSION_TYPE}" != "Aqua" ]]; then
+  echo "❌ ERROR: This script requires a GUI session to run properly"
+  echo "Current session type: ${SESSION_TYPE}"
+  echo ""
+  echo "Mac Mini server setup requires desktop access for:"
+  echo "- User account creation and configuration"
+  echo "- System Settings modifications"
+  echo "- AppleScript dialogs and automation"
+  echo "- Application installations and setup"
+  echo ""
+  echo "Please run this script from the Mac's local desktop session."
+  exit 1
+fi
+echo "✓ GUI session detected (${SESSION_TYPE}) - setup can proceed"
+
 # Get current machine fingerprint
 CURRENT_FINGERPRINT=$(system_profiler SPHardwareDataType | grep "Hardware UUID" | awk '{print $3}')
 

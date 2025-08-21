@@ -49,6 +49,27 @@ check_privileges() {
   fi
 }
 
+# Check if running in a GUI session (required for AppleScript dialogs)
+check_gui_session() {
+  local session_type
+  session_type=$(launchctl managername 2>/dev/null || echo "Unknown")
+
+  if [[ "${session_type}" != "Aqua" ]]; then
+    log "ERROR: This script requires a GUI session to display AppleScript dialogs and open System Settings."
+    log "Current session type: ${session_type}"
+    log ""
+    log "Remote Desktop setup requires direct access to the Mac's desktop to:"
+    log "- Display AppleScript configuration dialogs"
+    log "- Open and interact with System Settings"
+    log "- Enable Screen Sharing and Remote Management services"
+    log ""
+    log "Please run this script from the Mac's local desktop session."
+    exit 1
+  fi
+
+  log "✓ GUI session detected (${session_type}) - AppleScript dialogs available"
+}
+
 # Disable all remote desktop services (for clean slate)
 disable_all_services() {
   log "Disabling existing remote desktop services for clean setup..."
@@ -116,13 +137,11 @@ Otherwise Remote Management will prevent you from enabling Screen Sharing.
 Please complete these steps:
 1. Find 'Screen Sharing' in the list
 2. Click the toggle switch to turn Screen Sharing ON
-3. Click the (i) info button next to Screen Sharing  
-4. Configure access settings as needed:
-   • 'Anyone may request permission to control screen'
+3. Configure access settings as needed:
    • 'VNC viewers may control screen with password'
    • Set a password if desired
    • Configure 'Allow access for' (Administrators recommended)
-5. Click 'Done' when finished
+4. Click 'Done' when finished
 
 Click OK when you have completed the Screen Sharing setup." buttons {"Cancel", "OK"} default button "OK" with title "Remote Desktop Setup"
 EOF
@@ -251,8 +270,9 @@ main() {
 
   log "Starting Remote Desktop setup for macOS"
 
-  # Check privileges
+  # Check prerequisites
   check_privileges
+  check_gui_session
 
   # Confirmation prompt
   if [[ "${force}" != "true" ]]; then
