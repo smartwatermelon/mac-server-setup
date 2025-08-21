@@ -56,20 +56,20 @@ jobs:
           set -e
 
           # Check .sh files (excluding .git directory)
-          find . -name "*.sh" -type f -not -path './.git/*' | while read -r file; do
+          while IFS= read -r -d '' file; do
             if [[ -f "$file" && -r "$file" ]]; then
               echo "Checking $file"
               shellcheck "$file"
             fi
-          done
+          done < <(find . -name "*.sh" -type f -not -path './.git/*' -print0)
 
           # Check executable files with shell shebangs (excluding .git directory)
-          find . -type f -executable -not -path './.git/*' 2>/dev/null | while read -r file; do
+          while IFS= read -r -d '' file; do
             if [[ -f "$file" && -r "$file" ]] && grep -q '^#!/.*sh' "$file" 2>/dev/null; then
               echo "Checking executable $file"
               shellcheck "$file"
             fi
-          done
+          done < <(find . -type f -executable -not -path './.git/*' -print0 2>/dev/null)
 
   shfmt:
     name: Shell Script Formatting
@@ -94,20 +94,20 @@ jobs:
           set -e
 
           # Check .sh files (excluding .git directory)
-          find . -name "*.sh" -type f -not -path './.git/*' | while read -r file; do
+          while IFS= read -r -d '' file; do
             if [[ -f "$file" && -r "$file" ]]; then
               echo "Checking $file formatting"
               shfmt -d -i 2 -ci -bn "$file"
             fi
-          done
+          done < <(find . -name "*.sh" -type f -not -path './.git/*' -print0)
 
           # Check executable shell files (excluding .git directory)
-          find . -type f -executable -not -path './.git/*' 2>/dev/null | while read -r file; do
+          while IFS= read -r -d '' file; do
             if [[ -f "$file" && -r "$file" ]] && grep -q '^#!/.*sh' "$file" 2>/dev/null; then
               echo "Checking executable $file formatting"
               shfmt -d -i 2 -ci -bn "$file"
             fi
-          done
+          done < <(find . -type f -executable -not -path './.git/*' -print0 2>/dev/null)
 
   markdownlint:
     name: Markdown Linting
