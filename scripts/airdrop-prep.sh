@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 #
 # airdrop-prep.sh - Script to prepare a directory with necessary files for Mac Mini M2 server setup
 #
