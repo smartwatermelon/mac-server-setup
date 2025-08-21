@@ -105,11 +105,13 @@ The setup process consists of two main phases:
 ```plaintext
 .
 ├── README.md                   # This file
-├── scripts/                    # All executable scripts
+├── scripts/                    # Setup and deployment scripts
 │   ├── airdrop-prep.sh        # Setup package preparation
 │   ├── first-boot.sh          # Main setup script
-│   ├── mount-nas-media.sh     # SMB mount script
 │   └── operator-first-login.sh # Operator account customization (automatic via LaunchAgent)
+├── templates/                  # Runtime script templates
+│   ├── mount-nas-media.sh     # SMB mount script template
+│   └── start-plex-with-mount.sh # Plex startup wrapper template
 ├── config/                     # Configuration files
 │   ├── config.conf.template   # Configuration template
 │   ├── formulae.txt           # Homebrew formulae list
