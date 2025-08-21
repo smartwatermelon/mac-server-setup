@@ -84,12 +84,14 @@ The setup process consists of two main phases:
    > You can use [airdrop-cli](https://github.com/vldmrkl/airdrop-cli) (requires Xcode) to AirDrop files from the command line!
    > Install: (`brew install --HEAD vldmrkl/formulae/airdrop-cli`)
 
-3. **Run initial setup** on Mac Mini:
+3. **Run initial setup** on Mac Mini (**requires local desktop session**):
 
    ```bash
    cd ~/Downloads/MACMINI-setup # default name
    ./scripts/first-boot.sh
    ```
+
+   > **Important**: Must be run from the Mac Mini's local desktop session (not via SSH). The script requires GUI access for System Settings automation, AppleScript dialogs, and user account configuration.
 
 4. **Complete operator setup** after reboot (see [Operator Setup](docs/operator.md))
 
@@ -107,7 +109,8 @@ The setup process consists of two main phases:
 ├── README.md                   # This file
 ├── scripts/                    # Setup and deployment scripts
 │   ├── airdrop-prep.sh        # Setup package preparation
-│   ├── first-boot.sh          # Main setup script
+│   ├── first-boot.sh          # Main setup script (requires GUI session)
+│   ├── setup-remote-desktop.sh # Remote Desktop configuration (requires GUI session)
 │   └── operator-first-login.sh # Operator account customization (automatic via LaunchAgent)
 ├── templates/                  # Runtime script templates
 │   ├── mount-nas-media.sh     # SMB mount script template
@@ -165,6 +168,12 @@ Key improvements eliminate previous autofs reliability issues and provide robust
 ## Troubleshooting
 
 ### Common Issues
+
+**"GUI session required" error**: Setup scripts require local desktop access, not SSH.
+
+- Run `first-boot.sh` and `setup-remote-desktop.sh` from the Mac Mini's desktop (Terminal.app)
+- Check session: `launchctl managername` should return `Aqua` (not `Background`)
+- Cannot run via SSH - requires direct access for System Settings and AppleScript dialogs
 
 **SSH access denied**: Verify SSH keys were copied correctly and SSH service is enabled.
 

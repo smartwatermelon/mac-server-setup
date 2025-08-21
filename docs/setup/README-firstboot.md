@@ -17,13 +17,15 @@ This directory contains all the necessary files for setting up the Mac Mini M2 s
 
 1. Complete the macOS setup wizard on the Mac Mini
 2. AirDrop this entire folder to the Mac Mini (it will be placed in Downloads)
-3. Open Terminal and run:
+3. **Open Terminal from the Mac Mini's desktop session** and run:
 
    ```bash
    cd ~/Downloads/${SERVER_NAME_LOWER}-setup/scripts
    chmod +x first-boot.sh
    ./first-boot.sh
    ```
+
+   > **Important**: Must be run from the Mac Mini's local desktop session (not via SSH). The script requires GUI access for System Settings automation, AppleScript dialogs, and user account configuration.
 
 4. Follow the on-screen instructions
 
