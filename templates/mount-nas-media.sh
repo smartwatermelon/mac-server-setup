@@ -110,11 +110,14 @@ main() {
     exit 1
   fi
 
-  # Test read access with retry logic
+  # Test read access with retry logic (consistent with Plex startup script)
   local read_attempts=0
   local max_read_attempts=5
   while [[ ${read_attempts} -lt ${max_read_attempts} ]]; do
-    if ls "${PLEX_MEDIA_MOUNT}" >/dev/null 2>&1; then
+    # Use find to test mount accessibility (same test as working Plex startup script)
+    local item_count
+    if item_count=$(find "${PLEX_MEDIA_MOUNT}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l); then
+      log "✅ Read access confirmed - found ${item_count} items"
       break
     fi
     ((read_attempts++))
@@ -126,10 +129,6 @@ main() {
     log "❌ Cannot read mount directory after ${max_read_attempts} attempts"
     exit 1
   fi
-
-  local file_count
-  file_count=$(find "${PLEX_MEDIA_MOUNT}" -maxdepth 1 -type f -o -type d | tail -n +2 | wc -l 2>/dev/null || echo "0")
-  log "✅ Read access confirmed - found ${file_count} items"
 
   # Test write access with timestamped test file
   local test_file
