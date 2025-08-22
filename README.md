@@ -202,7 +202,4 @@ When modifying scripts:
 
 1. MIT; see [LICENSE](license.md)
 
-- Option 1: [![CI Tests](https://github.com/smartwatermelon/mac-server-setup/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/smartwatermelon/mac-server-setup/actions)
-- Option 2: [![CI Tests](https://github.com/smartwatermelon/mac-server-setup/actions/workflows/ci.yml/badge.svg)](https://github.com/smartwatermelon/mac-server-setup/actions)
-- Option 3: [![CI Tests](https://github.com/smartwatermelon/mac-server-setup/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/smartwatermelon/mac-server-setup/actions)
-- Original: [![CI Tests](https://github.com/smartwatermelon/mac-server-setup/workflows/CI%20Tests/badge.svg)](https://github.com/smartwatermelon/mac-server-setup/actions)
+[![CI Tests](https://github.com/smartwatermelon/mac-server-setup/actions/workflows/ci.yml/badge.svg)](https://github.com/smartwatermelon/mac-server-setup/actions)
