@@ -33,7 +33,7 @@ This project provides a complete automation framework for setting up an Apple Si
 ### Previous Improvements (v2.0)
 
 - **1Password Credential Integration**: Automated credential retrieval with secure handling
-- **Smart Fallbacks**: Interactive prompts when credentials unavailable  
+- **Smart Fallbacks**: Interactive prompts when credentials unavailable
 - **Intuitive Confirmations**: Sensible defaults for all prompts
 
 ## Key Principles
@@ -202,4 +202,4 @@ When modifying scripts:
 
 1. MIT; see [LICENSE](license.md)
 
-[![CI Tests](https://github.com/smartwatermelon/mac-server-setup/workflows/CI%20Tests/badge.svg)](https://github.com/smartwatermelon/mac-server-setup/actions)
+[![CI Tests](https://github.com/smartwatermelon/mac-server-setup/actions/workflows/ci.yml/badge.svg)](https://github.com/smartwatermelon/mac-server-setup/actions)
