@@ -95,14 +95,27 @@ disable_all_services() {
 enable_remote_management_service() {
   log "Enabling Remote Management service..."
 
-  # Use kickstart for basic setup
-  sudo -p "${LOG_PREFIX} Enter password to configure Remote Management: " \
+  # Capture kickstart output with verbose flag
+  local kickstart_output
+  kickstart_output=$(sudo -p "${LOG_PREFIX} Enter password to configure Remote Management: " \
     /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-    -activate -configure -access -on -users admin -privs -all -restart -agent -menu || {
-    log "WARNING: kickstart may have limited functionality on macOS 12.1+"
+    -activate -configure -access -on -users admin -privs -all -restart -agent -menu -verbose 2>&1) || {
+    log "WARNING: kickstart failed or had limited functionality"
+    log "Output: ${kickstart_output}"
+    return 1
   }
 
-  log "Remote Management service configured"
+  # Check if output indicates success
+  if echo "${kickstart_output}" | grep -q "Activated Remote Management" \
+    && echo "${kickstart_output}" | grep -q "Done"; then
+    log "✓ Remote Management service configured successfully"
+    log "Output: ${kickstart_output}"
+    return 0
+  else
+    log "⚠️ Remote Management configuration may have failed"
+    log "Output: ${kickstart_output}"
+    return 1
+  fi
 }
 
 # Guide user through Screen Sharing setup
@@ -313,10 +326,12 @@ main() {
   setup_screen_sharing
 
   # Now enable Remote Management (which will take control of Screen Sharing)
-  enable_remote_management_service
-
-  # Guide user through Remote Management configuration
-  setup_remote_management
+  if enable_remote_management_service; then
+    log "✓ Remote Management configured successfully - skipping manual setup"
+  else
+    log "Automated Remote Management setup failed - requiring manual configuration"
+    setup_remote_management
+  fi
 
   # Verify final setup
   verify_remote_desktop
