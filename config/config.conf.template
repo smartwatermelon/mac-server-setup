@@ -27,5 +27,10 @@ NAS_SHARE_NAME="Media"
 # Leave empty to prompt during setup or use --migrate-from command line option
 PLEX_MIGRATE_FROM=""  # e.g., "old-server.local"
 
+# Dropbox configuration (optional)
+# If you want to sync a specific Dropbox folder to the server
+DROPBOX_SYNC_FOLDER=""               # Dropbox folder to sync (e.g., "Private/ServerSync")
+DROPBOX_LOCAL_PATH=""                # Local path where to sync (default: ~/.local/sync/dropbox)
+
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME

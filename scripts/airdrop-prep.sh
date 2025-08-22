@@ -40,6 +40,8 @@ else
   ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
   ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"
   ONEPASSWORD_APPLEID_ITEM="Apple"
+  DROPBOX_SYNC_FOLDER=""
+  DROPBOX_LOCAL_PATH=""
 fi
 
 # Set derived variables
@@ -283,6 +285,20 @@ PLEX_NAS_HOSTNAME="${PLEX_NAS_HOSTNAME}"
 EOF
   chmod 600 "${OUTPUT_PATH}/scripts/app-setup/plex_nas.conf"
   echo "✅ Plex NAS configuration saved for transfer"
+fi
+
+# Set up Dropbox synchronization if configured
+if [[ -n "${DROPBOX_SYNC_FOLDER:-}" ]]; then
+  if [[ -f "${SCRIPT_SOURCE_DIR}/scripts/airdrop-prep-rclone.sh" ]]; then
+    echo "Running Dropbox setup..."
+    # Export required variables for the rclone script
+    export OUTPUT_PATH SERVER_NAME_LOWER DROPBOX_SYNC_FOLDER DROPBOX_LOCAL_PATH
+    "${SCRIPT_SOURCE_DIR}/scripts/airdrop-prep-rclone.sh"
+  else
+    echo "Warning: airdrop-prep-rclone.sh not found - skipping Dropbox setup"
+  fi
+else
+  echo "No Dropbox sync folder configured - skipping Dropbox setup"
 fi
 
 # Create and save one-time link for Apple ID password
