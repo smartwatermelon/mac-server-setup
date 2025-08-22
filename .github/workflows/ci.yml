@@ -24,14 +24,14 @@ jobs:
             shell-scripts:
               - '**/*.sh'
               - 'scripts/**'
-              - '.shellcheckrc'
+              - '.github/workflows/.shellcheckrc'
             markdown:
               - '**/*.md'
             yaml:
               - '**/*.yml'
               - '**/*.yaml'
               - '.github/workflows/**'
-              - '.yamllint*'
+              - '.github/workflows/.yamllint'
 
   shellcheck:
     name: Shell Script Analysis
@@ -55,11 +55,22 @@ jobs:
         run: |
           set -e
 
+          # Use config from .github/workflows if available, fallback to repo root
+          SHELLCHECK_CONFIG=""
+          if [[ -f ".github/workflows/.shellcheckrc" ]]; then
+            SHELLCHECK_CONFIG="--rcfile=.github/workflows/.shellcheckrc"
+            echo "Using shellcheck config from .github/workflows/.shellcheckrc"
+          elif [[ -f ".shellcheckrc" ]]; then
+            echo "Using shellcheck config from .shellcheckrc"
+          else
+            echo "No shellcheck config found, using defaults"
+          fi
+
           # Check .sh files (excluding .git directory)
           while IFS= read -r -d '' file; do
             if [[ -f "$file" && -r "$file" ]]; then
               echo "Checking $file"
-              shellcheck "$file"
+              shellcheck $SHELLCHECK_CONFIG "$file"
             fi
           done < <(find . -name "*.sh" -type f -not -path './.git/*' -print0)
 
@@ -67,7 +78,7 @@ jobs:
           while IFS= read -r -d '' file; do
             if [[ -f "$file" && -r "$file" ]] && grep -q '^#!/.*sh' "$file" 2>/dev/null; then
               echo "Checking executable $file"
-              shellcheck "$file"
+              shellcheck $SHELLCHECK_CONFIG "$file"
             fi
           done < <(find . -type f -executable -not -path './.git/*' -print0 2>/dev/null)
 
@@ -159,6 +170,17 @@ jobs:
 
       - name: Run yamllint
         run: |
+          # Use config from .github/workflows if available, fallback to repo root
+          if [[ -f ".github/workflows/.yamllint" ]]; then
+            export YAMLLINT_CONFIG_FILE=".github/workflows/.yamllint"
+            echo "Using yamllint config from .github/workflows/.yamllint"
+          elif [[ -f ".yamllint" ]]; then
+            export YAMLLINT_CONFIG_FILE=".yamllint"
+            echo "Using yamllint config from .yamllint"
+          else
+            echo "No yamllint config found, using defaults"
+          fi
+
           find . \( -name "*.yml" -o -name "*.yaml" \) -type f -not -path './.git/*' -print0 | \
             xargs -0 yamllint
 
