@@ -1223,8 +1223,16 @@ if [[ -f "${CONFIG_FILE%/*}/logrotate.conf" ]]; then
     sudo -p "[Logrotate setup] Enter password to create logrotate config directory: " mkdir -p "${LOGROTATE_CONFIG_DIR}"
   fi
 
+  # Create logrotate.d include directory
+  if [[ ! -d "${LOGROTATE_CONFIG_DIR}/logrotate.d" ]]; then
+    sudo -p "[Logrotate setup] Enter password to create logrotate.d directory: " mkdir -p "${LOGROTATE_CONFIG_DIR}/logrotate.d"
+  fi
+
   # Copy our logrotate configuration
   sudo -p "[Logrotate setup] Enter password to install logrotate config: " cp "${CONFIG_FILE%/*}/logrotate.conf" "${LOGROTATE_CONFIG_DIR}/"
+
+  # Fix ownership to satisfy logrotate requirements
+  sudo -p "[Logrotate setup] Enter password to set config ownership: " chown root:admin "${LOGROTATE_CONFIG_DIR}/logrotate.conf"
   check_success "Logrotate configuration install"
 
   # Start logrotate service system-wide
