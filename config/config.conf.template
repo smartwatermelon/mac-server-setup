@@ -31,6 +31,7 @@ PLEX_MIGRATE_FROM=""  # e.g., "old-server.local"
 # If you want to sync a specific Dropbox folder to the server
 DROPBOX_SYNC_FOLDER=""               # Dropbox folder to sync (e.g., "Private/ServerSync")
 DROPBOX_LOCAL_PATH=""                # Local path where to sync (default: ~/.local/sync/dropbox)
+DROPBOX_SYNC_INTERVAL="30"           # Sync interval in minutes (default: 30)
 
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME

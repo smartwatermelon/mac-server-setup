@@ -36,6 +36,7 @@ pipx
 pv
 python@3.13
 qrencode
+rclone
 ripgrep-all
 rsync
 s-search
