@@ -57,14 +57,14 @@ jobs:
 
           # Use config from .github/workflows if available, fallback to repo root
           SHELLCHECK_CONFIG=""
-          if [[ -f ".github/workflows/.shellcheckrc" ]]; then
-            SHELLCHECK_CONFIG="--rcfile .github/workflows/.shellcheckrc"
-            echo "Using shellcheck config from .github/workflows/.shellcheckrc"
-          elif [[ -f ".shellcheckrc" ]]; then
-            echo "Using shellcheck config from .shellcheckrc"
-          else
-            echo "No shellcheck config found, using defaults"
-          fi
+#           if [[ -f ".github/workflows/.shellcheckrc" ]]; then
+#             SHELLCHECK_CONFIG="--rcfile .github/workflows/.shellcheckrc"
+#             echo "Using shellcheck config from .github/workflows/.shellcheckrc"
+#           elif [[ -f ".shellcheckrc" ]]; then
+#             echo "Using shellcheck config from .shellcheckrc"
+#           else
+#             echo "No shellcheck config found, using defaults"
+#           fi
 
           # Check .sh files (excluding .git directory)
           while IFS= read -r -d '' file; do
