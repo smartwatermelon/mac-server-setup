@@ -979,12 +979,7 @@ if [[ "${SKIP_HOMEBREW}" = false ]]; then
     log "Running Homebrew's suggested post-installation steps"
 
     # Add Homebrew to path for current session
-    MACHINE_ARCH=$(uname -m)
-    if [[ "${MACHINE_ARCH}" == "arm64" ]]; then
-      HOMEBREW_PREFIX="/opt/homebrew"
-    else
-      HOMEBREW_PREFIX="/usr/local"
-    fi
+    HOMEBREW_PREFIX="$(brew --prefix)"
 
     # Add to .zprofile (Homebrew's recommended approach)
     echo >>"/Users/${ADMIN_USERNAME}/.zprofile"
@@ -1218,7 +1213,7 @@ if [[ -f "${CONFIG_FILE%/*}/logrotate.conf" ]]; then
   log "Installing logrotate configuration"
 
   # Ensure logrotate config directory exists
-  LOGROTATE_CONFIG_DIR="/opt/homebrew/etc"
+  LOGROTATE_CONFIG_DIR="${HOMEBREW_PREFIX}/etc"
   if [[ ! -d "${LOGROTATE_CONFIG_DIR}" ]]; then
     sudo -p "[Logrotate setup] Enter password to create logrotate config directory: " mkdir -p "${LOGROTATE_CONFIG_DIR}"
   fi
@@ -1231,17 +1226,18 @@ if [[ -f "${CONFIG_FILE%/*}/logrotate.conf" ]]; then
   # Copy our logrotate configuration
   sudo -p "[Logrotate setup] Enter password to install logrotate config: " cp "${CONFIG_FILE%/*}/logrotate.conf" "${LOGROTATE_CONFIG_DIR}/"
 
-  # Fix ownership to satisfy logrotate requirements
-  sudo -p "[Logrotate setup] Enter password to set config ownership: " chown root:admin "${LOGROTATE_CONFIG_DIR}/logrotate.conf"
+  # Make config user-writable so both admin and operator can modify it (664)
+  sudo -p "[Logrotate setup] Enter password to set config permissions: " chmod 664 "${LOGROTATE_CONFIG_DIR}/logrotate.conf"
+  sudo -p "[Logrotate setup] Enter password to set config ownership: " chown "${ADMIN_USERNAME}:admin" "${LOGROTATE_CONFIG_DIR}/logrotate.conf"
   check_success "Logrotate configuration install"
 
-  # Start logrotate service system-wide
-  log "Starting system-wide logrotate service"
-  if sudo brew services start logrotate; then
-    check_success "Logrotate service start"
-    log "✅ Logrotate service started - logs will be rotated automatically"
+  # Start logrotate service as admin user
+  log "Starting logrotate service for admin user"
+  if brew services start logrotate; then
+    check_success "Admin logrotate service start"
+    log "✅ Admin logrotate service started - admin logs will be rotated automatically"
   else
-    log "⚠️  Failed to start logrotate service - logs will not be rotated"
+    log "⚠️  Failed to start admin logrotate service - admin logs will not be rotated"
   fi
 else
   log "No logrotate configuration found - skipping log rotation setup"
@@ -1389,6 +1385,15 @@ EOF
   check_success "Operator first-login LaunchAgent setup"
 else
   log "No operator-first-login.sh found in ${SETUP_DIR}/scripts/"
+fi
+
+# Setup operator logrotate service
+log "Starting logrotate service for operator user"
+if sudo -p "[Operator logrotate setup] Enter password to start logrotate for operator: " -iu "${OPERATOR_USERNAME}" brew services start logrotate; then
+  check_success "Operator logrotate service start"
+  log "✅ Operator logrotate service started - operator logs will be rotated automatically"
+else
+  log "⚠️  Failed to start operator logrotate service - operator logs will not be rotated"
 fi
 
 # Configure Time Machine backup
