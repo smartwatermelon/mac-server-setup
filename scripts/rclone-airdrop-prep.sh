@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #
-# airdrop-prep-rclone.sh - Dropbox/rclone configuration for Mac Mini server setup
+# rclone-airdrop-prep.sh - Dropbox/rclone configuration for Mac Mini server setup
 #
 # This script handles rclone installation, OAuth authentication, and configuration
 # transfer for Dropbox synchronization on the server.

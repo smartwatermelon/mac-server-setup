@@ -289,13 +289,13 @@ fi
 
 # Set up Dropbox synchronization if configured
 if [[ -n "${DROPBOX_SYNC_FOLDER:-}" ]]; then
-  if [[ -f "${SCRIPT_SOURCE_DIR}/scripts/airdrop-prep-rclone.sh" ]]; then
+  if [[ -f "${SCRIPT_SOURCE_DIR}/scripts/rclone-airdrop-prep.sh" ]]; then
     echo "Running Dropbox setup..."
     # Export required variables for the rclone script
     export OUTPUT_PATH SERVER_NAME_LOWER DROPBOX_SYNC_FOLDER DROPBOX_LOCAL_PATH
-    "${SCRIPT_SOURCE_DIR}/scripts/airdrop-prep-rclone.sh"
+    "${SCRIPT_SOURCE_DIR}/scripts/rclone-airdrop-prep.sh"
   else
-    echo "Warning: airdrop-prep-rclone.sh not found - skipping Dropbox setup"
+    echo "Warning: rclone-airdrop-prep.sh not found - skipping Dropbox setup"
   fi
 else
   echo "No Dropbox sync folder configured - skipping Dropbox setup"
