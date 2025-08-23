@@ -1199,6 +1199,21 @@ if [[ -f "${HOMEBREW_BASH}" ]]; then
     sudo -p "[Shell setup] Enter password to change operator shell: " chsh -s "${HOMEBREW_BASH}" "${OPERATOR_USERNAME}"
     check_success "Operator user shell change"
   fi
+
+  # Copy .zprofile to .profile for bash compatibility
+  log "Setting up bash profile compatibility"
+  if [[ -f "/Users/${ADMIN_USERNAME}/.zprofile" ]]; then
+    log "Copying admin .zprofile to .profile for bash compatibility"
+    cp "/Users/${ADMIN_USERNAME}/.zprofile" "/Users/${ADMIN_USERNAME}/.profile"
+  fi
+
+  if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
+    log "Copying operator .zprofile to .profile for bash compatibility"
+    sudo -p "[Shell setup] Enter password to copy operator profile: " cp "/Users/${OPERATOR_USERNAME}/.zprofile" "/Users/${OPERATOR_USERNAME}/.profile" 2>/dev/null || true
+    sudo chown "${OPERATOR_USERNAME}:staff" "/Users/${OPERATOR_USERNAME}/.profile" 2>/dev/null || true
+  fi
+
+  check_success "Bash profile compatibility setup"
 else
   log "Homebrew bash not found - skipping shell change"
 fi
