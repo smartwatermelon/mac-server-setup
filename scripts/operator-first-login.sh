@@ -144,6 +144,16 @@ setup_dock() {
   log "Dock setup completed"
 }
 
+# Task: Start logrotate service
+setup_logrotate() {
+  log "Starting logrotate service for operator user..."
+  if brew services start logrotate; then
+    log "Logrotate service started successfully"
+  else
+    log "Warning: Failed to start logrotate service - logs will not be rotated"
+  fi
+}
+
 # Task: lock screen
 lock_screen_now() {
   log "Setting up dock for operator account..."
@@ -171,6 +181,7 @@ main() {
 
   # Run setup tasks
   setup_dock
+  setup_logrotate
   lock_screen_now
 
   log "=== Operator First-Login Setup Completed ==="

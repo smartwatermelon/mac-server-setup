@@ -1402,15 +1402,6 @@ else
   log "No operator-first-login.sh found in ${SETUP_DIR}/scripts/"
 fi
 
-# Setup operator logrotate service
-log "Starting logrotate service for operator user"
-if sudo -p "[Operator logrotate setup] Enter password to start logrotate for operator: " -iu "${OPERATOR_USERNAME}" brew services start logrotate; then
-  check_success "Operator logrotate service start"
-  log "✅ Operator logrotate service started - operator logs will be rotated automatically"
-else
-  log "⚠️  Failed to start operator logrotate service - operator logs will not be rotated"
-fi
-
 # Configure Time Machine backup
 section "Configuring Time Machine"
 
