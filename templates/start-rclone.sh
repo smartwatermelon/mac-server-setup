@@ -84,7 +84,7 @@ sync_dropbox() {
   fi
 
   # Perform sync with progress and error handling
-  if rclone sync "${remote_path}" "${DROPBOX_LOCAL_PATH}" \
+  if /opt/homebrew/bin/rclone sync "${remote_path}" "${DROPBOX_LOCAL_PATH}" \
     --progress \
     --transfers 4 \
     --checkers 8 \
@@ -136,7 +136,7 @@ main() {
 
   # Test with verbose output for debugging
   local test_output
-  test_output=$(rclone lsd "${RCLONE_REMOTE_NAME}:" --max-depth 1 2>&1)
+  test_output=$(/opt/homebrew/bin/rclone lsd "${RCLONE_REMOTE_NAME}:" --max-depth 1 2>&1)
   local test_result=$?
 
   if [[ ${test_result} -eq 0 ]]; then
