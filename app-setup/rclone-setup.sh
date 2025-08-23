@@ -128,14 +128,14 @@ confirm() {
 load_dropbox_config() {
   section "Loading Dropbox Configuration"
 
-  local dropbox_config="${SCRIPT_DIR}/config/dropbox_sync.conf"
+  local dropbox_config="${SCRIPT_DIR}/dropbox_sync.conf"
   if [[ -f "${dropbox_config}" ]]; then
     log "Loading Dropbox sync configuration from ${dropbox_config}"
     # shellcheck source=/dev/null
     source "${dropbox_config}"
   else
     log "❌ Dropbox configuration file not found: ${dropbox_config}"
-    log "This file should have been created by airdrop-prep.sh"
+    log "This file should have been created by airdrop-prep.sh and copied by first-boot.sh"
     exit 1
   fi
 
@@ -165,12 +165,12 @@ load_dropbox_config() {
 install_rclone_config() {
   section "Installing rclone Configuration"
 
-  local source_config="${SCRIPT_DIR}/config/rclone.conf"
+  local source_config="${SCRIPT_DIR}/rclone.conf"
   local target_config="${HOME}/.config/rclone/rclone.conf"
 
   if [[ ! -f "${source_config}" ]]; then
     log "❌ rclone configuration not found: ${source_config}"
-    log "This file should have been created by airdrop-prep.sh"
+    log "This file should have been created by airdrop-prep.sh and copied by first-boot.sh"
     exit 1
   fi
 
@@ -199,7 +199,7 @@ install_rclone_config() {
 deploy_rclone_script() {
   section "Deploying rclone Sync Script"
 
-  local template_script="${SCRIPT_DIR}/templates/start-rclone.sh"
+  local template_script="${SCRIPT_DIR}/start-rclone.sh"
   local operator_home="/Users/${OPERATOR_USERNAME}"
   local operator_script="${operator_home}/.local/bin/start-rclone.sh"
 
@@ -245,8 +245,9 @@ deploy_operator_rclone_config() {
   sudo -p "[rclone setup] Enter password to create operator rclone config directory: " -u "${OPERATOR_USERNAME}" mkdir -p "${operator_home}/.config/rclone"
 
   # Copy configuration with proper permissions
-  sudo -p "[rclone setup] Enter password to copy rclone config to operator: " -u "${OPERATOR_USERNAME}" cp "${admin_config}" "${operator_config}"
-  sudo -p "[rclone setup] Enter password to set operator rclone config permissions: " -u "${OPERATOR_USERNAME}" chmod 600 "${operator_config}"
+  sudo -p "[rclone setup] Enter password to copy rclone config to operator: " cp "${admin_config}" "${operator_config}"
+  sudo -p "[rclone setup] Enter password to set operator rclone config ownership: " chown "${OPERATOR_USERNAME}:staff" "${operator_config}"
+  sudo -p "[rclone setup] Enter password to set operator rclone config permissions: " chmod 600 "${operator_config}"
   check_success "operator rclone configuration deployment"
 
   log "✅ rclone configuration deployed to operator account"

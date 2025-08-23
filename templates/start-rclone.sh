@@ -26,6 +26,11 @@ DROPBOX_LOCAL_PATH="__DROPBOX_LOCAL_PATH__"
 RCLONE_REMOTE_NAME="__RCLONE_REMOTE_NAME__"
 DROPBOX_SYNC_INTERVAL="__DROPBOX_SYNC_INTERVAL__"
 
+# Ensure local path uses current user's HOME (not the admin's HOME from setup time)
+if [[ "${DROPBOX_LOCAL_PATH}" == "/Users/"*"/.local/sync/dropbox" ]]; then
+  DROPBOX_LOCAL_PATH="${HOME}/.local/sync/dropbox"
+fi
+
 # Derived configuration
 SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 LOG_DIR="${HOME}/.local/state"
@@ -84,7 +89,6 @@ sync_dropbox() {
     --transfers 4 \
     --checkers 8 \
     --retries 3 \
-    --retry-delay 30s \
     --timeout 10m \
     --log-level INFO \
     --stats 30s; then

@@ -1289,6 +1289,14 @@ else
   log "No Plex startup script template found in ${SETUP_DIR}/scripts/"
 fi
 
+if [[ -f "${SETUP_DIR}/scripts/start-rclone.sh" ]]; then
+  log "Copying rclone startup script template to app-setup directory"
+  cp "${SETUP_DIR}/scripts/start-rclone.sh" "${APP_SETUP_DIR}/"
+  check_success "rclone startup script template copy"
+else
+  log "No rclone startup script template found in ${SETUP_DIR}/scripts/"
+fi
+
 # Copy config.conf for application setup scripts
 if [[ -f "${CONFIG_FILE}" ]]; then
   log "Copying config.conf to app-setup directory"
@@ -1296,6 +1304,21 @@ if [[ -f "${CONFIG_FILE}" ]]; then
   check_success "Config file copy"
 else
   log "No config.conf found - application setup scripts will use defaults"
+fi
+
+# Copy Dropbox configuration files if available
+if [[ -f "${SETUP_DIR}/config/dropbox_sync.conf" ]]; then
+  log "Copying Dropbox sync configuration to app-setup directory"
+  cp "${SETUP_DIR}/config/dropbox_sync.conf" "${APP_SETUP_DIR}/"
+  chmod 600 "${APP_SETUP_DIR}/dropbox_sync.conf"
+  check_success "Dropbox sync config copy"
+fi
+
+if [[ -f "${SETUP_DIR}/config/rclone.conf" ]]; then
+  log "Copying rclone configuration to app-setup directory"
+  cp "${SETUP_DIR}/config/rclone.conf" "${APP_SETUP_DIR}/"
+  chmod 600 "${APP_SETUP_DIR}/rclone.conf"
+  check_success "rclone config copy"
 fi
 
 # Setup operator account files
