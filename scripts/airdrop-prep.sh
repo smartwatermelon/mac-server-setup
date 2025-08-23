@@ -40,6 +40,8 @@ else
   ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
   ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"
   ONEPASSWORD_APPLEID_ITEM="Apple"
+  DROPBOX_SYNC_FOLDER=""
+  DROPBOX_LOCAL_PATH=""
 fi
 
 # Set derived variables
@@ -285,6 +287,20 @@ EOF
   echo "✅ Plex NAS configuration saved for transfer"
 fi
 
+# Set up Dropbox synchronization if configured
+if [[ -n "${DROPBOX_SYNC_FOLDER:-}" ]]; then
+  if [[ -f "${SCRIPT_SOURCE_DIR}/scripts/airdrop-prep-rclone.sh" ]]; then
+    echo "Running Dropbox setup..."
+    # Export required variables for the rclone script
+    export OUTPUT_PATH SERVER_NAME_LOWER DROPBOX_SYNC_FOLDER DROPBOX_LOCAL_PATH
+    "${SCRIPT_SOURCE_DIR}/scripts/airdrop-prep-rclone.sh"
+  else
+    echo "Warning: airdrop-prep-rclone.sh not found - skipping Dropbox setup"
+  fi
+else
+  echo "No Dropbox sync folder configured - skipping Dropbox setup"
+fi
+
 # Create and save one-time link for Apple ID password
 APPLE_ID_ITEM="$(op item list --categories Login --vault "${ONEPASSWORD_VAULT}" --favorite --format=json 2>/dev/null | jq -r '.[] | select(.title == "'"${ONEPASSWORD_APPLEID_ITEM}"'") | .id' 2>/dev/null || echo "")"
 ONE_TIME_URL="$(op item share "${APPLE_ID_ITEM}" --view-once)"
@@ -318,6 +334,7 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   # Copy template scripts
   cp "${SCRIPT_SOURCE_DIR}/templates/mount-nas-media.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: mount-nas-media.sh not found in templates directory"
   cp "${SCRIPT_SOURCE_DIR}/templates/start-plex-with-mount.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: start-plex-with-mount.sh not found in templates directory"
+  cp "${SCRIPT_SOURCE_DIR}/templates/start-rclone.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: start-rclone.sh not found in templates directory"
   cp "${SCRIPT_SOURCE_DIR}/app-setup/"*.sh "${OUTPUT_PATH}/scripts/app-setup/" 2>/dev/null || echo "Warning: No app setup scripts found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/config/formulae.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: formulae.txt not found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/config/casks.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: casks.txt not found in source directory"
