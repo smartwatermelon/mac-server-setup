@@ -131,11 +131,31 @@ main() {
 
   # Test rclone configuration
   log "Testing rclone configuration..."
-  if rclone lsd "${RCLONE_REMOTE_NAME}:" --max-depth 1 >/dev/null 2>&1; then
+  log "Remote name: ${RCLONE_REMOTE_NAME}"
+  log "Config file: ~/.config/rclone/rclone.conf"
+
+  # Test with verbose output for debugging
+  local test_output
+  test_output=$(rclone lsd "${RCLONE_REMOTE_NAME}:" --max-depth 1 2>&1)
+  local test_result=$?
+
+  if [[ ${test_result} -eq 0 ]]; then
     log "✅ rclone configuration test successful"
   else
-    log "❌ rclone configuration test failed"
-    log "Check ~/.config/rclone/rclone.conf and network connectivity"
+    log "❌ rclone configuration test failed (exit code: ${test_result})"
+    log "rclone error output:"
+    echo "${test_output}" | while IFS= read -r line; do
+      log "  ${line}"
+    done
+    log "Config file status:"
+    if [[ -f "${HOME}/.config/rclone/rclone.conf" ]]; then
+      log "  Config file exists: ${HOME}/.config/rclone/rclone.conf"
+      local config_file_perms
+      config_file_perms="$(ls -l "${HOME}/.config/rclone/rclone.conf")"
+      log "  Config file permissions: ${config_file_perms}"
+    else
+      log "  ❌ Config file missing: ${HOME}/.config/rclone/rclone.conf"
+    fi
     exit 1
   fi
 
