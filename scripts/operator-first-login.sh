@@ -55,17 +55,12 @@ wait_for_network_mount() {
   log "Waiting for network mount at ${mount_path}..."
 
   while [[ ${elapsed} -lt ${timeout} ]]; do
-    if [[ -d "${mount_path}" ]]; then
-      local dir_count
-      dir_count=$(find "${mount_path}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
-      if [[ ${dir_count} -gt 0 ]]; then
-        log "Network mount ready (found ${dir_count} directories)"
-        return 0
-      else
-        log "Mount directory exists but no content found, waiting... (${elapsed}s/${timeout}s)"
-      fi
+    # Check if there's an active SMB mount owned by current user
+    if mount | grep "${CURRENT_USER}" | grep -q "${mount_path}"; then
+      log "Network mount ready (active mount found for ${CURRENT_USER})"
+      return 0
     else
-      log "Mount directory does not exist, waiting... (${elapsed}s/${timeout}s)"
+      log "No active mount found for ${CURRENT_USER}, waiting... (${elapsed}s/${timeout}s)"
     fi
 
     # Show progress dialog every 10 seconds

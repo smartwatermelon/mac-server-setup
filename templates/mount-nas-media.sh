@@ -108,25 +108,12 @@ main() {
   # Step 5: Test read/write access for all users
   log "Step 5: Testing read/write access..."
 
-  # Test basic mount verification
-  if ! mount | grep -q "${PLEX_MEDIA_MOUNT}"; then
-    log "❌ Mount not visible in system mount table"
+  # Test basic mount verification using user-based pattern
+  if ! mount | grep "${WHOAMI}" | grep -q "${PLEX_MEDIA_MOUNT}"; then
+    log "❌ Mount not visible in system mount table for user ${WHOAMI}"
     exit 1
   fi
-
-  # Open mount point in Finder to verify access and make it visible to user
-  log "Opening mount point in Finder for verification..."
-  #  open "${PLEX_MEDIA_MOUNT}" 2>/dev/null || log "Could not open mount point in Finder"
-
-  #   # Test write access with timestamped test file
-  #   local test_file
-  #   test_file="${PLEX_MEDIA_MOUNT}/mount-test-$(date +%Y%m%d-%H%M%S)"
-  #   if touch "${test_file}" 2>/dev/null; then
-  #     log "✅ Write access confirmed"
-  #     rm -f "${test_file}" 2>/dev/null || log "⚠️  Could not clean up test file ${test_file}"
-  #   else
-  #     log "⚠️  Write access failed - mount may be read-only"
-  #   fi
+  log "✅ Mount verification successful (active mount found for ${WHOAMI})"
 
   log "✅ NAS media mount process completed successfully"
 }

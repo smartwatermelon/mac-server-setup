@@ -788,7 +788,7 @@ main() {
     log ""
     log "SMB Mount troubleshooting:"
     log "  - Manual mount: mount_smbfs -o soft,nobrowse,noowners '//${PLEX_NAS_USERNAME}:<password>@${NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
-    log "  - Check mounts: mount | grep ${NAS_SHARE_NAME}"
+    log "  - Check mounts: mount | grep \$(whoami)"
     log "  - Unmount: umount '${PLEX_MEDIA_MOUNT}'"
     log "  - 'Too many users' error indicates SMB connection limit reached"
     log ""
