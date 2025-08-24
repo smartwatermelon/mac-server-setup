@@ -14,6 +14,12 @@
 # Exit on any error
 set -euo pipefail
 
+# Load Homebrew paths from system-wide configuration (LaunchAgent doesn't inherit PATH)
+if [[ -f "/etc/paths.d/homebrew" ]]; then
+  HOMEBREW_PATHS=$(cat /etc/paths.d/homebrew)
+  export PATH="${HOMEBREW_PATHS}:${PATH}"
+fi
+
 # Configuration - config.conf is copied here by first-boot.sh
 CONFIG_FILE="${HOME}/.config/operator/config.conf"
 
@@ -80,10 +86,9 @@ wait_for_network_mount() {
 setup_dock() {
   log "Setting up dock for operator account..."
 
-  local dockutil_path="/opt/homebrew/bin/dockutil"
-  if [[ ! -x "${dockutil_path}" ]]; then
-    log "ERROR: dockutil not found at ${dockutil_path}"
-    return 1
+  if ! command -v dockutil; then
+    log "Warning: dockutil not found. Install: brew install dockutil"
+    return 0
   fi
 
   # Restart Dock for clean state
@@ -97,8 +102,8 @@ setup_dock() {
 
   # Remove unwanted apps - repeat until Terminal is gone
   log "Removing unwanted applications from dock..."
-  while "${dockutil_path}" --find "/System/Applications/Utilities/Terminal.app" >/dev/null 2>&1; do
-    "${dockutil_path}" \
+  while dockutil --find "/System/Applications/Utilities/Terminal.app" >/dev/null 2>&1; do
+    dockutil \
       --remove "Messages" \
       --remove "Mail" \
       --remove "Maps" \
@@ -119,10 +124,10 @@ setup_dock() {
 
   # Add desired items - repeat until Passwords is present
   log "Adding desired applications to dock..."
-  while ! "${dockutil_path}" --find "/System/Applications/Passwords.app" >/dev/null 2>&1; do
+  while ! dockutil --find "/System/Applications/Passwords.app" >/dev/null 2>&1; do
     local media_path="${HOME}/.local/mnt/${NAS_SHARE_NAME}/Media"
 
-    local add_cmd=("${dockutil_path}")
+    local add_cmd=(dockutil)
     if [[ -d "${media_path}" ]]; then
       add_cmd+=(--add "${media_path}")
     fi
@@ -142,6 +147,7 @@ setup_dock() {
 # Task: Start logrotate service
 setup_logrotate() {
   log "Starting logrotate service for operator user..."
+  brew services stop logrotate &>/dev/null || true
   if brew services start logrotate; then
     log "Logrotate service started successfully"
   else

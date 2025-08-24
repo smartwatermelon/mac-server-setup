@@ -1248,6 +1248,7 @@ if [[ -f "${CONFIG_FILE%/*}/logrotate.conf" ]]; then
 
   # Start logrotate service as admin user
   log "Starting logrotate service for admin user"
+  brew services stop logrotate &>/dev/null || true
   if brew services start logrotate; then
     check_success "Admin logrotate service start"
     log "✅ Admin logrotate service started - admin logs will be rotated automatically"

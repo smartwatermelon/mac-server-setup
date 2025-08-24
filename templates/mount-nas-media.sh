@@ -6,6 +6,12 @@
 
 set -euo pipefail
 
+# Load Homebrew paths from system-wide configuration (LaunchAgent doesn't inherit PATH)
+if [[ -f "/etc/paths.d/homebrew" ]]; then
+  HOMEBREW_PATHS=$(cat /etc/paths.d/homebrew)
+  export PATH="${HOMEBREW_PATHS}:${PATH}"
+fi
+
 # Configuration - these will be set during installation
 NAS_HOSTNAME="__NAS_HOSTNAME__"
 NAS_SHARE_NAME="__NAS_SHARE_NAME__"
