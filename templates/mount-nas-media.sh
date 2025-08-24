@@ -13,6 +13,9 @@ PLEX_NAS_USERNAME="__PLEX_NAS_USERNAME__"
 PLEX_NAS_PASSWORD="__PLEX_NAS_PASSWORD__"
 PLEX_MEDIA_MOUNT="${HOME}/.local/mnt/__NAS_SHARE_NAME__"
 SERVER_NAME="__SERVER_NAME__"
+WHOAMI="$(whoami)"
+IDG="$(id -gn)"
+IDU="$(id -un)"
 
 # Logging configuration
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
@@ -61,6 +64,7 @@ main() {
   log "Starting idempotent NAS media mount process"
   log "Target: ${PLEX_MEDIA_MOUNT}"
   log "Source: //${PLEX_NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
+  log "Running as: ${WHOAMI} (${IDU}:${IDG})"
 
   # Wait for network connectivity first
   if ! wait_for_network; then
@@ -91,7 +95,7 @@ main() {
   encoded_password=$(printf '%s' "${PLEX_NAS_PASSWORD}" | sed 's/@/%40/g; s/:/%3A/g; s/ /%20/g; s/#/%23/g; s/?/%3F/g; s/&/%26/g')
   local mount_url="//${PLEX_NAS_USERNAME}:${encoded_password}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
 
-  if mount_smbfs -o soft,nobrowse,noowners -f 0664 -d 0775 "${mount_url}" "${PLEX_MEDIA_MOUNT}"; then
+  if mount_smbfs -o soft,noowners,filemode=0664,dirmode=0775 -f 0664 -d 0775 "${mount_url}" "${PLEX_MEDIA_MOUNT}"; then
     log "✅ SMB mount successful"
   else
     log "❌ SMB mount failed"
@@ -112,20 +116,21 @@ main() {
 
   # Open mount point in Finder to verify access and make it visible to user
   log "Opening mount point in Finder for verification..."
-  open "${PLEX_MEDIA_MOUNT}" 2>/dev/null || log "Could not open mount point in Finder"
+  #  open "${PLEX_MEDIA_MOUNT}" 2>/dev/null || log "Could not open mount point in Finder"
 
-  # Test write access with timestamped test file
-  local test_file
-  test_file="${PLEX_MEDIA_MOUNT}/mount-test-$(date +%Y%m%d-%H%M%S)"
-  if touch "${test_file}" 2>/dev/null; then
-    log "✅ Write access confirmed"
-    rm -f "${test_file}" 2>/dev/null || log "⚠️  Could not clean up test file ${test_file}"
-  else
-    log "⚠️  Write access failed - mount may be read-only"
-  fi
+  #   # Test write access with timestamped test file
+  #   local test_file
+  #   test_file="${PLEX_MEDIA_MOUNT}/mount-test-$(date +%Y%m%d-%H%M%S)"
+  #   if touch "${test_file}" 2>/dev/null; then
+  #     log "✅ Write access confirmed"
+  #     rm -f "${test_file}" 2>/dev/null || log "⚠️  Could not clean up test file ${test_file}"
+  #   else
+  #     log "⚠️  Write access failed - mount may be read-only"
+  #   fi
 
   log "✅ NAS media mount process completed successfully"
 }
 
 # Execute main function
 main "$@"
+exit 0
