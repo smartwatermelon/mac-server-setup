@@ -275,6 +275,8 @@ setup_persistent_smb_mount() {
     <true/>
     <key>KeepAlive</key>
     <true/>
+    <key>LimitLoadToSessionType</key>
+    <string>Aqua</string>
     <key>StandardOutPath</key>
     <string>${user_home}/.local/state/${plist_name}.log</string>
     <key>StandardErrorPath</key>

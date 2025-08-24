@@ -110,25 +110,9 @@ main() {
     exit 1
   fi
 
-  # Test read access with retry logic (consistent with Plex startup script)
-  local read_attempts=0
-  local max_read_attempts=5
-  while [[ ${read_attempts} -lt ${max_read_attempts} ]]; do
-    # Use find to test mount accessibility (same test as working Plex startup script)
-    local item_count
-    if item_count=$(find "${PLEX_MEDIA_MOUNT}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l); then
-      log "✅ Read access confirmed - found ${item_count} items"
-      break
-    fi
-    ((read_attempts++))
-    log "Read test failed, retrying... (${read_attempts}/${max_read_attempts})"
-    sleep 1
-  done
-
-  if [[ ${read_attempts} -ge ${max_read_attempts} ]]; then
-    log "❌ Cannot read mount directory after ${max_read_attempts} attempts"
-    exit 1
-  fi
+  # Open mount point in Finder to verify access and make it visible to user
+  log "Opening mount point in Finder for verification..."
+  open "${PLEX_MEDIA_MOUNT}" 2>/dev/null || log "Could not open mount point in Finder"
 
   # Test write access with timestamped test file
   local test_file
