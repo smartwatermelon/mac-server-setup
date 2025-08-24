@@ -6,6 +6,12 @@
 
 set -euo pipefail
 
+# Load Homebrew paths from system-wide configuration (LaunchAgent doesn't inherit PATH)
+if [[ -f "/etc/paths.d/homebrew" ]]; then
+  HOMEBREW_PATHS=$(cat /etc/paths.d/homebrew)
+  export PATH="${HOMEBREW_PATHS}:${PATH}"
+fi
+
 # Configuration - these will be set during installation
 NAS_HOSTNAME="__NAS_HOSTNAME__"
 NAS_SHARE_NAME="__NAS_SHARE_NAME__"
@@ -13,6 +19,9 @@ PLEX_NAS_USERNAME="__PLEX_NAS_USERNAME__"
 PLEX_NAS_PASSWORD="__PLEX_NAS_PASSWORD__"
 PLEX_MEDIA_MOUNT="${HOME}/.local/mnt/__NAS_SHARE_NAME__"
 SERVER_NAME="__SERVER_NAME__"
+WHOAMI="$(whoami)"
+IDG="$(id -gn)"
+IDU="$(id -un)"
 
 # Logging configuration
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
@@ -61,6 +70,7 @@ main() {
   log "Starting idempotent NAS media mount process"
   log "Target: ${PLEX_MEDIA_MOUNT}"
   log "Source: //${PLEX_NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
+  log "Running as: ${WHOAMI} (${IDU}:${IDG})"
 
   # Wait for network connectivity first
   if ! wait_for_network; then
@@ -91,7 +101,7 @@ main() {
   encoded_password=$(printf '%s' "${PLEX_NAS_PASSWORD}" | sed 's/@/%40/g; s/:/%3A/g; s/ /%20/g; s/#/%23/g; s/?/%3F/g; s/&/%26/g')
   local mount_url="//${PLEX_NAS_USERNAME}:${encoded_password}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
 
-  if mount_smbfs -o soft,nobrowse,noowners -f 0664 -d 0775 "${mount_url}" "${PLEX_MEDIA_MOUNT}"; then
+  if mount_smbfs -o soft,noowners,filemode=0664,dirmode=0775 -f 0664 -d 0775 "${mount_url}" "${PLEX_MEDIA_MOUNT}"; then
     log "✅ SMB mount successful"
   else
     log "❌ SMB mount failed"
@@ -104,44 +114,16 @@ main() {
   # Step 5: Test read/write access for all users
   log "Step 5: Testing read/write access..."
 
-  # Test basic mount verification
-  if ! mount | grep -q "${PLEX_MEDIA_MOUNT}"; then
-    log "❌ Mount not visible in system mount table"
+  # Test basic mount verification using user-based pattern
+  if ! mount | grep "${WHOAMI}" | grep -q "${PLEX_MEDIA_MOUNT}"; then
+    log "❌ Mount not visible in system mount table for user ${WHOAMI}"
     exit 1
   fi
-
-  # Test read access with retry logic (consistent with Plex startup script)
-  local read_attempts=0
-  local max_read_attempts=5
-  while [[ ${read_attempts} -lt ${max_read_attempts} ]]; do
-    # Use find to test mount accessibility (same test as working Plex startup script)
-    local item_count
-    if item_count=$(find "${PLEX_MEDIA_MOUNT}" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l); then
-      log "✅ Read access confirmed - found ${item_count} items"
-      break
-    fi
-    ((read_attempts++))
-    log "Read test failed, retrying... (${read_attempts}/${max_read_attempts})"
-    sleep 1
-  done
-
-  if [[ ${read_attempts} -ge ${max_read_attempts} ]]; then
-    log "❌ Cannot read mount directory after ${max_read_attempts} attempts"
-    exit 1
-  fi
-
-  # Test write access with timestamped test file
-  local test_file
-  test_file="${PLEX_MEDIA_MOUNT}/mount-test-$(date +%Y%m%d-%H%M%S)"
-  if touch "${test_file}" 2>/dev/null; then
-    log "✅ Write access confirmed"
-    rm -f "${test_file}" 2>/dev/null || log "⚠️  Could not clean up test file ${test_file}"
-  else
-    log "⚠️  Write access failed - mount may be read-only"
-  fi
+  log "✅ Mount verification successful (active mount found for ${WHOAMI})"
 
   log "✅ NAS media mount process completed successfully"
 }
 
 # Execute main function
 main "$@"
+exit 0

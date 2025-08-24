@@ -979,12 +979,7 @@ if [[ "${SKIP_HOMEBREW}" = false ]]; then
     log "Running Homebrew's suggested post-installation steps"
 
     # Add Homebrew to path for current session
-    MACHINE_ARCH=$(uname -m)
-    if [[ "${MACHINE_ARCH}" == "arm64" ]]; then
-      HOMEBREW_PREFIX="/opt/homebrew"
-    else
-      HOMEBREW_PREFIX="/usr/local"
-    fi
+    HOMEBREW_PREFIX="$(brew --prefix)"
 
     # Add to .zprofile (Homebrew's recommended approach)
     echo >>"/Users/${ADMIN_USERNAME}/.zprofile"
@@ -1204,6 +1199,21 @@ if [[ -f "${HOMEBREW_BASH}" ]]; then
     sudo -p "[Shell setup] Enter password to change operator shell: " chsh -s "${HOMEBREW_BASH}" "${OPERATOR_USERNAME}"
     check_success "Operator user shell change"
   fi
+
+  # Copy .zprofile to .profile for bash compatibility
+  log "Setting up bash profile compatibility"
+  if [[ -f "/Users/${ADMIN_USERNAME}/.zprofile" ]]; then
+    log "Copying admin .zprofile to .profile for bash compatibility"
+    cp "/Users/${ADMIN_USERNAME}/.zprofile" "/Users/${ADMIN_USERNAME}/.profile"
+  fi
+
+  if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
+    log "Copying operator .zprofile to .profile for bash compatibility"
+    sudo -p "[Shell setup] Enter password to copy operator profile: " cp "/Users/${OPERATOR_USERNAME}/.zprofile" "/Users/${OPERATOR_USERNAME}/.profile" 2>/dev/null || true
+    sudo chown "${OPERATOR_USERNAME}:staff" "/Users/${OPERATOR_USERNAME}/.profile" 2>/dev/null || true
+  fi
+
+  check_success "Bash profile compatibility setup"
 else
   log "Homebrew bash not found - skipping shell change"
 fi
@@ -1218,7 +1228,7 @@ if [[ -f "${CONFIG_FILE%/*}/logrotate.conf" ]]; then
   log "Installing logrotate configuration"
 
   # Ensure logrotate config directory exists
-  LOGROTATE_CONFIG_DIR="/opt/homebrew/etc"
+  LOGROTATE_CONFIG_DIR="${HOMEBREW_PREFIX}/etc"
   if [[ ! -d "${LOGROTATE_CONFIG_DIR}" ]]; then
     sudo -p "[Logrotate setup] Enter password to create logrotate config directory: " mkdir -p "${LOGROTATE_CONFIG_DIR}"
   fi
@@ -1231,17 +1241,19 @@ if [[ -f "${CONFIG_FILE%/*}/logrotate.conf" ]]; then
   # Copy our logrotate configuration
   sudo -p "[Logrotate setup] Enter password to install logrotate config: " cp "${CONFIG_FILE%/*}/logrotate.conf" "${LOGROTATE_CONFIG_DIR}/"
 
-  # Fix ownership to satisfy logrotate requirements
-  sudo -p "[Logrotate setup] Enter password to set config ownership: " chown root:admin "${LOGROTATE_CONFIG_DIR}/logrotate.conf"
+  # Make config user-writable so both admin and operator can modify it (664)
+  sudo -p "[Logrotate setup] Enter password to set config permissions: " chmod 664 "${LOGROTATE_CONFIG_DIR}/logrotate.conf"
+  sudo -p "[Logrotate setup] Enter password to set config ownership: " chown "${ADMIN_USERNAME}:admin" "${LOGROTATE_CONFIG_DIR}/logrotate.conf"
   check_success "Logrotate configuration install"
 
-  # Start logrotate service system-wide
-  log "Starting system-wide logrotate service"
-  if sudo brew services start logrotate; then
-    check_success "Logrotate service start"
-    log "✅ Logrotate service started - logs will be rotated automatically"
+  # Start logrotate service as admin user
+  log "Starting logrotate service for admin user"
+  brew services stop logrotate &>/dev/null || true
+  if brew services start logrotate; then
+    check_success "Admin logrotate service start"
+    log "✅ Admin logrotate service started - admin logs will be rotated automatically"
   else
-    log "⚠️  Failed to start logrotate service - logs will not be rotated"
+    log "⚠️  Failed to start admin logrotate service - admin logs will not be rotated"
   fi
 else
   log "No logrotate configuration found - skipping log rotation setup"

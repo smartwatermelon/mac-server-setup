@@ -14,6 +14,12 @@
 # Exit on any error
 set -euo pipefail
 
+# Load Homebrew paths from system-wide configuration (LaunchAgent doesn't inherit PATH)
+if [[ -f "/etc/paths.d/homebrew" ]]; then
+  HOMEBREW_PATHS=$(cat /etc/paths.d/homebrew)
+  export PATH="${HOMEBREW_PATHS}:${PATH}"
+fi
+
 # Configuration - config.conf is copied here by first-boot.sh
 CONFIG_FILE="${HOME}/.config/operator/config.conf"
 
@@ -55,17 +61,12 @@ wait_for_network_mount() {
   log "Waiting for network mount at ${mount_path}..."
 
   while [[ ${elapsed} -lt ${timeout} ]]; do
-    if [[ -d "${mount_path}" ]]; then
-      local dir_count
-      dir_count=$(find "${mount_path}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
-      if [[ ${dir_count} -gt 0 ]]; then
-        log "Network mount ready (found ${dir_count} directories)"
-        return 0
-      else
-        log "Mount directory exists but no content found, waiting... (${elapsed}s/${timeout}s)"
-      fi
+    # Check if there's an active SMB mount owned by current user
+    if mount | grep "${CURRENT_USER}" | grep -q "${mount_path}"; then
+      log "Network mount ready (active mount found for ${CURRENT_USER})"
+      return 0
     else
-      log "Mount directory does not exist, waiting... (${elapsed}s/${timeout}s)"
+      log "No active mount found for ${CURRENT_USER}, waiting... (${elapsed}s/${timeout}s)"
     fi
 
     # Show progress dialog every 10 seconds
@@ -85,10 +86,9 @@ wait_for_network_mount() {
 setup_dock() {
   log "Setting up dock for operator account..."
 
-  local dockutil_path="/opt/homebrew/bin/dockutil"
-  if [[ ! -x "${dockutil_path}" ]]; then
-    log "ERROR: dockutil not found at ${dockutil_path}"
-    return 1
+  if ! command -v dockutil; then
+    log "Warning: dockutil not found. Install: brew install dockutil"
+    return 0
   fi
 
   # Restart Dock for clean state
@@ -102,8 +102,8 @@ setup_dock() {
 
   # Remove unwanted apps - repeat until Terminal is gone
   log "Removing unwanted applications from dock..."
-  while "${dockutil_path}" --find "/System/Applications/Utilities/Terminal.app" >/dev/null 2>&1; do
-    "${dockutil_path}" \
+  while dockutil --find "/System/Applications/Utilities/Terminal.app" >/dev/null 2>&1; do
+    dockutil \
       --remove "Messages" \
       --remove "Mail" \
       --remove "Maps" \
@@ -124,10 +124,10 @@ setup_dock() {
 
   # Add desired items - repeat until Passwords is present
   log "Adding desired applications to dock..."
-  while ! "${dockutil_path}" --find "/System/Applications/Passwords.app" >/dev/null 2>&1; do
+  while ! dockutil --find "/System/Applications/Passwords.app" >/dev/null 2>&1; do
     local media_path="${HOME}/.local/mnt/${NAS_SHARE_NAME}/Media"
 
-    local add_cmd=("${dockutil_path}")
+    local add_cmd=(dockutil)
     if [[ -d "${media_path}" ]]; then
       add_cmd+=(--add "${media_path}")
     fi
@@ -142,6 +142,17 @@ setup_dock() {
   done
 
   log "Dock setup completed"
+}
+
+# Task: Start logrotate service
+setup_logrotate() {
+  log "Starting logrotate service for operator user..."
+  brew services stop logrotate &>/dev/null || true
+  if brew services start logrotate; then
+    log "Logrotate service started successfully"
+  else
+    log "Warning: Failed to start logrotate service - logs will not be rotated"
+  fi
 }
 
 # Task: lock screen
@@ -171,6 +182,7 @@ main() {
 
   # Run setup tasks
   setup_dock
+  setup_logrotate
   lock_screen_now
 
   log "=== Operator First-Login Setup Completed ==="
