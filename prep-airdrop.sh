@@ -92,7 +92,8 @@ date
 echo "Creating directory structure..."
 mkdir -p "${OUTPUT_PATH}/ssh_keys"
 mkdir -p "${OUTPUT_PATH}/scripts"
-mkdir -p "${OUTPUT_PATH}/scripts/app-setup"
+mkdir -p "${OUTPUT_PATH}/app-setup/config"
+mkdir -p "${OUTPUT_PATH}/app-setup/templates"
 mkdir -p "${OUTPUT_PATH}/pam.d"
 mkdir -p "${OUTPUT_PATH}/config"
 
@@ -291,13 +292,13 @@ else
     PLEX_NAS_HOSTNAME="${PLEX_NAS_URL}"
   fi
 
-  # Create Plex NAS configuration file in app-setup directory
-  cat >"${OUTPUT_PATH}/scripts/app-setup/plex_nas.conf" <<EOF
+  # Create Plex NAS configuration file in app-setup config directory
+  cat >"${OUTPUT_PATH}/app-setup/config/plex_nas.conf" <<EOF
 PLEX_NAS_USERNAME="${PLEX_NAS_USERNAME}"
 PLEX_NAS_PASSWORD="${PLEX_NAS_PASSWORD}"
 PLEX_NAS_HOSTNAME="${PLEX_NAS_HOSTNAME}"
 EOF
-  chmod 600 "${OUTPUT_PATH}/scripts/app-setup/plex_nas.conf"
+  chmod 600 "${OUTPUT_PATH}/app-setup/config/plex_nas.conf"
   echo "✅ Plex NAS configuration saved for transfer"
 fi
 
@@ -341,15 +342,21 @@ fi
 if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   echo "Copying scripts from local source directory..."
 
-  # Copy scripts
-  cp "${SCRIPT_SOURCE_DIR}/scripts/server/first-boot.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: first-boot.sh not found in server directory"
+  # Copy main entry point script to root
+  cp "${SCRIPT_SOURCE_DIR}/scripts/server/first-boot.sh" "${OUTPUT_PATH}/" 2>/dev/null || echo "Warning: first-boot.sh not found in server directory"
+  
+  # Copy system scripts to scripts directory
   cp "${SCRIPT_SOURCE_DIR}/scripts/server/setup-remote-desktop.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: setup-remote-desktop.sh not found in server directory"
 
-  # Copy template scripts
-  cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/mount-nas-media.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: mount-nas-media.sh not found in app-setup-templates directory"
-  cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-plex-with-mount.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: start-plex-with-mount.sh not found in app-setup-templates directory"
-  cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-rclone.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: start-rclone.sh not found in app-setup-templates directory"
-  cp "${SCRIPT_SOURCE_DIR}/app-setup/"*.sh "${OUTPUT_PATH}/scripts/app-setup/" 2>/dev/null || echo "Warning: No app setup scripts found in source directory"
+  # Copy template scripts to app-setup/templates
+  cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/mount-nas-media.sh" "${OUTPUT_PATH}/app-setup/templates/" 2>/dev/null || echo "Warning: mount-nas-media.sh not found in app-setup-templates directory"
+  cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-plex-with-mount.sh" "${OUTPUT_PATH}/app-setup/templates/" 2>/dev/null || echo "Warning: start-plex-with-mount.sh not found in app-setup-templates directory"
+  cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-rclone.sh" "${OUTPUT_PATH}/app-setup/templates/" 2>/dev/null || echo "Warning: start-rclone.sh not found in app-setup-templates directory"
+  
+  # Copy app setup scripts to app-setup directory
+  cp "${SCRIPT_SOURCE_DIR}/app-setup/"*.sh "${OUTPUT_PATH}/app-setup/" 2>/dev/null || echo "Warning: No app setup scripts found in source directory"
+  
+  # Copy system configuration files
   cp "${SCRIPT_SOURCE_DIR}/config/formulae.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: formulae.txt not found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/config/casks.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: casks.txt not found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/config/logrotate.conf" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: logrotate.conf not found in source directory"
@@ -377,13 +384,16 @@ else
 fi
 
 echo "Setting file permissions..."
+chmod 755 "${OUTPUT_PATH}/first-boot.sh" 2>/dev/null || true
 chmod -R 755 "${OUTPUT_PATH}/scripts"
+chmod -R 755 "${OUTPUT_PATH}/app-setup"
 chmod 600 "${OUTPUT_PATH}/config/"* 2>/dev/null || true
+chmod 600 "${OUTPUT_PATH}/app-setup/config/"* 2>/dev/null || true
 
 echo "====== Setup Files Preparation Complete ======"
 echo "The setup files at ${OUTPUT_PATH} are now ready for AirDrop."
 echo "AirDrop this entire folder to your Mac Mini after completing the macOS setup wizard"
-echo "and run the first-boot.sh script from the transferred directory."
+echo "and run ./first-boot.sh from the transferred directory root."
 
 open "${OUTPUT_PATH}"
 

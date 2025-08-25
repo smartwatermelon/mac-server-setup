@@ -27,7 +27,7 @@ set -euo pipefail
 
 # Configuration variables - adjust as needed
 ADMIN_USERNAME=$(whoami)                                     # Set this once and use throughout
-SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" # Directory where AirDropped files are located
+SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" # Directory where AirDropped files are located (script now at root)
 SSH_KEY_SOURCE="${SETUP_DIR}/ssh_keys"
 PAM_D_SOURCE="${SETUP_DIR}/pam.d"
 WIFI_CONFIG_FILE="${SETUP_DIR}/config/wifi_network.conf"
