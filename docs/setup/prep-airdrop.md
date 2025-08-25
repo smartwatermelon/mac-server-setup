@@ -79,7 +79,6 @@ If this item is not found, the Plex setup will fall back to an interactive passw
 >
 > **Password**: Your Apple ID password
 
-
 ## Running AirDrop Prep
 
 ### Basic Usage
