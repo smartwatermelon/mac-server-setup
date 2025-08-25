@@ -54,6 +54,7 @@ log() {
 
 # Wait for network mount
 wait_for_network_mount() {
+
   local mount_path="${HOME}/.local/mnt/${NAS_SHARE_NAME}"
   local timeout=120
   local elapsed=0
@@ -93,52 +94,76 @@ setup_dock() {
 
   # Restart Dock for clean state
   killall Dock 2>/dev/null || true
+  sleep 1
   until pgrep Dock >/dev/null 2>&1; do
     sleep 1
   done
 
-  # Wait for network mount
-  wait_for_network_mount
-
-  # Remove unwanted apps - repeat until Terminal is gone
+  # Remove unwanted apps
   log "Removing unwanted applications from dock..."
-  while dockutil --find "/System/Applications/Utilities/Terminal.app" >/dev/null 2>&1; do
-    dockutil \
-      --remove "Messages" \
-      --remove "Mail" \
-      --remove "Maps" \
-      --remove "Photos" \
-      --remove "FaceTime" \
-      --remove "Calendar" \
-      --remove "Contacts" \
-      --remove "Reminders" \
-      --remove "Freeform" \
-      --remove "TV" \
-      --remove "Music" \
-      --remove "News" \
-      --remove "iPhone Mirroring" \
-      --remove "/System/Applications/Utilities/Terminal.app" \
-      2>/dev/null || true
-    sleep 1
+  local apps_to_remove=(
+    "Messages"
+    "Mail"
+    "Maps"
+    "Photos"
+    "FaceTime"
+    "Calendar"
+    "Contacts"
+    "Reminders"
+    "Freeform"
+    "TV"
+    "Music"
+    "News"
+    "iPhone Mirroring"
+    "/System/Applications/Utilities/Terminal.app"
+  )
+
+  for app in "${apps_to_remove[@]}"; do
+    local timeout=30
+    local elapsed=0
+
+    while dockutil --find "${app}" >/dev/null 2>&1 && [[ ${elapsed} -lt ${timeout} ]]; do
+      log "Removing ${app} from dock..."
+      dockutil --remove "${app}" 2>/dev/null || true
+      sleep 1
+      ((elapsed++))
+    done
+
+    if [[ ${elapsed} -ge ${timeout} ]]; then
+      log "Warning: Timeout removing ${app} from dock"
+    fi
   done
 
-  # Add desired items - repeat until Passwords is present
+  # Add desired items
   log "Adding desired applications to dock..."
-  while ! dockutil --find "/System/Applications/Passwords.app" >/dev/null 2>&1; do
-    local media_path="${HOME}/.local/mnt/${NAS_SHARE_NAME}/Media"
+  local media_path="${HOME}/.local/mnt/${NAS_SHARE_NAME}/Media"
+  local apps_to_add=()
 
-    local add_cmd=(dockutil)
-    if [[ -d "${media_path}" ]]; then
-      add_cmd+=(--add "${media_path}")
+  # Add media path if it exists
+  if [[ -d "${media_path}" ]]; then
+    apps_to_add+=("${media_path}")
+  fi
+
+  apps_to_add+=(
+    "/Applications/iTerm.app"
+    "/Applications/Plex Media Server.app"
+    "/System/Applications/Passwords.app"
+  )
+
+  for app in "${apps_to_add[@]}"; do
+    local timeout=30
+    local elapsed=0
+
+    while ! dockutil --find "${app}" >/dev/null 2>&1 && [[ ${elapsed} -lt ${timeout} ]]; do
+      log "Adding ${app} to dock..."
+      dockutil --add "${app}" 2>/dev/null || true
+      sleep 1
+      ((elapsed++))
+    done
+
+    if [[ ${elapsed} -ge ${timeout} ]]; then
+      log "Warning: Timeout adding ${app} to dock"
     fi
-    add_cmd+=(
-      --add "/Applications/iTerm.app"
-      --add "/Applications/Plex Media Server.app"
-      --add "/System/Applications/Passwords.app"
-    )
-
-    "${add_cmd[@]}" 2>/dev/null || true
-    sleep 1
   done
 
   log "Dock setup completed"
@@ -183,7 +208,6 @@ main() {
   # Run setup tasks
   setup_dock
   setup_logrotate
-  lock_screen_now
 
   log "=== Operator First-Login Setup Completed ==="
 }

@@ -30,7 +30,7 @@ set -euo pipefail
 
 # Load server configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="${SCRIPT_DIR}/config.conf"
+CONFIG_FILE="${SCRIPT_DIR}/config/config.conf"
 
 if [[ -f "${CONFIG_FILE}" ]]; then
   # shellcheck source=/dev/null
@@ -195,7 +195,7 @@ setup_persistent_smb_mount() {
   log "   Operator mount: /Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
 
   # Load NAS credentials from plex_nas.conf
-  local nas_config="${SCRIPT_DIR}/plex_nas.conf"
+  local nas_config="${SCRIPT_DIR}/config/plex_nas.conf"
   if [[ -f "${nas_config}" ]]; then
     log "Loading NAS credentials from ${nas_config}"
     # shellcheck source=/dev/null
@@ -211,7 +211,7 @@ setup_persistent_smb_mount() {
   fi
 
   # Step 1: Configure the template once with actual values
-  local template_script="${SCRIPT_DIR}/mount-nas-media.sh"
+  local template_script="${SCRIPT_DIR}/templates/mount-nas-media.sh"
   local configured_script="${SCRIPT_DIR}/mount-nas-media-configured.sh"
 
   log "Configuring mount script template with credentials"
@@ -579,7 +579,7 @@ configure_plex_autostart() {
 
   # Deploy Plex startup wrapper script
   OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
-  WRAPPER_TEMPLATE="${SCRIPT_DIR}/start-plex-with-mount.sh"
+  WRAPPER_TEMPLATE="${SCRIPT_DIR}/templates/start-plex-with-mount.sh"
   WRAPPER_SCRIPT="${OPERATOR_HOME}/.local/bin/start-plex-with-mount.sh"
   LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
   PLIST_FILE="${LAUNCH_AGENTS_DIR}/com.plexapp.plexmediaserver.plist"

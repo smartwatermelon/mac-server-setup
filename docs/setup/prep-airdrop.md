@@ -79,12 +79,6 @@ If this item is not found, the Plex setup will fall back to an interactive passw
 >
 > **Password**: Your Apple ID password
 
-### TouchID Sudo Configuration
-
-During the airdrop preparation process, you'll be prompted whether to enable TouchID authentication for sudo commands on the Mac Mini. Choose "Yes" (the default) to enable convenient TouchID authentication for administrative tasks on the server.
-
-This creates the necessary `sudo_local` file for transfer without modifying your development Mac.
-
 ## Running AirDrop Prep
 
 ### Basic Usage
@@ -142,10 +136,10 @@ macmini-setup/
 │   ├── timemachine.conf         # Backup configuration
 │   ├── apple_id_password.url    # One-time Apple ID link
 │   └── wifi_network.conf        # WiFi credentials (only if script-based config)
-├── pam.d/
-│   └── sudo_local               # TouchID sudo config
-└── scripts/app-setup/
-    └── plex_nas.conf            # Plex NAS credentials
+└── app-setup/
+    ├── config/
+    │   └── plex_nas.conf        # Plex NAS credentials  
+    └── plex-setup.sh            # Plex setup script
 └── README.md                    # Setup instructions
 ```
 
@@ -215,8 +209,6 @@ op item list --vault "personal"
 op item get "operator" --vault "personal"
 ```
 
-### TouchID Sudo Troubleshooting
+### TouchID Sudo Configuration
 
-The TouchID sudo configuration is now handled automatically during the airdrop preparation process. You'll be prompted whether to enable it, and the script will create the necessary file for transfer to the server.
-
-No manual setup is required on your development machine.
+TouchID sudo setup has been moved to the first-boot setup process on the Mac Mini. You'll be prompted during first-boot.sh execution whether to enable TouchID authentication for sudo commands. No TouchID configuration is needed during the airdrop preparation phase.

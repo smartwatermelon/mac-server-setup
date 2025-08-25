@@ -13,8 +13,8 @@
 #   --sync-interval: Override sync interval (default from config)
 #
 # Expected configuration files from airdrop-prep.sh:
-#   config/rclone.conf          # rclone configuration with OAuth tokens
-#   config/dropbox_sync.conf    # Dropbox sync configuration
+#   rclone.conf          # rclone configuration with OAuth tokens (copied to app-setup dir by first-boot.sh)
+#   dropbox_sync.conf    # Dropbox sync configuration (copied to app-setup dir by first-boot.sh)
 #
 # Author: Claude
 # Version: 1.0
@@ -25,7 +25,7 @@ set -euo pipefail
 
 # Load server configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="${SCRIPT_DIR}/config.conf"
+CONFIG_FILE="${SCRIPT_DIR}/config/config.conf"
 
 if [[ -f "${CONFIG_FILE}" ]]; then
   # shellcheck source=/dev/null
@@ -128,7 +128,7 @@ confirm() {
 load_dropbox_config() {
   section "Loading Dropbox Configuration"
 
-  local dropbox_config="${SCRIPT_DIR}/dropbox_sync.conf"
+  local dropbox_config="${SCRIPT_DIR}/config/dropbox_sync.conf"
   if [[ -f "${dropbox_config}" ]]; then
     log "Loading Dropbox sync configuration from ${dropbox_config}"
     # shellcheck source=/dev/null
@@ -165,7 +165,7 @@ load_dropbox_config() {
 install_rclone_config() {
   section "Installing rclone Configuration"
 
-  local source_config="${SCRIPT_DIR}/rclone.conf"
+  local source_config="${SCRIPT_DIR}/config/rclone.conf"
   local target_config="${HOME}/.config/rclone/rclone.conf"
 
   if [[ ! -f "${source_config}" ]]; then
@@ -199,7 +199,7 @@ install_rclone_config() {
 deploy_rclone_script() {
   section "Deploying rclone Sync Script"
 
-  local template_script="${SCRIPT_DIR}/start-rclone.sh"
+  local template_script="${SCRIPT_DIR}/templates/start-rclone.sh"
   local operator_home="/Users/${OPERATOR_USERNAME}"
   local operator_script="${operator_home}/.local/bin/start-rclone.sh"
 

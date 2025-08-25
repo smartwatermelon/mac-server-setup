@@ -70,8 +70,8 @@ if [[ -n "${DROPBOX_SYNC_FOLDER:-}" ]]; then
     sleep 1
 
     if [[ -f "${RCLONE_CONFIG_PATH}" ]]; then
-      if cp "${RCLONE_CONFIG_PATH}" "${OUTPUT_PATH}/config/rclone.conf"; then
-        chmod 600 "${OUTPUT_PATH}/config/rclone.conf"
+      if cp "${RCLONE_CONFIG_PATH}" "${OUTPUT_PATH}/app-setup/config/rclone.conf"; then
+        chmod 600 "${OUTPUT_PATH}/app-setup/config/rclone.conf"
         echo "✅ rclone configuration saved for transfer"
       else
         echo "❌ Failed to copy rclone configuration file"
@@ -83,12 +83,12 @@ if [[ -n "${DROPBOX_SYNC_FOLDER:-}" ]]; then
     fi
 
     # Create Dropbox sync configuration file
-    cat >"${OUTPUT_PATH}/config/dropbox_sync.conf" <<EOF
+    cat >"${OUTPUT_PATH}/app-setup/config/dropbox_sync.conf" <<EOF
 DROPBOX_SYNC_FOLDER="${DROPBOX_SYNC_FOLDER}"
 DROPBOX_LOCAL_PATH="${DROPBOX_LOCAL_PATH:-\$HOME/.local/sync/dropbox}"
 RCLONE_REMOTE_NAME="${RCLONE_REMOTE_NAME}"
 EOF
-    chmod 600 "${OUTPUT_PATH}/config/dropbox_sync.conf"
+    chmod 600 "${OUTPUT_PATH}/app-setup/config/dropbox_sync.conf"
     echo "✅ Dropbox sync configuration saved for transfer"
 
     # Test the configuration (list only, no sync)
