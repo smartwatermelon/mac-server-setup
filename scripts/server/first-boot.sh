@@ -347,7 +347,6 @@ EOF
 
     # Test TouchID configuration
     log "Testing TouchID sudo configuration..."
-    sudo -k
     sudo -p "[TouchID test] Enter password to test TouchID sudo configuration: " -v
     check_success "TouchID sudo test"
   fi
