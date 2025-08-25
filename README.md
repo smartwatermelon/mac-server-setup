@@ -88,7 +88,7 @@ The setup process consists of two main phases:
 
    ```bash
    cd ~/Downloads/MACMINI-setup # default name
-   ./scripts/first-boot.sh
+   ./first-boot.sh
    ```
 
    > **Important**: Must be run from the Mac Mini's local desktop session (not via SSH). The script requires GUI access for System Settings automation, AppleScript dialogs, and user account configuration.
@@ -97,7 +97,7 @@ The setup process consists of two main phases:
 
 ## Documentation
 
-- [AirDrop Prep Instructions](docs/setup/airdrop-prep.md) - Preparing the setup package
+- [AirDrop Prep Instructions](docs/setup/prep-airdrop.md) - Preparing the setup package
 - [First Boot Instructions](docs/setup/first-boot.md) - Running the initial setup
 - [Operator Setup](docs/operator.md) - Post-reboot configuration
 - [Configuration Reference](docs/configuration.md) - Customizing setup parameters
@@ -109,11 +109,16 @@ The setup process consists of two main phases:
 ├── README.md                   # This file
 ├── prep-airdrop.sh             # Setup package preparation (primary entry point)
 ├── app-setup/                  # Application setup scripts
+│   ├── config/                # Application-specific configuration
+│   │   ├── plex_nas.conf      # Plex NAS credentials
+│   │   ├── rclone.conf        # rclone OAuth configuration
+│   │   └── dropbox_sync.conf  # Dropbox sync settings
+│   ├── templates/             # Runtime script templates
+│   │   ├── mount-nas-media.sh # SMB mount script template
+│   │   ├── start-plex-with-mount.sh # Plex startup wrapper template
+│   │   └── start-rclone.sh    # rclone sync script template
 │   ├── plex-setup.sh          # Plex Media Server setup
-│   ├── rclone-setup.sh        # Dropbox sync setup  
-│   └── app-setup-templates/   # Runtime script templates
-│       ├── mount-nas-media.sh # SMB mount script template
-│       └── start-plex-with-mount.sh # Plex startup wrapper template
+│   └── rclone-setup.sh        # Dropbox sync setup
 ├── scripts/                    # Setup and deployment scripts
 │   ├── airdrop/               # AirDrop preparation scripts
 │   │   └── rclone-airdrop-prep.sh # Dropbox setup for AirDrop
@@ -125,11 +130,9 @@ The setup process consists of two main phases:
 │   ├── config.conf.template   # Configuration template
 │   ├── formulae.txt           # Homebrew formulae list
 │   └── casks.txt              # Homebrew casks list
-├── app-setup/                  # Application setup scripts
-│   └── *.sh                   # Individual app installers
 └── docs/                       # Documentation
     ├── setup/                 # Setup documentation
-    │   ├── airdrop-prep.md
+    │   ├── prep-airdrop.md
     │   └── first-boot.md
     ├── apps/                  # App-specific docs
     ├── operator.md
@@ -165,7 +168,7 @@ Key improvements eliminate previous autofs reliability issues and provide robust
 ## Security Features
 
 - **SSH key-based authentication** with password fallback disabled
-- **TouchID sudo access** for local administration
+- **TouchID sudo access** configured during setup for local administration
 - **Separate operator account** for day-to-day use
 - **Automatic login** configured for operator account
 - **Firewall configuration** with SSH allowlist
@@ -183,7 +186,7 @@ Key improvements eliminate previous autofs reliability issues and provide robust
 
 **SSH access denied**: Verify SSH keys were copied correctly and SSH service is enabled.
 
-**TouchID not working**: Ensure `/etc/pam.d/sudo_local` exists and contains proper configuration. **Note:** TouchID cannot coexist with automatic login, so the operator account cannot use TouchID.
+**TouchID not working**: TouchID sudo is configured during first-boot setup. **Note:** TouchID cannot coexist with automatic login, so the operator account cannot use TouchID.
 
 **Homebrew not found**: Source shell environment or restart Terminal session.
 
