@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 #
-# airdrop-prep.sh - Script to prepare a directory with necessary files for Mac Mini M2 server setup
+# airdrop-prep.sh - Script to prepare a directory with necessary files for Mac Mini server setup
 #
 # This script prepares a directory with all the necessary scripts and files
-# for setting up the Mac Mini M2 server. After running, AirDrop the entire directory
+# for setting up the Mac Mini server. After running, AirDrop the entire directory
 # to your new Mac Mini.
 #
 # Usage: ./airdrop-prep.sh [output_path] [script_path]
@@ -48,7 +48,7 @@ fi
 if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
   echo "Usage: $(basename "$0") [output_path] [script_path]"
   echo ""
-  echo "Prepares setup files for Mac Mini M2 server deployment."
+  echo "Prepares setup files for Mac Mini server deployment."
   echo ""
   echo "Arguments:"
   echo "  output_path    Directory where setup files will be created (default: ~/${SERVER_NAME_LOWER:-server}-setup)"

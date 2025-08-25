@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# plex-setup.sh - Native Plex Media Server setup script for Mac Mini M2 server
+# plex-setup.sh - Native Plex Media Server setup script for Mac Mini server
 #
 # This script sets up Plex Media Server natively on macOS with:
 # - SMB mount to NAS for media storage (retrieved from config.conf)

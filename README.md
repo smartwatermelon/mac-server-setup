@@ -1,4 +1,4 @@
-# Mac Mini M2 Server Setup
+# Mac Mini Server Setup
 
 Automated setup scripts for configuring an Apple Silicon Mac Mini as a home server with native macOS applications.
 
@@ -69,7 +69,9 @@ The setup process consists of two main phases:
 - Development Mac with:
   - 1Password CLI installed and authenticated
   - SSH keys generated (`~/.ssh/id_ed25519.pub`)
-  - Required 1Password vault items (see [AirDrop Prep Instructions](docs/airdrop-prep.md))
+  - Required 1Password vault items (see [AirDrop Prep Instructions](docs/setup/prep-airdrop.md))
+
+> **Compatibility Note**: This automation is designed and tested for **macOS 15.x on Apple Silicon**. It may work on earlier macOS versions or Intel-based Macs, but compatibility is not guaranteed and has not been tested.
 
 ### Setup Process
 

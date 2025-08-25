@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# first-boot.sh - Complete setup script for Mac Mini M2 server
+# first-boot.sh - Complete setup script for Mac Mini server
 #
 # This script performs the complete setup for the Mac Mini server after
 # the macOS setup wizard has been completed. It configures:
@@ -198,7 +198,7 @@ if [[ "${CURRENT_FINGERPRINT}" == "${DEV_MACHINE_FINGERPRINT}" ]]; then
   echo "Development fingerprint: ${DEV_MACHINE_FINGERPRINT}"
   echo "Current fingerprint: ${CURRENT_FINGERPRINT}"
   echo ""
-  echo "This script is only for target Mac Mini M2 server setup"
+  echo "This script is only for target Mac Mini server setup"
   exit 1
 fi
 
@@ -246,7 +246,7 @@ else
 fi
 
 # Print header
-section "Starting Mac Mini M2 '${SERVER_NAME}' Server Setup"
+section "Starting Mac Mini '${SERVER_NAME}' Server Setup"
 log "Running as user: ${ADMIN_USERNAME}"
 log -n "Date: "
 date
