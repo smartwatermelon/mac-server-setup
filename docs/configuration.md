@@ -321,7 +321,7 @@ Use with airdrop-prep.sh by copying the appropriate config:
 
 ```bash
 cp config-production.conf config/config.conf
-./scripts/airdrop-prep.sh
+./prep-airdrop.sh
 ```
 
 ### Integration Hooks

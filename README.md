@@ -76,7 +76,7 @@ The setup process consists of two main phases:
 1. **Prepare setup package** on your development Mac:
 
    ```bash
-   ./scripts/airdrop-prep.sh
+   ./prep-airdrop.sh
    ```
 
 2. **Transfer to Mac Mini** via AirDrop (entire setup folder)
@@ -107,14 +107,20 @@ The setup process consists of two main phases:
 ```plaintext
 .
 ├── README.md                   # This file
+├── prep-airdrop.sh             # Setup package preparation (primary entry point)
+├── app-setup/                  # Application setup scripts
+│   ├── plex-setup.sh          # Plex Media Server setup
+│   ├── rclone-setup.sh        # Dropbox sync setup  
+│   └── app-setup-templates/   # Runtime script templates
+│       ├── mount-nas-media.sh # SMB mount script template
+│       └── start-plex-with-mount.sh # Plex startup wrapper template
 ├── scripts/                    # Setup and deployment scripts
-│   ├── airdrop-prep.sh        # Setup package preparation
-│   ├── first-boot.sh          # Main setup script (requires GUI session)
-│   ├── setup-remote-desktop.sh # Remote Desktop configuration (requires GUI session)
-│   └── operator-first-login.sh # Operator account customization (automatic via LaunchAgent)
-├── templates/                  # Runtime script templates
-│   ├── mount-nas-media.sh     # SMB mount script template
-│   └── start-plex-with-mount.sh # Plex startup wrapper template
+│   ├── airdrop/               # AirDrop preparation scripts
+│   │   └── rclone-airdrop-prep.sh # Dropbox setup for AirDrop
+│   └── server/                # Server setup scripts
+│       ├── first-boot.sh      # Main setup script (requires GUI session)
+│       ├── setup-remote-desktop.sh # Remote Desktop configuration (requires GUI session)
+│       └── operator-first-login.sh # Operator account customization (automatic via LaunchAgent)
 ├── config/                     # Configuration files
 │   ├── config.conf.template   # Configuration template
 │   ├── formulae.txt           # Homebrew formulae list
