@@ -1,13 +1,14 @@
 #!/bin/bash
 
-# Simple Remote Desktop setup for macOS with user-guided configuration
-# This script handles the service setup and guides users through System Settings
+# Simple Remote Desktop setup for macOS with direct launchd configuration
+# This script enables Screen Sharing and Remote Management using system commands
 
 set -euo pipefail
 
 # Configuration
 readonly SCRIPT_NAME="${0##*/}"
 readonly LOG_PREFIX="[Remote Desktop Setup]"
+readonly DEFAULT_OVERRIDES_PERMS="0644"
 
 # Logging function
 log() {
@@ -19,23 +20,22 @@ show_usage() {
   cat <<EOF
 Usage: ${SCRIPT_NAME} [OPTIONS]
 
-Simple Remote Desktop setup for macOS with guided System Settings configuration.
+Simple Remote Desktop setup for macOS with direct system configuration.
 
 OPTIONS:
     --force             Skip confirmation prompts
     --help              Show this help message
 
 DESCRIPTION:
-    This script provides a clean, user-friendly approach to Remote Desktop setup:
+    This script provides a clean approach to Remote Desktop setup:
     1. Disables existing remote desktop services for a clean state
-    2. Enables basic services via command line where possible
-    3. Opens System Settings and guides user through manual configuration
+    2. Enables Screen Sharing using direct launchd commands
+    3. Configures Remote Management service
     4. Verifies final configuration and provides connection information
 
 NOTES:
     - Requires administrator privileges
-    - Works with Apple's security model instead of against it
-    - User interaction required for security-sensitive settings
+    - Uses direct system commands for reliable configuration
     - Compatible with all macOS versions including 15.6+
 
 EOF
@@ -49,27 +49,6 @@ check_privileges() {
   fi
 }
 
-# Check if running in a GUI session (required for AppleScript dialogs)
-check_gui_session() {
-  local session_type
-  session_type=$(launchctl managername 2>/dev/null || echo "Unknown")
-
-  if [[ "${session_type}" != "Aqua" ]]; then
-    log "ERROR: This script requires a GUI session to display AppleScript dialogs and open System Settings."
-    log "Current session type: ${session_type}"
-    log ""
-    log "Remote Desktop setup requires direct access to the Mac's desktop to:"
-    log "- Display AppleScript configuration dialogs"
-    log "- Open and interact with System Settings"
-    log "- Enable Screen Sharing and Remote Management services"
-    log ""
-    log "Please run this script from the Mac's local desktop session."
-    exit 1
-  fi
-
-  log "✓ GUI session detected (${session_type}) - AppleScript dialogs available"
-}
-
 # Disable all remote desktop services (for clean slate)
 disable_all_services() {
   log "Disabling existing remote desktop services for clean setup..."
@@ -80,10 +59,28 @@ disable_all_services() {
     -deactivate -stop 2>/dev/null || true
 
   # Disable Screen Sharing
-  sudo launchctl unload -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || true
+  sudo launchctl unload -w /System/Library/LaunchDaemons/com.apple.screensharing.plist &>/dev/null || true
 
   # Clear any conflicting settings
-  sudo defaults delete /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing 2>/dev/null || true
+  local overrides_plist="/var/db/launchd.db/com.apple.launchd/overrides.plist"
+  local original_perms
+
+  if [[ -f "${overrides_plist}" ]]; then
+    # Capture current permissions before modifying
+    original_perms=$(stat -f "%Mp%Lp" "${overrides_plist}" 2>/dev/null || echo "${DEFAULT_OVERRIDES_PERMS}")
+
+    # Delete the conflicting setting
+    sudo defaults delete "${overrides_plist}" com.apple.screensharing &>/dev/null || true
+
+    # Restore permissions if file still exists after deletion
+    if [[ -f "${overrides_plist}" ]]; then
+      if [[ "${original_perms}" =~ ^[0-7]*4[4-7]$ ]] || [[ "${original_perms}" =~ ^[0-7]*6[4-7]$ ]]; then
+        sudo chmod "${original_perms}" "${overrides_plist}"
+      else
+        sudo chmod a+r "${overrides_plist}"
+      fi
+    fi
+  fi
 
   # Wait for services to fully stop
   sleep 2
@@ -118,55 +115,45 @@ enable_remote_management_service() {
   fi
 }
 
-# Guide user through Screen Sharing setup
+# Enable Screen Sharing using direct launchd commands
 setup_screen_sharing() {
-  log "Opening Screen Sharing settings for manual configuration..."
+  log "Enabling Screen Sharing service..."
 
-  # Open directly to Screen Sharing settings
-  if open "x-apple.systempreferences:com.apple.Sharing-Settings.extension?Services_ScreenSharing"; then
-    log "System Settings opened to Screen Sharing"
+  local overrides_plist="/var/db/launchd.db/com.apple.launchd/overrides.plist"
+  local original_perms
+
+  # Capture current permissions to restore them later
+  if [[ -f "${overrides_plist}" ]]; then
+    original_perms=$(stat -f "%Mp%Lp" "${overrides_plist}" 2>/dev/null || echo "${DEFAULT_OVERRIDES_PERMS}")
+    log "Current overrides.plist permissions: ${original_perms}"
   else
-    log "Opening general Sharing settings..."
-    open "x-apple.systempreferences:com.apple.preferences.sharing" || {
-      log "WARNING: Could not open System Settings automatically"
-      log "Please manually open: System Settings > General > Sharing"
-    }
+    # Default permissions for new file
+    original_perms="${DEFAULT_OVERRIDES_PERMS}"
+    log "overrides.plist does not exist - will use default permissions: ${original_perms}"
   fi
 
-  # Give System Settings time to load
-  sleep 2
+  # Enable Screen Sharing in launchd overrides
+  sudo -p "${LOG_PREFIX} Enter password to enable Screen Sharing: " \
+    defaults write "${overrides_plist}" com.apple.screensharing -dict Disabled -bool false
 
-  log "System Settings opened - showing Screen Sharing configuration dialog..."
-
-  # Show AppleScript dialog for user confirmation
-  if osascript <<'EOF'; then
-display dialog "Screen Sharing Configuration - STEP 1
-
-System Settings should now be open to the Sharing page.
-
-IMPORTANT: Screen Sharing must be enabled FIRST, before Remote Management.
-Otherwise Remote Management will prevent you from enabling Screen Sharing.
-
-Please complete these steps:
-1. Find 'Screen Sharing' in the list
-2. Click the toggle switch to turn Screen Sharing ON
-3. Configure access settings as needed:
-   • 'VNC viewers may control screen with password'
-   • Set a password if desired
-   • Configure 'Allow access for' (Administrators recommended)
-4. Click 'Done' when finished
-
-Click OK when you have completed the Screen Sharing setup." buttons {"Cancel", "OK"} default button "OK" with title "Remote Desktop Setup"
-EOF
-    log "Screen Sharing configuration completed by user"
-
-    # Close System Settings now that user is done with configuration
-    log "Closing System Settings..."
-    osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
+  # Restore original permissions (ensuring at least a+r access)
+  if [[ "${original_perms}" =~ ^[0-7]*4[4-7]$ ]] || [[ "${original_perms}" =~ ^[0-7]*6[4-7]$ ]]; then
+    # Original permissions already have a+r, restore them
+    sudo chmod "${original_perms}" "${overrides_plist}"
+    log "Restored original permissions: ${original_perms}"
   else
-    log "User cancelled Screen Sharing setup"
-    return 1
+    # Original permissions didn't have a+r, ensure a+r access
+    sudo chmod a+r "${overrides_plist}"
+    log "Applied a+r permissions for launchd access"
   fi
+
+  # Unload Screen Sharing service (if running) to ensure clean state
+  sudo launchctl unload -w /System/Library/LaunchDaemons/com.apple.screensharing.plist &>/dev/null || true
+
+  # Load Screen Sharing service
+  sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
+
+  log "✓ Screen Sharing service enabled"
 }
 
 # Guide user through Remote Management setup
@@ -293,18 +280,17 @@ main() {
 
   # Check prerequisites
   check_privileges
-  check_gui_session
 
   # Confirmation prompt
   if [[ "${force}" != "true" ]]; then
     echo "${LOG_PREFIX} This script will:"
     echo "${LOG_PREFIX} 1. Disable existing remote desktop services"
-    echo "${LOG_PREFIX} 2. Guide you through enabling Screen Sharing first"
+    echo "${LOG_PREFIX} 2. Enable Screen Sharing using direct system commands"
     echo "${LOG_PREFIX} 3. Enable Remote Management service"
-    echo "${LOG_PREFIX} 4. Guide you through Remote Management configuration"
+    echo "${LOG_PREFIX} 4. Configure Remote Management if needed"
     echo "${LOG_PREFIX} 5. Verify the final setup"
     echo ""
-    echo "${LOG_PREFIX} This requires administrator privileges and user interaction."
+    echo "${LOG_PREFIX} This requires administrator privileges."
     read -p "${LOG_PREFIX} Continue? (Y/n): " -n 1 -r response
     echo
     case ${response} in
