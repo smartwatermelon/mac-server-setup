@@ -1,6 +1,6 @@
 # Plex Setup Script Documentation
 
-This document describes the `plex-setup.sh` script for Mac Mini M2 server Plex Media Server setup.
+This document describes the `plex-setup.sh` script for Mac Mini server Plex Media Server setup.
 
 ## Overview
 

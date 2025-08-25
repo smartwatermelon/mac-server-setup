@@ -1,6 +1,6 @@
 # Server Setup Files
 
-This directory contains all the necessary files for setting up the Mac Mini M2 server.
+This directory contains all the necessary files for setting up the Mac Mini server.
 
 ## Contents
 

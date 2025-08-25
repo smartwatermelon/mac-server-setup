@@ -1,6 +1,6 @@
 # rclone Setup Script Documentation
 
-This document describes the `rclone-setup.sh` script for Mac Mini M2 server Dropbox synchronization.
+This document describes the `rclone-setup.sh` script for Mac Mini server Dropbox synchronization.
 
 ## Overview
 

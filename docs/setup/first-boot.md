@@ -119,7 +119,7 @@ The script waits for you to complete Apple ID setup before continuing.
 The script automatically opens a second Terminal window showing live setup logs:
 
 ```plaintext
-[2025-08-04 10:30:15] ====== Starting Mac Mini M2 Server Setup ======
+[2025-08-04 10:30:15] ====== Starting Mac Mini Server Setup ======
 [2025-08-04 10:30:16] Running as user: admin
 [2025-08-04 10:30:16] ✅ TouchID sudo configuration
 [2025-08-04 10:30:18] ✅ SSH has been enabled successfully

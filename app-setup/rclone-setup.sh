@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# rclone-setup.sh - Dropbox synchronization setup script for Mac Mini M2 server
+# rclone-setup.sh - Dropbox synchronization setup script for Mac Mini server
 #
 # This script sets up rclone-based Dropbox synchronization natively on macOS with:
 # - rclone configuration transfer from airdrop-prep.sh setup
