@@ -6,7 +6,6 @@ This directory contains all the necessary files for setting up the Mac Mini M2 s
 
 - `ssh_keys/`: SSH public keys for secure remote access
 - `scripts/`: Setup scripts for the server
-- `pam.d/`: TouchID sudo configuration
 - `URLs/`: Internet shortcuts used by Setup
 - `wifi/`: WiFi network configuration
 - `operator_password`: Operator account password
@@ -35,5 +34,5 @@ For detailed instructions, refer to the complete runbook.
 
 - The operator account password is retrieved from 1Password using configured credentials
 - After setup, you can access the server via SSH using the admin or operator account
-- TouchID sudo will be enabled if the configuration file was available during preparation
+- TouchID sudo will be configured during first-boot setup (you'll be prompted to enable it)
 - WiFi will be configured automatically using the saved network information

@@ -94,7 +94,6 @@ mkdir -p "${OUTPUT_PATH}/ssh_keys"
 mkdir -p "${OUTPUT_PATH}/scripts"
 mkdir -p "${OUTPUT_PATH}/app-setup/config"
 mkdir -p "${OUTPUT_PATH}/app-setup/templates"
-mkdir -p "${OUTPUT_PATH}/pam.d"
 mkdir -p "${OUTPUT_PATH}/config"
 
 # Generate development machine fingerprint to prevent accidental execution
@@ -135,31 +134,6 @@ if [[ -f "${SSH_PRIVATE_KEY_PATH}" ]]; then
 else
   echo "Warning: SSH private key not found at ${SSH_PRIVATE_KEY_PATH}"
   echo "Private key will not be available on the server"
-fi
-
-# TouchID sudo configuration setup
-echo ""
-echo "====== TouchID Sudo Configuration ======"
-read -p "Enable TouchID for sudo authentication on the server? (Y/n) " -n 1 -r TOUCHID_CHOICE
-echo ""
-
-if [[ -z "${TOUCHID_CHOICE}" ]] || [[ ${TOUCHID_CHOICE} =~ ^[Yy]$ ]]; then
-  echo "Creating TouchID sudo configuration file for server setup..."
-  cat >"${OUTPUT_PATH}/pam.d/sudo_local" <<'EOF'
-# sudo_local: PAM configuration for enabling TouchID for sudo
-#
-# This file enables the use of TouchID as an authentication method for sudo
-# commands on macOS. It is used in addition to the standard sudo configuration.
-#
-# Format: auth sufficient pam_tid.so
-
-# Allow TouchID authentication for sudo
-auth       sufficient     pam_tid.so
-EOF
-  chmod 644 "${OUTPUT_PATH}/pam.d/sudo_local"
-  echo "✅ TouchID sudo configuration created for transfer"
-else
-  echo "Skipping TouchID sudo setup - standard password authentication will be used"
 fi
 
 # WiFi Configuration Strategy Selection
@@ -344,7 +318,7 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
 
   # Copy main entry point script to root
   cp "${SCRIPT_SOURCE_DIR}/scripts/server/first-boot.sh" "${OUTPUT_PATH}/" 2>/dev/null || echo "Warning: first-boot.sh not found in server directory"
-  
+
   # Copy system scripts to scripts directory
   cp "${SCRIPT_SOURCE_DIR}/scripts/server/setup-remote-desktop.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: setup-remote-desktop.sh not found in server directory"
 
@@ -352,10 +326,10 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/mount-nas-media.sh" "${OUTPUT_PATH}/app-setup/templates/" 2>/dev/null || echo "Warning: mount-nas-media.sh not found in app-setup-templates directory"
   cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-plex-with-mount.sh" "${OUTPUT_PATH}/app-setup/templates/" 2>/dev/null || echo "Warning: start-plex-with-mount.sh not found in app-setup-templates directory"
   cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-rclone.sh" "${OUTPUT_PATH}/app-setup/templates/" 2>/dev/null || echo "Warning: start-rclone.sh not found in app-setup-templates directory"
-  
+
   # Copy app setup scripts to app-setup directory
   cp "${SCRIPT_SOURCE_DIR}/app-setup/"*.sh "${OUTPUT_PATH}/app-setup/" 2>/dev/null || echo "Warning: No app setup scripts found in source directory"
-  
+
   # Copy system configuration files
   cp "${SCRIPT_SOURCE_DIR}/config/formulae.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: formulae.txt not found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/config/casks.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: casks.txt not found in source directory"

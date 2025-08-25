@@ -26,10 +26,9 @@
 set -euo pipefail
 
 # Configuration variables - adjust as needed
-ADMIN_USERNAME=$(whoami)                                     # Set this once and use throughout
+ADMIN_USERNAME=$(whoami)                                  # Set this once and use throughout
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" # Directory where AirDropped files are located (script now at root)
 SSH_KEY_SOURCE="${SETUP_DIR}/ssh_keys"
-PAM_D_SOURCE="${SETUP_DIR}/pam.d"
 WIFI_CONFIG_FILE="${SETUP_DIR}/config/wifi_network.conf"
 FORMULAE_FILE="${SETUP_DIR}/config/formulae.txt"
 CASKS_FILE="${SETUP_DIR}/config/casks.txt"
@@ -288,35 +287,70 @@ fi
 
 # TouchID sudo setup
 section "TouchID sudo setup"
-if [[ -d "${PAM_D_SOURCE}" ]]; then
-  log "Found TouchID sudo setup in ${PAM_D_SOURCE}"
 
-  if [[ -f "${PAM_D_SOURCE}/sudo_local" ]]; then
-    # Check if the file already exists with the correct content
-    if [[ -f "/etc/pam.d/sudo_local" ]] && diff -q "${PAM_D_SOURCE}/sudo_local" "/etc/pam.d/sudo_local" >/dev/null; then
-      log "TouchID sudo is already properly configured"
-    else
-      # File doesn't exist OR exists but has different content - same action either way
-      # Check if TouchID is available before warning about password
-      if bioutil -rs 2>/dev/null | grep -q "Touch ID"; then
-        show_log "TouchID sudo needs to be configured. We will ask for your user password."
-      else
-        show_log "TouchID sudo needs to be configured (TouchID not available - will use password)."
-      fi
-      sudo -p "[TouchID setup] Enter password to configure TouchID for sudo: " cp "${PAM_D_SOURCE}/sudo_local" "/etc/pam.d"
-      check_success "TouchID sudo configuration"
-
-      # Test TouchID configuration
-      log "Testing TouchID sudo configuration..."
-      sudo -k
-      sudo -p "[TouchID test] Enter password to test TouchID sudo configuration: " -v
-      check_success "TouchID sudo test"
-    fi
+# Check if TouchID sudo is already configured
+if [[ -f "/etc/pam.d/sudo_local" ]]; then
+  # Verify the content is correct
+  expected_content="auth       sufficient     pam_tid.so"
+  if grep -q "${expected_content}" "/etc/pam.d/sudo_local" 2>/dev/null; then
+    log "TouchID sudo is already properly configured"
   else
-    log "No sudo_local file found in ${PAM_D_SOURCE}"
+    log "TouchID sudo configuration exists but content may be incorrect"
+    log "Current content:"
+    head -10 < "/etc/pam.d/sudo_local" | while read -r line; do log "  ${line}"; done
   fi
 else
-  log "No TouchID sudo setup directory found at ${PAM_D_SOURCE}"
+  # TouchID sudo not configured - prompt user
+  touchid_enabled=false
+
+  if [[ "${FORCE}" = true ]]; then
+    # Force mode - enable TouchID by default
+    touchid_enabled=true
+    log "Force mode enabled - configuring TouchID sudo authentication"
+  else
+    # Interactive mode - prompt user
+    show_log "TouchID sudo allows you to use fingerprint authentication for administrative commands."
+    show_log "This is more convenient than typing your password repeatedly."
+
+    read -p "Enable TouchID for sudo authentication? (Y/n): " -n 1 -r touchid_choice
+    echo
+
+    if [[ -z "${touchid_choice}" ]] || [[ ${touchid_choice} =~ ^[Yy]$ ]]; then
+      touchid_enabled=true
+    else
+      log "TouchID sudo setup skipped - standard password authentication will be used"
+    fi
+  fi
+
+  if [[ "${touchid_enabled}" = true ]]; then
+    # Check if TouchID is available before warning about password
+    if bioutil -rs 2>/dev/null | grep -q "Touch ID"; then
+      show_log "TouchID sudo needs to be configured. We will ask for your user password."
+    else
+      show_log "TouchID sudo needs to be configured (TouchID not available - will use password)."
+    fi
+
+    # Create the PAM configuration file
+    log "Creating TouchID sudo configuration..."
+    sudo -p "[TouchID setup] Enter password to configure TouchID for sudo: " tee "/etc/pam.d/sudo_local" >/dev/null <<'EOF'
+# sudo_local: PAM configuration for enabling TouchID for sudo
+#
+# This file enables the use of TouchID as an authentication method for sudo
+# commands on macOS. It is used in addition to the standard sudo configuration.
+#
+# Format: auth sufficient pam_tid.so
+
+# Allow TouchID authentication for sudo
+auth       sufficient     pam_tid.so
+EOF
+    check_success "TouchID sudo configuration"
+
+    # Test TouchID configuration
+    log "Testing TouchID sudo configuration..."
+    sudo -k
+    sudo -p "[TouchID test] Enter password to test TouchID sudo configuration: " -v
+    check_success "TouchID sudo test"
+  fi
 fi
 
 # WiFi Network Assessment and Configuration
@@ -1276,15 +1310,15 @@ fi
 # Copy application setup directory preserving organized structure
 if [[ -d "${SETUP_DIR}/app-setup" ]]; then
   log "Copying application setup directory with organized structure from ${SETUP_DIR}/app-setup"
-  
+
   # Copy the entire app-setup directory structure
   cp -R "${SETUP_DIR}/app-setup/"* "${APP_SETUP_DIR}/" 2>/dev/null
-  
+
   # Set proper permissions
   chmod +x "${APP_SETUP_DIR}/"*.sh 2>/dev/null
   chmod 600 "${APP_SETUP_DIR}/config/"*.conf 2>/dev/null || true
   chmod 755 "${APP_SETUP_DIR}/templates/"*.sh 2>/dev/null || true
-  
+
   check_success "Application directory copy with organized structure"
 else
   log "No application setup directory found in ${SETUP_DIR}/app-setup"
