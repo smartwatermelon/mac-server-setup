@@ -1273,41 +1273,24 @@ if [[ ! -d "${APP_SETUP_DIR}" ]]; then
   check_success "App setup directory creation"
 fi
 
-# Copy application setup scripts and configuration files if available
-if [[ -d "${SETUP_DIR}/scripts/app-setup" ]]; then
-  log "Copying application setup scripts and config files from ${SETUP_DIR}/scripts/app-setup"
-  cp "${SETUP_DIR}/scripts/app-setup/"* "${APP_SETUP_DIR}/" 2>/dev/null
+# Copy application setup directory preserving organized structure
+if [[ -d "${SETUP_DIR}/app-setup" ]]; then
+  log "Copying application setup directory with organized structure from ${SETUP_DIR}/app-setup"
+  
+  # Copy the entire app-setup directory structure
+  cp -R "${SETUP_DIR}/app-setup/"* "${APP_SETUP_DIR}/" 2>/dev/null
+  
+  # Set proper permissions
   chmod +x "${APP_SETUP_DIR}/"*.sh 2>/dev/null
-  chmod 600 "${APP_SETUP_DIR}/"*.conf 2>/dev/null
-  check_success "Application scripts and config copy"
+  chmod 600 "${APP_SETUP_DIR}/config/"*.conf 2>/dev/null || true
+  chmod 755 "${APP_SETUP_DIR}/templates/"*.sh 2>/dev/null || true
+  
+  check_success "Application directory copy with organized structure"
 else
-  log "No application setup scripts found in ${SETUP_DIR}/scripts/app-setup"
+  log "No application setup directory found in ${SETUP_DIR}/app-setup"
 fi
 
-# Copy script templates to app-setup directory for plex-setup.sh
-if [[ -f "${SETUP_DIR}/scripts/mount-nas-media.sh" ]]; then
-  log "Copying mount script template to app-setup directory"
-  cp "${SETUP_DIR}/scripts/mount-nas-media.sh" "${HOME}/app-setup/"
-  check_success "Mount script template copy"
-else
-  log "No mount script template found in ${SETUP_DIR}/scripts/"
-fi
-
-if [[ -f "${SETUP_DIR}/scripts/start-plex-with-mount.sh" ]]; then
-  log "Copying Plex startup script template to app-setup directory"
-  cp "${SETUP_DIR}/scripts/start-plex-with-mount.sh" "${HOME}/app-setup/"
-  check_success "Plex startup script template copy"
-else
-  log "No Plex startup script template found in ${SETUP_DIR}/scripts/"
-fi
-
-if [[ -f "${SETUP_DIR}/scripts/start-rclone.sh" ]]; then
-  log "Copying rclone startup script template to app-setup directory"
-  cp "${SETUP_DIR}/scripts/start-rclone.sh" "${APP_SETUP_DIR}/"
-  check_success "rclone startup script template copy"
-else
-  log "No rclone startup script template found in ${SETUP_DIR}/scripts/"
-fi
+# Script templates are now copied above as part of the organized directory structure
 
 # Copy config.conf for application setup scripts
 if [[ -f "${CONFIG_FILE}" ]]; then
@@ -1318,20 +1301,9 @@ else
   log "No config.conf found - application setup scripts will use defaults"
 fi
 
-# Copy Dropbox configuration files if available
-if [[ -f "${SETUP_DIR}/config/dropbox_sync.conf" ]]; then
-  log "Copying Dropbox sync configuration to app-setup directory"
-  cp "${SETUP_DIR}/config/dropbox_sync.conf" "${APP_SETUP_DIR}/"
-  chmod 600 "${APP_SETUP_DIR}/dropbox_sync.conf"
-  check_success "Dropbox sync config copy"
-fi
-
-if [[ -f "${SETUP_DIR}/config/rclone.conf" ]]; then
-  log "Copying rclone configuration to app-setup directory"
-  cp "${SETUP_DIR}/config/rclone.conf" "${APP_SETUP_DIR}/"
-  chmod 600 "${APP_SETUP_DIR}/rclone.conf"
-  check_success "rclone config copy"
-fi
+# Copy Dropbox configuration files if available (already copied above from app-setup/config)
+# These files are now handled in the "Copy application config files" section above
+log "Dropbox and rclone config files are copied from app-setup/config/ directory above"
 
 # Setup operator account files
 section "Configuring operator account files"

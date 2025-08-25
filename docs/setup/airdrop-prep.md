@@ -144,8 +144,10 @@ macmini-setup/
 │   └── wifi_network.conf        # WiFi credentials (only if script-based config)
 ├── pam.d/
 │   └── sudo_local               # TouchID sudo config
-└── scripts/app-setup/
-    └── plex_nas.conf            # Plex NAS credentials
+└── app-setup/
+    ├── config/
+    │   └── plex_nas.conf        # Plex NAS credentials  
+    └── plex-setup.sh            # Plex setup script
 └── README.md                    # Setup instructions
 ```
 

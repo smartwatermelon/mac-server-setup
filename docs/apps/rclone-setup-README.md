@@ -48,8 +48,8 @@ DROPBOX_SYNC_INTERVAL="30"  # Sync interval in minutes
 
 The script requires configuration files created by `prep-airdrop.sh`:
 
-1. **`config/rclone.conf`**: OAuth tokens from browser authentication
-2. **`config/dropbox_sync.conf`**: Sync configuration settings
+1. **`app-setup/config/rclone.conf`**: OAuth tokens from browser authentication
+2. **`app-setup/config/dropbox_sync.conf`**: Sync configuration settings
 
 ## Architecture
 
