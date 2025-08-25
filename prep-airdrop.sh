@@ -22,7 +22,7 @@ SCRIPT_SOURCE_DIR="${2:-.}" # Directory containing source scripts (default is cu
 
 # Load configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="${SCRIPT_DIR}" # Script is now at repo root
 CONFIG_DIR="${PROJECT_ROOT}/config"
 CONFIG_FILE="${CONFIG_DIR}/config.conf"
 
@@ -42,6 +42,20 @@ else
   ONEPASSWORD_APPLEID_ITEM="Apple"
   DROPBOX_SYNC_FOLDER=""
   DROPBOX_LOCAL_PATH=""
+fi
+
+# Handle command line arguments
+if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
+  echo "Usage: $(basename "$0") [output_path] [script_path]"
+  echo ""
+  echo "Prepares setup files for Mac Mini M2 server deployment."
+  echo ""
+  echo "Arguments:"
+  echo "  output_path    Directory where setup files will be created (default: ~/${SERVER_NAME_LOWER:-server}-setup)"
+  echo "  script_path    Source directory containing scripts (default: current directory)"
+  echo ""
+  echo "The prepared directory can be AirDropped to your Mac Mini for setup."
+  exit 0
 fi
 
 # Set derived variables
@@ -289,11 +303,11 @@ fi
 
 # Set up Dropbox synchronization if configured
 if [[ -n "${DROPBOX_SYNC_FOLDER:-}" ]]; then
-  if [[ -f "${SCRIPT_SOURCE_DIR}/scripts/rclone-airdrop-prep.sh" ]]; then
+  if [[ -f "${SCRIPT_SOURCE_DIR}/scripts/airdrop/rclone-airdrop-prep.sh" ]]; then
     echo "Running Dropbox setup..."
     # Export required variables for the rclone script
     export OUTPUT_PATH SERVER_NAME_LOWER DROPBOX_SYNC_FOLDER DROPBOX_LOCAL_PATH
-    "${SCRIPT_SOURCE_DIR}/scripts/rclone-airdrop-prep.sh"
+    "${SCRIPT_SOURCE_DIR}/scripts/airdrop/rclone-airdrop-prep.sh"
   else
     echo "Warning: rclone-airdrop-prep.sh not found - skipping Dropbox setup"
   fi
@@ -317,9 +331,9 @@ else
 fi
 
 # Copy operator first-login script
-if [[ -f "${SCRIPT_SOURCE_DIR}/scripts/operator-first-login.sh" ]]; then
+if [[ -f "${SCRIPT_SOURCE_DIR}/scripts/server/operator-first-login.sh" ]]; then
   echo "Copying operator first-login script"
-  cp "${SCRIPT_SOURCE_DIR}/scripts/operator-first-login.sh" "${OUTPUT_PATH}/scripts/"
+  cp "${SCRIPT_SOURCE_DIR}/scripts/server/operator-first-login.sh" "${OUTPUT_PATH}/scripts/"
   chmod +x "${OUTPUT_PATH}/scripts/operator-first-login.sh"
 fi
 
@@ -328,13 +342,13 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   echo "Copying scripts from local source directory..."
 
   # Copy scripts
-  cp "${SCRIPT_SOURCE_DIR}/scripts/first-boot.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: first-boot.sh not found in source directory"
-  cp "${SCRIPT_SOURCE_DIR}/scripts/setup-remote-desktop.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: setup-remote-desktop.sh not found in source directory"
+  cp "${SCRIPT_SOURCE_DIR}/scripts/server/first-boot.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: first-boot.sh not found in server directory"
+  cp "${SCRIPT_SOURCE_DIR}/scripts/server/setup-remote-desktop.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: setup-remote-desktop.sh not found in server directory"
 
   # Copy template scripts
-  cp "${SCRIPT_SOURCE_DIR}/templates/mount-nas-media.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: mount-nas-media.sh not found in templates directory"
-  cp "${SCRIPT_SOURCE_DIR}/templates/start-plex-with-mount.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: start-plex-with-mount.sh not found in templates directory"
-  cp "${SCRIPT_SOURCE_DIR}/templates/start-rclone.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: start-rclone.sh not found in templates directory"
+  cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/mount-nas-media.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: mount-nas-media.sh not found in app-setup-templates directory"
+  cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-plex-with-mount.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: start-plex-with-mount.sh not found in app-setup-templates directory"
+  cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-rclone.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: start-rclone.sh not found in app-setup-templates directory"
   cp "${SCRIPT_SOURCE_DIR}/app-setup/"*.sh "${OUTPUT_PATH}/scripts/app-setup/" 2>/dev/null || echo "Warning: No app setup scripts found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/config/formulae.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: formulae.txt not found in source directory"
   cp "${SCRIPT_SOURCE_DIR}/config/casks.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: casks.txt not found in source directory"
@@ -353,13 +367,13 @@ else
 fi
 
 # Copy README with variable substitution
-if [[ -f "${SCRIPT_SOURCE_DIR}/docs/setup/README-firstboot.md" ]]; then
+if [[ -f "${SCRIPT_SOURCE_DIR}/docs/setup/firstboot-README.md" ]]; then
   echo "Processing README file..."
   sed "s/\${SERVER_NAME_LOWER}/${SERVER_NAME_LOWER}/g" \
-    "${SCRIPT_SOURCE_DIR}/docs/setup/README-firstboot.md" >"${OUTPUT_PATH}/README.md"
+    "${SCRIPT_SOURCE_DIR}/docs/setup/firstboot-README.md" >"${OUTPUT_PATH}/README.md"
   echo "✅ README creation"
 else
-  echo "⚠️ README-firstboot.md not found in source directory"
+  echo "⚠️ firstboot-README.md not found in source directory"
 fi
 
 echo "Setting file permissions..."
