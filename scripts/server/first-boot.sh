@@ -264,11 +264,42 @@ fi
 # Configure sudo timeout to reduce password prompts during setup
 section "Configuring sudo timeout"
 log "Setting sudo timeout to 15 minutes for smoother setup experience"
+
+# Debug: Check current sudo timeout settings
+log "DEBUG: Current sudo timeout settings before configuration:"
+sudo -l | grep -i timeout || log "No timeout settings found in sudo -l output"
+
+# Create the timeout configuration file
+log "Creating sudo timeout configuration file..."
 sudo -p "[System setup] Enter password to configure sudo timeout: " tee /etc/sudoers.d/10_setup_timeout >/dev/null <<EOF
-# Temporary sudo timeout extension for setup - 15 minutes
-Defaults timestamp_timeout=15
+# Temporary sudo timeout extension for setup - 30 minutes
+Defaults timestamp_timeout=30
 EOF
+# Fix permissions for sudoers file
+sudo chmod 0440 /etc/sudoers.d/10_setup_timeout
 check_success "Sudo timeout configuration"
+
+# Debug: Verify the configuration was applied
+log "DEBUG: Verifying sudo timeout configuration:"
+if [[ -f "/etc/sudoers.d/10_setup_timeout" ]]; then
+  while read -r line; do
+    log "  ${line}"
+  done < <(sudo cat /etc/sudoers.d/10_setup_timeout || true)
+else
+  log "ERROR: Configuration file was not created!"
+fi
+
+# Debug: Test that sudoers accepts the new configuration
+log "DEBUG: Testing sudoers configuration validity:"
+if sudo visudo -c; then
+  log "✅ sudoers configuration is valid"
+else
+  log "❌ sudoers configuration has errors!"
+fi
+
+# Debug: Check sudo timeout after configuration
+log "DEBUG: Sudo settings after timeout configuration:"
+sudo -l | grep -i timeout || log "Still no timeout settings found in sudo -l output"
 
 # Confirm operation if not forced
 if [[ "${FORCE}" = false ]] && [[ "${RERUN_AFTER_FDA}" = false ]]; then
@@ -297,7 +328,7 @@ if [[ -f "/etc/pam.d/sudo_local" ]]; then
   else
     log "TouchID sudo configuration exists but content may be incorrect"
     log "Current content:"
-    head -10 < "/etc/pam.d/sudo_local" | while read -r line; do log "  ${line}"; done
+    head -10 <"/etc/pam.d/sudo_local" | while read -r line; do log "  ${line}"; done
   fi
 else
   # TouchID sudo not configured - prompt user
@@ -1223,6 +1254,12 @@ if [[ -f "${HOMEBREW_BASH}" ]]; then
 
   # Change shell for admin user to Homebrew bash
   log "Setting shell to Homebrew bash for admin user"
+  log "DEBUG: About to run chsh command - checking sudo timestamp status..."
+  if sudo -n true 2>/dev/null; then
+    log "DEBUG: sudo timestamp is valid (no password needed)"
+  else
+    log "DEBUG: sudo timestamp is invalid (password will be required)"
+  fi
   sudo -p "[Shell setup] Enter password to change admin shell: " chsh -s "${HOMEBREW_BASH}" "${ADMIN_USERNAME}"
   check_success "Admin user shell change"
 
