@@ -42,7 +42,7 @@ The script performs these major configuration steps:
 ### Standard Setup
 
 ```bash
-cd ~/Downloads/macmini-setup/scripts
+cd ~/Downloads/macmini-setup
 chmod +x first-boot.sh
 ./first-boot.sh
 ```
