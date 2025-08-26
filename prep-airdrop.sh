@@ -58,6 +58,69 @@ if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
+# Error and warning collection system  
+COLLECTED_ERRORS=()
+COLLECTED_WARNINGS=()
+CURRENT_SCRIPT_SECTION=""
+
+# Function to set current script section for context
+set_section() {
+  CURRENT_SCRIPT_SECTION="$1"
+  echo "====== $1 ======"
+}
+
+# Function to collect an error (with immediate display)
+collect_error() {
+  local message="$1"
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+  
+  echo "❌ ${message}"
+  COLLECTED_ERRORS+=("${context}: ${message}")
+}
+
+# Function to collect a warning (with immediate display)
+collect_warning() {
+  local message="$1" 
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+  
+  echo "⚠️ ${message}"
+  COLLECTED_WARNINGS+=("${context}: ${message}")
+}
+
+# Function to show collected errors and warnings at end
+show_collected_issues() {
+  local error_count=${#COLLECTED_ERRORS[@]}
+  local warning_count=${#COLLECTED_WARNINGS[@]}
+  
+  if [[ ${error_count} -eq 0 && ${warning_count} -eq 0 ]]; then
+    echo "✅ AirDrop preparation completed successfully with no errors or warnings!"
+    return
+  fi
+  
+  echo ""
+  echo "====== AIRDROP PREPARATION SUMMARY ======"
+  echo "Preparation completed, but ${error_count} errors and ${warning_count} warnings occurred:"
+  echo ""
+  
+  if [[ ${error_count} -gt 0 ]]; then
+    echo "ERRORS:"
+    for error in "${COLLECTED_ERRORS[@]}"; do
+      echo "  ❌ ${error}"
+    done
+    echo ""
+  fi
+  
+  if [[ ${warning_count} -gt 0 ]]; then
+    echo "WARNINGS:"
+    for warning in "${COLLECTED_WARNINGS[@]}"; do
+      echo "  ⚠️ ${warning}"
+    done
+    echo ""
+  fi
+  
+  echo "Review issues above - some warnings may be expected if optional components are missing."
+}
+
 # Set derived variables
 SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 OUTPUT_PATH="${1:-${HOME}/${SERVER_NAME_LOWER}-setup}"
@@ -83,13 +146,13 @@ else
   mkdir -p "${OUTPUT_PATH}"
 fi
 
-echo "====== Preparing ${SERVER_NAME} Server Setup Files for AirDrop ======"
+set_section "Preparing ${SERVER_NAME} Server Setup Files for AirDrop"
 echo "Output path: ${OUTPUT_PATH}"
 echo -n "Date: "
 date
 
 # Create directory structure
-echo "Creating directory structure..."
+set_section "Creating Directory Structure"
 mkdir -p "${OUTPUT_PATH}/ssh_keys"
 mkdir -p "${OUTPUT_PATH}/scripts"
 mkdir -p "${OUTPUT_PATH}/app-setup/config"
@@ -104,7 +167,7 @@ if [[ -n "${DEV_FINGERPRINT}" ]]; then
   chmod 600 "${OUTPUT_PATH}/config/dev_fingerprint.conf"
   echo "Development fingerprint saved to prevent accidental execution on this machine"
 else
-  echo "❌ Could not generate development machine fingerprint"
+  collect_error "Could not generate development machine fingerprint"
   exit 1
 fi
 
@@ -112,6 +175,7 @@ fi
 ssh-keygen -R "${SERVER_NAME_LOWER}".local
 
 # Copy SSH keys
+set_section "Copying SSH Keys"
 SSH_PUBLIC_KEY_PATH="${HOME}/.ssh/id_ed25519.pub"
 SSH_PRIVATE_KEY_PATH="${HOME}/.ssh/id_ed25519"
 
@@ -123,7 +187,7 @@ if [[ -f "${SSH_PUBLIC_KEY_PATH}" ]]; then
   # Create operator keys (same as admin for now)
   cp "${SSH_PUBLIC_KEY_PATH}" "${OUTPUT_PATH}/ssh_keys/operator_authorized_keys"
 else
-  echo "Warning: SSH public key not found at ${SSH_PUBLIC_KEY_PATH}"
+  collect_warning "SSH public key not found at ${SSH_PUBLIC_KEY_PATH}"
   echo "Please generate SSH keys or specify the correct path"
 fi
 
@@ -132,13 +196,12 @@ if [[ -f "${SSH_PRIVATE_KEY_PATH}" ]]; then
   cp "${SSH_PRIVATE_KEY_PATH}" "${OUTPUT_PATH}/ssh_keys/id_ed25519"
   chmod 600 "${OUTPUT_PATH}/ssh_keys/id_ed25519"
 else
-  echo "Warning: SSH private key not found at ${SSH_PRIVATE_KEY_PATH}"
+  collect_warning "SSH private key not found at ${SSH_PRIVATE_KEY_PATH}"
   echo "Private key will not be available on the server"
 fi
 
 # WiFi Configuration Strategy Selection
-echo ""
-echo "====== WiFi Network Configuration Strategy ======"
+set_section "WiFi Network Configuration Strategy"
 echo "Choose your WiFi setup method:"
 echo "1. Migration Assistant iPhone/iPad option (recommended - handles WiFi automatically)"
 echo "2. Script-based WiFi configuration (retrieves current network credentials)"
@@ -169,11 +232,11 @@ EOF
       chmod 600 "${OUTPUT_PATH}/config/wifi_network.conf"
       echo "WiFi network configuration saved to config/wifi_network.conf"
     else
-      echo "Error: Could not retrieve WiFi password."
+      collect_error "Could not retrieve WiFi password"
       echo "WiFi network configuration will not be automated."
     fi
   else
-    echo "Warning: Could not detect current WiFi network."
+    collect_warning "Could not detect current WiFi network"
     echo "WiFi network configuration will not be automated."
   fi
 else
@@ -183,7 +246,7 @@ else
 fi
 
 # Set up operator account credentials using 1Password
-echo "Setting up operator account credentials..."
+set_section "Setting up operator account credentials"
 
 # Check if operator credentials exist in 1Password
 if ! op item get "${ONEPASSWORD_OPERATOR_ITEM}" --vault "${ONEPASSWORD_VAULT}" >/dev/null 2>&1; then
@@ -284,7 +347,7 @@ if [[ -n "${DROPBOX_SYNC_FOLDER:-}" ]]; then
     export OUTPUT_PATH SERVER_NAME_LOWER DROPBOX_SYNC_FOLDER DROPBOX_LOCAL_PATH
     "${SCRIPT_SOURCE_DIR}/scripts/airdrop/rclone-airdrop-prep.sh"
   else
-    echo "Warning: rclone-airdrop-prep.sh not found - skipping Dropbox setup"
+    collect_warning "rclone-airdrop-prep.sh not found - skipping Dropbox setup"
   fi
 else
   echo "No Dropbox sync folder configured - skipping Dropbox setup"
@@ -314,10 +377,10 @@ fi
 
 # Copy from local script source directory
 if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
-  echo "Copying scripts from local source directory..."
+  set_section "Copying scripts from local source directory"
 
   # Copy main entry point script to root
-  cp "${SCRIPT_SOURCE_DIR}/scripts/server/first-boot.sh" "${OUTPUT_PATH}/" 2>/dev/null || echo "Warning: first-boot.sh not found in server directory"
+  cp "${SCRIPT_SOURCE_DIR}/scripts/server/first-boot.sh" "${OUTPUT_PATH}/" 2>/dev/null || collect_warning "first-boot.sh not found in server directory"
 
   # Copy system scripts to scripts directory
   cp "${SCRIPT_SOURCE_DIR}/scripts/server/setup-remote-desktop.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: setup-remote-desktop.sh not found in server directory"
@@ -364,6 +427,10 @@ chmod -R 755 "${OUTPUT_PATH}/app-setup"
 chmod 600 "${OUTPUT_PATH}/config/"* 2>/dev/null || true
 chmod 600 "${OUTPUT_PATH}/app-setup/config/"* 2>/dev/null || true
 
+# Show collected errors and warnings
+show_collected_issues
+
+echo ""
 echo "====== Setup Files Preparation Complete ======"
 echo "The setup files at ${OUTPUT_PATH} are now ready for AirDrop."
 echo "AirDrop this entire folder to your Mac Mini after completing the macOS setup wizard"
