@@ -58,7 +58,7 @@ if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
-# Error and warning collection system  
+# Error and warning collection system
 COLLECTED_ERRORS=()
 COLLECTED_WARNINGS=()
 CURRENT_SCRIPT_SECTION=""
@@ -73,16 +73,16 @@ set_section() {
 collect_error() {
   local message="$1"
   local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
-  
+
   echo "❌ ${message}"
   COLLECTED_ERRORS+=("${context}: ${message}")
 }
 
 # Function to collect a warning (with immediate display)
 collect_warning() {
-  local message="$1" 
+  local message="$1"
   local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
-  
+
   echo "⚠️ ${message}"
   COLLECTED_WARNINGS+=("${context}: ${message}")
 }
@@ -91,17 +91,17 @@ collect_warning() {
 show_collected_issues() {
   local error_count=${#COLLECTED_ERRORS[@]}
   local warning_count=${#COLLECTED_WARNINGS[@]}
-  
+
   if [[ ${error_count} -eq 0 && ${warning_count} -eq 0 ]]; then
     echo "✅ AirDrop preparation completed successfully with no errors or warnings!"
     return
   fi
-  
+
   echo ""
   echo "====== AIRDROP PREPARATION SUMMARY ======"
   echo "Preparation completed, but ${error_count} errors and ${warning_count} warnings occurred:"
   echo ""
-  
+
   if [[ ${error_count} -gt 0 ]]; then
     echo "ERRORS:"
     for error in "${COLLECTED_ERRORS[@]}"; do
@@ -109,7 +109,7 @@ show_collected_issues() {
     done
     echo ""
   fi
-  
+
   if [[ ${warning_count} -gt 0 ]]; then
     echo "WARNINGS:"
     for warning in "${COLLECTED_WARNINGS[@]}"; do
@@ -117,7 +117,7 @@ show_collected_issues() {
     done
     echo ""
   fi
-  
+
   echo "Review issues above - some warnings may be expected if optional components are missing."
 }
 
