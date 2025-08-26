@@ -31,7 +31,7 @@ The `first-boot.sh` script performs complete automated setup of your Mac Mini se
 The script performs these major configuration steps:
 
 * **System Security**: TouchID sudo, SSH access, firewall configuration
-* **User Management**: Operator account creation, automatic login setup  
+* **User Management**: Operator account creation, automatic login setup
 * **Network Configuration**: WiFi connection, hostname setting
 * **Power Management**: Server-optimized power settings
 * **Package Installation**: Homebrew, essential tools and applications
@@ -134,7 +134,7 @@ The script automatically opens a second Terminal window showing live setup logs:
 
 * TouchID, SSH, hostname, power settings
 
-**Phase 2**: Package installation (15-30 minutes)  
+**Phase 2**: Package installation (15-30 minutes)
 
 * Xcode Command Line Tools, Homebrew, packages
 
@@ -204,6 +204,32 @@ tail -f ~/.local/state/macmini-setup.log
 ```
 
 ## Troubleshooting
+
+### Error Collection and Summary
+
+The first-boot setup script includes comprehensive error and warning collection:
+
+* **Real-time display**: Errors and warnings show immediately during setup
+* **End-of-run summary**: Consolidated review of all issues when setup completes
+* **Context tracking**: Each issue shows which setup section it occurred in
+
+Example summary output:
+
+```bash
+====== SETUP SUMMARY ======
+Setup completed, but 1 error and 2 warnings occurred:
+
+ERRORS:
+  ❌ Installing Homebrew Packages: Formula installation failed: some-package
+
+WARNINGS:
+  ⚠️ Configuring SSH Access: Remote Desktop setup failed or was cancelled
+  ⚠️ Setting Up Operator Account: Password verification warning
+
+Review the full log for details: ~/.local/state/macmini-setup.log
+```
+
+This summary helps identify issues that need attention without having to scroll through the entire setup log.
 
 ### Script Fails with "Safety Abort"
 

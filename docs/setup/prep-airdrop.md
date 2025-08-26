@@ -45,7 +45,7 @@ The script will create this item in 1Password automatically if it doesn't exist,
 
 #### Time Machine Backup Credentials
 
-> **Item Type**: Login  
+> **Item Type**: Login
 >
 > **Title**: "TimeMachine" (or as configured)
 >
@@ -57,7 +57,7 @@ The script will create this item in 1Password automatically if it doesn't exist,
 
 #### Plex NAS Credentials (Optional)
 
-> **Item Type**: Login  
+> **Item Type**: Login
 >
 > **Title**: "Plex NAS" (or as configured)
 >
@@ -106,7 +106,7 @@ Select this if you plan to use Migration Assistant's iPhone/iPad option during m
 - **Advantages**: Seamless, secure, no credential handling
 - **Requirements**: iPhone/iPad with same iCloud account
 
-#### Option 2: Script-based Configuration  
+#### Option 2: Script-based Configuration
 
 Select this to retrieve and transfer your current WiFi credentials automatically.
 
@@ -138,7 +138,7 @@ macmini-setup/
 │   └── wifi_network.conf        # WiFi credentials (only if script-based config)
 └── app-setup/
     ├── config/
-    │   └── plex_nas.conf        # Plex NAS credentials  
+    │   └── plex_nas.conf        # Plex NAS credentials
     └── plex-setup.sh            # Plex setup script
 └── README.md                    # Setup instructions
 ```
@@ -166,6 +166,29 @@ macmini-setup/
 5. Proceed with [First Boot Instructions](first-boot.md)
 
 ## Troubleshooting
+
+### Error Collection and Summary
+
+The AirDrop preparation script includes comprehensive error and warning collection:
+
+- **Real-time display**: Errors and warnings show immediately during preparation
+- **End-of-preparation summary**: Consolidated review of all issues when preparation completes
+- **Context tracking**: Each issue shows which preparation section it occurred in
+
+Example summary output:
+
+```bash
+====== AIRDROP PREPARATION SUMMARY ======
+Preparation completed, but 2 warnings occurred:
+
+WARNINGS:
+  ⚠️ Copying SSH Keys: SSH private key not found at ~/.ssh/id_ed25519
+  ⚠️ WiFi Network Configuration: Could not detect current WiFi network
+
+Review issues above - some warnings may be expected if optional components are missing.
+```
+
+Many warnings during preparation are expected (missing optional components), while errors indicate critical issues that need resolution.
 
 ### 1Password Authentication Issues
 

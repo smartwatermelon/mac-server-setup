@@ -141,6 +141,30 @@ tail -f ~/.local/state/${HOSTNAME_LOWER}-mount.log
 
 ## Troubleshooting
 
+### Error Collection and Summary
+
+The Plex setup script includes comprehensive error and warning collection:
+
+- **Real-time display**: Errors and warnings show immediately during setup
+- **End-of-run summary**: Consolidated review of all issues when setup completes
+- **Context tracking**: Each issue shows which setup section it occurred in
+
+Example summary output:
+
+```bash
+====== PLEX SETUP SUMMARY ======
+Plex setup completed, but 1 error and 2 warnings occurred:
+
+ERRORS:
+  ❌ Installing Plex Media Server: Homebrew installation failed
+
+WARNINGS:
+  ⚠️ Setting Up Per-User SMB Mount: Admin SMB mount failed - check credentials
+  ⚠️ Configuring Remote Migration: SSH connection to old-server.local failed
+
+Review the full log for details: ~/.local/state/macmini-apps.log
+```
+
 ### Common Issues
 
 **1Password CLI Issues**:

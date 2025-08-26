@@ -134,12 +134,75 @@ section() {
   log "====== $1 ======"
 }
 
+# Error and warning collection system
+COLLECTED_ERRORS=()
+COLLECTED_WARNINGS=()
+CURRENT_SCRIPT_SECTION=""
+
+# Function to set current script section for context
+set_section() {
+  CURRENT_SCRIPT_SECTION="$1"
+  section "$1"
+}
+
+# Function to collect an error (with immediate display)
+collect_error() {
+  local message="$1"
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+
+  show_log "❌ ${message}"
+  COLLECTED_ERRORS+=("${context}: ${message}")
+}
+
+# Function to collect a warning (with immediate display)
+collect_warning() {
+  local message="$1"
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+
+  show_log "⚠️ ${message}"
+  COLLECTED_WARNINGS+=("${context}: ${message}")
+}
+
+# Function to show collected errors and warnings at end
+show_collected_issues() {
+  local error_count=${#COLLECTED_ERRORS[@]}
+  local warning_count=${#COLLECTED_WARNINGS[@]}
+
+  if [[ ${error_count} -eq 0 && ${warning_count} -eq 0 ]]; then
+    show_log "✅ Setup completed successfully with no errors or warnings!"
+    return
+  fi
+
+  show_log ""
+  show_log "====== SETUP SUMMARY ======"
+  show_log "Setup completed, but ${error_count} errors and ${warning_count} warnings occurred:"
+  show_log ""
+
+  if [[ ${error_count} -gt 0 ]]; then
+    show_log "ERRORS:"
+    for error in "${COLLECTED_ERRORS[@]}"; do
+      show_log "  ❌ ${error}"
+    done
+    show_log ""
+  fi
+
+  if [[ ${warning_count} -gt 0 ]]; then
+    show_log "WARNINGS:"
+    for warning in "${COLLECTED_WARNINGS[@]}"; do
+      show_log "  ⚠️ ${warning}"
+    done
+    show_log ""
+  fi
+
+  show_log "Review the full log for details: ${LOG_FILE}"
+}
+
 # Function to check if a command was successful
 check_success() {
   if [[ $? -eq 0 ]]; then
     show_log "✅ $1"
   else
-    show_log "❌ $1 failed"
+    collect_error "$1 failed"
     if [[ "${FORCE}" = false ]]; then
       read -p "Continue anyway? (y/N) " -n 1 -r
       echo
@@ -152,7 +215,7 @@ check_success() {
 }
 
 # SAFETY CHECK: Prevent execution on development machine
-section "Development Machine Safety Check"
+set_section "Development Machine Safety Check"
 
 # Load development fingerprint if available
 if [[ -f "${DEV_FINGERPRINT_FILE}" ]]; then
@@ -246,7 +309,7 @@ else
 fi
 
 # Print header
-section "Starting Mac Mini '${SERVER_NAME}' Server Setup"
+set_section "Starting Mac Mini '${SERVER_NAME}' Server Setup"
 log "Running as user: ${ADMIN_USERNAME}"
 log -n "Date: "
 date
@@ -480,7 +543,7 @@ else
 fi
 
 # Setup SSH access
-section "Configuring SSH Access"
+set_section "Configuring SSH Access"
 
 # 1. Check if remote login is already enabled
 if sudo -p "[SSH check] Enter password to check SSH status: " systemsetup -getremotelogin 2>/dev/null | grep -q "On"; then
@@ -567,14 +630,14 @@ log "Remote Desktop requires GUI interaction to enable services, then automated 
 if [[ "${FORCE}" == "true" ]]; then
   log "Running Remote Desktop setup with --force flag"
   "${SETUP_DIR}/scripts/setup-remote-desktop.sh" --force || {
-    log "WARNING: Remote Desktop setup failed or was cancelled"
+    collect_warning "Remote Desktop setup failed or was cancelled"
     log "You can run it manually later: ${SETUP_DIR}/scripts/setup-remote-desktop.sh"
     return 0 # Don't fail the entire setup if this is skipped
   }
 else
   log "Remote Desktop setup will guide you through System Settings configuration"
   "${SETUP_DIR}/scripts/setup-remote-desktop.sh" || {
-    log "WARNING: Remote Desktop setup failed or was cancelled"
+    collect_warning "Remote Desktop setup failed or was cancelled"
     log "You can run it manually later: ${SETUP_DIR}/scripts/setup-remote-desktop.sh"
     return 0 # Don't fail the entire setup if this is skipped
   }
@@ -694,7 +757,7 @@ defaults write com.apple.ncprefs apps -array-add '{
 check_success "Notification settings configuration"
 
 # Create operator account if it doesn't exist
-section "Setting Up Operator Account"
+set_section "Setting Up Operator Account"
 if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
   log "Operator account already exists"
 else
@@ -718,7 +781,7 @@ else
   if dscl /Local/Default -authonly "${OPERATOR_USERNAME}" "${OPERATOR_PASSWORD}"; then
     show_log "✅ Password verification successful"
   else
-    log "❌ Password verification failed"
+    collect_error "Password verification failed"
     exit 1
   fi
 
@@ -928,7 +991,7 @@ log "Disabled automatic app downloads"
 #
 
 # Install Xcode Command Line Tools if needed
-section "Installing Xcode Command Line Tools"
+set_section "Installing Xcode Command Line Tools"
 
 # Check if CLT is already installed
 if softwareupdate --history 2>/dev/null | grep 'Command Line Tools for Xcode' >/dev/null; then
@@ -1044,7 +1107,7 @@ if [[ "${SKIP_HOMEBREW}" = false ]]; then
     if brew help >/dev/null 2>&1; then
       show_log "✅ Homebrew verification successful"
     else
-      log "❌ Homebrew verification failed - brew help returned an error"
+      collect_error "Homebrew verification failed - brew help returned an error"
       exit 1
     fi
   fi
@@ -1067,7 +1130,7 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
       if brew install "$1"; then
         log "✅ Formula installation: $1"
       else
-        log "❌ Formula installation failed: $1"
+        collect_error "Formula installation failed: $1"
         # Continue instead of exiting
       fi
     else
@@ -1104,7 +1167,7 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
           done <<<"${new_apps}"
         fi
       else
-        log "❌ Cask installation failed: $1"
+        collect_error "Cask installation failed: $1"
         # Continue instead of exiting
       fi
     else
@@ -1299,7 +1362,7 @@ fi
 #
 
 # Create application setup directory
-section "Preparing Application Setup"
+set_section "Preparing Application Setup"
 APP_SETUP_DIR="/Users/${ADMIN_USERNAME}/app-setup"
 
 if [[ ! -d "${APP_SETUP_DIR}" ]]; then
@@ -1517,5 +1580,8 @@ show_log "   - Test that all applications are accessible as the operator"
 # Clean up temporary sudo timeout configuration
 log "Removing temporary sudo timeout configuration"
 sudo rm -f /etc/sudoers.d/10_setup_timeout
+
+# Show collected errors and warnings
+show_collected_issues
 
 exit 0

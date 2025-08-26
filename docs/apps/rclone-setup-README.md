@@ -92,6 +92,29 @@ rclone sync ${RCLONE_REMOTE_NAME}:${DROPBOX_SYNC_FOLDER} ${DROPBOX_LOCAL_PATH}
 
 ## Troubleshooting
 
+### Error Collection and Summary
+
+The rclone setup script includes comprehensive error and warning collection:
+
+- **Real-time display**: Errors and warnings show immediately during setup
+- **End-of-run summary**: Consolidated review of all issues when setup completes
+- **Context tracking**: Each issue shows which setup section it occurred in
+
+Example summary output:
+
+```bash
+====== RCLONE SETUP SUMMARY ======
+rclone setup completed, but 1 error and 1 warning occurred:
+
+ERRORS:
+  ❌ Installing rclone Configuration: Configuration test failed
+
+WARNINGS:
+  ⚠️ Testing Initial Sync: Network connection timeout during test
+
+Review the full log for details: ~/.local/state/macmini-apps.log
+```
+
 ### Common Issues
 
 **OAuth Token Expiration**: Re-run `prep-airdrop.sh` to refresh tokens

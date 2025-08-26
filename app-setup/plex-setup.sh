@@ -118,7 +118,7 @@ check_success() {
   if [[ $? -eq 0 ]]; then
     log "✅ $1"
   else
-    log "❌ $1 failed"
+    collect_error "$1 failed"
     exit 1
   fi
 }
@@ -129,6 +129,69 @@ section() {
   show_log "$1"
   show_log "=================================================================================="
   echo ""
+}
+
+# Error and warning collection system
+COLLECTED_ERRORS=()
+COLLECTED_WARNINGS=()
+CURRENT_SCRIPT_SECTION=""
+
+# Function to set current script section for context
+set_section() {
+  CURRENT_SCRIPT_SECTION="$1"
+  section "$1"
+}
+
+# Function to collect an error (with immediate display)
+collect_error() {
+  local message="$1"
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+
+  log "❌ ${message}"
+  COLLECTED_ERRORS+=("${context}: ${message}")
+}
+
+# Function to collect a warning (with immediate display)
+collect_warning() {
+  local message="$1"
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+
+  log "⚠️ ${message}"
+  COLLECTED_WARNINGS+=("${context}: ${message}")
+}
+
+# Function to show collected errors and warnings at end
+show_collected_issues() {
+  local error_count=${#COLLECTED_ERRORS[@]}
+  local warning_count=${#COLLECTED_WARNINGS[@]}
+
+  if [[ ${error_count} -eq 0 && ${warning_count} -eq 0 ]]; then
+    log "✅ Plex setup completed successfully with no errors or warnings!"
+    return
+  fi
+
+  log ""
+  log "====== PLEX SETUP SUMMARY ======"
+  log "Plex setup completed, but ${error_count} errors and ${warning_count} warnings occurred:"
+  log ""
+
+  if [[ ${error_count} -gt 0 ]]; then
+    log "ERRORS:"
+    for error in "${COLLECTED_ERRORS[@]}"; do
+      log "  ❌ ${error}"
+    done
+    log ""
+  fi
+
+  if [[ ${warning_count} -gt 0 ]]; then
+    log "WARNINGS:"
+    for warning in "${COLLECTED_WARNINGS[@]}"; do
+      log "  ⚠️ ${warning}"
+    done
+    log ""
+  fi
+
+  log "Review the full log for details: ${LOG_FILE}"
 }
 
 confirm() {
@@ -176,16 +239,16 @@ discover_plex_servers() {
 
 # Per-User SMB Mount Setup (LaunchAgent-based)
 setup_persistent_smb_mount() {
-  section "Setting Up Per-User SMB Mount for Media Storage"
+  set_section "Setting Up Per-User SMB Mount for Media Storage"
 
   # Critical safety checks for mount path
   if [[ -z "${NAS_SHARE_NAME}" ]]; then
-    log "❌ CRITICAL ERROR: NAS_SHARE_NAME is empty or not set"
+    collect_error "CRITICAL ERROR: NAS_SHARE_NAME is empty or not set"
     exit 1
   fi
 
   if [[ "${NAS_SHARE_NAME}" == "." || "${NAS_SHARE_NAME}" == ".." ]]; then
-    log "❌ CRITICAL ERROR: NAS_SHARE_NAME cannot be '.' or '..'"
+    collect_error "CRITICAL ERROR: NAS_SHARE_NAME cannot be '.' or '..'"
     exit 1
   fi
 
@@ -810,3 +873,6 @@ main() {
 
 # Run main function
 main "$@"
+
+# Show collected errors and warnings
+show_collected_issues
