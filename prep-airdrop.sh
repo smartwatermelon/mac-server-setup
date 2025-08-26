@@ -406,7 +406,7 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
 
   echo "Scripts copied from local source directory"
 else
-  echo "Error: No script source found. Please provide a local script source directory."
+  collect_error "No script source found. Please provide a local script source directory."
   exit 1
 fi
 
