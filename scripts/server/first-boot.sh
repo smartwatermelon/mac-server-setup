@@ -149,16 +149,16 @@ set_section() {
 collect_error() {
   local message="$1"
   local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
-  
+
   show_log "❌ ${message}"
   COLLECTED_ERRORS+=("${context}: ${message}")
 }
 
 # Function to collect a warning (with immediate display)
 collect_warning() {
-  local message="$1" 
+  local message="$1"
   local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
-  
+
   show_log "⚠️ ${message}"
   COLLECTED_WARNINGS+=("${context}: ${message}")
 }
@@ -167,17 +167,17 @@ collect_warning() {
 show_collected_issues() {
   local error_count=${#COLLECTED_ERRORS[@]}
   local warning_count=${#COLLECTED_WARNINGS[@]}
-  
+
   if [[ ${error_count} -eq 0 && ${warning_count} -eq 0 ]]; then
     show_log "✅ Setup completed successfully with no errors or warnings!"
     return
   fi
-  
+
   show_log ""
   show_log "====== SETUP SUMMARY ======"
   show_log "Setup completed, but ${error_count} errors and ${warning_count} warnings occurred:"
   show_log ""
-  
+
   if [[ ${error_count} -gt 0 ]]; then
     show_log "ERRORS:"
     for error in "${COLLECTED_ERRORS[@]}"; do
@@ -185,7 +185,7 @@ show_collected_issues() {
     done
     show_log ""
   fi
-  
+
   if [[ ${warning_count} -gt 0 ]]; then
     show_log "WARNINGS:"
     for warning in "${COLLECTED_WARNINGS[@]}"; do
@@ -193,7 +193,7 @@ show_collected_issues() {
     done
     show_log ""
   fi
-  
+
   show_log "Review the full log for details: ${LOG_FILE}"
 }
 
