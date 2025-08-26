@@ -12,6 +12,22 @@ This project provides a complete automation framework for setting up an Apple Si
 
 ## Recent Improvements (v3.0 - Major Overhaul)
 
+### Comprehensive Error and Warning Collection (2025-08-26)
+
+- **Real-time + End Summary**: All errors and warnings display immediately during setup, plus consolidated review at completion
+  - Preserves existing immediate feedback during fast-scrolling operations
+  - Shows organized summary when setup completes and user attention returns
+  - Context tracking shows which setup section each issue occurred in
+- **Consistent Across All Scripts**: Unified error handling across the entire setup process
+  - **prep-airdrop.sh**: Missing files, SSH keys, WiFi detection, credential issues
+  - **first-boot.sh**: System setup, package installation, service configuration
+  - **plex-setup.sh**: Plex installation, SMB mounting, migration processes
+  - **rclone-setup.sh**: Dropbox sync configuration and testing
+- **Better Troubleshooting**: Clear distinction between expected warnings vs critical errors
+  - Expected warnings (optional components): SSH private keys, WiFi detection
+  - Critical errors (setup blockers): Missing credentials, system failures
+  - Section context helps pinpoint exactly where issues occurred
+
 ### Per-User SMB Mounting with Enhanced Reliability (2025-08-18)
 
 - **Per-user LaunchAgent approach**: Replaced system-level LaunchDaemon with user-specific mounting
@@ -196,9 +212,30 @@ Key improvements eliminate previous autofs reliability issues and provide robust
 
 **Application not starting**: Check LaunchAgent status with `launchctl list | grep <app>`. Verify shared configuration directory permissions.
 
-### Logs
+### Error Collection and Logs
 
-Setup logs are stored in `~/.local/state/MACMINI-setup.log` with automatic rotation. (Default name)
+**Error Collection System**: All setup scripts now provide both immediate error feedback and end-of-run summaries:
+
+```
+====== SETUP SUMMARY ======
+Setup completed, but 1 error and 2 warnings occurred:
+
+ERRORS:
+  ❌ Installing Homebrew Packages: Formula installation failed: some-package
+
+WARNINGS:
+  ⚠️ Copying SSH Keys: SSH private key not found at ~/.ssh/id_ed25519
+  ⚠️ WiFi Network Configuration: Could not detect current WiFi network
+
+Review the full log for details: ~/.local/state/macmini-setup.log
+```
+
+**Log Files**: Setup logs are stored in `~/.local/state/MACMINI-setup.log` with automatic rotation. (Default name)
+
+- **prep-airdrop.sh**: Console output during preparation (no separate log file)
+- **first-boot.sh**: `~/.local/state/macmini-setup.log`
+- **plex-setup.sh**: `~/.local/state/macmini-apps.log`  
+- **rclone-setup.sh**: `~/.local/state/macmini-apps.log`
 
 ## Contributing
 
@@ -206,7 +243,11 @@ When modifying scripts:
 
 1. Maintain idempotency - scripts should handle re-runs gracefully
 2. Add comprehensive logging via the `log()` and `show_log()` functions
-3. Use `check_success()` for error handling
+3. Use error collection system:
+   - `collect_error()` for critical failures that may block setup
+   - `collect_warning()` for non-critical issues (missing optional components)
+   - `set_section()` to provide context for error tracking
+   - `check_success()` for automatic error handling
 4. Update documentation for any configuration changes
 
 ## License

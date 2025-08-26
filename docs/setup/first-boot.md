@@ -205,6 +205,31 @@ tail -f ~/.local/state/macmini-setup.log
 
 ## Troubleshooting
 
+### Error Collection and Summary
+
+The first-boot setup script includes comprehensive error and warning collection:
+
+- **Real-time display**: Errors and warnings show immediately during setup
+- **End-of-run summary**: Consolidated review of all issues when setup completes
+- **Context tracking**: Each issue shows which setup section it occurred in
+
+Example summary output:
+```
+====== SETUP SUMMARY ======
+Setup completed, but 1 error and 2 warnings occurred:
+
+ERRORS:
+  ❌ Installing Homebrew Packages: Formula installation failed: some-package
+
+WARNINGS:
+  ⚠️ Configuring SSH Access: Remote Desktop setup failed or was cancelled
+  ⚠️ Setting Up Operator Account: Password verification warning
+
+Review the full log for details: ~/.local/state/macmini-setup.log
+```
+
+This summary helps identify issues that need attention without having to scroll through the entire setup log.
+
 ### Script Fails with "Safety Abort"
 
 This means you're trying to run the script on your development Mac instead of the Mac Mini:

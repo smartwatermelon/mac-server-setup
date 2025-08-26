@@ -167,6 +167,28 @@ macmini-setup/
 
 ## Troubleshooting
 
+### Error Collection and Summary
+
+The AirDrop preparation script includes comprehensive error and warning collection:
+
+- **Real-time display**: Errors and warnings show immediately during preparation
+- **End-of-preparation summary**: Consolidated review of all issues when preparation completes
+- **Context tracking**: Each issue shows which preparation section it occurred in
+
+Example summary output:
+```
+====== AIRDROP PREPARATION SUMMARY ======
+Preparation completed, but 2 warnings occurred:
+
+WARNINGS:
+  ⚠️ Copying SSH Keys: SSH private key not found at ~/.ssh/id_ed25519
+  ⚠️ WiFi Network Configuration: Could not detect current WiFi network
+
+Review issues above - some warnings may be expected if optional components are missing.
+```
+
+Many warnings during preparation are expected (missing optional components), while errors indicate critical issues that need resolution.
+
 ### 1Password Authentication Issues
 
 ```bash
