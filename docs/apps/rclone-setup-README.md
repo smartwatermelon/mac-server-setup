@@ -97,11 +97,12 @@ rclone sync ${RCLONE_REMOTE_NAME}:${DROPBOX_SYNC_FOLDER} ${DROPBOX_LOCAL_PATH}
 The rclone setup script includes comprehensive error and warning collection:
 
 - **Real-time display**: Errors and warnings show immediately during setup
-- **End-of-run summary**: Consolidated review of all issues when setup completes  
+- **End-of-run summary**: Consolidated review of all issues when setup completes
 - **Context tracking**: Each issue shows which setup section it occurred in
 
 Example summary output:
-```
+
+```bash
 ====== RCLONE SETUP SUMMARY ======
 rclone setup completed, but 1 error and 1 warning occurred:
 

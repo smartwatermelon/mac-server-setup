@@ -150,14 +150,15 @@ The Plex setup script includes comprehensive error and warning collection:
 - **Context tracking**: Each issue shows which setup section it occurred in
 
 Example summary output:
-```
+
+```bash
 ====== PLEX SETUP SUMMARY ======
 Plex setup completed, but 1 error and 2 warnings occurred:
 
 ERRORS:
   ❌ Installing Plex Media Server: Homebrew installation failed
 
-WARNINGS:  
+WARNINGS:
   ⚠️ Setting Up Per-User SMB Mount: Admin SMB mount failed - check credentials
   ⚠️ Configuring Remote Migration: SSH connection to old-server.local failed
 

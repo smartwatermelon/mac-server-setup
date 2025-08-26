@@ -216,7 +216,7 @@ Key improvements eliminate previous autofs reliability issues and provide robust
 
 **Error Collection System**: All setup scripts now provide both immediate error feedback and end-of-run summaries:
 
-```
+```bash
 ====== SETUP SUMMARY ======
 Setup completed, but 1 error and 2 warnings occurred:
 
@@ -234,7 +234,7 @@ Review the full log for details: ~/.local/state/macmini-setup.log
 
 - **prep-airdrop.sh**: Console output during preparation (no separate log file)
 - **first-boot.sh**: `~/.local/state/macmini-setup.log`
-- **plex-setup.sh**: `~/.local/state/macmini-apps.log`  
+- **plex-setup.sh**: `~/.local/state/macmini-apps.log`
 - **rclone-setup.sh**: `~/.local/state/macmini-apps.log`
 
 ## Contributing
