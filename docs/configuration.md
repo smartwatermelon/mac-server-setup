@@ -13,7 +13,7 @@ The configuration uses simple shell variable syntax:
 SERVER_NAME="MACMINI"
 OPERATOR_USERNAME="operator"
 
-# 1Password configuration  
+# 1Password configuration
 ONEPASSWORD_VAULT="personal"
 ONEPASSWORD_OPERATOR_ITEM="operator"
 ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
@@ -40,7 +40,7 @@ HOSTNAME_OVERRIDE=""
 
 **OPERATOR_USERNAME**: Name for the day-to-day user account
 
-- **Default**: "operator"  
+- **Default**: "operator"
 - **Used for**: User account creation, SSH access, automatic login
 - **Format**: Lowercase, no spaces (Unix username format)
 - **Example**: `OPERATOR_USERNAME="server"`
@@ -115,7 +115,7 @@ HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 
 **HOSTNAME_LOWER**: Lowercase version for file paths and system naming
 
-```bash  
+```bash
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 ```
 
@@ -148,10 +148,10 @@ ONEPASSWORD_TIMEMACHINE_ITEM="MediaServer TimeMachine"
 ```
 
 ```bash
-# Development server configuration  
+# Development server configuration
 SERVER_NAME="DEVSERVER"
 OPERATOR_USERNAME="dev"
-ONEPASSWORD_OPERATOR_ITEM="DevServer Operator" 
+ONEPASSWORD_OPERATOR_ITEM="DevServer Operator"
 ONEPASSWORD_TIMEMACHINE_ITEM="DevServer TimeMachine"
 ```
 
@@ -201,7 +201,7 @@ op item get "${ONEPASSWORD_TIMEMACHINE_ITEM}" --vault "${ONEPASSWORD_VAULT}"
 # Verify Plex NAS item exists (optional - will fall back to plex_nas.conf file)
 op item get "${ONEPASSWORD_PLEX_NAS_ITEM}" --vault "${ONEPASSWORD_VAULT}" || echo "Will use plex_nas.conf file"
 
-# Verify Apple ID item exists  
+# Verify Apple ID item exists
 op item get "${ONEPASSWORD_APPLEID_ITEM}" --vault "${ONEPASSWORD_VAULT}"
 ```
 
@@ -210,7 +210,7 @@ op item get "${ONEPASSWORD_APPLEID_ITEM}" --vault "${ONEPASSWORD_VAULT}"
 Test that your chosen server name resolves properly on your network:
 
 ```bash
-# After setup, test resolution  
+# After setup, test resolution
 ping "${HOSTNAME_LOWER}.local"
 
 # Test SSH connectivity
@@ -295,7 +295,7 @@ htop
 ncdu
 tree
 
-# Add to config/casks.txt  
+# Add to config/casks.txt
 visual-studio-code
 firefox
 vlc
@@ -311,7 +311,7 @@ SERVER_NAME="PRODSERVER"
 ONEPASSWORD_VAULT="Production Infrastructure"
 MONITORING_EMAIL="production-alerts@company.com"
 
-# config-staging.conf  
+# config-staging.conf
 SERVER_NAME="STAGINGSERVER"
 ONEPASSWORD_VAULT="Staging Infrastructure"
 MONITORING_EMAIL="staging-alerts@company.com"
