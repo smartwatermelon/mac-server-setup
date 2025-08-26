@@ -146,16 +146,16 @@ set_section() {
 collect_error() {
   local message="$1"
   local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
-  
+
   log "❌ ${message}"
   COLLECTED_ERRORS+=("${context}: ${message}")
 }
 
 # Function to collect a warning (with immediate display)
 collect_warning() {
-  local message="$1" 
+  local message="$1"
   local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
-  
+
   log "⚠️ ${message}"
   COLLECTED_WARNINGS+=("${context}: ${message}")
 }
@@ -164,17 +164,17 @@ collect_warning() {
 show_collected_issues() {
   local error_count=${#COLLECTED_ERRORS[@]}
   local warning_count=${#COLLECTED_WARNINGS[@]}
-  
+
   if [[ ${error_count} -eq 0 && ${warning_count} -eq 0 ]]; then
     log "✅ Plex setup completed successfully with no errors or warnings!"
     return
   fi
-  
+
   log ""
   log "====== PLEX SETUP SUMMARY ======"
   log "Plex setup completed, but ${error_count} errors and ${warning_count} warnings occurred:"
   log ""
-  
+
   if [[ ${error_count} -gt 0 ]]; then
     log "ERRORS:"
     for error in "${COLLECTED_ERRORS[@]}"; do
@@ -182,7 +182,7 @@ show_collected_issues() {
     done
     log ""
   fi
-  
+
   if [[ ${warning_count} -gt 0 ]]; then
     log "WARNINGS:"
     for warning in "${COLLECTED_WARNINGS[@]}"; do
@@ -190,7 +190,7 @@ show_collected_issues() {
     done
     log ""
   fi
-  
+
   log "Review the full log for details: ${LOG_FILE}"
 }
 
