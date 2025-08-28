@@ -292,7 +292,7 @@ fi
 
 mkdir -p "${LOG_DIR}"
 touch "${LOG_FILE}"
-chmod 644 "${LOG_FILE}"
+chmod 600 "${LOG_FILE}"
 
 # Function to check if a Terminal window with specific title exists
 check_terminal_window_exists() {
