@@ -238,13 +238,22 @@ if [[ ${WIFI_STRATEGY} =~ ^[Nn]$ ]]; then
     if [[ -n "${WIFI_PASSWORD}" ]]; then
       echo "WiFi password retrieved successfully."
 
-      # Save WiFi information securely in config directory
+      # Store WiFi credentials in Keychain
+      store_keychain_credential \
+        "mac-server-setup-wifi-${SERVER_NAME_LOWER}" \
+        "${SERVER_NAME_LOWER}" \
+        "${CURRENT_SSID}:${WIFI_PASSWORD}" \
+        "Mac Server Setup - WiFi Credentials"
+
+      # Create basic SSID config file (non-sensitive)
       cat >"${OUTPUT_PATH}/config/wifi_network.conf" <<EOF
 WIFI_SSID="${CURRENT_SSID}"
-WIFI_PASSWORD="${WIFI_PASSWORD}"
 EOF
-      chmod 600 "${OUTPUT_PATH}/config/wifi_network.conf"
-      echo "WiFi network configuration saved to config/wifi_network.conf"
+      chmod 644 "${OUTPUT_PATH}/config/wifi_network.conf"
+
+      # Clear password from memory
+      unset WIFI_PASSWORD
+      echo "WiFi credentials stored in Keychain and SSID saved to config"
     else
       collect_error "Could not retrieve WiFi password"
       echo "WiFi network configuration will not be automated."
@@ -258,6 +267,65 @@ else
   echo "✅ Migration Assistant will handle WiFi network setup automatically"
   echo "No WiFi credentials will be transferred to the setup package"
 fi
+
+# Keychain credential management functions
+# Store credential in Keychain with immediate verification
+store_keychain_credential() {
+  local service="$1"
+  local account="$2"
+  local password="$3"
+  local description="$4"
+
+  # Delete existing credential if present (for updates)
+  security delete-generic-password -s "${service}" -a "${account}" 2>/dev/null || true
+
+  # Store in Keychain with unrestricted access for LaunchAgent automation
+  # Note: -A flag allows any application access without prompting, required for LaunchAgent use
+  if security add-generic-password \
+    -s "${service}" \
+    -a "${account}" \
+    -w "${password}" \
+    -D "${description}" \
+    -A \
+    -U; then
+
+    # Immediately verify by reading back
+    local retrieved_password
+    if retrieved_password=$(security find-generic-password \
+      -s "${service}" \
+      -a "${account}" \
+      -w 2>/dev/null); then
+
+      if [[ "${password}" == "${retrieved_password}" ]]; then
+        echo "✅ Credential stored and verified in Keychain: ${service}"
+        return 0
+      else
+        collect_error "Keychain credential verification failed for ${service}"
+        return 1
+      fi
+    else
+      collect_error "Keychain credential verification failed for ${service}: could not retrieve"
+      return 1
+    fi
+  else
+    collect_error "Failed to store credential in Keychain: ${service}"
+    return 1
+  fi
+}
+
+# Create Keychain manifest for server
+create_keychain_manifest() {
+  cat >"${OUTPUT_PATH}/config/keychain_manifest.conf" <<EOF
+# Keychain service identifiers for credential retrieval
+KEYCHAIN_OPERATOR_SERVICE="mac-server-setup-operator-${SERVER_NAME_LOWER}"
+KEYCHAIN_PLEX_NAS_SERVICE="mac-server-setup-plex-nas-${SERVER_NAME_LOWER}"
+KEYCHAIN_TIMEMACHINE_SERVICE="mac-server-setup-timemachine-${SERVER_NAME_LOWER}"
+KEYCHAIN_WIFI_SERVICE="mac-server-setup-wifi-${SERVER_NAME_LOWER}"
+KEYCHAIN_ACCOUNT="${SERVER_NAME_LOWER}"
+EOF
+  chmod 600 "${OUTPUT_PATH}/config/keychain_manifest.conf"
+  echo "✅ Keychain manifest created"
+}
 
 # Set up operator account credentials using 1Password
 set_section "Setting up operator account credentials"
@@ -282,11 +350,18 @@ else
   echo "✅ Found existing ${ONEPASSWORD_OPERATOR_ITEM} credentials in 1Password"
 fi
 
-# Retrieve the operator password and save it for transfer
+# Retrieve the operator password and store in Keychain
 echo "Retrieving operator password from 1Password..."
-op read "op://${ONEPASSWORD_VAULT}/${ONEPASSWORD_OPERATOR_ITEM}/password" >"${OUTPUT_PATH}/config/operator_password"
-chmod 600 "${OUTPUT_PATH}/config/operator_password"
-echo "✅ Operator password saved for transfer"
+OPERATOR_PASSWORD=$(op read "op://${ONEPASSWORD_VAULT}/${ONEPASSWORD_OPERATOR_ITEM}/password")
+store_keychain_credential \
+  "mac-server-setup-operator-${SERVER_NAME_LOWER}" \
+  "${SERVER_NAME_LOWER}" \
+  "${OPERATOR_PASSWORD}" \
+  "Mac Server Setup - Operator Account Password"
+
+# Clear password from memory
+unset OPERATOR_PASSWORD
+echo "✅ Operator password stored in Keychain"
 
 # Set up Time Machine credentials using 1Password
 echo "Setting up Time Machine credentials..."
@@ -306,14 +381,22 @@ else
   TM_JSON=$(op item get "${OP_TIMEMACHINE_ENTRY}" --vault "${ONEPASSWORD_VAULT}" --format json)
   TM_URL=$(echo "${TM_JSON}" | jq -r '.urls[0].href')
 
-  # Create Time Machine configuration file
+  # Store TimeMachine credentials in Keychain (username:password format)
+  store_keychain_credential \
+    "mac-server-setup-timemachine-${SERVER_NAME_LOWER}" \
+    "${SERVER_NAME_LOWER}" \
+    "${TM_USERNAME}:${TM_PASSWORD}" \
+    "Mac Server Setup - TimeMachine Credentials"
+
+  # Create basic URL config file (non-sensitive)
   cat >"${OUTPUT_PATH}/config/timemachine.conf" <<EOF
-TM_USERNAME="${TM_USERNAME}"
-TM_PASSWORD="${TM_PASSWORD}"
 TM_URL="${TM_URL}"
 EOF
-  chmod 600 "${OUTPUT_PATH}/config/timemachine.conf"
-  echo "✅ Time Machine configuration saved for transfer"
+  chmod 644 "${OUTPUT_PATH}/config/timemachine.conf"
+
+  # Clear credentials from memory
+  unset TM_USERNAME TM_PASSWORD
+  echo "✅ Time Machine credentials stored in Keychain"
 fi
 
 # Set up Plex NAS credentials using 1Password
@@ -343,14 +426,22 @@ else
     PLEX_NAS_HOSTNAME="${PLEX_NAS_URL}"
   fi
 
-  # Create Plex NAS configuration file in app-setup config directory
+  # Store Plex NAS credentials in Keychain (username:password format)
+  store_keychain_credential \
+    "mac-server-setup-plex-nas-${SERVER_NAME_LOWER}" \
+    "${SERVER_NAME_LOWER}" \
+    "${PLEX_NAS_USERNAME}:${PLEX_NAS_PASSWORD}" \
+    "Mac Server Setup - Plex NAS Credentials"
+
+  # Create basic hostname config file (non-sensitive)
   cat >"${OUTPUT_PATH}/app-setup/config/plex_nas.conf" <<EOF
-PLEX_NAS_USERNAME="${PLEX_NAS_USERNAME}"
-PLEX_NAS_PASSWORD="${PLEX_NAS_PASSWORD}"
 PLEX_NAS_HOSTNAME="${PLEX_NAS_HOSTNAME}"
 EOF
-  chmod 600 "${OUTPUT_PATH}/app-setup/config/plex_nas.conf"
-  echo "✅ Plex NAS configuration saved for transfer"
+  chmod 644 "${OUTPUT_PATH}/app-setup/config/plex_nas.conf"
+
+  # Clear credentials from memory
+  unset PLEX_NAS_USERNAME PLEX_NAS_PASSWORD
+  echo "✅ Plex NAS credentials stored in Keychain"
 fi
 
 # Set up Dropbox synchronization if configured
@@ -440,6 +531,9 @@ chmod -R 755 "${OUTPUT_PATH}/scripts"
 chmod -R 755 "${OUTPUT_PATH}/app-setup"
 chmod 600 "${OUTPUT_PATH}/config/"* 2>/dev/null || true
 chmod 600 "${OUTPUT_PATH}/app-setup/config/"* 2>/dev/null || true
+
+# Create Keychain manifest for server-side credential access
+create_keychain_manifest
 
 # Show collected errors and warnings
 show_collected_issues

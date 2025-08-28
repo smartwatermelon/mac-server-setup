@@ -770,6 +770,118 @@ defaults write com.apple.ncprefs apps -array-add '{
 }'
 check_success "Notification settings configuration"
 
+# Keychain credential management functions
+# Secure credential retrieval function
+get_keychain_credential() {
+  local service="$1"
+  local account="$2"
+
+  local credential
+  if credential=$(security find-generic-password \
+    -s "${service}" \
+    -a "${account}" \
+    -w 2>/dev/null); then
+    echo "${credential}"
+    return 0
+  else
+    collect_error "Failed to retrieve credential from Keychain: ${service}"
+    return 1
+  fi
+}
+
+# Verify Keychain access and credentials after Apple ID setup
+verify_keychain_credentials() {
+  set_section "Verifying Keychain Credentials Access"
+
+  # Load keychain manifest
+  local manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
+  if [[ ! -f "${manifest_file}" ]]; then
+    collect_error "Keychain manifest not found: ${manifest_file}"
+    return 1
+  fi
+
+  # shellcheck source=/dev/null
+  source "${manifest_file}"
+
+  # Validate required variables from manifest
+  if [[ -z "${KEYCHAIN_OPERATOR_SERVICE:-}" || -z "${KEYCHAIN_ACCOUNT:-}" || -z "${KEYCHAIN_PLEX_NAS_SERVICE:-}" || -z "${KEYCHAIN_TIMEMACHINE_SERVICE:-}" || -z "${KEYCHAIN_WIFI_SERVICE:-}" ]]; then
+    collect_error "Required keychain variables not found in manifest"
+    return 1
+  fi
+
+  # Test each required credential with retry logic
+  local max_attempts=30
+  local attempt=1
+  local credentials_available=false
+
+  show_log "Waiting for iCloud Keychain sync to complete..."
+  show_log "This may take up to 5 minutes after Apple ID setup"
+
+  while [[ ${attempt} -le ${max_attempts} ]]; do
+    log "Keychain verification attempt ${attempt}/${max_attempts}"
+
+    # Check each credential
+    local all_credentials_found=true
+
+    # Operator credential (required)
+    if security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
+      log "  ✅ Operator credential available"
+    else
+      log "  ❌ Operator credential not yet available"
+      all_credentials_found=false
+    fi
+
+    # Plex NAS credential (required)
+    if security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
+      log "  ✅ Plex NAS credential available"
+    else
+      log "  ❌ Plex NAS credential not yet available"
+      all_credentials_found=false
+    fi
+
+    # TimeMachine credential (optional)
+    if security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
+      log "  ✅ TimeMachine credential available"
+    else
+      log "  ⚠️ TimeMachine credential not available (may be optional)"
+    fi
+
+    # WiFi credential (optional)
+    if security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
+      log "  ✅ WiFi credential available"
+    else
+      log "  ⚠️ WiFi credential not available (may be optional)"
+    fi
+
+    if [[ "${all_credentials_found}" == "true" ]]; then
+      show_log "✅ All required credentials available in Keychain"
+      credentials_available=true
+      break
+    fi
+
+    log "Waiting 10 seconds for Keychain sync..."
+    sleep 10
+    ((attempt++))
+  done
+
+  if [[ "${credentials_available}" == "false" ]]; then
+    collect_error "Required credentials not available in Keychain after ${max_attempts} attempts"
+    show_log "This may indicate:"
+    show_log "1. Apple ID setup was not completed"
+    show_log "2. iCloud Keychain is not enabled"
+    show_log "3. Network connectivity issues preventing sync"
+    return 1
+  fi
+
+  return 0
+}
+
+# Verify Keychain credentials are available after Apple ID setup
+if ! verify_keychain_credentials; then
+  collect_error "Keychain credential verification failed"
+  exit 1
+fi
+
 # Create operator account if it doesn't exist
 set_section "Setting Up Operator Account"
 if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
@@ -777,27 +889,35 @@ if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
 else
   log "Creating operator account"
 
-  # Read the password from the transferred file
-  OPERATOR_PASSWORD_FILE="${SETUP_DIR}/config/operator_password"
-  if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
-    OPERATOR_PASSWORD=$(<"${OPERATOR_PASSWORD_FILE}")
-    log "Using password from 1Password (${ONEPASSWORD_OPERATOR_ITEM})"
+  # Load keychain manifest
+  manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
+  # shellcheck source=/dev/null
+  source "${manifest_file}"
+
+  # Get credential securely from Keychain
+  operator_password
+  if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "${KEYCHAIN_ACCOUNT}"); then
+    log "Using password from Keychain (${ONEPASSWORD_OPERATOR_ITEM})"
   else
-    log "❌ Operator password file not found"
+    log "❌ Failed to retrieve operator password from Keychain"
     exit 1
   fi
 
   # Create the operator account
-  sudo -p "[Account setup] Enter password to create operator account: " sysadminctl -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${OPERATOR_PASSWORD}" -hint "See 1Password ${ONEPASSWORD_OPERATOR_ITEM} for password" 2>/dev/null
+  sudo -p "[Account setup] Enter password to create operator account: " sysadminctl -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${operator_password}" -hint "See 1Password ${ONEPASSWORD_OPERATOR_ITEM} for password" 2>/dev/null
   check_success "Operator account creation"
 
   # Verify the password works
-  if dscl /Local/Default -authonly "${OPERATOR_USERNAME}" "${OPERATOR_PASSWORD}"; then
+  if dscl /Local/Default -authonly "${OPERATOR_USERNAME}" "${operator_password}"; then
     show_log "✅ Password verification successful"
   else
     collect_error "Password verification failed"
+    unset operator_password
     exit 1
   fi
+
+  # Clear password from memory immediately
+  unset operator_password
 
   # Store reference to 1Password (don't store actual password)
   echo "Operator account password is stored in 1Password: op://${ONEPASSWORD_VAULT}/${ONEPASSWORD_OPERATOR_ITEM}/password" >"/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
@@ -872,13 +992,17 @@ sudo -iu "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.controlcen
 # Configure automatic login for operator account (whether new or existing)
 section "Automatic login for operator account"
 log "Configuring automatic login for operator account"
-OPERATOR_PASSWORD_FILE="${SETUP_DIR}/config/operator_password"
-if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
-  OPERATOR_PASSWORD=$(<"${OPERATOR_PASSWORD_FILE}")
+# Load keychain manifest
+manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
+# shellcheck source=/dev/null
+source "${manifest_file}"
 
+# Get credential securely from Keychain for auto-login
+if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "${KEYCHAIN_ACCOUNT}"); then
   # Create the encoded password file that macOS uses for auto-login
-  ENCODED_PASSWORD=$(echo "${OPERATOR_PASSWORD}" | openssl enc -base64)
-  echo "${ENCODED_PASSWORD}" | sudo -p "[Auto-login] Enter password to configure automatic login: " tee /etc/kcpassword >/dev/null
+  encoded_password
+  encoded_password=$(echo "${operator_password}" | openssl enc -base64)
+  echo "${encoded_password}" | sudo -p "[Auto-login] Enter password to configure automatic login: " tee /etc/kcpassword >/dev/null
   sudo chmod 600 /etc/kcpassword
   check_success "Create auto-login password file"
 
@@ -886,10 +1010,12 @@ if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
   sudo -p "[Auto-login] Enter password to set auto-login user: " defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser "${OPERATOR_USERNAME}"
   check_success "Set auto-login user"
 
-  show_log "✅ Automatic login configured for ${OPERATOR_USERNAME}"
+  # Clear passwords from memory immediately
+  unset operator_password encoded_password
 
+  show_log "✅ Automatic login configured for ${OPERATOR_USERNAME}"
 else
-  log "Operator password file not found at ${OPERATOR_PASSWORD_FILE} - skipping automatic login setup"
+  log "Failed to retrieve operator password from Keychain - skipping automatic login setup"
 fi
 
 # Add operator to sudoers
