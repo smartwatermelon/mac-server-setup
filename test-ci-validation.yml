@@ -1,0 +1,11 @@
+---
+# Simple test YAML to validate CI yamllint paths
+test:
+  name: "Hello World - YAML Test"
+  description: "Simple test YAML file for CI validation"
+  items:
+    - shell
+    - python
+    - html
+    - yaml
+    - markdown
