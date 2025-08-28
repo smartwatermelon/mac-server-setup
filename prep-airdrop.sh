@@ -277,11 +277,11 @@ store_keychain_credential() {
   local description="$4"
 
   # Delete existing credential if present (for updates)
-  security delete-generic-password -s "${service}" -a "${account}" 2>/dev/null || true
+  security delete-internet-password -s "${service}" -a "${account}" 2>/dev/null || true
 
-  # Store in Keychain with unrestricted access for LaunchAgent automation
+  # Store in Keychain as internet password (these sync with iCloud Keychain automatically)
   # Note: -A flag allows any application access without prompting, required for LaunchAgent use
-  if security add-generic-password \
+  if security add-internet-password \
     -s "${service}" \
     -a "${account}" \
     -w "${password}" \
@@ -291,7 +291,7 @@ store_keychain_credential() {
 
     # Immediately verify by reading back
     local retrieved_password
-    if retrieved_password=$(security find-generic-password \
+    if retrieved_password=$(security find-internet-password \
       -s "${service}" \
       -a "${account}" \
       -w 2>/dev/null); then

@@ -777,7 +777,7 @@ get_keychain_credential() {
   local account="$2"
 
   local credential
-  if credential=$(security find-generic-password \
+  if credential=$(security find-internet-password \
     -s "${service}" \
     -a "${account}" \
     -w 2>/dev/null); then
@@ -824,7 +824,7 @@ verify_keychain_credentials() {
     local all_credentials_found=true
 
     # Operator credential (required)
-    if security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
+    if security find-internet-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
       log "  ✅ Operator credential available"
     else
       log "  ❌ Operator credential not yet available"
@@ -832,7 +832,7 @@ verify_keychain_credentials() {
     fi
 
     # Plex NAS credential (required)
-    if security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
+    if security find-internet-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
       log "  ✅ Plex NAS credential available"
     else
       log "  ❌ Plex NAS credential not yet available"
@@ -840,14 +840,14 @@ verify_keychain_credentials() {
     fi
 
     # TimeMachine credential (optional)
-    if security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
+    if security find-internet-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
       log "  ✅ TimeMachine credential available"
     else
       log "  ⚠️ TimeMachine credential not available (may be optional)"
     fi
 
     # WiFi credential (optional)
-    if security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
+    if security find-internet-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
       log "  ✅ WiFi credential available"
     else
       log "  ⚠️ WiFi credential not available (may be optional)"

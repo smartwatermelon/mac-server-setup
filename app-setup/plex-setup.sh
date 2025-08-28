@@ -214,7 +214,7 @@ get_keychain_credential() {
   local account="$2"
   local credential
 
-  if credential=$(security find-generic-password -s "${service}" -a "${account}" -w 2>/dev/null); then
+  if credential=$(security find-internet-password -s "${service}" -a "${account}" -w 2>/dev/null); then
     echo "${credential}"
     return 0
   else
