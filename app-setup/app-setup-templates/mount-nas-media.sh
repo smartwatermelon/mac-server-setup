@@ -33,7 +33,7 @@ mkdir -p "${HOME}/.local/mnt"
 
 # Ensure log file exists with proper permissions
 touch "${LOG_FILE}"
-chmod 644 "${LOG_FILE}"
+chmod 600 "${LOG_FILE}"
 truncate -s 0 "${LOG_FILE}" || true
 
 # Logging function
