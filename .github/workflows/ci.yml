@@ -15,6 +15,8 @@ jobs:
       shell-scripts: ${{ steps.changes.outputs.shell-scripts }}
       markdown: ${{ steps.changes.outputs.markdown }}
       yaml: ${{ steps.changes.outputs.yaml }}
+      python: ${{ steps.changes.outputs.python }}
+      html: ${{ steps.changes.outputs.html }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v2
@@ -32,6 +34,10 @@ jobs:
               - '**/*.yaml'
               - '.github/workflows/**'
               - '.github/workflows/.yamllint'
+            python:
+              - '**/*.py'
+            html:
+              - '**/*.html'
 
   shellcheck:
     name: Shell Script Analysis
@@ -55,24 +61,34 @@ jobs:
         run: |
           set -e
 
-          # Use config from .github/workflows if available, fallback to repo root
-          SHELLCHECK_CONFIG=""
+          # shellcheck will automatically use .shellcheckrc from current directory
+          if [[ -f ".github/workflows/.shellcheckrc" ]]; then
+            echo "Found .shellcheckrc in .github/workflows/"
+            cd .github/workflows
+            WORKING_DIR="../../"
+          else
+            echo "Using shellcheck with default settings"
+            WORKING_DIR="."
+          fi
 
           # Check .sh files (excluding .git directory)
           while IFS= read -r -d '' file; do
-            if [[ -f "$file" && -r "$file" ]]; then
+            if [[ -f "$WORKING_DIR/$file" && -r "$WORKING_DIR/$file" ]]; then
               echo "Checking $file"
-              shellcheck $SHELLCHECK_CONFIG "$file"
+              shellcheck "$WORKING_DIR/$file"
             fi
-          done < <(find . -name "*.sh" -type f -not -path './.git/*' -print0)
+          done < <(find "$WORKING_DIR" -name "*.sh" -type f -not -path './.git/*' -print0 \
+            | sed "s|^$WORKING_DIR/||")
 
           # Check executable files with shell shebangs (excluding .git directory)
           while IFS= read -r -d '' file; do
-            if [[ -f "$file" && -r "$file" ]] && grep -q '^#!/.*sh' "$file" 2>/dev/null; then
+            if [[ -f "$WORKING_DIR/$file" && -r "$WORKING_DIR/$file" ]] && \
+              grep -q '^#!/.*sh' "$WORKING_DIR/$file" 2>/dev/null; then
               echo "Checking executable $file"
-              shellcheck $SHELLCHECK_CONFIG "$file"
+              shellcheck "$WORKING_DIR/$file"
             fi
-          done < <(find . -type f -executable -not -path './.git/*' -print0 2>/dev/null)
+          done < <(find "$WORKING_DIR" -type f -executable -not -path './.git/*' -print0 \
+            2>/dev/null | sed "s|^$WORKING_DIR/||")
 
   shfmt:
     name: Shell Script Formatting
@@ -135,6 +151,8 @@ jobs:
 
       - name: Run markdownlint
         run: |
+          # Use same config as global pre-commit (MD013 disabled)
+          echo "Using markdownlint with MD013 disabled (matching global config)"
           find . -name "*.md" -type f -not -path './.git/*' -print0 | \
             grep -zv 'LICENSE\.md$' | \
             xargs -0 markdownlint --disable=MD013
@@ -175,6 +193,60 @@ jobs:
 
           find . \( -name "*.yml" -o -name "*.yaml" \) -type f -not -path './.git/*' -print0 | \
             xargs -0 yamllint
+
+  python-lint:
+    name: Python Linting and Formatting
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.python == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install Python tools
+        run: |
+          pip install black flake8 flake8-bugbear
+
+      - name: Find Python files
+        run: |
+          echo "=== Python files found ==="
+          find . -name "*.py" -type f -not -path './.git/*'
+
+      - name: Run black (formatter check)
+        run: |
+          echo "Checking Python formatting with black..."
+          black --check --quiet .
+
+      - name: Run flake8 (linter)
+        run: |
+          echo "Running Python linter with flake8..."
+          flake8 .
+
+  html-lint:
+    name: HTML Validation
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.html == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install HTML Tidy
+        run: sudo apt-get update && sudo apt-get install -y tidy
+
+      - name: Find HTML files
+        run: |
+          echo "=== HTML files found ==="
+          find . -name "*.html" -type f -not -path './.git/*'
+
+      - name: Run HTML validation
+        run: |
+          echo "Validating HTML files with tidy..."
+          find . -name "*.html" -type f -not -path './.git/*' -print0 | \
+            xargs -0 -I {} tidy -q -e {}
 
   # Future test placeholders
   configuration-validation:
