@@ -148,19 +148,33 @@ set_section() {
 # Function to collect an error (with immediate display)
 collect_error() {
   local message="$1"
+  local line_number="${2:-${LINENO}}"
   local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+  local script_name
+  script_name="$(basename "${BASH_SOURCE[1]:-${0}}")"
 
-  show_log "❌ ${message}"
-  COLLECTED_ERRORS+=("${context}: ${message}")
+  # Normalize message to single line (replace newlines with spaces)
+  local clean_message
+  clean_message="$(echo "${message}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
+
+  show_log "❌ ${clean_message}"
+  COLLECTED_ERRORS+=("[${script_name}:${line_number}] ${context}: ${clean_message}")
 }
 
 # Function to collect a warning (with immediate display)
 collect_warning() {
   local message="$1"
+  local line_number="${2:-${LINENO}}"
   local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+  local script_name
+  script_name="$(basename "${BASH_SOURCE[1]:-${0}}")"
 
-  show_log "⚠️ ${message}"
-  COLLECTED_WARNINGS+=("${context}: ${message}")
+  # Normalize message to single line (replace newlines with spaces)
+  local clean_message
+  clean_message="$(echo "${message}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
+
+  show_log "⚠️ ${clean_message}"
+  COLLECTED_WARNINGS+=("[${script_name}:${line_number}] ${context}: ${clean_message}")
 }
 
 # Function to show collected errors and warnings at end
@@ -181,7 +195,7 @@ show_collected_issues() {
   if [[ ${error_count} -gt 0 ]]; then
     show_log "ERRORS:"
     for error in "${COLLECTED_ERRORS[@]}"; do
-      show_log "  ❌ ${error}"
+      show_log "  ${error}"
     done
     show_log ""
   fi
@@ -189,7 +203,7 @@ show_collected_issues() {
   if [[ ${warning_count} -gt 0 ]]; then
     show_log "WARNINGS:"
     for warning in "${COLLECTED_WARNINGS[@]}"; do
-      show_log "  ⚠️ ${warning}"
+      show_log "  ${warning}"
     done
     show_log ""
   fi
