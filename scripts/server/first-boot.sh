@@ -809,7 +809,7 @@ import_external_keychain_credentials() {
     return 1
   fi
 
-  # Move external keychain file to user's keychain directory
+  # Copy external keychain file to user's keychain directory (preserve original for idempotency)
   local external_keychain_file="${SETUP_DIR}/config/${EXTERNAL_KEYCHAIN}-db"
   local user_keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}-db"
 
@@ -818,10 +818,10 @@ import_external_keychain_credentials() {
     return 1
   fi
 
-  log "Moving external keychain to user's keychain directory..."
-  mv "${external_keychain_file}" "${user_keychain_file}"
+  log "Copying external keychain to user's keychain directory..."
+  cp "${external_keychain_file}" "${user_keychain_file}"
   chmod 600 "${user_keychain_file}"
-  check_success "External keychain file moved"
+  check_success "External keychain file copied"
 
   # Unlock external keychain
   log "Unlocking external keychain with dev machine fingerprint..."
@@ -924,7 +924,6 @@ else
   source "${manifest_file}"
 
   # Get credential securely from Keychain
-  operator_password
   if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "${KEYCHAIN_ACCOUNT}"); then
     log "Using password from Keychain (${ONEPASSWORD_OPERATOR_ITEM})"
   else
@@ -944,9 +943,6 @@ else
     unset operator_password
     exit 1
   fi
-
-  # Clear password from memory immediately
-  unset operator_password
 
   # Store reference to 1Password (don't store actual password)
   echo "Operator account password is stored in 1Password: op://${ONEPASSWORD_VAULT}/${ONEPASSWORD_OPERATOR_ITEM}/password" >"/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
@@ -974,6 +970,9 @@ else
 
   # Unlock operator's keychain
   sudo -p "[Operator keychain] Enter password to unlock operator keychain: " -iu "${OPERATOR_USERNAME}" security unlock-keychain -p "${operator_password}"
+
+  # Clear password from memory after all uses are complete
+  unset operator_password
 
   # Import operator credentials to operator's keychain
   if operator_credential=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
@@ -1087,7 +1086,6 @@ source "${manifest_file}"
 # Get credential securely from Keychain for auto-login
 if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "${KEYCHAIN_ACCOUNT}"); then
   # Create the encoded password file that macOS uses for auto-login
-  encoded_password
   encoded_password=$(echo "${operator_password}" | openssl enc -base64)
   echo "${encoded_password}" | sudo -p "[Auto-login] Enter password to configure automatic login: " tee /etc/kcpassword >/dev/null
   sudo chmod 600 /etc/kcpassword
@@ -1807,6 +1805,16 @@ show_log "   - Test that all applications are accessible as the operator"
 # Clean up temporary sudo timeout configuration
 log "Removing temporary sudo timeout configuration"
 sudo rm -f /etc/sudoers.d/10_setup_timeout
+
+# Clean up external keychain from setup directory (only after successful completion)
+if [[ -n "${EXTERNAL_KEYCHAIN:-}" ]]; then
+  setup_keychain_file="${SETUP_DIR}/config/${EXTERNAL_KEYCHAIN}-db"
+  if [[ -f "${setup_keychain_file}" ]]; then
+    log "Cleaning up external keychain from setup directory"
+    rm -f "${setup_keychain_file}"
+    log "✅ Setup keychain file cleaned up"
+  fi
+fi
 
 # Show collected errors and warnings
 show_collected_issues
