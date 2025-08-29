@@ -238,9 +238,9 @@ if [[ ${WIFI_STRATEGY} =~ ^[Nn]$ ]]; then
     if [[ -n "${WIFI_PASSWORD}" ]]; then
       echo "WiFi password retrieved successfully."
 
-      # Store WiFi credentials in Keychain
-      store_keychain_credential \
-        "mac-server-setup-wifi-${SERVER_NAME_LOWER}" \
+      # Store WiFi credentials in external keychain
+      store_external_keychain_credential \
+        "wifi-${SERVER_NAME_LOWER}" \
         "${SERVER_NAME_LOWER}" \
         "${CURRENT_SSID}:${WIFI_PASSWORD}" \
         "Mac Server Setup - WiFi Credentials"
@@ -268,47 +268,112 @@ else
   echo "No WiFi credentials will be transferred to the setup package"
 fi
 
-# Keychain credential management functions
-# Store credential in Keychain with immediate verification
-store_keychain_credential() {
+# External keychain credential management functions
+# Create and manage external keychain for credential transfer
+
+# Initialize external keychain for credential storage
+init_external_keychain() {
+  # Generate keychain password from dev machine fingerprint
+  KEYCHAIN_PASSWORD="$(system_profiler SPHardwareDataType | awk '/Hardware UUID/{print $3}')"
+  EXTERNAL_KEYCHAIN="mac-server-setup"
+
+  echo "Initializing external keychain for credential transfer..."
+
+  # Delete existing keychain if present
+  security delete-keychain "${EXTERNAL_KEYCHAIN}" 2>/dev/null || true
+
+  # Create new external keychain
+  if security create-keychain -p "${KEYCHAIN_PASSWORD}" "${EXTERNAL_KEYCHAIN}"; then
+    echo "✅ External keychain created"
+  else
+    collect_error "Failed to create external keychain"
+    return 1
+  fi
+
+  # Unlock the keychain for credential storage
+  if security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${EXTERNAL_KEYCHAIN}"; then
+    echo "✅ External keychain unlocked for credential storage"
+  else
+    collect_error "Failed to unlock external keychain"
+    return 1
+  fi
+
+  return 0
+}
+
+# Store credential in external keychain with immediate verification
+store_external_keychain_credential() {
   local service="$1"
   local account="$2"
   local password="$3"
   local description="$4"
 
   # Delete existing credential if present (for updates)
-  security delete-internet-password -s "${service}" -a "${account}" 2>/dev/null || true
+  security delete-generic-password -s "${service}" -a "${account}" "${EXTERNAL_KEYCHAIN}" 2>/dev/null || true
 
-  # Store in Keychain as internet password (these sync with iCloud Keychain automatically)
-  # Note: -A flag allows any application access without prompting, required for LaunchAgent use
-  if security add-internet-password \
+  # Store in external keychain
+  # Note: -A flag allows any application access without prompting, required for transfer
+  if security add-generic-password \
     -s "${service}" \
     -a "${account}" \
     -w "${password}" \
     -D "${description}" \
     -A \
-    -U; then
+    -U \
+    "${EXTERNAL_KEYCHAIN}"; then
 
-    # Immediately verify by reading back
+    # Immediately verify by reading back from external keychain
     local retrieved_password
-    if retrieved_password=$(security find-internet-password \
+    if retrieved_password=$(security find-generic-password \
       -s "${service}" \
       -a "${account}" \
-      -w 2>/dev/null); then
+      -w \
+      "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
 
       if [[ "${password}" == "${retrieved_password}" ]]; then
-        echo "✅ Credential stored and verified in Keychain: ${service}"
+        echo "✅ Credential stored and verified in external keychain: ${service}"
         return 0
       else
-        collect_error "Keychain credential verification failed for ${service}"
+        collect_error "External keychain credential verification failed for ${service}"
         return 1
       fi
     else
-      collect_error "Keychain credential verification failed for ${service}: could not retrieve"
+      collect_error "External keychain credential verification failed for ${service}: could not retrieve"
       return 1
     fi
   else
-    collect_error "Failed to store credential in Keychain: ${service}"
+    collect_error "Failed to store credential in external keychain: ${service}"
+    return 1
+  fi
+}
+
+# Finalize external keychain and add to airdrop package
+finalize_external_keychain() {
+  echo "Finalizing external keychain for transfer..."
+
+  # Lock the external keychain
+  security lock-keychain "${EXTERNAL_KEYCHAIN}"
+  check_success "External keychain locked"
+
+  # Get the keychain file path
+  local keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}.keychain-db"
+
+  if [[ -f "${keychain_file}" ]]; then
+    # Copy keychain file to airdrop package
+    cp "${keychain_file}" "${OUTPUT_PATH}/config/"
+    chmod 600 "${OUTPUT_PATH}/config/${EXTERNAL_KEYCHAIN}.keychain-db"
+
+    echo "✅ External keychain added to airdrop package"
+    echo "   Keychain file: ${EXTERNAL_KEYCHAIN}.keychain-db"
+    echo "   Password: Hardware UUID fingerprint"
+
+    # Store keychain password in manifest for server use
+    echo "KEYCHAIN_PASSWORD=\"${KEYCHAIN_PASSWORD}\"" >>"${OUTPUT_PATH}/config/keychain_manifest.conf"
+    echo "EXTERNAL_KEYCHAIN=\"${EXTERNAL_KEYCHAIN}\"" >>"${OUTPUT_PATH}/config/keychain_manifest.conf"
+
+    return 0
+  else
+    collect_error "External keychain file not found: ${keychain_file}"
     return 1
   fi
 }
@@ -316,11 +381,11 @@ store_keychain_credential() {
 # Create Keychain manifest for server
 create_keychain_manifest() {
   cat >"${OUTPUT_PATH}/config/keychain_manifest.conf" <<EOF
-# Keychain service identifiers for credential retrieval
-KEYCHAIN_OPERATOR_SERVICE="mac-server-setup-operator-${SERVER_NAME_LOWER}"
-KEYCHAIN_PLEX_NAS_SERVICE="mac-server-setup-plex-nas-${SERVER_NAME_LOWER}"
-KEYCHAIN_TIMEMACHINE_SERVICE="mac-server-setup-timemachine-${SERVER_NAME_LOWER}"
-KEYCHAIN_WIFI_SERVICE="mac-server-setup-wifi-${SERVER_NAME_LOWER}"
+# External keychain service identifiers for credential retrieval
+KEYCHAIN_OPERATOR_SERVICE="operator-${SERVER_NAME_LOWER}"
+KEYCHAIN_PLEX_NAS_SERVICE="plex-nas-${SERVER_NAME_LOWER}"
+KEYCHAIN_TIMEMACHINE_SERVICE="timemachine-${SERVER_NAME_LOWER}"
+KEYCHAIN_WIFI_SERVICE="wifi-${SERVER_NAME_LOWER}"
 KEYCHAIN_ACCOUNT="${SERVER_NAME_LOWER}"
 EOF
   chmod 600 "${OUTPUT_PATH}/config/keychain_manifest.conf"
@@ -329,6 +394,9 @@ EOF
 
 # Set up operator account credentials using 1Password
 set_section "Setting up operator account credentials"
+
+# Initialize external keychain for credential storage
+init_external_keychain
 
 # Check if operator credentials exist in 1Password
 if ! op item get "${ONEPASSWORD_OPERATOR_ITEM}" --vault "${ONEPASSWORD_VAULT}" >/dev/null 2>&1; then
@@ -350,11 +418,11 @@ else
   echo "✅ Found existing ${ONEPASSWORD_OPERATOR_ITEM} credentials in 1Password"
 fi
 
-# Retrieve the operator password and store in Keychain
+# Retrieve the operator password and store in external keychain
 echo "Retrieving operator password from 1Password..."
 OPERATOR_PASSWORD=$(op read "op://${ONEPASSWORD_VAULT}/${ONEPASSWORD_OPERATOR_ITEM}/password")
-store_keychain_credential \
-  "mac-server-setup-operator-${SERVER_NAME_LOWER}" \
+store_external_keychain_credential \
+  "operator-${SERVER_NAME_LOWER}" \
   "${SERVER_NAME_LOWER}" \
   "${OPERATOR_PASSWORD}" \
   "Mac Server Setup - Operator Account Password"
@@ -381,9 +449,9 @@ else
   TM_JSON=$(op item get "${OP_TIMEMACHINE_ENTRY}" --vault "${ONEPASSWORD_VAULT}" --format json)
   TM_URL=$(echo "${TM_JSON}" | jq -r '.urls[0].href')
 
-  # Store TimeMachine credentials in Keychain (username:password format)
-  store_keychain_credential \
-    "mac-server-setup-timemachine-${SERVER_NAME_LOWER}" \
+  # Store TimeMachine credentials in external keychain (username:password format)
+  store_external_keychain_credential \
+    "timemachine-${SERVER_NAME_LOWER}" \
     "${SERVER_NAME_LOWER}" \
     "${TM_USERNAME}:${TM_PASSWORD}" \
     "Mac Server Setup - TimeMachine Credentials"
@@ -426,9 +494,9 @@ else
     PLEX_NAS_HOSTNAME="${PLEX_NAS_URL}"
   fi
 
-  # Store Plex NAS credentials in Keychain (username:password format)
-  store_keychain_credential \
-    "mac-server-setup-plex-nas-${SERVER_NAME_LOWER}" \
+  # Store Plex NAS credentials in external keychain (username:password format)
+  store_external_keychain_credential \
+    "plex-nas-${SERVER_NAME_LOWER}" \
     "${SERVER_NAME_LOWER}" \
     "${PLEX_NAS_USERNAME}:${PLEX_NAS_PASSWORD}" \
     "Mac Server Setup - Plex NAS Credentials"
@@ -534,6 +602,9 @@ chmod 600 "${OUTPUT_PATH}/app-setup/config/"* 2>/dev/null || true
 
 # Create Keychain manifest for server-side credential access
 create_keychain_manifest
+
+# Finalize external keychain and add to airdrop package
+finalize_external_keychain
 
 # Show collected errors and warnings
 show_collected_issues

@@ -50,7 +50,7 @@ get_nas_credentials() {
   keychain_account="$(whoami)"
 
   local combined_credential
-  if combined_credential=$(security find-internet-password -s "${keychain_service}" -a "${keychain_account}" -w 2>/dev/null); then
+  if combined_credential=$(security find-generic-password -s "${keychain_service}" -a "${keychain_account}" -w 2>/dev/null); then
     # Split combined credential (format: "username:password")
     PLEX_NAS_USERNAME="${combined_credential%:*}"
     PLEX_NAS_PASSWORD="${combined_credential#*:}"

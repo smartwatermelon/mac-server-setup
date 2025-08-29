@@ -777,7 +777,7 @@ get_keychain_credential() {
   local account="$2"
 
   local credential
-  if credential=$(security find-internet-password \
+  if credential=$(security find-generic-password \
     -s "${service}" \
     -a "${account}" \
     -w 2>/dev/null); then
@@ -789,9 +789,9 @@ get_keychain_credential() {
   fi
 }
 
-# Verify Keychain access and credentials after Apple ID setup
-verify_keychain_credentials() {
-  set_section "Verifying Keychain Credentials Access"
+# Import credentials from external keychain and populate user keychains
+import_external_keychain_credentials() {
+  set_section "Importing Credentials from External Keychain"
 
   # Load keychain manifest
   local manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
@@ -804,81 +804,110 @@ verify_keychain_credentials() {
   source "${manifest_file}"
 
   # Validate required variables from manifest
-  if [[ -z "${KEYCHAIN_OPERATOR_SERVICE:-}" || -z "${KEYCHAIN_ACCOUNT:-}" || -z "${KEYCHAIN_PLEX_NAS_SERVICE:-}" || -z "${KEYCHAIN_TIMEMACHINE_SERVICE:-}" || -z "${KEYCHAIN_WIFI_SERVICE:-}" ]]; then
+  if [[ -z "${KEYCHAIN_PASSWORD:-}" || -z "${EXTERNAL_KEYCHAIN:-}" ]]; then
     collect_error "Required keychain variables not found in manifest"
     return 1
   fi
 
-  # Test each required credential with retry logic
-  local max_attempts=30
-  local attempt=1
-  local credentials_available=false
+  # Move external keychain file to user's keychain directory
+  local external_keychain_file="${SETUP_DIR}/config/${EXTERNAL_KEYCHAIN}.keychain-db"
+  local user_keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}.keychain-db"
 
-  show_log "Waiting for iCloud Keychain sync to complete..."
-  show_log "This may take up to 5 minutes after Apple ID setup"
-
-  while [[ ${attempt} -le ${max_attempts} ]]; do
-    log "Keychain verification attempt ${attempt}/${max_attempts}"
-
-    # Check each credential
-    local all_credentials_found=true
-
-    # Operator credential (required)
-    if security find-internet-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
-      log "  ✅ Operator credential available"
-    else
-      log "  ❌ Operator credential not yet available"
-      all_credentials_found=false
-    fi
-
-    # Plex NAS credential (required)
-    if security find-internet-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
-      log "  ✅ Plex NAS credential available"
-    else
-      log "  ❌ Plex NAS credential not yet available"
-      all_credentials_found=false
-    fi
-
-    # TimeMachine credential (optional)
-    if security find-internet-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
-      log "  ✅ TimeMachine credential available"
-    else
-      log "  ⚠️ TimeMachine credential not available (may be optional)"
-    fi
-
-    # WiFi credential (optional)
-    if security find-internet-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w >/dev/null 2>&1; then
-      log "  ✅ WiFi credential available"
-    else
-      log "  ⚠️ WiFi credential not available (may be optional)"
-    fi
-
-    if [[ "${all_credentials_found}" == "true" ]]; then
-      show_log "✅ All required credentials available in Keychain"
-      credentials_available=true
-      break
-    fi
-
-    log "Waiting 10 seconds for Keychain sync..."
-    sleep 10
-    ((attempt++))
-  done
-
-  if [[ "${credentials_available}" == "false" ]]; then
-    collect_error "Required credentials not available in Keychain after ${max_attempts} attempts"
-    show_log "This may indicate:"
-    show_log "1. Apple ID setup was not completed"
-    show_log "2. iCloud Keychain is not enabled"
-    show_log "3. Network connectivity issues preventing sync"
+  if [[ ! -f "${external_keychain_file}" ]]; then
+    collect_error "External keychain file not found: ${external_keychain_file}"
     return 1
+  fi
+
+  log "Moving external keychain to user's keychain directory..."
+  mv "${external_keychain_file}" "${user_keychain_file}"
+  chmod 600 "${user_keychain_file}"
+  check_success "External keychain file moved"
+
+  # Unlock external keychain
+  log "Unlocking external keychain with dev machine fingerprint..."
+  if security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${EXTERNAL_KEYCHAIN}"; then
+    log "✅ External keychain unlocked successfully"
+  else
+    collect_error "Failed to unlock external keychain"
+    return 1
+  fi
+
+  # Import administrator credentials to default keychain
+  log "Importing administrator credentials to default keychain..."
+
+  # Import operator credential
+  if operator_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    # Store in default keychain
+    security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${operator_password}" -D "Mac Server Setup - Operator Account Password" -A -U; then
+      # Verify storage
+      if compare_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w 2>/dev/null); then
+        if [[ "${operator_password}" == "${compare_password}" ]]; then
+          log "✅ Operator credential imported to administrator keychain"
+        else
+          collect_error "Operator credential verification failed after import"
+          return 1
+        fi
+      else
+        collect_error "Operator credential import verification failed"
+        return 1
+      fi
+    else
+      collect_error "Failed to import operator credential to administrator keychain"
+      return 1
+    fi
+    unset operator_password compare_password
+  else
+    collect_error "Failed to retrieve operator credential from external keychain"
+    return 1
+  fi
+
+  # Import Plex NAS credential
+  if plex_nas_credential=$(security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_nas_credential}" -D "Mac Server Setup - Plex NAS Credentials" -A -U; then
+      log "✅ Plex NAS credential imported to administrator keychain"
+    else
+      collect_error "Failed to import Plex NAS credential to administrator keychain"
+      return 1
+    fi
+    unset plex_nas_credential
+  else
+    collect_warning "Plex NAS credential not found in external keychain (may be optional)"
+  fi
+
+  # Import TimeMachine credential (optional)
+  if timemachine_credential=$(security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${timemachine_credential}" -D "Mac Server Setup - TimeMachine Credentials" -A -U; then
+      log "✅ TimeMachine credential imported to administrator keychain"
+    else
+      collect_warning "Failed to import TimeMachine credential to administrator keychain"
+    fi
+    unset timemachine_credential
+  else
+    log "⚠️ TimeMachine credential not found in external keychain (optional)"
+  fi
+
+  # Import WiFi credential (optional)
+  if wifi_credential=$(security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${wifi_credential}" -D "Mac Server Setup - WiFi Credentials" -A -U; then
+      log "✅ WiFi credential imported to administrator keychain"
+    else
+      collect_warning "Failed to import WiFi credential to administrator keychain"
+    fi
+    unset wifi_credential
+  else
+    log "⚠️ WiFi credential not found in external keychain (optional)"
   fi
 
   return 0
 }
 
-# Verify Keychain credentials are available after Apple ID setup
-if ! verify_keychain_credentials; then
-  collect_error "Keychain credential verification failed"
+# Import credentials from external keychain
+if ! import_external_keychain_credentials; then
+  collect_error "External keychain credential import failed"
   exit 1
 fi
 
@@ -924,6 +953,64 @@ else
   chmod 600 "/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
 
   show_log "Operator account created successfully"
+
+  # Populate operator's keychain with credentials
+  log "Populating operator keychain with credentials..."
+
+  # Load keychain manifest for external keychain access
+  manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
+  # shellcheck source=/dev/null
+  source "${manifest_file}"
+
+  # Validate required variables from manifest
+  if [[ -z "${KEYCHAIN_OPERATOR_SERVICE:-}" || -z "${KEYCHAIN_ACCOUNT:-}" || -z "${KEYCHAIN_PLEX_NAS_SERVICE:-}" ]]; then
+    collect_error "Required keychain variables not found in manifest for operator setup"
+    return 1
+  fi
+
+  # Set optional variables to empty if not defined (suppresses shellcheck warnings)
+  KEYCHAIN_TIMEMACHINE_SERVICE="${KEYCHAIN_TIMEMACHINE_SERVICE:-}"
+  KEYCHAIN_WIFI_SERVICE="${KEYCHAIN_WIFI_SERVICE:-}"
+
+  # Unlock operator's keychain
+  sudo -p "[Operator keychain] Enter password to unlock operator keychain: " -iu "${OPERATOR_USERNAME}" security unlock-keychain -p "${operator_password}"
+
+  # Import operator credentials to operator's keychain
+  if operator_credential=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    if sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${operator_credential}" -D "Mac Server Setup - Operator Account Password" -A -U; then
+      log "✅ Operator credential imported to operator keychain"
+    else
+      collect_warning "Failed to import operator credential to operator keychain"
+    fi
+    unset operator_credential
+  fi
+
+  # Import Plex NAS credential to operator's keychain
+  if plex_nas_credential=$(security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    if sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_nas_credential}" -D "Mac Server Setup - Plex NAS Credentials" -A -U; then
+      log "✅ Plex NAS credential imported to operator keychain"
+    else
+      collect_warning "Failed to import Plex NAS credential to operator keychain"
+    fi
+    unset plex_nas_credential
+  fi
+
+  # Import optional credentials to operator's keychain
+  if timemachine_credential=$(security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${timemachine_credential}" -D "Mac Server Setup - TimeMachine Credentials" -A -U 2>/dev/null || true
+    unset timemachine_credential
+  fi
+
+  if wifi_credential=$(security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${wifi_credential}" -D "Mac Server Setup - WiFi Credentials" -A -U 2>/dev/null || true
+    unset wifi_credential
+  fi
+
+  log "✅ Operator keychain populated with credentials"
 
   # Skip setup screens for operator account (more aggressive approach)
   log "Configuring operator account to skip setup screens"
