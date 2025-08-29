@@ -209,6 +209,9 @@ main() {
   setup_dock
   setup_logrotate
 
+  # Show setup notification to user
+  osascript -e 'display dialog "✅ Done setting up operator account!" buttons {"OK"} default button "OK" giving up after 8 with title "Mac Mini Setup"'
+
   log "=== Operator First-Login Setup Completed ==="
 }
 

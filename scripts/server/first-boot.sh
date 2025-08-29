@@ -863,8 +863,13 @@ import_external_keychain_credentials() {
   local user_keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}-db"
 
   if [[ ! -f "${external_keychain_file}" ]]; then
-    collect_error "External keychain file not found: ${external_keychain_file}"
-    return 1
+    if [[ -f "${user_keychain_file}" ]]; then
+      log "External keychain file not found in setup package, but located in local keychains."
+      cp "${user_keychain_file}" "${external_keychain_file}"
+    else
+      collect_error "External keychain file not found: ${external_keychain_file}"
+      return 1
+    fi
   fi
 
   log "Copying external keychain to user's keychain directory..."
