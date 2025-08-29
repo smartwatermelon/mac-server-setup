@@ -824,7 +824,6 @@ get_keychain_credential() {
 # Import credentials from external keychain and populate user keychains
 import_external_keychain_credentials() {
   set_section "Importing Credentials from External Keychain"
-  set -x
   # Load keychain manifest
   local manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
   if [[ ! -f "${manifest_file}" ]]; then
@@ -943,7 +942,6 @@ import_external_keychain_credentials() {
   else
     log "⚠️ WiFi credential not found in external keychain (optional)"
   fi
-  set +x
   return 0
 }
 

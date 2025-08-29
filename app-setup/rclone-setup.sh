@@ -23,8 +23,23 @@
 # Exit on error
 set -euo pipefail
 
-# Load server configuration
+# Determine script directory first
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Validate working directory before loading config
+if [[ "${PWD}" != "${SCRIPT_DIR}" ]] || [[ "$(basename "${SCRIPT_DIR}")" != "app-setup" ]]; then
+  echo "❌ Error: This script must be run from the app-setup directory"
+  echo ""
+  echo "Current directory: ${PWD}"
+  echo "Script directory: ${SCRIPT_DIR}"
+  echo ""
+  echo "Please change to the app-setup directory and try again:"
+  echo "  cd \"${SCRIPT_DIR}\" && ./rclone-setup.sh"
+  echo ""
+  exit 1
+fi
+
+# Load server configuration
 CONFIG_FILE="${SCRIPT_DIR}/config/config.conf"
 
 if [[ -f "${CONFIG_FILE}" ]]; then
