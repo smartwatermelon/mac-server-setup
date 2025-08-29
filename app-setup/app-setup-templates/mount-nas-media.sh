@@ -47,7 +47,13 @@ get_nas_credentials() {
   hostname_lower="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
   local keychain_service="plex-nas-${hostname_lower}"
   local keychain_account
-  keychain_account="$(whoami)"
+  keychain_account="${hostname_lower}"
+
+  # Ensure keychain is unlocked before accessing
+  if ! security unlock-keychain 2>/dev/null; then
+    log "❌ Failed to unlock keychain for credential retrieval"
+    return 1
+  fi
 
   local combined_credential
   if combined_credential=$(security find-generic-password -s "${keychain_service}" -a "${keychain_account}" -w 2>/dev/null); then
@@ -100,9 +106,13 @@ main() {
   log "Target: ${PLEX_MEDIA_MOUNT}"
   log "Running as: ${WHOAMI} (${IDU}:${IDG})"
 
-  # Retrieve NAS credentials from Keychain
+  # Retrieve NAS credentials from Keychain (CRITICAL - fail fast)
   if ! get_nas_credentials; then
-    log "❌ Cannot proceed without NAS credentials"
+    local hostname_lower
+    hostname_lower="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
+    log "❌ CRITICAL: Cannot proceed without NAS credentials"
+    log "❌ Looking for: service='plex-nas-${hostname_lower}', account='${hostname_lower}'"
+    log "❌ Ensure credentials were imported during first-boot.sh"
     exit 1
   fi
 

@@ -848,6 +848,13 @@ import_external_keychain_credentials() {
   # Import administrator credentials to default keychain
   log "Importing administrator credentials to default keychain..."
 
+  # Unlock admin keychain first
+  log "Unlocking administrator keychain for credential import..."
+  if ! security unlock-keychain; then
+    collect_error "Failed to unlock administrator keychain"
+    return 1
+  fi
+
   # Import operator credential
   if operator_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
     # Store in default keychain
@@ -982,7 +989,12 @@ else
   KEYCHAIN_WIFI_SERVICE="${KEYCHAIN_WIFI_SERVICE:-}"
 
   # Unlock operator's keychain
-  sudo -p "[Operator keychain] Enter password to unlock operator keychain: " -iu "${OPERATOR_USERNAME}" security unlock-keychain -p "${operator_password}"
+  log "Unlocking operator keychain for credential import..."
+  if ! sudo -p "[Operator keychain] Enter password to unlock operator keychain: " -iu "${OPERATOR_USERNAME}" security unlock-keychain -p "${operator_password}"; then
+    collect_error "Failed to unlock operator keychain"
+    return 1
+  fi
+  log "✅ Operator keychain unlocked successfully"
 
   # Clear password from memory after all uses are complete
   unset operator_password
@@ -998,15 +1010,19 @@ else
     unset operator_credential
   fi
 
-  # Import Plex NAS credential to operator's keychain
+  # Import Plex NAS credential to operator's keychain (CRITICAL)
   if plex_nas_credential=$(security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
     sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
     if sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_nas_credential}" -D "Mac Server Setup - Plex NAS Credentials" -A -U; then
       log "✅ Plex NAS credential imported to operator keychain"
     else
-      collect_warning "Failed to import Plex NAS credential to operator keychain"
+      collect_error "CRITICAL: Failed to import Plex NAS credential to operator keychain"
+      return 1
     fi
     unset plex_nas_credential
+  else
+    collect_error "CRITICAL: Plex NAS credential not found in external keychain for operator import"
+    return 1
   fi
 
   # Import optional credentials to operator's keychain

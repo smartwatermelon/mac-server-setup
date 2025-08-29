@@ -214,6 +214,12 @@ get_keychain_credential() {
   local account="$2"
   local credential
 
+  # Ensure keychain is unlocked before accessing
+  if ! security unlock-keychain 2>/dev/null; then
+    collect_error "Failed to unlock keychain for credential retrieval"
+    return 1
+  fi
+
   if credential=$(security find-generic-password -s "${service}" -a "${account}" -w 2>/dev/null); then
     echo "${credential}"
     return 0
