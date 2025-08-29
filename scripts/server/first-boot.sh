@@ -1086,7 +1086,6 @@ source "${manifest_file}"
 # Get credential securely from Keychain for auto-login
 if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "${KEYCHAIN_ACCOUNT}"); then
   # Create the encoded password file that macOS uses for auto-login
-  encoded_password
   encoded_password=$(echo "${operator_password}" | openssl enc -base64)
   echo "${encoded_password}" | sudo -p "[Auto-login] Enter password to configure automatic login: " tee /etc/kcpassword >/dev/null
   sudo chmod 600 /etc/kcpassword
