@@ -273,8 +273,8 @@ fi
 
 # Initialize external keychain for credential storage
 init_external_keychain() {
-  # Generate keychain password from dev machine fingerprint
-  KEYCHAIN_PASSWORD="$(system_profiler SPHardwareDataType | awk '/Hardware UUID/{print $3}')"
+  # Use existing dev machine fingerprint as keychain password
+  KEYCHAIN_PASSWORD="${DEV_FINGERPRINT}"
   EXTERNAL_KEYCHAIN="mac-server-setup"
 
   echo "Initializing external keychain for credential transfer..."
