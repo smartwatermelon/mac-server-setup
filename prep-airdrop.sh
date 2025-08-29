@@ -273,7 +273,7 @@ fi
 
 # Initialize external keychain for credential storage
 init_external_keychain() {
-  # Use existing dev machine fingerprint as keychain password
+  # Use existing dev machine fingerprint as keychain password (dynamically generated, not hardcoded)
   KEYCHAIN_PASSWORD="${DEV_FINGERPRINT}"
   EXTERNAL_KEYCHAIN="mac-server-setup"
 
