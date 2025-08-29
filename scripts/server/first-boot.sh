@@ -27,6 +27,7 @@ set -euo pipefail
 
 # Configuration variables - adjust as needed
 ADMIN_USERNAME=$(whoami)                                  # Set this once and use throughout
+ADMINISTRATOR_PASSWORD=""                                 # Get it interactively later
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" # Directory where AirDropped files are located (script now at root)
 SSH_KEY_SOURCE="${SETUP_DIR}/ssh_keys"
 WIFI_CONFIG_FILE="${SETUP_DIR}/config/wifi_network.conf"
@@ -94,6 +95,21 @@ OPERATOR_FULLNAME="${SERVER_NAME} Operator"
 export LOG_DIR
 LOG_DIR="${HOME}/.local/state" # XDG_STATE_HOME
 LOG_FILE="${LOG_DIR}/${HOSTNAME_LOWER}-setup.log"
+
+# _timeout function - uses timeout utility if installed, otherwise Perl
+# https://gist.github.com/jaytaylor/6527607
+function _timeout() {
+  if command -v timeout; then
+    timeout "$@"
+  else
+    if ! command -v perl; then
+      echo "perl not found 😿"
+      exit 1
+    else
+      perl -e 'alarm shift; exec @ARGV' "$@"
+    fi
+  fi
+}
 
 # log function - only writes to log file
 log() {
@@ -353,24 +369,24 @@ fi
 if [[ "${FORCE}" != "true" && "${RERUN_AFTER_FDA}" != "true" ]]; then
   echo
   echo "This script will need your Mac account password for keychain operations."
-  read -r -e -p "Enter your Mac account password: " -s ADMINISTRATOR_PASSWORD
+  read -r -e -p "Enter your Mac ${ADMIN_USERNAME} account password: " -s ADMINISTRATOR_PASSWORD
   echo # Add newline after hidden input
 
-  # Validate password by testing keychain unlock
-  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}" 2>/dev/null; then
-    echo "❌ Invalid password or keychain unlock failed"
-    echo "Please run the script again with the correct password"
-    exit 1
-  fi
+  # Validate password by testing with dscl
+  until _timeout 1 dscl /Local/Default -authonly "${USER}" "${ADMINISTRATOR_PASSWORD}" &>/dev/null; do
+    echo "Invalid ${ADMIN_USERNAME} account password. Try again or ctrl-C to exit."
+    read -r -e -p "Enter your Mac ${ADMIN_USERNAME} account password: " -s ADMINISTRATOR_PASSWORD
+    echo # Add newline after hidden input
+  done
 
-  log "✅ Administrator password validated for keychain operations"
+  show_log "✅ Administrator password validated"
 else
-  log "Skipping password prompt (force mode or FDA re-run)"
+  log "🆗 Skipping password prompt (force mode or FDA re-run)"
 fi
 
 # Configure sudo timeout to reduce password prompts during setup
 section "Configuring sudo timeout"
-log "Setting sudo timeout to 30 minutes for smoother setup experience"
+show_log "Setting sudo timeout to 30 minutes for smoother setup experience"
 sudo -p "[System setup] Enter password to configure sudo timeout: " tee /etc/sudoers.d/10_setup_timeout >/dev/null <<EOF
 # Temporary sudo timeout extension for setup - 30 minutes
 Defaults timestamp_timeout=30
@@ -391,7 +407,7 @@ if [[ -f "/etc/pam.d/sudo_local" ]]; then
   # Verify the content is correct
   expected_content="auth       sufficient     pam_tid.so"
   if grep -q "${expected_content}" "/etc/pam.d/sudo_local" 2>/dev/null; then
-    log "TouchID sudo is already properly configured"
+    show_log "✅ TouchID sudo is already properly configured"
   else
     log "TouchID sudo configuration exists but content may be incorrect"
     log "Current content:"
@@ -452,6 +468,7 @@ fi
 
 # WiFi Network Assessment and Configuration
 section "WiFi Network Assessment and Configuration"
+show_log "WiFi Network Assessment and Configuration; this may take a moment..."
 
 # Detect active WiFi interface
 WIFI_INTERFACE=$(networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}' || echo "en0")
@@ -550,7 +567,7 @@ elif [[ "${WIFI_CONFIGURED}" != true ]]; then
     show_log "Force mode: continuing without WiFi - may affect subsequent steps"
   fi
 else
-  log "WiFi already working - skipping configuration"
+  log "✅ WiFi already working - skipping configuration"
 fi
 
 # Set hostname and HD name
@@ -681,7 +698,7 @@ if [[ "${FORCE}" == "true" ]]; then
     return 0 # Don't fail the entire setup if this is skipped
   }
 else
-  log "Remote Desktop setup will guide you through System Settings configuration"
+  log "Remote Desktop setup will automatically configure System Settings"
   "${SETUP_DIR}/scripts/setup-remote-desktop.sh" || {
     collect_warning "Remote Desktop setup failed or was cancelled"
     log "You can run it manually later: ${SETUP_DIR}/scripts/setup-remote-desktop.sh"
@@ -823,6 +840,7 @@ get_keychain_credential() {
 
 # Import credentials from external keychain and populate user keychains
 import_external_keychain_credentials() {
+
   set_section "Importing Credentials from External Keychain"
   # Load keychain manifest
   local manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
@@ -857,7 +875,7 @@ import_external_keychain_credentials() {
   # Unlock external keychain
   log "Unlocking external keychain with dev machine fingerprint..."
   if security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${EXTERNAL_KEYCHAIN}"; then
-    log "✅ External keychain unlocked successfully"
+    show_log "✅ External keychain unlocked successfully"
   else
     collect_error "Failed to unlock external keychain"
     return 1
@@ -867,7 +885,8 @@ import_external_keychain_credentials() {
   log "Importing administrator credentials to default keychain..."
 
   # Unlock admin keychain first
-  log "Unlocking administrator keychain for credential import..."
+  show_log "Unlocking administrator keychain for credential import..."
+
   if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}"; then
     collect_error "Failed to unlock administrator keychain"
     return 1
@@ -877,12 +896,12 @@ import_external_keychain_credentials() {
   # shellcheck disable=SC2154 # KEYCHAIN_OPERATOR_SERVICE loaded from sourced manifest
   if operator_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
     # Store in default keychain
-    security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
     if security add-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${operator_password}" -D "Mac Server Setup - Operator Account Password" -A -U; then
       # Verify storage
       if compare_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w 2>/dev/null); then
         if [[ "${operator_password}" == "${compare_password}" ]]; then
-          log "✅ Operator credential imported to administrator keychain"
+          show_log "✅ Operator credential imported to administrator keychain"
         else
           collect_error "Operator credential verification failed after import"
           return 1
@@ -904,9 +923,9 @@ import_external_keychain_credentials() {
   # Import Plex NAS credential
   # shellcheck disable=SC2154 # KEYCHAIN_PLEX_NAS_SERVICE loaded from sourced manifest
   if plex_nas_credential=$(security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
     if security add-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_nas_credential}" -D "Mac Server Setup - Plex NAS Credentials" -A -U; then
-      log "✅ Plex NAS credential imported to administrator keychain"
+      show_log "✅ Plex NAS credential imported to administrator keychain"
     else
       collect_error "Failed to import Plex NAS credential to administrator keychain"
       return 1
@@ -919,29 +938,30 @@ import_external_keychain_credentials() {
   # Import TimeMachine credential (optional)
   # shellcheck disable=SC2154 # KEYCHAIN_TIMEMACHINE_SERVICE loaded from sourced manifest
   if timemachine_credential=$(security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
     if security add-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${timemachine_credential}" -D "Mac Server Setup - TimeMachine Credentials" -A -U; then
-      log "✅ TimeMachine credential imported to administrator keychain"
+      show_log "✅ TimeMachine credential imported to administrator keychain"
     else
       collect_warning "Failed to import TimeMachine credential to administrator keychain"
     fi
     unset timemachine_credential
   else
-    log "⚠️ TimeMachine credential not found in external keychain (optional)"
+    show_log "⚠️ TimeMachine credential not found in external keychain (optional)"
   fi
 
   # Import WiFi credential (optional)
   if wifi_credential=$(security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
     if security add-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${wifi_credential}" -D "Mac Server Setup - WiFi Credentials" -A -U; then
-      log "✅ WiFi credential imported to administrator keychain"
+      show_log "✅ WiFi credential imported to administrator keychain"
     else
       collect_warning "Failed to import WiFi credential to administrator keychain"
     fi
     unset wifi_credential
   else
-    log "⚠️ WiFi credential not found in external keychain (optional)"
+    show_log "⚠️ WiFi credential not found in external keychain (optional)"
   fi
+
   return 0
 }
 
