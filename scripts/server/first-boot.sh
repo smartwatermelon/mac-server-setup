@@ -924,7 +924,6 @@ else
   source "${manifest_file}"
 
   # Get credential securely from Keychain
-  operator_password
   if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "${KEYCHAIN_ACCOUNT}"); then
     log "Using password from Keychain (${ONEPASSWORD_OPERATOR_ITEM})"
   else
