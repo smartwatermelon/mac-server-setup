@@ -461,11 +461,24 @@ fi
 if [[ "${WIFI_CONFIGURED}" != true ]] && [[ -f "${WIFI_CONFIG_FILE}" ]]; then
   log "Found WiFi configuration file - attempting setup"
 
-  # Source the WiFi configuration file to get SSID and password
+  # Source the WiFi configuration file to get SSID
   # shellcheck source=/dev/null
   source "${WIFI_CONFIG_FILE}"
 
-  if [[ -n "${WIFI_SSID}" ]] && [[ -n "${WIFI_PASSWORD}" ]]; then
+  # Retrieve WiFi password from Keychain (if available)
+  wifi_password=""
+  if [[ -n "${KEYCHAIN_WIFI_SERVICE:-}" ]] && [[ -n "${KEYCHAIN_ACCOUNT:-}" ]]; then
+    log "Attempting to retrieve WiFi password from Keychain..."
+    if wifi_password=$(get_keychain_credential "${KEYCHAIN_WIFI_SERVICE}" "${KEYCHAIN_ACCOUNT}" 2>/dev/null); then
+      # Extract password from combined credential (format: "ssid:password")
+      wifi_password="${wifi_password#*:}"
+      log "✅ WiFi password retrieved from Keychain"
+    else
+      log "⚠️ WiFi password not found in Keychain - manual configuration will be needed"
+    fi
+  fi
+
+  if [[ -n "${WIFI_SSID}" ]] && [[ -n "${wifi_password}" ]]; then
     log "Configuring WiFi network: ${WIFI_SSID}"
 
     # Check if SSID is already in preferred networks list
@@ -475,13 +488,13 @@ if [[ "${WIFI_CONFIGURED}" != true ]] && [[ -f "${WIFI_CONFIG_FILE}" ]]; then
       # Add WiFi network to preferred networks
       networksetup -addpreferredwirelessnetworkatindex "${WIFI_INTERFACE}" "${WIFI_SSID}" 0 WPA2
       check_success "Add preferred WiFi network"
-      security add-generic-password -D "AirPort network password" -a "${WIFI_SSID}" -s "AirPort" -w "${WIFI_PASSWORD}" || true
+      security add-generic-password -D "AirPort network password" -a "${WIFI_SSID}" -s "AirPort" -w "${wifi_password}" || true
       check_success "Store password in keychain"
     fi
 
     # Try to join the network
     log "Attempting to join WiFi network ${WIFI_SSID}..."
-    networksetup -setairportnetwork "${WIFI_INTERFACE}" "${WIFI_SSID}" "${WIFI_PASSWORD}" &>/dev/null || true
+    networksetup -setairportnetwork "${WIFI_INTERFACE}" "${WIFI_SSID}" "${wifi_password}" &>/dev/null || true
 
     # Give it a few seconds and check if we connected
     sleep 5
@@ -492,9 +505,9 @@ if [[ "${WIFI_CONFIGURED}" != true ]] && [[ -f "${WIFI_CONFIG_FILE}" ]]; then
       show_log "⚠️ WiFi network will be automatically joined after reboot"
     fi
 
-    # Securely remove the WiFi password from the configuration file
-    sed -i '' "s/WIFI_PASSWORD=.*/WIFI_PASSWORD=\"REMOVED\"/" "${WIFI_CONFIG_FILE}"
-    log "WiFi password removed from configuration file for security"
+    # Clear password from memory for security
+    unset wifi_password
+    log "WiFi password cleared from memory for security"
   else
     log "WiFi configuration file does not contain valid SSID and password"
   fi

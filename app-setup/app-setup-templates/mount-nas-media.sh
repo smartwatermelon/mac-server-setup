@@ -52,7 +52,8 @@ get_nas_credentials() {
   local combined_credential
   if combined_credential=$(security find-generic-password -s "${keychain_service}" -a "${keychain_account}" -w 2>/dev/null); then
     # Split combined credential (format: "username:password")
-    PLEX_NAS_USERNAME="${combined_credential%:*}"
+    # Use %% and # to split only on first colon (handles passwords with colons)
+    PLEX_NAS_USERNAME="${combined_credential%%:*}"
     PLEX_NAS_PASSWORD="${combined_credential#*:}"
 
     # Validate credentials were properly extracted

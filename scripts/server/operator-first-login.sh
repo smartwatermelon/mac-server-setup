@@ -182,7 +182,7 @@ setup_logrotate() {
 
 # Task: lock screen
 lock_screen_now() {
-  log "Setting up dock for operator account..."
+  log "Locking screen..."
   if pmset displaysleepnow; then
     log "Screen locked successfully"
   else
