@@ -94,7 +94,7 @@ macmini-setup/
 │   ├── casks.txt                # Homebrew applications
 │   ├── dev_fingerprint.conf     # Safety check data
 │   ├── keychain_manifest.conf   # Keychain service identifiers
-│   ├── mac-server-setup.keychain-db # External keychain file
+│   ├── mac-server-setup-db # External keychain file
 │   ├── timemachine.conf         # Backup configuration
 │   ├── apple_id_password.url    # One-time Apple ID link
 │   └── wifi_network.conf        # WiFi credentials (only if script-based config)
