@@ -73,13 +73,6 @@ main() {
   log "Target: ${PLEX_MEDIA_MOUNT}"
   log "Running as: ${WHOAMI} (${IDU}:${IDG})"
 
-  # Validate SMB credentials are configured
-  if [[ "${PLEX_NAS_USERNAME}" == "__PLEX_NAS_USERNAME__" || "${PLEX_NAS_PASSWORD}" == "__PLEX_NAS_PASSWORD__" ]]; then
-    log "❌ CRITICAL: SMB credentials not configured in script"
-    log "❌ Ensure plex-setup.sh completed successfully"
-    exit 1
-  fi
-
   log "Source: //${PLEX_NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
 
   # Wait for network connectivity first
