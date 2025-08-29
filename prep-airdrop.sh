@@ -353,7 +353,6 @@ finalize_external_keychain() {
 
   # Lock the external keychain
   security lock-keychain "${EXTERNAL_KEYCHAIN}"
-  check_success "External keychain locked"
 
   # Get the keychain file path
   local keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}.keychain-db"
