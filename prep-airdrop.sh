@@ -354,16 +354,16 @@ finalize_external_keychain() {
   # Lock the external keychain
   security lock-keychain "${EXTERNAL_KEYCHAIN}"
 
-  # Get the keychain file path
-  local keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}.keychain-db"
+  # Get the keychain file path (macOS creates keychains with -db suffix)
+  local keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}-db"
 
   if [[ -f "${keychain_file}" ]]; then
     # Copy keychain file to airdrop package
     cp "${keychain_file}" "${OUTPUT_PATH}/config/"
-    chmod 600 "${OUTPUT_PATH}/config/${EXTERNAL_KEYCHAIN}.keychain-db"
+    chmod 600 "${OUTPUT_PATH}/config/${EXTERNAL_KEYCHAIN}-db"
 
     echo "✅ External keychain added to airdrop package"
-    echo "   Keychain file: ${EXTERNAL_KEYCHAIN}.keychain-db"
+    echo "   Keychain file: ${EXTERNAL_KEYCHAIN}-db"
     echo "   Password: Hardware UUID fingerprint"
 
     # Store keychain password in manifest for server use

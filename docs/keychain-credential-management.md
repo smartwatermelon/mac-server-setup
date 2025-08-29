@@ -76,7 +76,7 @@ Retrieves NAS credentials from keychain for SMB mounting, URL-encodes passwords,
 ### Configuration Files
 
 - **keychain_manifest.conf**: Contains service identifiers and keychain metadata
-- **External keychain file**: `mac-server-setup.keychain-db` transferred with setup package
+- **External keychain file**: `mac-server-setup-db` transferred with setup package
 
 ## Error Handling
 

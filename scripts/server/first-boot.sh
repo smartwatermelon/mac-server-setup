@@ -810,8 +810,8 @@ import_external_keychain_credentials() {
   fi
 
   # Move external keychain file to user's keychain directory
-  local external_keychain_file="${SETUP_DIR}/config/${EXTERNAL_KEYCHAIN}.keychain-db"
-  local user_keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}.keychain-db"
+  local external_keychain_file="${SETUP_DIR}/config/${EXTERNAL_KEYCHAIN}-db"
+  local user_keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}-db"
 
   if [[ ! -f "${external_keychain_file}" ]]; then
     collect_error "External keychain file not found: ${external_keychain_file}"

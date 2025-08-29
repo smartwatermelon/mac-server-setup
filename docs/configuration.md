@@ -260,7 +260,7 @@ HOSTNAME_OVERRIDE="unique-hostname"
 ```bash
 # Fix common permission issues
 chmod 755 ~/macmini-setup/scripts/*.sh
-chmod 600 ~/macmini-setup/config/mac-server-setup.keychain-db
+chmod 600 ~/macmini-setup/config/mac-server-setup-db
 chmod 600 ~/macmini-setup/config/wifi_network.conf
 ```
 
