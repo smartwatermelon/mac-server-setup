@@ -47,45 +47,33 @@ HOSTNAME_OVERRIDE=""
 
 ### 1Password Integration
 
-All credential management relies on 1Password items. The configuration specifies which vault and items to use.
+The system uses 1Password for initial credential retrieval during setup preparation, then transfers credentials securely via macOS Keychain Services. See [Keychain-Based Credential Management](keychain-credential-management.md) for complete details.
 
 **ONEPASSWORD_VAULT**: 1Password vault containing server credentials
 
 - **Default**: "personal"
-- **Format**: Exact vault name as shown in 1Password
 - **Example**: `ONEPASSWORD_VAULT="Infrastructure"`
 
 **ONEPASSWORD_OPERATOR_ITEM**: Login item for operator account password
 
 - **Default**: "operator"
-- **Requirements**: Must be a Login item with username and password
+- **Requirements**: Login item with username and password
 - **Auto-creation**: Script creates item if it doesn't exist
-- **Example**: `ONEPASSWORD_OPERATOR_ITEM="HomeServer Operator"`
 
 **ONEPASSWORD_TIMEMACHINE_ITEM**: Login item for Time Machine backup credentials
 
 - **Default**: "TimeMachine"
 - **Requirements**: Login item with username, password, and URL field
-- **URL Format**: `smb://nas-ip/share-name` or similar backup destination
-- **Example**: `ONEPASSWORD_TIMEMACHINE_ITEM="Synology TimeMachine"`
 
 **ONEPASSWORD_PLEX_NAS_ITEM**: Login item for Plex media NAS credentials
 
 - **Default**: "Plex NAS"
 - **Requirements**: Login item with username, password, and URL field (optional)
-- **Purpose**: Provides automated SMB mounting for Plex media storage via direct mounting
-- **Fallback**: If not found, loads credentials from plex_nas.conf file
-- **Example**: `ONEPASSWORD_PLEX_NAS_ITEM="Synology Plex"`
-- **Special Character Handling**: Passwords with @ symbols are automatically URL-encoded for SMB URLs
-- **Username Processing**: Usernames are used as provided for SMB authentication
-- **Direct SMB Integration**: Credentials used for direct SMB mount commands with safety checks
 
 **ONEPASSWORD_APPLEID_ITEM**: Login item for Apple ID credentials
 
 - **Default**: "Apple"
 - **Requirements**: Login item with Apple ID email and password
-- **Usage**: Creates one-time sharing links for secure password transfer
-- **Example**: `ONEPASSWORD_APPLEID_ITEM="Apple ID Personal"`
 
 ### Optional Overrides
 
@@ -221,9 +209,7 @@ ssh operator@"${HOSTNAME_LOWER}.local"
 
 ### Credential Storage
 
-**1Password Integration**: All sensitive credentials are stored in 1Password, never in plain text files.
-
-**Temporary Files**: Setup scripts create temporary credential files with restrictive permissions (600) and remove them after use.
+The system uses a secure four-stage credential management process via macOS Keychain Services. See [Keychain-Based Credential Management](keychain-credential-management.md) for complete implementation details.
 
 **SSH Keys**: Public keys only are transferred; private keys remain on your development Mac.
 
@@ -274,8 +260,8 @@ HOSTNAME_OVERRIDE="unique-hostname"
 ```bash
 # Fix common permission issues
 chmod 755 ~/macmini-setup/scripts/*.sh
-chmod 600 ~/macmini-setup/operator_password
-chmod 600 ~/macmini-setup/wifi/network.conf
+chmod 600 ~/macmini-setup/config/mac-server-setup.keychain-db
+chmod 600 ~/macmini-setup/config/wifi_network.conf
 ```
 
 ## Advanced Configuration

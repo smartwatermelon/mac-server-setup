@@ -48,8 +48,8 @@ This project provides a complete automation framework for setting up an Apple Si
 
 ### Previous Improvements (v2.0)
 
-- **1Password Credential Integration**: Automated credential retrieval with secure handling
-- **Smart Fallbacks**: Interactive prompts when credentials unavailable
+- **Keychain-Based Credential Management**: Secure credential storage and transfer via macOS Keychain Services (see [Credential Management](docs/keychain-credential-management.md))
+- **1Password Integration**: Automated credential retrieval from 1Password during setup preparation
 - **Intuitive Confirmations**: Sensible defaults for all prompts
 
 ## Key Principles
@@ -128,7 +128,7 @@ The setup process consists of two main phases:
 ├── prep-airdrop.sh             # Setup package preparation (primary entry point)
 ├── app-setup/                  # Application setup scripts
 │   ├── config/                # Application-specific configuration
-│   │   ├── plex_nas.conf      # Plex NAS credentials
+│   │   ├── plex_nas.conf      # Plex NAS configuration
 │   │   ├── rclone.conf        # rclone OAuth configuration
 │   │   └── dropbox_sync.conf  # Dropbox sync settings
 │   ├── templates/             # Runtime script templates

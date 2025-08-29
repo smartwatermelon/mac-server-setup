@@ -5,12 +5,11 @@ This directory contains all the necessary files for setting up the Mac Mini serv
 ## Contents
 
 - `ssh_keys/`: SSH public keys for secure remote access
-- `scripts/`: Setup scripts for the server
+- `scripts/`: Setup scripts for the server  
+- `config/`: Server configuration and encrypted credential keychain
 - `URLs/`: Internet shortcuts used by Setup
 - `wifi/`: WiFi network configuration
-- `operator_password`: Operator account password
 - `timemachine.conf` : Configuration information for Time Machine
-- `config.conf`: Server configuration settings
 
 ## Setup Instructions
 
