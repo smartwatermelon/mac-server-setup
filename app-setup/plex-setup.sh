@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# plex-setup.sh - Native Plex Media Server setup script for Mac Mini server
+# plex-setup.sh - Plex Media Server setup script for Mac Mini server
 #
-# This script sets up Plex Media Server natively on macOS with:
+# This script sets up Plex Media Server on macOS with:
 # - SMB mount to NAS for media storage (retrieved from config.conf)
-# - Native Plex installation via official installer
+# - Plex installation via official installer
 # - Configuration migration from existing Plex server
 # - Auto-start configuration
 #
@@ -288,7 +288,7 @@ setup_persistent_smb_mount() {
   log "Mount scripts will retrieve NAS credentials from Keychain at runtime"
 
   # Step 1: Configure the template with non-sensitive values
-  local template_script="${SCRIPT_DIR}/app-setup-templates/mount-nas-media.sh"
+  local template_script="${SCRIPT_DIR}/templates/mount-nas-media.sh"
   local configured_script="${SCRIPT_DIR}/mount-nas-media-configured.sh"
 
   log "Configuring mount script template (credentials retrieved from Keychain at runtime)"
@@ -654,7 +654,7 @@ configure_plex_autostart() {
 
   # Deploy Plex startup wrapper script
   OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
-  WRAPPER_TEMPLATE="${SCRIPT_DIR}/app-setup-templates/start-plex-with-mount.sh"
+  WRAPPER_TEMPLATE="${SCRIPT_DIR}/templates/start-plex-with-mount.sh"
   WRAPPER_SCRIPT="${OPERATOR_HOME}/.local/bin/start-plex-with-mount.sh"
   LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
   PLIST_FILE="${LAUNCH_AGENTS_DIR}/com.plexapp.plexmediaserver.plist"
@@ -733,7 +733,7 @@ start_plex() {
   # Start Plex as the current user first for initial setup
   log "Starting Plex Media Server for initial configuration..."
   log "Using shared configuration directory: ${PLEX_NEW_CONFIG}"
-  log "Note: Plex will request Local Network permission - click Allow when prompted"
+  log "Note: Plex may request Local Network permission - click Allow when prompted"
   open "/Applications/Plex Media Server.app"
 
   # Wait a moment for startup
@@ -763,12 +763,12 @@ start_plex() {
 # Main execution
 main() {
   section "Plex Media Server Setup"
-  log "Starting native Plex setup for ${HOSTNAME}"
+  log "Starting Plex setup for ${HOSTNAME}"
   log "Media mount target: ${PLEX_MEDIA_MOUNT}"
   log "Server name: ${PLEX_SERVER_NAME}"
 
   # Confirm setup
-  if ! confirm "Set up native Plex Media Server?" "y"; then
+  if ! confirm "Set up Plex Media Server?" "y"; then
     log "Setup cancelled by user"
     exit 0
   fi
@@ -854,7 +854,7 @@ main() {
   start_plex
 
   section "Setup Complete"
-  log "✅ Native Plex Media Server setup completed successfully"
+  log "✅ Plex Media Server setup completed successfully"
   log "Configuration directory: ${PLEX_NEW_CONFIG}"
   log "Media directory: ${PLEX_MEDIA_MOUNT}"
 
