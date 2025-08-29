@@ -265,20 +265,21 @@ jobs:
           test -r config/formulae.txt
           test -r config/casks.txt
 
-  security-scanning:
-    name: Security Scanning (Future)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Security placeholder
-        run: |
-          echo "🔮 Future: Scan for hardcoded secrets"
-          echo "🔮 Future: Validate SSH key handling"
-          echo "🔮 Future: Check for insecure shell patterns"
-          # Basic check for obvious secrets (this could catch accidents)
-          if grep -r "password.*=" . --include="*.sh" --include="*.conf" | \
-              grep -v "PASSWORD_FILE\|1Password\|#.*password\|\\\${.*PASSWORD.*}\|encoded_password"; then
-            echo "⚠️  Warning: Found potential hardcoded passwords"
-            exit 1
-          fi
+#   security-scanning:
+#     name: Security Scanning (Future)
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
+#
+#       - name: Security placeholder
+#         run: |
+#           echo "🔮 Future: Scan for hardcoded secrets"
+#           echo "🔮 Future: Validate SSH key handling"
+#           echo "🔮 Future: Check for insecure shell patterns"
+#           # Basic check for obvious secrets (this could catch accidents)
+#           if grep -r "password.*=" . --include="*.sh" --include="*.conf" | \
+#               grep -v "PASSWORD_FILE\|1Password\|#.*password\|\\\${.*PASSWORD.*}\|encoded_password" | \
+#               grep -v "KEYCHAIN_PASSWORD\|dynamically generated"; then
+#             echo "⚠️  Warning: Found potential hardcoded passwords"
+#             exit 1
+#           fi

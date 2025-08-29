@@ -29,55 +29,16 @@ ssh-keygen -t ed25519 -C "your-email@example.com"
 
 ### Required 1Password Items
 
-Create these items in your 1Password vault before running the prep script:
+The system uses 1Password for initial credential retrieval during setup preparation, then securely transfers credentials via macOS Keychain Services. See [Keychain-Based Credential Management](../keychain-credential-management.md) for complete details.
 
-#### Operator Account Credentials
+Create these Login items in your 1Password vault before running the prep script:
 
-> **Item Type**: Login
->
-> **Title**: "MACMINI operator" (or as configured in `config.conf`)
->
-> **Username**: operator
->
-> **Password**: Auto-generated secure password
+- **Operator Account**: Username and password for day-to-day server access
+- **Time Machine Backup**: NAS credentials with SMB URL for backup storage  
+- **Plex NAS**: Media server credentials (optional - prompts if missing)
+- **Apple ID**: Your Apple ID for system setup
 
-The script will create this item in 1Password automatically if it doesn't exist, but you can create it manually with your preferred password.
-
-#### Time Machine Backup Credentials
-
-> **Item Type**: Login
->
-> **Title**: "TimeMachine" (or as configured)
->
-> **Username**: Your NAS/backup server username
->
-> **Password**: Your NAS/backup server password
->
-> **URL**: `smb://your-nas-ip/TimeMachine` (or appropriate backup URL)
-
-#### Plex NAS Credentials (Optional)
-
-> **Item Type**: Login
->
-> **Title**: "Plex NAS" (or as configured)
->
-> **Username**: Your media NAS username (e.g., "plex")
->
-> **Password**: Your media NAS password
->
-> **URL**: `nas.local` (or your NAS hostname - optional)
-
-If this item is not found, the Plex setup will fall back to an interactive password prompt. Note that interactive prompts display as GUI dialogs on the desktop, not in the terminal.
-
-#### Apple ID Credentials
-
-> **Item Type**: Login
->
-> **Title**: "Apple" (or as configured)
->
-> **Username**: Your Apple ID email
->
-> **Password**: Your Apple ID password
+Item titles should match your `config.conf` settings (defaults: "operator", "TimeMachine", "Plex NAS", "Apple").
 
 ## Running AirDrop Prep
 
@@ -132,13 +93,14 @@ macmini-setup/
 │   ├── formulae.txt             # Homebrew packages
 │   ├── casks.txt                # Homebrew applications
 │   ├── dev_fingerprint.conf     # Safety check data
-│   ├── operator_password        # Operator account password
+│   ├── keychain_manifest.conf   # Keychain service identifiers
+│   ├── mac-server-setup.keychain-db # External keychain file
 │   ├── timemachine.conf         # Backup configuration
 │   ├── apple_id_password.url    # One-time Apple ID link
 │   └── wifi_network.conf        # WiFi credentials (only if script-based config)
 └── app-setup/
     ├── config/
-    │   └── plex_nas.conf        # Plex NAS credentials
+    │   └── plex_nas.conf        # Plex NAS hostname configuration
     └── plex-setup.sh            # Plex setup script
 └── README.md                    # Setup instructions
 ```
@@ -147,7 +109,7 @@ macmini-setup/
 
 **Development Machine Fingerprint**: Prevents accidental execution of setup scripts on your development Mac.
 
-**Credential Encryption**: Sensitive data is stored with restrictive permissions (600) in the `config/` directory.
+**Keychain-Based Security**: Credentials stored in encrypted external keychain file for secure transfer (see [Credential Management](../keychain-credential-management.md)).
 
 **One-time URLs**: Apple ID password uses 1Password's view-once sharing feature.
 

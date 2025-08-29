@@ -15,8 +15,6 @@ fi
 # Configuration - these will be set during installation
 NAS_HOSTNAME="__NAS_HOSTNAME__"
 NAS_SHARE_NAME="__NAS_SHARE_NAME__"
-PLEX_NAS_USERNAME="__PLEX_NAS_USERNAME__"
-PLEX_NAS_PASSWORD="__PLEX_NAS_PASSWORD__"
 PLEX_MEDIA_MOUNT="${HOME}/.local/mnt/__NAS_SHARE_NAME__"
 SERVER_NAME="__SERVER_NAME__"
 WHOAMI="$(whoami)"
@@ -33,7 +31,7 @@ mkdir -p "${HOME}/.local/mnt"
 
 # Ensure log file exists with proper permissions
 touch "${LOG_FILE}"
-chmod 644 "${LOG_FILE}"
+chmod 600 "${LOG_FILE}"
 truncate -s 0 "${LOG_FILE}" || true
 
 # Logging function
@@ -41,6 +39,36 @@ log() {
   local timestamp
   timestamp=$(date '+%Y-%m-%d %H:%M:%S')
   echo "${timestamp} [mount-nas-media] $*" | tee -a "${LOG_FILE}"
+}
+
+# Function to retrieve credentials from Keychain
+get_nas_credentials() {
+  local hostname_lower
+  hostname_lower="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
+  local keychain_service="plex-nas-${hostname_lower}"
+  local keychain_account
+  keychain_account="$(whoami)"
+
+  local combined_credential
+  if combined_credential=$(security find-generic-password -s "${keychain_service}" -a "${keychain_account}" -w 2>/dev/null); then
+    # Split combined credential (format: "username:password")
+    PLEX_NAS_USERNAME="${combined_credential%:*}"
+    PLEX_NAS_PASSWORD="${combined_credential#*:}"
+
+    # Validate credentials were properly extracted
+    if [[ -z "${PLEX_NAS_USERNAME}" || -z "${PLEX_NAS_PASSWORD}" ]]; then
+      log "❌ Failed to extract NAS credentials from Keychain"
+      unset combined_credential PLEX_NAS_USERNAME PLEX_NAS_PASSWORD
+      return 1
+    fi
+
+    unset combined_credential
+    log "✅ NAS credentials retrieved from Keychain"
+    return 0
+  else
+    log "❌ NAS credentials not found in Keychain (service: ${keychain_service}, account: ${keychain_account})"
+    return 1
+  fi
 }
 
 # Wait for network connectivity
@@ -69,8 +97,15 @@ wait_for_network() {
 main() {
   log "Starting idempotent NAS media mount process"
   log "Target: ${PLEX_MEDIA_MOUNT}"
-  log "Source: //${PLEX_NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
   log "Running as: ${WHOAMI} (${IDU}:${IDG})"
+
+  # Retrieve NAS credentials from Keychain
+  if ! get_nas_credentials; then
+    log "❌ Cannot proceed without NAS credentials"
+    exit 1
+  fi
+
+  log "Source: //${PLEX_NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
 
   # Wait for network connectivity first
   if ! wait_for_network; then
@@ -120,6 +155,9 @@ main() {
     exit 1
   fi
   log "✅ Mount verification successful (active mount found for ${WHOAMI})"
+
+  # Clear sensitive credentials from memory
+  unset PLEX_NAS_USERNAME PLEX_NAS_PASSWORD
 
   log "✅ NAS media mount process completed successfully"
 }

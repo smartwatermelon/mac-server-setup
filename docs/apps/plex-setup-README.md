@@ -50,13 +50,13 @@ SERVER_NAME="MEDIA"              # Primary server identifier
 OPERATOR_USERNAME="operator"     # Non-admin user account
 NAS_HOSTNAME="nas.local"         # NAS hostname for SMB
 NAS_SHARE_NAME="Media"           # Media share name
-ONEPASSWORD_NAS_ITEM="plex-nas"  # 1Password item for NAS credentials
+ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"  # 1Password item for NAS credentials
 ```
 
 ## Prerequisites
 
-- 1Password CLI configured and authenticated
-- NAS credentials stored in 1Password
+- Setup completed via first-boot.sh (includes credential import via keychain)
+- NAS credentials available in operator keychain (see [Credential Management](../keychain-credential-management.md))
 - For migration: Plex config files in `~/plex-migration/Plex Media Server/`
 
 ## Architecture

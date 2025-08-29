@@ -208,6 +208,20 @@ show_collected_issues() {
   log "Review the full log for details: ${LOG_FILE}"
 }
 
+# Function to retrieve credentials from Keychain
+get_keychain_credential() {
+  local service="$1"
+  local account="$2"
+  local credential
+
+  if credential=$(security find-generic-password -s "${service}" -a "${account}" -w 2>/dev/null); then
+    echo "${credential}"
+    return 0
+  else
+    return 1
+  fi
+}
+
 confirm() {
   if [[ "${FORCE}" == "true" ]]; then
     return 0
@@ -271,27 +285,13 @@ setup_persistent_smb_mount() {
   log "   Admin mount: ${HOME}/.local/mnt/${NAS_SHARE_NAME}"
   log "   Operator mount: /Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
 
-  # Load NAS credentials from plex_nas.conf
-  local nas_config="${SCRIPT_DIR}/config/plex_nas.conf"
-  if [[ -f "${nas_config}" ]]; then
-    log "Loading NAS credentials from ${nas_config}"
-    # shellcheck source=/dev/null
-    source "${nas_config}"
-  else
-    log "❌ NAS configuration file not found: ${nas_config}"
-    exit 1
-  fi
+  log "Mount scripts will retrieve NAS credentials from Keychain at runtime"
 
-  if [[ -z "${PLEX_NAS_USERNAME}" || -z "${PLEX_NAS_PASSWORD}" ]]; then
-    log "❌ NAS credentials not found in ${nas_config}"
-    exit 1
-  fi
-
-  # Step 1: Configure the template once with actual values
-  local template_script="${SCRIPT_DIR}/templates/mount-nas-media.sh"
+  # Step 1: Configure the template with non-sensitive values
+  local template_script="${SCRIPT_DIR}/app-setup-templates/mount-nas-media.sh"
   local configured_script="${SCRIPT_DIR}/mount-nas-media-configured.sh"
 
-  log "Configuring mount script template with credentials"
+  log "Configuring mount script template (credentials retrieved from Keychain at runtime)"
 
   # Verify template exists
   if [[ ! -f "${template_script}" ]]; then
@@ -302,16 +302,14 @@ setup_persistent_smb_mount() {
   # Create configured version
   cp "${template_script}" "${configured_script}"
 
-  # Replace placeholders with actual values (done once)
+  # Replace placeholders with actual values (no sensitive data)
   sed -i '' \
     -e "s|__NAS_HOSTNAME__|${NAS_HOSTNAME}|g" \
     -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
-    -e "s|__PLEX_NAS_USERNAME__|${PLEX_NAS_USERNAME}|g" \
-    -e "s|__PLEX_NAS_PASSWORD__|${PLEX_NAS_PASSWORD}|g" \
     -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
     "${configured_script}"
 
-  log "✅ Mount script configured with credentials"
+  log "✅ Mount script configured (credentials will be retrieved from Keychain at runtime)"
 
   # Function to deploy configured script to a specific user
   deploy_user_mount() {
@@ -656,7 +654,7 @@ configure_plex_autostart() {
 
   # Deploy Plex startup wrapper script
   OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
-  WRAPPER_TEMPLATE="${SCRIPT_DIR}/templates/start-plex-with-mount.sh"
+  WRAPPER_TEMPLATE="${SCRIPT_DIR}/app-setup-templates/start-plex-with-mount.sh"
   WRAPPER_SCRIPT="${OPERATOR_HOME}/.local/bin/start-plex-with-mount.sh"
   LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
   PLIST_FILE="${LAUNCH_AGENTS_DIR}/com.plexapp.plexmediaserver.plist"
@@ -864,7 +862,7 @@ main() {
     log "Media directory mounted for administrator"
     log ""
     log "SMB Mount troubleshooting:"
-    log "  - Manual mount: mount_smbfs -o soft,nobrowse,noowners '//${PLEX_NAS_USERNAME}:<password>@${NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
+    log "  - Manual mount: mount_smbfs -o soft,nobrowse,noowners '//<username>:<password>@${NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
     log "  - Check mounts: mount | grep \$(whoami)"
     log "  - Unmount: umount '${PLEX_MEDIA_MOUNT}'"
     log "  - 'Too many users' error indicates SMB connection limit reached"

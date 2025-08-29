@@ -292,7 +292,7 @@ fi
 
 mkdir -p "${LOG_DIR}"
 touch "${LOG_FILE}"
-chmod 644 "${LOG_FILE}"
+chmod 600 "${LOG_FILE}"
 
 # Function to check if a Terminal window with specific title exists
 check_terminal_window_exists() {
@@ -770,6 +770,147 @@ defaults write com.apple.ncprefs apps -array-add '{
 }'
 check_success "Notification settings configuration"
 
+# Keychain credential management functions
+# Secure credential retrieval function
+get_keychain_credential() {
+  local service="$1"
+  local account="$2"
+
+  local credential
+  if credential=$(security find-generic-password \
+    -s "${service}" \
+    -a "${account}" \
+    -w 2>/dev/null); then
+    echo "${credential}"
+    return 0
+  else
+    collect_error "Failed to retrieve credential from Keychain: ${service}"
+    return 1
+  fi
+}
+
+# Import credentials from external keychain and populate user keychains
+import_external_keychain_credentials() {
+  set_section "Importing Credentials from External Keychain"
+
+  # Load keychain manifest
+  local manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
+  if [[ ! -f "${manifest_file}" ]]; then
+    collect_error "Keychain manifest not found: ${manifest_file}"
+    return 1
+  fi
+
+  # shellcheck source=/dev/null
+  source "${manifest_file}"
+
+  # Validate required variables from manifest
+  if [[ -z "${KEYCHAIN_PASSWORD:-}" || -z "${EXTERNAL_KEYCHAIN:-}" ]]; then
+    collect_error "Required keychain variables not found in manifest"
+    return 1
+  fi
+
+  # Move external keychain file to user's keychain directory
+  local external_keychain_file="${SETUP_DIR}/config/${EXTERNAL_KEYCHAIN}.keychain-db"
+  local user_keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}.keychain-db"
+
+  if [[ ! -f "${external_keychain_file}" ]]; then
+    collect_error "External keychain file not found: ${external_keychain_file}"
+    return 1
+  fi
+
+  log "Moving external keychain to user's keychain directory..."
+  mv "${external_keychain_file}" "${user_keychain_file}"
+  chmod 600 "${user_keychain_file}"
+  check_success "External keychain file moved"
+
+  # Unlock external keychain
+  log "Unlocking external keychain with dev machine fingerprint..."
+  if security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${EXTERNAL_KEYCHAIN}"; then
+    log "✅ External keychain unlocked successfully"
+  else
+    collect_error "Failed to unlock external keychain"
+    return 1
+  fi
+
+  # Import administrator credentials to default keychain
+  log "Importing administrator credentials to default keychain..."
+
+  # Import operator credential
+  if operator_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    # Store in default keychain
+    security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${operator_password}" -D "Mac Server Setup - Operator Account Password" -A -U; then
+      # Verify storage
+      if compare_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w 2>/dev/null); then
+        if [[ "${operator_password}" == "${compare_password}" ]]; then
+          log "✅ Operator credential imported to administrator keychain"
+        else
+          collect_error "Operator credential verification failed after import"
+          return 1
+        fi
+      else
+        collect_error "Operator credential import verification failed"
+        return 1
+      fi
+    else
+      collect_error "Failed to import operator credential to administrator keychain"
+      return 1
+    fi
+    unset operator_password compare_password
+  else
+    collect_error "Failed to retrieve operator credential from external keychain"
+    return 1
+  fi
+
+  # Import Plex NAS credential
+  if plex_nas_credential=$(security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_nas_credential}" -D "Mac Server Setup - Plex NAS Credentials" -A -U; then
+      log "✅ Plex NAS credential imported to administrator keychain"
+    else
+      collect_error "Failed to import Plex NAS credential to administrator keychain"
+      return 1
+    fi
+    unset plex_nas_credential
+  else
+    collect_warning "Plex NAS credential not found in external keychain (may be optional)"
+  fi
+
+  # Import TimeMachine credential (optional)
+  if timemachine_credential=$(security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${timemachine_credential}" -D "Mac Server Setup - TimeMachine Credentials" -A -U; then
+      log "✅ TimeMachine credential imported to administrator keychain"
+    else
+      collect_warning "Failed to import TimeMachine credential to administrator keychain"
+    fi
+    unset timemachine_credential
+  else
+    log "⚠️ TimeMachine credential not found in external keychain (optional)"
+  fi
+
+  # Import WiFi credential (optional)
+  if wifi_credential=$(security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${wifi_credential}" -D "Mac Server Setup - WiFi Credentials" -A -U; then
+      log "✅ WiFi credential imported to administrator keychain"
+    else
+      collect_warning "Failed to import WiFi credential to administrator keychain"
+    fi
+    unset wifi_credential
+  else
+    log "⚠️ WiFi credential not found in external keychain (optional)"
+  fi
+
+  return 0
+}
+
+# Import credentials from external keychain
+if ! import_external_keychain_credentials; then
+  collect_error "External keychain credential import failed"
+  exit 1
+fi
+
 # Create operator account if it doesn't exist
 set_section "Setting Up Operator Account"
 if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
@@ -777,33 +918,99 @@ if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
 else
   log "Creating operator account"
 
-  # Read the password from the transferred file
-  OPERATOR_PASSWORD_FILE="${SETUP_DIR}/config/operator_password"
-  if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
-    OPERATOR_PASSWORD=$(<"${OPERATOR_PASSWORD_FILE}")
-    log "Using password from 1Password (${ONEPASSWORD_OPERATOR_ITEM})"
+  # Load keychain manifest
+  manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
+  # shellcheck source=/dev/null
+  source "${manifest_file}"
+
+  # Get credential securely from Keychain
+  operator_password
+  if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "${KEYCHAIN_ACCOUNT}"); then
+    log "Using password from Keychain (${ONEPASSWORD_OPERATOR_ITEM})"
   else
-    log "❌ Operator password file not found"
+    log "❌ Failed to retrieve operator password from Keychain"
     exit 1
   fi
 
   # Create the operator account
-  sudo -p "[Account setup] Enter password to create operator account: " sysadminctl -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${OPERATOR_PASSWORD}" -hint "See 1Password ${ONEPASSWORD_OPERATOR_ITEM} for password" 2>/dev/null
+  sudo -p "[Account setup] Enter password to create operator account: " sysadminctl -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${operator_password}" -hint "See 1Password ${ONEPASSWORD_OPERATOR_ITEM} for password" 2>/dev/null
   check_success "Operator account creation"
 
   # Verify the password works
-  if dscl /Local/Default -authonly "${OPERATOR_USERNAME}" "${OPERATOR_PASSWORD}"; then
+  if dscl /Local/Default -authonly "${OPERATOR_USERNAME}" "${operator_password}"; then
     show_log "✅ Password verification successful"
   else
     collect_error "Password verification failed"
+    unset operator_password
     exit 1
   fi
+
+  # Clear password from memory immediately
+  unset operator_password
 
   # Store reference to 1Password (don't store actual password)
   echo "Operator account password is stored in 1Password: op://${ONEPASSWORD_VAULT}/${ONEPASSWORD_OPERATOR_ITEM}/password" >"/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
   chmod 600 "/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
 
   show_log "Operator account created successfully"
+
+  # Populate operator's keychain with credentials
+  log "Populating operator keychain with credentials..."
+
+  # Load keychain manifest for external keychain access
+  manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
+  # shellcheck source=/dev/null
+  source "${manifest_file}"
+
+  # Validate required variables from manifest
+  if [[ -z "${KEYCHAIN_OPERATOR_SERVICE:-}" || -z "${KEYCHAIN_ACCOUNT:-}" || -z "${KEYCHAIN_PLEX_NAS_SERVICE:-}" ]]; then
+    collect_error "Required keychain variables not found in manifest for operator setup"
+    return 1
+  fi
+
+  # Set optional variables to empty if not defined (suppresses shellcheck warnings)
+  KEYCHAIN_TIMEMACHINE_SERVICE="${KEYCHAIN_TIMEMACHINE_SERVICE:-}"
+  KEYCHAIN_WIFI_SERVICE="${KEYCHAIN_WIFI_SERVICE:-}"
+
+  # Unlock operator's keychain
+  sudo -p "[Operator keychain] Enter password to unlock operator keychain: " -iu "${OPERATOR_USERNAME}" security unlock-keychain -p "${operator_password}"
+
+  # Import operator credentials to operator's keychain
+  if operator_credential=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    if sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${operator_credential}" -D "Mac Server Setup - Operator Account Password" -A -U; then
+      log "✅ Operator credential imported to operator keychain"
+    else
+      collect_warning "Failed to import operator credential to operator keychain"
+    fi
+    unset operator_credential
+  fi
+
+  # Import Plex NAS credential to operator's keychain
+  if plex_nas_credential=$(security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    if sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_nas_credential}" -D "Mac Server Setup - Plex NAS Credentials" -A -U; then
+      log "✅ Plex NAS credential imported to operator keychain"
+    else
+      collect_warning "Failed to import Plex NAS credential to operator keychain"
+    fi
+    unset plex_nas_credential
+  fi
+
+  # Import optional credentials to operator's keychain
+  if timemachine_credential=$(security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${timemachine_credential}" -D "Mac Server Setup - TimeMachine Credentials" -A -U 2>/dev/null || true
+    unset timemachine_credential
+  fi
+
+  if wifi_credential=$(security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${wifi_credential}" -D "Mac Server Setup - WiFi Credentials" -A -U 2>/dev/null || true
+    unset wifi_credential
+  fi
+
+  log "✅ Operator keychain populated with credentials"
 
   # Skip setup screens for operator account (more aggressive approach)
   log "Configuring operator account to skip setup screens"
@@ -872,13 +1079,17 @@ sudo -iu "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.controlcen
 # Configure automatic login for operator account (whether new or existing)
 section "Automatic login for operator account"
 log "Configuring automatic login for operator account"
-OPERATOR_PASSWORD_FILE="${SETUP_DIR}/config/operator_password"
-if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
-  OPERATOR_PASSWORD=$(<"${OPERATOR_PASSWORD_FILE}")
+# Load keychain manifest
+manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
+# shellcheck source=/dev/null
+source "${manifest_file}"
 
+# Get credential securely from Keychain for auto-login
+if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "${KEYCHAIN_ACCOUNT}"); then
   # Create the encoded password file that macOS uses for auto-login
-  ENCODED_PASSWORD=$(echo "${OPERATOR_PASSWORD}" | openssl enc -base64)
-  echo "${ENCODED_PASSWORD}" | sudo -p "[Auto-login] Enter password to configure automatic login: " tee /etc/kcpassword >/dev/null
+  encoded_password
+  encoded_password=$(echo "${operator_password}" | openssl enc -base64)
+  echo "${encoded_password}" | sudo -p "[Auto-login] Enter password to configure automatic login: " tee /etc/kcpassword >/dev/null
   sudo chmod 600 /etc/kcpassword
   check_success "Create auto-login password file"
 
@@ -886,10 +1097,12 @@ if [[ -f "${OPERATOR_PASSWORD_FILE}" ]]; then
   sudo -p "[Auto-login] Enter password to set auto-login user: " defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser "${OPERATOR_USERNAME}"
   check_success "Set auto-login user"
 
-  show_log "✅ Automatic login configured for ${OPERATOR_USERNAME}"
+  # Clear passwords from memory immediately
+  unset operator_password encoded_password
 
+  show_log "✅ Automatic login configured for ${OPERATOR_USERNAME}"
 else
-  log "Operator password file not found at ${OPERATOR_PASSWORD_FILE} - skipping automatic login setup"
+  log "Failed to retrieve operator password from Keychain - skipping automatic login setup"
 fi
 
 # Add operator to sudoers
