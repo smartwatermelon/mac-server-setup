@@ -944,9 +944,6 @@ else
     exit 1
   fi
 
-  # Clear password from memory immediately
-  unset operator_password
-
   # Store reference to 1Password (don't store actual password)
   echo "Operator account password is stored in 1Password: op://${ONEPASSWORD_VAULT}/${ONEPASSWORD_OPERATOR_ITEM}/password" >"/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
   chmod 600 "/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
@@ -973,6 +970,9 @@ else
 
   # Unlock operator's keychain
   sudo -p "[Operator keychain] Enter password to unlock operator keychain: " -iu "${OPERATOR_USERNAME}" security unlock-keychain -p "${operator_password}"
+
+  # Clear password from memory after all uses are complete
+  unset operator_password
 
   # Import operator credentials to operator's keychain
   if operator_credential=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
