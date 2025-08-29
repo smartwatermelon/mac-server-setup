@@ -118,6 +118,21 @@ if [[ "${SKIP_MIGRATION}" == "true" && -n "${MIGRATE_FROM}" ]]; then
   exit 1
 fi
 
+# _timeout function - uses timeout utility if installed, otherwise Perl
+# https://gist.github.com/jaytaylor/6527607
+function _timeout() {
+  if command -v timeout; then
+    timeout "$@"
+  else
+    if ! command -v perl; then
+      echo "perl not found 😿"
+      exit 1
+    else
+      perl -e 'alarm shift; exec @ARGV' "$@"
+    fi
+  fi
+}
+
 # Ensure we have administrator password for keychain operations
 if [[ -z "${ADMINISTRATOR_PASSWORD}" ]]; then
   echo
@@ -125,12 +140,12 @@ if [[ -z "${ADMINISTRATOR_PASSWORD}" ]]; then
   read -r -e -p "Enter your Mac account password: " -s ADMINISTRATOR_PASSWORD
   echo # Add newline after hidden input
 
-  # Validate password by testing keychain unlock
-  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}" 2>/dev/null; then
-    echo "❌ Invalid password or keychain unlock failed"
-    echo "Please run the script again with the correct password"
-    exit 1
-  fi
+  # Validate password by testing with dscl
+  until _timeout 1 dscl /Local/Default -authonly "${USER}" "${ADMINISTRATOR_PASSWORD}" &>/dev/null; do
+    echo "Invalid ${USER} account password. Try again or ctrl-C to exit."
+    read -r -e -p "Enter your Mac ${USER} account password: " -s ADMINISTRATOR_PASSWORD
+    echo # Add newline after hidden input
+  done
 
   echo "✅ Administrator password validated for keychain operations"
 fi
