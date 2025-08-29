@@ -264,7 +264,7 @@ if [[ "${SESSION_TYPE}" != "Aqua" ]]; then
   echo "Please run this script from the Mac's local desktop session."
   exit 1
 fi
-echo "✓ GUI session detected (${SESSION_TYPE}) - setup can proceed"
+show_log "✓ GUI session detected (${SESSION_TYPE}) - setup can proceed"
 
 # Get current machine fingerprint
 CURRENT_FINGERPRINT=$(system_profiler SPHardwareDataType | grep "Hardware UUID" | awk '{print $3}')
@@ -279,7 +279,7 @@ if [[ "${CURRENT_FINGERPRINT}" == "${DEV_MACHINE_FINGERPRINT}" ]]; then
   exit 1
 fi
 
-log "✅ Safety check passed - not running on development machine"
+show_log "✅ Safety check passed - not running on development machine"
 log "Current machine: ${CURRENT_FINGERPRINT}"
 
 # Create log file if it doesn't exist, rotate if it exists
@@ -325,10 +325,10 @@ fi
 # Print header
 set_section "Starting Mac Mini '${SERVER_NAME}' Server Setup"
 log "Running as user: ${ADMIN_USERNAME}"
-log -n "Date: "
-date
-log -n "macOS Version: "
-sw_vers -productVersion
+timestamp="$(date)"
+log "Date: ${timestamp}"
+productversion="$(sw_vers -productVersion)"
+log "macOS Version: ${productversion}"
 log "Setup directory: ${SETUP_DIR}"
 
 # Look for evidence we're being re-run after FDA grant
