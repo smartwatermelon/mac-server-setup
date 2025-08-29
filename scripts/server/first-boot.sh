@@ -338,17 +338,6 @@ if [[ -f "/tmp/${HOSTNAME_LOWER}_fda_requested" ]]; then
   log "Detected re-run after Full Disk Access grant"
 fi
 
-# Configure sudo timeout to reduce password prompts during setup
-section "Configuring sudo timeout"
-log "Setting sudo timeout to 30 minutes for smoother setup experience"
-sudo -p "[System setup] Enter password to configure sudo timeout: " tee /etc/sudoers.d/10_setup_timeout >/dev/null <<EOF
-# Temporary sudo timeout extension for setup - 30 minutes
-Defaults timestamp_timeout=30
-EOF
-# Fix permissions for sudoers file
-sudo chmod 0440 /etc/sudoers.d/10_setup_timeout
-check_success "Sudo timeout configuration"
-
 # Confirm operation if not forced
 if [[ "${FORCE}" = false ]] && [[ "${RERUN_AFTER_FDA}" = false ]]; then
   read -p "This script will configure your Mac Mini server. Continue? (Y/n) " -n 1 -r
@@ -359,6 +348,36 @@ if [[ "${FORCE}" = false ]] && [[ "${RERUN_AFTER_FDA}" = false ]]; then
     exit 0
   fi
 fi
+
+# Collect administrator password for keychain operations
+if [[ "${FORCE}" != "true" && "${RERUN_AFTER_FDA}" != "true" ]]; then
+  echo
+  echo "This script will need your Mac account password for keychain operations."
+  read -r -e -p "Enter your Mac account password: " -s ADMINISTRATOR_PASSWORD
+  echo # Add newline after hidden input
+
+  # Validate password by testing keychain unlock
+  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}" 2>/dev/null; then
+    echo "❌ Invalid password or keychain unlock failed"
+    echo "Please run the script again with the correct password"
+    exit 1
+  fi
+
+  log "✅ Administrator password validated for keychain operations"
+else
+  log "Skipping password prompt (force mode or FDA re-run)"
+fi
+
+# Configure sudo timeout to reduce password prompts during setup
+section "Configuring sudo timeout"
+log "Setting sudo timeout to 30 minutes for smoother setup experience"
+sudo -p "[System setup] Enter password to configure sudo timeout: " tee /etc/sudoers.d/10_setup_timeout >/dev/null <<EOF
+# Temporary sudo timeout extension for setup - 30 minutes
+Defaults timestamp_timeout=30
+EOF
+# Fix permissions for sudoers file
+sudo chmod 0440 /etc/sudoers.d/10_setup_timeout
+check_success "Sudo timeout configuration"
 
 #
 # SYSTEM CONFIGURATION
@@ -805,7 +824,7 @@ get_keychain_credential() {
 # Import credentials from external keychain and populate user keychains
 import_external_keychain_credentials() {
   set_section "Importing Credentials from External Keychain"
-
+  set -x
   # Load keychain manifest
   local manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
   if [[ ! -f "${manifest_file}" ]]; then
@@ -850,12 +869,13 @@ import_external_keychain_credentials() {
 
   # Unlock admin keychain first
   log "Unlocking administrator keychain for credential import..."
-  if ! security unlock-keychain; then
+  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}"; then
     collect_error "Failed to unlock administrator keychain"
     return 1
   fi
 
   # Import operator credential
+  # shellcheck disable=SC2154 # KEYCHAIN_OPERATOR_SERVICE loaded from sourced manifest
   if operator_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
     # Store in default keychain
     security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
@@ -883,6 +903,7 @@ import_external_keychain_credentials() {
   fi
 
   # Import Plex NAS credential
+  # shellcheck disable=SC2154 # KEYCHAIN_PLEX_NAS_SERVICE loaded from sourced manifest
   if plex_nas_credential=$(security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
     security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
     if security add-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_nas_credential}" -D "Mac Server Setup - Plex NAS Credentials" -A -U; then
@@ -897,6 +918,7 @@ import_external_keychain_credentials() {
   fi
 
   # Import TimeMachine credential (optional)
+  # shellcheck disable=SC2154 # KEYCHAIN_TIMEMACHINE_SERVICE loaded from sourced manifest
   if timemachine_credential=$(security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
     security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
     if security add-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${timemachine_credential}" -D "Mac Server Setup - TimeMachine Credentials" -A -U; then
@@ -921,7 +943,7 @@ import_external_keychain_credentials() {
   else
     log "⚠️ WiFi credential not found in external keychain (optional)"
   fi
-
+  set +x
   return 0
 }
 
@@ -970,75 +992,13 @@ else
 
   show_log "Operator account created successfully"
 
-  # Populate operator's keychain with credentials
-  log "Populating operator keychain with credentials..."
+  # Note: Operator keychain population no longer needed
+  # SMB credentials are now embedded directly in mount scripts during plex-setup.sh
+  # This eliminates the need to unlock operator keychain before first login
+  log "✅ Operator keychain operations skipped - credentials embedded in service scripts"
 
-  # Load keychain manifest for external keychain access
-  manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
-  # shellcheck source=/dev/null
-  source "${manifest_file}"
-
-  # Validate required variables from manifest
-  if [[ -z "${KEYCHAIN_OPERATOR_SERVICE:-}" || -z "${KEYCHAIN_ACCOUNT:-}" || -z "${KEYCHAIN_PLEX_NAS_SERVICE:-}" ]]; then
-    collect_error "Required keychain variables not found in manifest for operator setup"
-    return 1
-  fi
-
-  # Set optional variables to empty if not defined (suppresses shellcheck warnings)
-  KEYCHAIN_TIMEMACHINE_SERVICE="${KEYCHAIN_TIMEMACHINE_SERVICE:-}"
-  KEYCHAIN_WIFI_SERVICE="${KEYCHAIN_WIFI_SERVICE:-}"
-
-  # Unlock operator's keychain
-  log "Unlocking operator keychain for credential import..."
-  if ! sudo -p "[Operator keychain] Enter password to unlock operator keychain: " -iu "${OPERATOR_USERNAME}" security unlock-keychain -p "${operator_password}"; then
-    collect_error "Failed to unlock operator keychain"
-    return 1
-  fi
-  log "✅ Operator keychain unlocked successfully"
-
-  # Clear password from memory after all uses are complete
+  # Clear password from memory since we don't need it for keychain operations
   unset operator_password
-
-  # Import operator credentials to operator's keychain
-  if operator_credential=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
-    if sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${operator_credential}" -D "Mac Server Setup - Operator Account Password" -A -U; then
-      log "✅ Operator credential imported to operator keychain"
-    else
-      collect_warning "Failed to import operator credential to operator keychain"
-    fi
-    unset operator_credential
-  fi
-
-  # Import Plex NAS credential to operator's keychain (CRITICAL)
-  if plex_nas_credential=$(security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
-    if sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_nas_credential}" -D "Mac Server Setup - Plex NAS Credentials" -A -U; then
-      log "✅ Plex NAS credential imported to operator keychain"
-    else
-      collect_error "CRITICAL: Failed to import Plex NAS credential to operator keychain"
-      return 1
-    fi
-    unset plex_nas_credential
-  else
-    collect_error "CRITICAL: Plex NAS credential not found in external keychain for operator import"
-    return 1
-  fi
-
-  # Import optional credentials to operator's keychain
-  if timemachine_credential=$(security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
-    sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${timemachine_credential}" -D "Mac Server Setup - TimeMachine Credentials" -A -U 2>/dev/null || true
-    unset timemachine_credential
-  fi
-
-  if wifi_credential=$(security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
-    sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${wifi_credential}" -D "Mac Server Setup - WiFi Credentials" -A -U 2>/dev/null || true
-    unset wifi_credential
-  fi
-
-  log "✅ Operator keychain populated with credentials"
 
   # Skip setup screens for operator account (more aggressive approach)
   log "Configuring operator account to skip setup screens"
@@ -1112,7 +1072,8 @@ manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
 # shellcheck source=/dev/null
 source "${manifest_file}"
 
-# Get credential securely from Keychain for auto-login
+# Get credential securely from admin Keychain for auto-login
+log "Retrieving operator password from admin keychain for automatic login setup"
 if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "${KEYCHAIN_ACCOUNT}"); then
   # Create the encoded password file that macOS uses for auto-login
   encoded_password=$(echo "${operator_password}" | openssl enc -base64)
@@ -1129,7 +1090,8 @@ if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "$
 
   show_log "✅ Automatic login configured for ${OPERATOR_USERNAME}"
 else
-  log "Failed to retrieve operator password from Keychain - skipping automatic login setup"
+  collect_warning "Failed to retrieve operator password from admin keychain - skipping automatic login setup"
+  log "⚠️ Operator will need to log in manually on first boot"
 fi
 
 # Add operator to sudoers
@@ -1821,6 +1783,7 @@ show_log "You can now set up individual applications with scripts in: ${APP_SETU
 show_log ""
 show_log "Next steps:"
 show_log "1. Set up applications: cd ${APP_SETUP_DIR} && ./plex-setup.sh"
+show_log "   (The script will prompt for your Mac account password)"
 show_log "2. Test SSH access from your dev machine:"
 show_log "   ssh ${ADMIN_USERNAME}@${HOSTNAME_LOWER}.local"
 show_log "   ssh operator@${HOSTNAME_LOWER}.local"
@@ -1843,6 +1806,12 @@ if [[ -n "${EXTERNAL_KEYCHAIN:-}" ]]; then
     rm -f "${setup_keychain_file}"
     log "✅ Setup keychain file cleaned up"
   fi
+fi
+
+# Clean up administrator password from memory
+if [[ -n "${ADMINISTRATOR_PASSWORD:-}" ]]; then
+  unset ADMINISTRATOR_PASSWORD
+  log "✅ Administrator password cleared from memory"
 fi
 
 # Show collected errors and warnings

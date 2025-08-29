@@ -6,12 +6,11 @@ The Mac Server Setup framework uses macOS Keychain Services for secure credentia
 
 ## Architecture
 
-### Four-Stage Credential Flow
+### Three-Stage Credential Flow
 
 1. **Development Machine (prep-airdrop.sh)** - Retrieves credentials from 1Password and creates external keychain file
-2. **Target Server (first-boot.sh)** - Imports credentials from external keychain to admin and operator keychains  
-3. **Application Setup (app-setup/*.sh)** - Retrieves credentials from local keychain for configuration
-4. **Runtime Services** - Services and applications retrieve credentials from operator keychain (e.g. mount-nas-media.sh)
+2. **Target Server (first-boot.sh)** - Imports credentials from external keychain to admin keychain only
+3. **Application Setup (app-setup/*.sh)** - Retrieves credentials from admin keychain and embeds them into service scripts with restrictive file permissions for secure runtime access
 
 ## Credential Services
 
@@ -40,18 +39,19 @@ Service identifiers:
 
 ### Credential Import (first-boot.sh)
 
-Two-phase process:
+Single-phase admin import process:
 
 1. **Admin Import** - Transfers credentials from external keychain to admin's keychain
-2. **Operator Replication** - Copies credentials to operator's keychain for application access
+
+**Note**: Operator keychain population has been removed as it's no longer needed. The operator account is created before first login, meaning no login keychain exists yet. SMB credentials are embedded directly into service scripts during application setup, eliminating the need for operator keychain access.
 
 ### Application Usage (app-setup/*.sh)
 
-Uses `get_keychain_credential()` function to retrieve credentials securely, with immediate memory cleanup after use.
+Uses `get_keychain_credential()` function to retrieve credentials securely during setup, then embeds them directly into service scripts with restrictive file permissions (mode 700) for runtime access.
 
 ### Runtime Services
 
-Services running under operator context retrieve credentials directly from operator keychain for ongoing operations like SMB mounting.
+Services use embedded credentials that were securely inserted during application setup. This eliminates the need for interactive keychain unlocks in LaunchAgent contexts while maintaining security through restrictive file permissions.
 
 ## Credential Formats
 
@@ -71,7 +71,7 @@ Services running under operator context retrieve credentials directly from opera
 
 ### mount-nas-media.sh Template
 
-Retrieves NAS credentials from keychain for SMB mounting, URL-encodes passwords, and clears credentials from memory immediately after use.
+Uses embedded NAS credentials that were securely inserted during plex-setup.sh execution. Credentials are validated during script startup, URL-encoded for SMB mounting, and protected by restrictive file permissions (mode 700).
 
 ### Configuration Files
 
@@ -94,8 +94,9 @@ Retrieves NAS credentials from keychain for SMB mounting, URL-encodes passwords,
 
 ### Operations  
 
-- Automatic credential distribution to both admin and operator accounts
-- Simple single-function credential retrieval interface
+- Automatic credential storage in admin keychain during setup
+- Simple single-function credential retrieval interface for setup scripts
+- Embedded credentials in service scripts eliminate runtime keychain dependencies
 - Error resilience with graceful degradation
 
 ### Development
@@ -105,11 +106,37 @@ Retrieves NAS credentials from keychain for SMB mounting, URL-encodes passwords,
 
 ## Troubleshooting
 
-Common diagnostic approaches:
+### Admin Keychain Issues
+
+Common diagnostic approaches for setup-time credential issues:
 
 - Verify keychain file existence and permissions
 - Test credential retrieval manually with `security` commands
-- Check keychain unlock status and access permissions
+- Check keychain unlock status and access permissions  
 - Use Keychain Access.app for GUI credential inspection
+
+### Embedded Credential Issues
+
+For runtime credential problems with service scripts:
+
+- **Script permissions**: Verify service scripts have mode 700 permissions
+
+  ```bash
+  ls -la ~/.local/bin/mount-nas-media.sh
+  # Should show: -rwx------
+  ```
+
+- **Credential validation**: Check for unconfigured placeholders in scripts
+
+  ```bash
+  grep "__.*__" ~/.local/bin/mount-nas-media.sh
+  # Should return no results if properly configured
+  ```
+
+- **Service script logs**: Check service-specific log files
+
+  ```bash
+  tail -f ~/.local/state/${server-name}-mount.log
+  ```
 
 The system provides comprehensive logging and error collection to identify credential-related issues during setup.

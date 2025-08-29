@@ -8,7 +8,7 @@
 # - Configuration migration from existing Plex server
 # - Auto-start configuration
 #
-# Usage: ./plex-setup.sh [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST]
+# Usage: ./plex-setup.sh [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--password PASSWORD]
 #   --force: Skip all confirmation prompts
 #   --skip-migration: Skip Plex config migration
 #   --skip-mount: Skip SMB mount setup
@@ -61,6 +61,7 @@ FORCE=false
 SKIP_MIGRATION=false
 SKIP_MOUNT=false
 MIGRATE_FROM=""
+ADMINISTRATOR_PASSWORD=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -84,9 +85,13 @@ while [[ $# -gt 0 ]]; do
       MIGRATE_FROM="$2"
       shift 2
       ;;
+    --password)
+      ADMINISTRATOR_PASSWORD="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST]"
+      echo "Usage: $0 [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--password PASSWORD]"
       exit 1
       ;;
   esac
@@ -96,6 +101,23 @@ done
 if [[ "${SKIP_MIGRATION}" == "true" && -n "${MIGRATE_FROM}" ]]; then
   echo "Error: --skip-migration and --migrate-from cannot be used together"
   exit 1
+fi
+
+# Ensure we have administrator password for keychain operations
+if [[ -z "${ADMINISTRATOR_PASSWORD}" ]]; then
+  echo
+  echo "This script needs your Mac account password for keychain operations."
+  read -r -e -p "Enter your Mac account password: " -s ADMINISTRATOR_PASSWORD
+  echo # Add newline after hidden input
+
+  # Validate password by testing keychain unlock
+  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}" 2>/dev/null; then
+    echo "❌ Invalid password or keychain unlock failed"
+    echo "Please run the script again with the correct password"
+    exit 1
+  fi
+
+  echo "✅ Administrator password validated for keychain operations"
 fi
 
 # Set up logging
@@ -215,7 +237,7 @@ get_keychain_credential() {
   local credential
 
   # Ensure keychain is unlocked before accessing
-  if ! security unlock-keychain 2>/dev/null; then
+  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}" 2>/dev/null; then
     collect_error "Failed to unlock keychain for credential retrieval"
     return 1
   fi
@@ -923,6 +945,12 @@ main() {
 
 # Run main function
 main "$@"
+
+# Clean up administrator password from memory
+if [[ -n "${ADMINISTRATOR_PASSWORD:-}" ]]; then
+  unset ADMINISTRATOR_PASSWORD
+  log "✅ Administrator password cleared from memory"
+fi
 
 # Show collected errors and warnings
 show_collected_issues
