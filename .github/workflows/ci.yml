@@ -206,7 +206,8 @@ jobs:
           echo "🔮 Future: Check for insecure shell patterns"
           # Basic check for obvious secrets (this could catch accidents)
           if grep -r "password.*=" . --include="*.sh" --include="*.conf" | \
-              grep -v "PASSWORD_FILE\|1Password\|#.*password\|\\\${.*PASSWORD.*}\|encoded_password\|KEYCHAIN_PASSWORD\|dynamically generated"; then
+              grep -v "PASSWORD_FILE\|1Password\|#.*password\|\\\${.*PASSWORD.*}\|encoded_password" | \
+              grep -v "KEYCHAIN_PASSWORD\|dynamically generated"; then
             echo "⚠️  Warning: Found potential hardcoded passwords"
             exit 1
           fi
