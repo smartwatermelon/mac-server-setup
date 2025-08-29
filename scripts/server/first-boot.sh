@@ -809,7 +809,7 @@ import_external_keychain_credentials() {
     return 1
   fi
 
-  # Move external keychain file to user's keychain directory
+  # Copy external keychain file to user's keychain directory (preserve original for idempotency)
   local external_keychain_file="${SETUP_DIR}/config/${EXTERNAL_KEYCHAIN}-db"
   local user_keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}-db"
 
@@ -818,10 +818,10 @@ import_external_keychain_credentials() {
     return 1
   fi
 
-  log "Moving external keychain to user's keychain directory..."
-  mv "${external_keychain_file}" "${user_keychain_file}"
+  log "Copying external keychain to user's keychain directory..."
+  cp "${external_keychain_file}" "${user_keychain_file}"
   chmod 600 "${user_keychain_file}"
-  check_success "External keychain file moved"
+  check_success "External keychain file copied"
 
   # Unlock external keychain
   log "Unlocking external keychain with dev machine fingerprint..."
@@ -1806,6 +1806,16 @@ show_log "   - Test that all applications are accessible as the operator"
 # Clean up temporary sudo timeout configuration
 log "Removing temporary sudo timeout configuration"
 sudo rm -f /etc/sudoers.d/10_setup_timeout
+
+# Clean up external keychain from setup directory (only after successful completion)
+if [[ -n "${EXTERNAL_KEYCHAIN:-}" ]]; then
+  setup_keychain_file="${SETUP_DIR}/config/${EXTERNAL_KEYCHAIN}-db"
+  if [[ -f "${setup_keychain_file}" ]]; then
+    log "Cleaning up external keychain from setup directory"
+    rm -f "${setup_keychain_file}"
+    log "✅ Setup keychain file cleaned up"
+  fi
+fi
 
 # Show collected errors and warnings
 show_collected_issues
