@@ -41,42 +41,9 @@ log() {
   echo "${timestamp} [mount-nas-media] $*" | tee -a "${LOG_FILE}"
 }
 
-# Function to retrieve credentials from Keychain
-get_nas_credentials() {
-  local hostname_lower
-  hostname_lower="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
-  local keychain_service="plex-nas-${hostname_lower}"
-  local keychain_account
-  keychain_account="${hostname_lower}"
-
-  # Ensure keychain is unlocked before accessing
-  if ! security unlock-keychain 2>/dev/null; then
-    log "❌ Failed to unlock keychain for credential retrieval"
-    return 1
-  fi
-
-  local combined_credential
-  if combined_credential=$(security find-generic-password -s "${keychain_service}" -a "${keychain_account}" -w 2>/dev/null); then
-    # Split combined credential (format: "username:password")
-    # Use %% and # to split only on first colon (handles passwords with colons)
-    PLEX_NAS_USERNAME="${combined_credential%%:*}"
-    PLEX_NAS_PASSWORD="${combined_credential#*:}"
-
-    # Validate credentials were properly extracted
-    if [[ -z "${PLEX_NAS_USERNAME}" || -z "${PLEX_NAS_PASSWORD}" ]]; then
-      log "❌ Failed to extract NAS credentials from Keychain"
-      unset combined_credential PLEX_NAS_USERNAME PLEX_NAS_PASSWORD
-      return 1
-    fi
-
-    unset combined_credential
-    log "✅ NAS credentials retrieved from Keychain"
-    return 0
-  else
-    log "❌ NAS credentials not found in Keychain (service: ${keychain_service}, account: ${keychain_account})"
-    return 1
-  fi
-}
+# SMB credentials - these will be set during installation
+PLEX_NAS_USERNAME="__PLEX_NAS_USERNAME__"
+PLEX_NAS_PASSWORD="__PLEX_NAS_PASSWORD__"
 
 # Wait for network connectivity
 wait_for_network() {
@@ -106,13 +73,10 @@ main() {
   log "Target: ${PLEX_MEDIA_MOUNT}"
   log "Running as: ${WHOAMI} (${IDU}:${IDG})"
 
-  # Retrieve NAS credentials from Keychain (CRITICAL - fail fast)
-  if ! get_nas_credentials; then
-    local hostname_lower
-    hostname_lower="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
-    log "❌ CRITICAL: Cannot proceed without NAS credentials"
-    log "❌ Looking for: service='plex-nas-${hostname_lower}', account='${hostname_lower}'"
-    log "❌ Ensure credentials were imported during first-boot.sh"
+  # Validate SMB credentials are configured
+  if [[ "${PLEX_NAS_USERNAME}" == "__PLEX_NAS_USERNAME__" || "${PLEX_NAS_PASSWORD}" == "__PLEX_NAS_PASSWORD__" ]]; then
+    log "❌ CRITICAL: SMB credentials not configured in script"
+    log "❌ Ensure plex-setup.sh completed successfully"
     exit 1
   fi
 

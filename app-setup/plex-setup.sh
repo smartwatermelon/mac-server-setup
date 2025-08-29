@@ -291,31 +291,63 @@ setup_persistent_smb_mount() {
   log "   Admin mount: ${HOME}/.local/mnt/${NAS_SHARE_NAME}"
   log "   Operator mount: /Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
 
-  log "Mount scripts will retrieve NAS credentials from Keychain at runtime"
+  # Step 1: Retrieve NAS credentials from Keychain for embedding
+  log "Retrieving NAS credentials from Keychain for mount script embedding"
 
-  # Step 1: Configure the template with non-sensitive values
+  local keychain_service="plex-nas-${HOSTNAME_LOWER}"
+  local keychain_account="${HOSTNAME_LOWER}"
+  local combined_credential
+
+  if ! combined_credential=$(get_keychain_credential "${keychain_service}" "${keychain_account}"); then
+    collect_error "Failed to retrieve NAS credentials from Keychain"
+    collect_error "Service: ${keychain_service}, Account: ${keychain_account}"
+    collect_error "Ensure credentials were imported during first-boot.sh"
+    return 1
+  fi
+
+  # Split combined credential (format: "username:password")
+  # Use %% and # to split only on first colon (handles passwords with colons)
+  local plex_nas_username="${combined_credential%%:*}"
+  local plex_nas_password="${combined_credential#*:}"
+
+  # Validate credentials were properly extracted
+  if [[ -z "${plex_nas_username}" || -z "${plex_nas_password}" ]]; then
+    collect_error "Failed to parse NAS credentials from Keychain"
+    unset combined_credential plex_nas_username plex_nas_password
+    return 1
+  fi
+
+  unset combined_credential
+  log "✅ NAS credentials retrieved from Keychain (username: ${plex_nas_username})"
+
+  # Step 2: Configure the template with all values including credentials
   local template_script="${SCRIPT_DIR}/templates/mount-nas-media.sh"
   local configured_script="${SCRIPT_DIR}/mount-nas-media-configured.sh"
 
-  log "Configuring mount script template (credentials retrieved from Keychain at runtime)"
+  log "Configuring mount script template with embedded credentials"
 
   # Verify template exists
   if [[ ! -f "${template_script}" ]]; then
-    log "❌ Mount script template not found at ${template_script}"
-    exit 1
+    collect_error "Mount script template not found at ${template_script}"
+    return 1
   fi
 
   # Create configured version
   cp "${template_script}" "${configured_script}"
 
-  # Replace placeholders with actual values (no sensitive data)
+  # Replace placeholders with actual values (including sensitive credentials)
   sed -i '' \
     -e "s|__NAS_HOSTNAME__|${NAS_HOSTNAME}|g" \
     -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
     -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
+    -e "s|__PLEX_NAS_USERNAME__|${plex_nas_username}|g" \
+    -e "s|__PLEX_NAS_PASSWORD__|${plex_nas_password}|g" \
     "${configured_script}"
 
-  log "✅ Mount script configured (credentials will be retrieved from Keychain at runtime)"
+  # Clear sensitive variables from memory
+  unset plex_nas_username plex_nas_password
+
+  log "✅ Mount script configured with embedded NAS credentials"
 
   # Function to deploy configured script to a specific user
   deploy_user_mount() {
