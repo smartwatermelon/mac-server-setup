@@ -67,6 +67,16 @@ wait_for_network() {
   return 1
 }
 
+test_mount() {
+  # Test basic mount verification using user-based pattern
+  if ! mount | grep "${WHOAMI}" | grep -q "${PLEX_MEDIA_MOUNT}"; then
+    log "❌ Mount not visible in system mount table for user ${WHOAMI}"
+    return 1
+  fi
+  log "✅ Mount verification successful (active mount found for ${WHOAMI})"
+  return 0
+}
+
 # Main execution - idempotent mounting process
 main() {
   log "Starting idempotent NAS media mount process"
@@ -79,6 +89,12 @@ main() {
   if ! wait_for_network; then
     log "❌ Cannot proceed without network connectivity"
     exit 1
+  fi
+
+  # Step 0: Check for existing mount; return 0 if true
+  log "Step 0: Check for existing mount..."
+  if test_mount; then
+    return 0
   fi
 
   # Step 1: Unmount existing mount (ignore failures)
@@ -114,15 +130,12 @@ main() {
   # Wait a moment for mount to be fully accessible
   sleep 2
 
-  # Step 5: Test read/write access for all users
-  log "Step 5: Testing read/write access..."
+  # Step 5: Test access for current user
+  log "Step 5: Testing access..."
 
-  # Test basic mount verification using user-based pattern
-  if ! mount | grep "${WHOAMI}" | grep -q "${PLEX_MEDIA_MOUNT}"; then
-    log "❌ Mount not visible in system mount table for user ${WHOAMI}"
+  if ! test_mount; then
     exit 1
   fi
-  log "✅ Mount verification successful (active mount found for ${WHOAMI})"
 
   # Clear sensitive credentials from memory
   unset PLEX_NAS_USERNAME PLEX_NAS_PASSWORD
