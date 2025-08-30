@@ -1473,7 +1473,7 @@ else
 
       # Start log monitoring in background - write a temporary script to avoid shellcheck issues
       local monitor_script="/tmp/clt_monitor_$$"
-      cat > "${monitor_script}" << 'MONITOR_EOF'
+      cat >"${monitor_script}" <<'MONITOR_EOF'
 #!/bin/bash
 sudo log stream --predicate "processImagePath Contains[c] 'softwareupdate'" 2>/dev/null | while read -r line; do
   # Filter for relevant messages

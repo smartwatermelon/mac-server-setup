@@ -212,7 +212,7 @@ EOF
 # Verify Remote Desktop functionality with comprehensive checks
 verify_remote_desktop() {
   log "Verifying Remote Desktop status with comprehensive checks..."
-  
+
   local verification_failed=false
   local screen_sharing_working=false
   local remote_management_working=false
@@ -279,7 +279,7 @@ verify_remote_desktop() {
   log "        VERIFICATION SUMMARY"
   log "========================================="
   log ""
-  
+
   if [[ "${screen_sharing_working}" == "true" ]]; then
     log "✅ SCREEN SHARING: Fully functional and ready for connections"
     log "   Connection URL: vnc://${hostname}.local"
@@ -288,13 +288,13 @@ verify_remote_desktop() {
     log "❌ SCREEN SHARING: Not working properly"
     log "   Setup incomplete or configuration failed"
   fi
-  
+
   if [[ "${remote_management_working}" == "true" ]]; then
     log "✅ REMOTE MANAGEMENT: Active (Apple Remote Desktop compatible)"
   else
     log "ℹ️ REMOTE MANAGEMENT: Not enabled (VNC-only mode)"
   fi
-  
+
   log ""
   if [[ "${verification_failed}" == "true" ]]; then
     log "❌ OVERALL STATUS: Remote Desktop setup has issues"
