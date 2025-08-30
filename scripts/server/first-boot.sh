@@ -1288,10 +1288,11 @@ if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "$
     else
       local kcpassword_perms
       kcpassword_perms=$(stat -f "%Mp%Lp" /etc/kcpassword 2>/dev/null || echo "unknown")
-      if [[ "${kcpassword_perms}" != "600" && "${kcpassword_perms}" != "0600" ]]; then
-        collect_warning "Auto-login password file has incorrect permissions: ${kcpassword_perms} (should be 600)"
-      else
+      if [[ "${kcpassword_perms}" == "600" || "${kcpassword_perms}" == "0600" ]]; then
         log "✓ Auto-login password file exists with correct permissions"
+      else
+        collect_error "Auto-login password file has incorrect permissions: ${kcpassword_perms} (should be 600)"
+        verification_failed=true
       fi
     fi
 
