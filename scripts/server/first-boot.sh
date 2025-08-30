@@ -299,6 +299,111 @@ fi
 show_log "✅ Safety check passed - not running on development machine"
 log "Current machine: ${CURRENT_FINGERPRINT}"
 
+# CRITICAL CHECK: FileVault compatibility for auto-login functionality
+set_section "FileVault Compatibility Check"
+
+log "Checking FileVault status (critical for auto-login functionality)..."
+
+filevault_status=$(fdesetup status 2>/dev/null || echo "unknown")
+
+if [[ "${filevault_status}" == *"FileVault is On"* ]]; then
+  echo ""
+  echo "=================================================================="
+  echo "                    ⚠️  CRITICAL ISSUE DETECTED  ⚠️"
+  echo "=================================================================="
+  echo ""
+  echo "FileVault disk encryption is ENABLED on this system."
+  echo ""
+  echo "This is incompatible with automatic login functionality,"
+  echo "which is required for the operator account setup."
+  echo ""
+  echo "RESOLUTION OPTIONS:"
+  echo "1. Try disabling FileVault via command line (fastest):"
+  echo "   • Run: sudo fdesetup disable"
+  echo "   • This requires decryption which may take several hours"
+  echo "   • Then re-run this setup script"
+  echo ""
+  echo "2. Try disabling FileVault in System Settings:"
+  echo "   • Open System Settings > Privacy & Security > FileVault"
+  echo "   • Click 'Turn Off...' and follow the prompts"
+  echo "   • This requires decryption which may take several hours"
+  echo "   • Then re-run this setup script"
+  echo ""
+  echo "3. If FileVault cannot be disabled:"
+  echo "   • Wipe this Mac completely and start over"
+  echo "   • During macOS setup, DO NOT enable FileVault"
+  echo "   • Ensure automatic login is enabled for admin account"
+  echo ""
+  echo "FileVault prevents automatic login for security reasons."
+  echo "This Mac Mini server setup requires auto-login for the"
+  echo "operator account to work properly."
+  echo ""
+  echo "=================================================================="
+  echo ""
+
+  collect_error "FileVault is enabled - incompatible with auto-login setup"
+
+  if [[ "${FORCE}" != "true" ]]; then
+    read -p "Continue anyway? (this will likely cause operator account issues) (y/N): " -n 1 -r response
+    echo
+    case ${response} in
+      [yY])
+        collect_warning "User chose to continue despite FileVault being enabled"
+        show_log "Continuing setup - operator auto-login will NOT work"
+        ;;
+      *)
+        show_log "Setup cancelled due to FileVault incompatibility"
+        exit 1
+        ;;
+    esac
+  else
+    collect_warning "Force mode - continuing despite FileVault being enabled"
+    show_log "Auto-login functionality will NOT work with FileVault enabled"
+  fi
+
+elif [[ "${filevault_status}" == *"Deferred"* ]]; then
+  echo ""
+  echo "=================================================================="
+  echo "                    ⚠️  POTENTIAL ISSUE DETECTED  ⚠️"
+  echo "=================================================================="
+  echo ""
+  echo "FileVault has DEFERRED ENABLEMENT scheduled."
+  echo "This means it will be enabled after the next reboot."
+  echo ""
+  echo "This will disable automatic login functionality required"
+  echo "for the operator account."
+  echo ""
+  echo "RECOMMENDATION:"
+  echo "Cancel FileVault enablement before it takes effect:"
+  echo "  sudo fdesetup disable"
+  echo ""
+  echo "=================================================================="
+  echo ""
+
+  collect_warning "FileVault deferred enablement detected - will disable auto-login after reboot"
+
+  if [[ "${FORCE}" != "true" ]]; then
+    read -p "Continue with setup? (Y/n): " -n 1 -r response
+    echo
+    case ${response} in
+      [nN])
+        show_log "Setup cancelled to resolve FileVault deferred enablement"
+        exit 1
+        ;;
+      *)
+        show_log "Continuing setup - recommend disabling FileVault deferred enablement"
+        ;;
+    esac
+  fi
+
+elif [[ "${filevault_status}" == *"FileVault is Off"* ]]; then
+  show_log "✅ FileVault is disabled - automatic login will work properly"
+
+else
+  collect_warning "FileVault status unclear: ${filevault_status}"
+  show_log "Manual verification recommended for auto-login compatibility"
+fi
+
 # Create log file if it doesn't exist, rotate if it exists
 if [[ -f "${LOG_FILE}" ]]; then
   # Rotate existing log file with timestamp
@@ -690,21 +795,25 @@ section "Configuring Remote Desktop"
 
 log "Remote Desktop requires GUI interaction to enable services, then automated permission setup"
 
-# Run the user-guided setup script
+# Run the user-guided setup script with proper verification
 if [[ "${FORCE}" == "true" ]]; then
   log "Running Remote Desktop setup with --force flag"
-  "${SETUP_DIR}/scripts/setup-remote-desktop.sh" --force || {
-    collect_warning "Remote Desktop setup failed or was cancelled"
-    log "You can run it manually later: ${SETUP_DIR}/scripts/setup-remote-desktop.sh"
-    return 0 # Don't fail the entire setup if this is skipped
-  }
+  if "${SETUP_DIR}/scripts/setup-remote-desktop.sh" --force; then
+    log "✅ Remote Desktop setup completed successfully with verification"
+  else
+    collect_error "Remote Desktop setup failed verification - Screen Sharing may not be working"
+    log "Manual setup required: ${SETUP_DIR}/scripts/setup-remote-desktop.sh"
+    log "Check System Settings > General > Sharing to enable Screen Sharing manually"
+  fi
 else
   log "Remote Desktop setup will automatically configure System Settings"
-  "${SETUP_DIR}/scripts/setup-remote-desktop.sh" || {
-    collect_warning "Remote Desktop setup failed or was cancelled"
-    log "You can run it manually later: ${SETUP_DIR}/scripts/setup-remote-desktop.sh"
-    return 0 # Don't fail the entire setup if this is skipped
-  }
+  if "${SETUP_DIR}/scripts/setup-remote-desktop.sh"; then
+    log "✅ Remote Desktop setup completed successfully with verification"
+  else
+    collect_error "Remote Desktop setup failed verification - Screen Sharing may not be working"
+    log "Manual setup required: ${SETUP_DIR}/scripts/setup-remote-desktop.sh"
+    log "Check System Settings > General > Sharing to enable Screen Sharing manually"
+  fi
 fi
 
 # After GUI setup, configure automated permissions for admin user
@@ -717,7 +826,6 @@ sudo -p "[Remote management] Enter password to configure admin privileges: " /Sy
 }
 check_success "Admin Remote Management privileges (if services enabled)"
 
-show_log "✅ Remote Desktop setup completed"
 log "Note: Operator user privileges will be configured after account creation"
 
 # Configure Apple ID
@@ -1001,11 +1109,56 @@ else
   sudo -p "[Account setup] Enter password to create operator account: " sysadminctl -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${operator_password}" -hint "See 1Password ${ONEPASSWORD_OPERATOR_ITEM} for password" 2>/dev/null
   check_success "Operator account creation"
 
-  # Verify the password works
-  if dscl /Local/Default -authonly "${OPERATOR_USERNAME}" "${operator_password}"; then
-    show_log "✅ Password verification successful"
-  else
-    collect_error "Password verification failed"
+  # Comprehensive verification of operator account creation
+  verify_operator_account_creation() {
+    local verification_failed=false
+
+    log "Performing comprehensive operator account verification..."
+
+    # Test 1: Account exists in directory services
+    if ! dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
+      collect_error "Operator account does not exist in directory services"
+      verification_failed=true
+    else
+      log "✓ Operator account exists in directory services"
+    fi
+
+    # Test 2: Password authentication works
+    if ! dscl /Local/Default -authonly "${OPERATOR_USERNAME}" "${operator_password}" 2>/dev/null; then
+      collect_error "Operator account password authentication failed"
+      verification_failed=true
+    else
+      log "✓ Operator account password authentication successful"
+    fi
+
+    # Test 3: Home directory exists and is accessible
+    local home_dir="/Users/${OPERATOR_USERNAME}"
+    if [[ ! -d "${home_dir}" ]]; then
+      collect_error "Operator home directory does not exist: ${home_dir}"
+      verification_failed=true
+    else
+      # Check ownership using stat
+      local owner_info
+      owner_info=$(stat -f "%Su:%Sg" "${home_dir}" 2>/dev/null || echo "unknown:unknown")
+      if [[ "${owner_info}" == "${OPERATOR_USERNAME}:staff" ]]; then
+        log "✓ Operator home directory exists with correct ownership"
+      else
+        collect_warning "Operator home directory ownership may be incorrect: ${owner_info}"
+      fi
+    fi
+
+    # Overall status
+    if [[ "${verification_failed}" == "true" ]]; then
+      collect_error "Operator account creation verification FAILED"
+      return 1
+    else
+      show_log "✅ Operator account creation verification PASSED"
+      return 0
+    fi
+  }
+
+  # Run the verification
+  if ! verify_operator_account_creation; then
     unset operator_password
     exit 1
   fi
@@ -1112,7 +1265,64 @@ if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "$
   # Clear passwords from memory immediately
   unset operator_password encoded_password
 
-  show_log "✅ Automatic login configured for ${OPERATOR_USERNAME}"
+  # Comprehensive verification of auto-login configuration
+  verify_autologin_configuration() {
+    local verification_failed=false
+
+    log "Performing comprehensive auto-login verification..."
+
+    # Test 1: Auto-login user is correctly configured
+    local auto_login_user
+    auto_login_user=$(defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser 2>/dev/null || echo "")
+    if [[ "${auto_login_user}" != "${OPERATOR_USERNAME}" ]]; then
+      collect_error "Auto-login is not configured for operator account (current: ${auto_login_user:-none})"
+      verification_failed=true
+    else
+      log "✓ Auto-login is configured for operator account"
+    fi
+
+    # Test 2: Auto-login password file exists
+    if [[ ! -f "/etc/kcpassword" ]]; then
+      collect_error "Auto-login password file missing (/etc/kcpassword)"
+      verification_failed=true
+    else
+      local kcpassword_perms
+      kcpassword_perms=$(stat -f "%Mp%Lp" /etc/kcpassword 2>/dev/null || echo "unknown")
+      if [[ "${kcpassword_perms}" != "600" ]]; then
+        collect_warning "Auto-login password file has incorrect permissions: ${kcpassword_perms} (should be 600)"
+      else
+        log "✓ Auto-login password file exists with correct permissions"
+      fi
+    fi
+
+    # Test 3: FileVault compatibility check (if not already done)
+    local filevault_status
+    filevault_status=$(fdesetup status 2>/dev/null || echo "unknown")
+    if [[ "${filevault_status}" == *"FileVault is On"* ]]; then
+      collect_error "FileVault is enabled - this will prevent auto-login from working"
+      verification_failed=true
+    elif [[ "${filevault_status}" == *"FileVault is Off"* ]]; then
+      log "✓ FileVault is disabled - auto-login compatibility confirmed"
+    else
+      collect_warning "FileVault status unclear for auto-login: ${filevault_status}"
+    fi
+
+    # Overall status
+    if [[ "${verification_failed}" == "true" ]]; then
+      collect_error "Auto-login configuration verification FAILED - operator may not auto-login"
+      return 1
+    else
+      show_log "✅ Auto-login configuration verification PASSED"
+      return 0
+    fi
+  }
+
+  # Run auto-login verification
+  if verify_autologin_configuration; then
+    show_log "✅ Automatic login configured and verified for ${OPERATOR_USERNAME}"
+  else
+    collect_error "Auto-login configuration failed verification"
+  fi
 else
   collect_warning "Failed to retrieve operator password from admin keychain - skipping automatic login setup"
   log "⚠️ Operator will need to log in manually on first boot"
@@ -1246,9 +1456,89 @@ else
   CLT_PACKAGE=$(softwareupdate -l 2>/dev/null | grep Label | tail -n 1 | cut -d ':' -f 2 | xargs)
 
   if [[ -n "${CLT_PACKAGE}" ]]; then
-    log "Installing package: ${CLT_PACKAGE}"
-    softwareupdate --verbose -i "${CLT_PACKAGE}"
-    check_success "Xcode Command Line Tools installation"
+    # Monitored Command Line Tools installation with progress feedback
+    install_clt_with_monitoring() {
+      local clt_package="$1"
+      local install_pid
+      local monitor_pid
+      local max_wait_time=1800 # 30 minutes maximum
+      local elapsed_time=0
+
+      show_log "Installing Command Line Tools with progress monitoring: ${clt_package}"
+      show_log "This may take 10-30 minutes depending on your internet connection..."
+
+      # Start the installation in background
+      softwareupdate --verbose -i "${clt_package}" &
+      install_pid=$!
+
+      # Start log monitoring in background - write a temporary script to avoid shellcheck issues
+      local monitor_script="/tmp/clt_monitor_$$"
+      cat > "${monitor_script}" << 'MONITOR_EOF'
+#!/bin/bash
+sudo log stream --predicate "processImagePath Contains[c] 'softwareupdate'" 2>/dev/null | while read -r line; do
+  # Filter for relevant messages
+  if [[ "${line}" == *"progress"* ]] || [[ "${line}" == *"Installing"* ]] || [[ "${line}" == *"Downloaded"* ]] || [[ "${line}" == *"Preparing"* ]] || [[ "${line}" == *"Extracting"* ]]; then
+    # Extract just the relevant part and show with timestamp
+    timestamp=$(date '+%H:%M:%S')
+    message=$(echo "${line}" | sed -E 's/.*eventMessage:"([^"]*).*/\1/' | sed 's/\\n/ /g')
+    if [[ -n "${message}" && "${message}" != "${line}" ]]; then
+      echo "[${timestamp}] CLT: ${message}"
+    fi
+  fi
+done
+MONITOR_EOF
+      chmod +x "${monitor_script}"
+      "${monitor_script}" &
+      monitor_pid=$!
+
+      # Wait for installation to complete with timeout
+      log "Monitoring Command Line Tools installation (max ${max_wait_time} seconds)..."
+
+      while kill -0 "${install_pid}" 2>/dev/null; do
+        if [[ ${elapsed_time} -ge ${max_wait_time} ]]; then
+          show_log "❌ Command Line Tools installation timed out after ${max_wait_time} seconds"
+          kill "${install_pid}" 2>/dev/null || true
+          kill "${monitor_pid}" 2>/dev/null || true
+          return 1
+        fi
+
+        sleep 10
+        elapsed_time=$((elapsed_time + 10))
+
+        # Show periodic status every 2 minutes
+        if [[ $((elapsed_time % 120)) -eq 0 ]]; then
+          local elapsed_min=$((elapsed_time / 60))
+          show_log "CLT installation still in progress... (${elapsed_min} minutes elapsed)"
+        fi
+      done
+
+      # Stop the log monitoring and cleanup temporary script
+      kill "${monitor_pid}" 2>/dev/null || true
+      rm -f "${monitor_script}" 2>/dev/null || true
+
+      # Wait for the install process to fully complete
+      wait "${install_pid}"
+      local install_result=$?
+
+      # Verify installation succeeded
+      if [[ ${install_result} -eq 0 ]] && xcode-select -p >/dev/null 2>&1; then
+        local install_time_min=$((elapsed_time / 60))
+        local install_time_sec=$((elapsed_time % 60))
+        show_log "✅ Command Line Tools installation completed successfully in ${install_time_min}m ${install_time_sec}s"
+        return 0
+      else
+        show_log "❌ Command Line Tools installation failed (exit code: ${install_result})"
+        return 1
+      fi
+    }
+
+    # Run the monitored installation
+    if install_clt_with_monitoring "${CLT_PACKAGE}"; then
+      log "Command Line Tools installation verified"
+    else
+      collect_error "Command Line Tools installation failed"
+      exit 1
+    fi
   else
     show_log "⚠️ Could not determine CLT package via softwareupdate"
     show_log "Falling back to interactive xcode-select installation"

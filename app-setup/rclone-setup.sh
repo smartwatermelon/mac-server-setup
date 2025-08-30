@@ -23,9 +23,22 @@
 # Exit on error
 set -euo pipefail
 
-# Reload profile
-# shellcheck source=/dev/null
-source "${HOME}/.profile"
+# Ensure Homebrew environment is available
+# Don't rely on profile files - set up Homebrew PATH directly
+HOMEBREW_PREFIX="/opt/homebrew" # Apple Silicon
+if [[ -x "${HOMEBREW_PREFIX}/bin/brew" ]]; then
+  # Apply Homebrew environment directly
+  brew_env=$("${HOMEBREW_PREFIX}/bin/brew" shellenv)
+  eval "${brew_env}"
+  echo "Homebrew environment configured for rclone setup"
+elif command -v brew >/dev/null 2>&1; then
+  # Homebrew is already in PATH
+  echo "Homebrew already available in current environment"
+else
+  echo "❌ Homebrew not found - rclone setup requires Homebrew"
+  echo "Please ensure first-boot.sh completed successfully before running app setup"
+  exit 1
+fi
 
 # Determine script directory first
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -209,48 +209,103 @@ EOF
   fi
 }
 
-# Verify Remote Desktop functionality
+# Verify Remote Desktop functionality with comprehensive checks
 verify_remote_desktop() {
-  log "Verifying Remote Desktop status..."
+  log "Verifying Remote Desktop status with comprehensive checks..."
+  
+  local verification_failed=false
+  local screen_sharing_working=false
+  local remote_management_working=false
 
-  # Check if Screen Sharing is running
-  if pgrep -f "/System/Library/CoreServices/RemoteManagement/ScreensharingAgent" >/dev/null; then
-    log "✓ Screen Sharing agent is running"
+  # CRITICAL TEST: Is VNC port actually listening?
+  log "Testing VNC port 5900 (definitive Screen Sharing test)..."
+  if lsof -i :5900 >/dev/null 2>&1; then
+    log "✓ VNC port 5900 is listening - Screen Sharing is ACTIVE"
+    screen_sharing_working=true
   else
-    log "ℹ Screen Sharing agent not detected (may not be enabled)"
+    log "❌ VNC port 5900 is NOT listening - Screen Sharing is NOT working"
+    verification_failed=true
   fi
 
-  # Check if Remote Management is running
+  # Check Screen Sharing agent process
+  if pgrep -f "/System/Library/CoreServices/RemoteManagement/ScreensharingAgent" >/dev/null; then
+    log "✓ Screen Sharing agent process is running"
+  else
+    log "❌ Screen Sharing agent process is NOT running"
+    verification_failed=true
+  fi
+
+  # Check Remote Management agent
   if pgrep -f "/System/Library/CoreServices/RemoteManagement/ARDAgent" >/dev/null; then
     log "✓ Remote Management agent is running"
+    remote_management_working=true
   else
-    log "ℹ Remote Management agent not running (may not be enabled)"
+    log "ℹ️ Remote Management agent not running (may not be enabled)"
   fi
 
-  # Check service status
+  # Check launchd service status
   local screen_sharing_status
   screen_sharing_status=$(sudo launchctl list | grep com.apple.screensharing || echo "not found")
   if [[ "${screen_sharing_status}" == *"com.apple.screensharing"* ]]; then
-    log "✓ Screen Sharing service is loaded"
+    log "✓ Screen Sharing service is loaded in launchd"
+    log "   Status: ${screen_sharing_status}"
   else
-    log "ℹ Screen Sharing service not loaded"
+    log "❌ Screen Sharing service is NOT loaded in launchd"
+    verification_failed=true
   fi
 
-  # Display connection information
+  # Check overrides.plist setting
+  local overrides_plist="/var/db/launchd.db/com.apple.launchd/overrides.plist"
+  if [[ -f "${overrides_plist}" ]]; then
+    local disabled_status
+    disabled_status=$(sudo defaults read "${overrides_plist}" "com.apple.screensharing" "Disabled" 2>/dev/null || echo "not set")
+    if [[ "${disabled_status}" == "0" ]]; then
+      log "✓ Screen Sharing is enabled in overrides.plist"
+    elif [[ "${disabled_status}" == "1" ]]; then
+      log "❌ Screen Sharing is DISABLED in overrides.plist"
+      verification_failed=true
+    else
+      log "ℹ️ Screen Sharing override status: ${disabled_status}"
+    fi
+  else
+    log "ℹ️ No overrides.plist found (using default behavior)"
+  fi
+
+  # Summary and connection information
   local hostname
   hostname=$(hostname)
   log ""
   log "========================================="
-  log "        CONNECTION INFORMATION"
+  log "        VERIFICATION SUMMARY"
   log "========================================="
   log ""
-  log "If Remote Desktop is now enabled, you can connect using:"
+  
+  if [[ "${screen_sharing_working}" == "true" ]]; then
+    log "✅ SCREEN SHARING: Fully functional and ready for connections"
+    log "   Connection URL: vnc://${hostname}.local"
+    log "   Test from another Mac: Finder > Go > Connect to Server"
+  else
+    log "❌ SCREEN SHARING: Not working properly"
+    log "   Setup incomplete or configuration failed"
+  fi
+  
+  if [[ "${remote_management_working}" == "true" ]]; then
+    log "✅ REMOTE MANAGEMENT: Active (Apple Remote Desktop compatible)"
+  else
+    log "ℹ️ REMOTE MANAGEMENT: Not enabled (VNC-only mode)"
+  fi
+  
   log ""
-  log "• VNC URL: vnc://${hostname}.local"
-  log "• Screen Sharing: Connect from another Mac using Finder > Go > Connect to Server"
-  log "• Apple Remote Desktop: Use ARD app if Remote Management is enabled"
-  log ""
-  log "Test your connection from another Mac to verify setup is working."
+  if [[ "${verification_failed}" == "true" ]]; then
+    log "❌ OVERALL STATUS: Remote Desktop setup has issues"
+    log "   Some services are not working properly"
+    log "   Manual configuration may be required"
+    return 1
+  else
+    log "✅ OVERALL STATUS: Remote Desktop is working correctly"
+    log "   Ready for remote connections"
+    return 0
+  fi
 }
 
 # Main execution function
