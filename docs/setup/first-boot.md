@@ -9,6 +9,7 @@ The `first-boot.sh` script performs complete automated setup of your Mac Mini se
 1. **Connect power and peripherals** to Mac Mini
 2. **Follow macOS Setup Wizard** completely
    > You can use the Migration Assistant to pre-configure your WiFi network and other settings using your iPhone or iPad.
+   > _Sometimes_ this will also set up your Apple Account. But it's flakey.
 3. **Create your admin account** (this becomes the primary administrator)
 4. **Complete Apple ID setup** if prompted, or skip to do later
    * If your Apple ID password is long and complex, you can skip doing this now and use the 1Password one-time link later on in the process.
@@ -22,7 +23,7 @@ The `first-boot.sh` script performs complete automated setup of your Mac Mini se
    > You can use [airdrop-cli](https://github.com/vldmrkl/airdrop-cli) (requires Xcode) to AirDrop files from the command line!
    > Install: (`brew install --HEAD vldmrkl/formulae/airdrop-cli`)
 
-2. The folder appears in `~/Downloads/macmini-setup` on the Mac Mini
+2. The folder appears in `~/Downloads/macmini-setup` on the Mac Mini (default name)
 
 3. **Do not run the first-boot script yet** - read the sections below first
 
@@ -43,7 +44,6 @@ The script performs these major configuration steps:
 
 ```bash
 cd ~/Downloads/macmini-setup
-chmod +x first-boot.sh
 ./first-boot.sh
 ```
 

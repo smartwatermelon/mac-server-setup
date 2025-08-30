@@ -23,6 +23,10 @@
 # Exit on error
 set -euo pipefail
 
+# Reload profile
+# shellcheck source=/dev/null
+source "${HOME}/.profile"
+
 # Determine script directory first
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 

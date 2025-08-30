@@ -1,6 +1,6 @@
 # AirDrop Prep Instructions
 
-The `airdrop-prep.sh` script prepares a complete setup package on your development Mac that will be transferred to the Mac Mini for automated configuration.
+The `prep-airdrop.sh` script prepares a complete setup package on your development Mac that will be transferred to the Mac Mini for automated configuration.
 
 ## Prerequisites
 
@@ -34,7 +34,7 @@ The system uses 1Password for initial credential retrieval during setup preparat
 Create these Login items in your 1Password vault before running the prep script:
 
 - **Operator Account**: Username and password for day-to-day server access
-- **Time Machine Backup**: NAS credentials with SMB URL for backup storage  
+- **Time Machine Backup**: NAS credentials with SMB URL for backup storage
 - **Plex NAS**: Media server credentials (optional - prompts if missing)
 - **Apple ID**: Your Apple ID for system setup
 
@@ -45,7 +45,7 @@ Item titles should match your `config.conf` settings (defaults: "operator", "Tim
 ### Basic Usage
 
 ```bash
-./airdrop-prep.sh
+./prep-airdrop.sh
 ```
 
 This creates a `macmini-setup` directory in your home folder with all necessary files.
@@ -53,7 +53,7 @@ This creates a `macmini-setup` directory in your home folder with all necessary 
 ### Custom Output Path (Optional)
 
 ```bash
-./airdrop-prep.sh ~/custom-setup-path
+./prep-airdrop.sh ~/custom-setup-path
 ```
 
 ### WiFi Configuration Strategy
@@ -65,6 +65,7 @@ The script offers two WiFi configuration approaches:
 Select this if you plan to use Migration Assistant's iPhone/iPad option during macOS setup. This automatically transfers WiFi credentials from your iOS device.
 
 - **Advantages**: Seamless, secure, no credential handling
+   > _Sometimes_ this will also set up your Apple Account. But it's flakey.
 - **Requirements**: iPhone/iPad with same iCloud account
 
 #### Option 2: Script-based Configuration

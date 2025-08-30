@@ -38,11 +38,12 @@ NEED_SYSTEMUI_RESTART=false
 NEED_CONTROLCENTER_RESTART=false
 # Safety: Development machine fingerprint (to prevent accidental execution)
 DEV_FINGERPRINT_FILE="${SETUP_DIR}/config/dev_fingerprint.conf"
-DEV_MACHINE_FINGERPRINT="" # Default blank - will be populated from file
+DEV_MACHINE_FINGERPRINT=""      # Default blank - will be populated from file
+HOMEBREW_PREFIX="/opt/homebrew" # Apple Silicon
 
 # Parse command line arguments
 FORCE=false
-SKIP_UPDATE=false
+SKIP_UPDATE=true # this is unreliable during setup
 SKIP_HOMEBREW=false
 SKIP_PACKAGES=false
 
@@ -384,17 +385,6 @@ else
   log "🆗 Skipping password prompt (force mode or FDA re-run)"
 fi
 
-# Configure sudo timeout to reduce password prompts during setup
-section "Configuring sudo timeout"
-show_log "Setting sudo timeout to 30 minutes for smoother setup experience"
-sudo -p "[System setup] Enter password to configure sudo timeout: " tee /etc/sudoers.d/10_setup_timeout >/dev/null <<EOF
-# Temporary sudo timeout extension for setup - 30 minutes
-Defaults timestamp_timeout=30
-EOF
-# Fix permissions for sudoers file
-sudo chmod 0440 /etc/sudoers.d/10_setup_timeout
-check_success "Sudo timeout configuration"
-
 #
 # SYSTEM CONFIGURATION
 #
@@ -465,6 +455,17 @@ EOF
     check_success "TouchID sudo test"
   fi
 fi
+
+# Configure sudo timeout to reduce password prompts during setup
+section "Configuring sudo timeout"
+show_log "Setting sudo timeout to 30 minutes for smoother setup experience"
+sudo -p "[System setup] Enter password to configure sudo timeout: " tee /etc/sudoers.d/10_setup_timeout >/dev/null <<EOF
+# Temporary sudo timeout extension for setup - 30 minutes
+Defaults timestamp_timeout=30
+EOF
+# Fix permissions for sudoers file
+sudo chmod 0440 /etc/sudoers.d/10_setup_timeout
+check_success "Sudo timeout configuration"
 
 # WiFi Network Assessment and Configuration
 section "WiFi Network Assessment and Configuration"
@@ -1236,7 +1237,7 @@ set_section "Installing Xcode Command Line Tools"
 if softwareupdate --history 2>/dev/null | grep 'Command Line Tools for Xcode' >/dev/null; then
   log "Xcode Command Line Tools already installed"
 else
-  show_log "Installing Xcode Command Line Tools silently..."
+  show_log "Installing Xcode Command Line Tools..."
 
   # Touch flag to indicate user has requested CLT installation
   sudo touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
@@ -1246,7 +1247,7 @@ else
 
   if [[ -n "${CLT_PACKAGE}" ]]; then
     log "Installing package: ${CLT_PACKAGE}"
-    softwareupdate -i "${CLT_PACKAGE}"
+    softwareupdate --verbose -i "${CLT_PACKAGE}"
     check_success "Xcode Command Line Tools installation"
   else
     show_log "⚠️ Could not determine CLT package via softwareupdate"
@@ -1314,9 +1315,6 @@ if [[ "${SKIP_HOMEBREW}" = false ]]; then
 
     # Follow Homebrew's suggested post-installation steps
     log "Running Homebrew's suggested post-installation steps"
-
-    # Add Homebrew to path for current session
-    HOMEBREW_PREFIX="$(brew --prefix)"
 
     # Add to .zprofile (Homebrew's recommended approach)
     echo >>"/Users/${ADMIN_USERNAME}/.zprofile"
