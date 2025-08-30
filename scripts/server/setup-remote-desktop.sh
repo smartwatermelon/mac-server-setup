@@ -156,6 +156,70 @@ setup_screen_sharing() {
   log "✓ Screen Sharing service enabled"
 }
 
+# Manual Screen Sharing fallback when programmatic setup fails
+manual_screen_sharing_fallback() {
+  log "Programmatic Screen Sharing setup failed - requiring manual activation"
+
+  # Open System Settings to Sharing page
+  log "Opening System Settings to Sharing page..."
+  if open "x-apple.systempreferences:com.apple.preferences.sharing"; then
+    log "System Settings opened to Sharing page"
+  else
+    log "WARNING: Could not open System Settings automatically"
+    log "Please manually open: System Settings > General > Sharing"
+  fi
+
+  # Give System Settings time to load
+  sleep 2
+
+  # Show user instructions with AppleScript dialog
+  if osascript <<'EOF'; then
+display dialog "Manual Screen Sharing Setup Required
+
+The automated Screen Sharing setup did not work properly.
+
+Please complete these steps manually:
+
+1. System Settings should now be open to the Sharing page
+2. Find 'Screen Sharing' in the services list
+3. Click the toggle switch to turn Screen Sharing ON
+4. If prompted, configure access settings:
+   • Select users who can access (Administrators recommended)
+   • Set VNC access password if desired
+5. Leave System Settings open for verification
+
+Click OK when you have turned Screen Sharing ON." buttons {"Cancel", "OK"} default button "OK" with title "Screen Sharing Setup Required"
+EOF
+    log "User confirmed Screen Sharing has been enabled manually"
+
+    # Wait a moment for the service to fully activate
+    sleep 3
+
+    # Verify Screen Sharing is now working
+    log "Verifying manual Screen Sharing activation..."
+    local attempts=0
+    local max_attempts=6 # 30 seconds total
+
+    while [[ ${attempts} -lt ${max_attempts} ]]; do
+      if lsof -i :5900 >/dev/null 2>&1; then
+        log "✅ Screen Sharing is now active - VNC port 5900 is listening"
+        return 0
+      fi
+
+      log "Waiting for Screen Sharing to activate... (attempt $((attempts + 1))/${max_attempts})"
+      sleep 5
+      ((attempts++))
+    done
+
+    log "❌ Screen Sharing still not responding after manual setup"
+    log "Please verify Screen Sharing is enabled in System Settings > General > Sharing"
+    return 1
+  else
+    log "User cancelled manual Screen Sharing setup"
+    return 1
+  fi
+}
+
 # Guide user through Remote Management setup
 setup_remote_management() {
   log "Opening Remote Management settings for manual configuration..."
@@ -364,7 +428,30 @@ main() {
 
   # CRITICAL: Screen Sharing must be enabled BEFORE Remote Management
   # Otherwise Remote Management will control Screen Sharing and prevent user from enabling it
-  setup_screen_sharing
+  if ! setup_screen_sharing; then
+    log "Programmatic Screen Sharing setup failed - trying manual fallback"
+    if ! manual_screen_sharing_fallback; then
+      log "❌ Both automatic and manual Screen Sharing setup failed"
+      log "Screen Sharing must be enabled for Remote Desktop to work"
+      return 1
+    fi
+  else
+    # Verify that Screen Sharing actually started after programmatic setup
+    log "Verifying programmatic Screen Sharing activation..."
+    sleep 3 # Give service time to start
+
+    if ! lsof -i :5900 >/dev/null 2>&1; then
+      log "⚠️ Programmatic setup completed but Screen Sharing not responding"
+      log "Attempting manual fallback..."
+      if ! manual_screen_sharing_fallback; then
+        log "❌ Manual Screen Sharing fallback also failed"
+        log "Screen Sharing must be enabled for Remote Desktop to work"
+        return 1
+      fi
+    else
+      log "✅ Programmatic Screen Sharing setup successful and verified"
+    fi
+  fi
 
   # Now enable Remote Management (which will take control of Screen Sharing)
   if enable_remote_management_service; then
