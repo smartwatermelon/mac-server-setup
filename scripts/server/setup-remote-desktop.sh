@@ -214,19 +214,20 @@ check_screen_sharing_status() {
   local status="inactive"
   local details=""
 
-  # Check if Screen Sharing is available through dedicated service
-  if launchctl list | grep -q com.apple.screensharing; then
-    if pgrep -f "/System/Library/CoreServices/RemoteManagement/ScreensharingAgent" >/dev/null 2>&1; then
-      status="active"
-      details="dedicated Screen Sharing service active"
-    else
-      status="partial"
-      details="Screen Sharing service loaded but agent not running"
-    fi
-  # Check if Screen Sharing is available through Remote Management
-  elif pgrep -f "/System/Library/CoreServices/RemoteManagement/ARDAgent" >/dev/null 2>&1; then
+  # Check for dedicated Screen Sharing agent service (correct service name from diagnostics)
+  if launchctl list | grep -q com.apple.screensharing.agent; then
     status="active"
-    details="Screen Sharing available via Remote Management"
+    details="Screen Sharing agent service active"
+  # Check if Screen Sharing is available through overrides.plist (fallback method)
+  elif sudo test -f "/var/db/launchd.db/com.apple.launchd/overrides.plist"; then
+    local screen_override
+    screen_override=$(sudo defaults read "/var/db/launchd.db/com.apple.launchd/overrides.plist" com.apple.screensharing 2>/dev/null || echo "not found")
+    if [[ "${screen_override}" == *"Disabled = 0"* ]]; then
+      status="active"
+      details="Screen Sharing enabled via overrides.plist"
+    else
+      details="Screen Sharing not enabled in overrides.plist"
+    fi
   else
     details="no Screen Sharing service detected"
   fi
@@ -239,12 +240,16 @@ check_remote_management_status() {
   local status="inactive"
   local details=""
 
-  # Check ARDAgent process (most reliable for Remote Management)
-  if pgrep -f "/System/Library/CoreServices/RemoteManagement/ARDAgent" >/dev/null 2>&1; then
+  # Check for Remote Management agent service (from diagnostics)
+  if launchctl list | grep -q com.apple.RemoteManagementAgent; then
+    status="active"
+    details="Remote Management agent service active"
+  # Fallback: Check ARDAgent process
+  elif pgrep -f "/System/Library/CoreServices/RemoteManagement/ARDAgent" >/dev/null 2>&1; then
     status="active"
     details="ARDAgent process running"
   else
-    details="ARDAgent process not running"
+    details="Remote Management not active"
   fi
 
   echo "${status}|${details}"
@@ -254,20 +259,31 @@ check_remote_management_status() {
 show_manual_setup_dialog() {
   log "Showing manual setup instructions dialog..."
 
+  # Open System Settings to the Sharing page first
+  log "Opening System Settings to Sharing page..."
+  if open "x-apple.systempreferences:com.apple.preferences.sharing"; then
+    log "System Settings opened to Sharing page"
+  else
+    log "WARNING: Could not open System Settings automatically"
+  fi
+
+  # Give System Settings time to load
+  sleep 2
+
   if osascript <<'EOF'; then
 display dialog "Remote Desktop Setup Incomplete
 
 Automatic setup was unable to fully activate Remote Desktop services.
 
+System Settings has been opened to the Sharing page for you.
+
 Please complete the setup manually:
 
-1. Open System Settings
-2. Go to General > Sharing
-3. Turn ON 'Screen Sharing' 
-4. Turn ON 'Remote Management' (if you need Apple Remote Desktop features)
-5. Configure user access and permissions as needed
+1. Turn ON 'Screen Sharing' 
+2. Turn ON 'Remote Management' (if you need Apple Remote Desktop features)
+3. Configure user access and permissions as needed
 
-After completing these steps, you can test the connection from another Mac." buttons {"OK"} default button "OK" with title "Remote Desktop Manual Setup" with icon caution
+After completing these steps, click OK to re-test the configuration." buttons {"OK"} default button "OK" with title "Remote Desktop Manual Setup" with icon caution
 EOF
     log "Manual setup dialog completed"
     return 0
@@ -358,24 +374,49 @@ verify_remote_desktop() {
   if [[ "${setup_success}" != "true" ]]; then
     log ""
     log "Setup was not fully successful - showing manual setup instructions"
-    show_manual_setup_dialog
+    if show_manual_setup_dialog; then
 
-    # Check status again after user completes manual setup
-    log ""
-    log "Re-checking status after manual setup opportunity..."
-    screen_result=$(check_screen_sharing_status)
-    rm_result=$(check_remote_management_status)
+      # Re-test after user completes manual setup
+      log ""
+      log "Re-checking Remote Desktop status after manual setup..."
+      screen_result=$(check_screen_sharing_status)
+      rm_result=$(check_remote_management_status)
 
-    screen_status="${screen_result%|*}"
-    rm_status="${rm_result%|*}"
+      local new_screen_status="${screen_result%|*}"
+      local new_screen_details="${screen_result#*|}"
+      local new_rm_status="${rm_result%|*}"
+      local new_rm_details="${rm_result#*|}"
 
-    if [[ "${screen_status}" == "active" ]] && [[ "${rm_status}" == "active" ]]; then
-      log "✅ Both Screen Sharing and Remote Management are now active"
-    elif [[ "${screen_status}" == "active" ]] || [[ "${rm_status}" == "active" ]]; then
-      log "✅ Remote Desktop functionality is now available"
+      # Report new status
+      if [[ "${new_screen_status}" == "active" ]]; then
+        log "✅ Screen Sharing is now ACTIVE - ${new_screen_details}"
+      else
+        log "❌ Screen Sharing is still INACTIVE - ${new_screen_details}"
+      fi
+
+      if [[ "${new_rm_status}" == "active" ]]; then
+        log "✅ Remote Management is now ACTIVE - ${new_rm_details}"
+      else
+        log "❌ Remote Management is still INACTIVE - ${new_rm_details}"
+      fi
+
+      # Show final assessment
+      log ""
+      if [[ "${new_screen_status}" == "active" ]] && [[ "${new_rm_status}" == "active" ]]; then
+        log "🎯 SUCCESS: Both services are now active after manual setup"
+      elif [[ "${new_screen_status}" == "active" ]] || [[ "${new_rm_status}" == "active" ]]; then
+        log "✅ Remote Desktop functionality is now available"
+      else
+        log "⚠️  WARNING: Services still not detected as active"
+        log "   If Screen Sharing and Remote Management show as ON in System Settings,"
+        log "   then the services are working despite detection issues"
+      fi
+
+      # Close System Settings
+      log "Closing System Settings..."
+      osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
     else
-      log "⚠️  Services still not active - manual setup may be needed"
-      log "   This is not necessarily an error if you prefer to configure later"
+      log "Manual setup was cancelled - continuing without Remote Desktop"
     fi
   fi
 }
