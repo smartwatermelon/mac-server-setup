@@ -209,48 +209,168 @@ EOF
   fi
 }
 
-# Verify Remote Desktop functionality
+# Function to check Screen Sharing status accurately
+check_screen_sharing_status() {
+  local status="inactive"
+  local details=""
+
+  # Check launchd service (most reliable)
+  if launchctl list | grep -q com.apple.screensharing; then
+    status="active"
+    details="launchd service loaded"
+
+    # Verify process is actually running
+    if pgrep -f "/System/Library/CoreServices/RemoteManagement/ScreensharingAgent" >/dev/null 2>&1; then
+      details="${details} + agent process running"
+    else
+      details="${details} + agent process NOT running"
+    fi
+  else
+    details="launchd service not loaded"
+  fi
+
+  echo "${status}|${details}"
+}
+
+# Function to check Remote Management status accurately
+check_remote_management_status() {
+  local status="inactive"
+  local details=""
+
+  # Check ARDAgent process (most reliable for Remote Management)
+  if pgrep -f "/System/Library/CoreServices/RemoteManagement/ARDAgent" >/dev/null 2>&1; then
+    status="active"
+    details="ARDAgent process running"
+  else
+    details="ARDAgent process not running"
+  fi
+
+  echo "${status}|${details}"
+}
+
+# Show GUI dialog with manual instructions when auto-activation fails
+show_manual_setup_dialog() {
+  log "Showing manual setup instructions dialog..."
+
+  if osascript <<'EOF'; then
+display dialog "Remote Desktop Setup Incomplete
+
+Automatic setup was unable to fully activate Remote Desktop services.
+
+Please complete the setup manually:
+
+1. Open System Settings
+2. Go to General > Sharing
+3. Turn ON 'Screen Sharing' 
+4. Turn ON 'Remote Management' (if you need Apple Remote Desktop features)
+5. Configure user access and permissions as needed
+
+After completing these steps, you can test the connection from another Mac." buttons {"OK"} default button "OK" with title "Remote Desktop Manual Setup" with icon caution
+EOF
+    log "Manual setup dialog completed"
+    return 0
+  else
+    log "User cancelled manual setup dialog"
+    return 1
+  fi
+}
+
+# Verify Remote Desktop functionality with accurate detection
 verify_remote_desktop() {
-  log "Verifying Remote Desktop status..."
+  log "Verifying Remote Desktop status with accurate detection..."
 
-  # Check if Screen Sharing is running
-  if pgrep -f "/System/Library/CoreServices/RemoteManagement/ScreensharingAgent" >/dev/null; then
-    log "✓ Screen Sharing agent is running"
+  # Get accurate status for both services
+  local screen_result rm_result
+  screen_result=$(check_screen_sharing_status)
+  rm_result=$(check_remote_management_status)
+
+  local screen_status="${screen_result%|*}"
+  local screen_details="${screen_result#*|}"
+  local rm_status="${rm_result%|*}"
+  local rm_details="${rm_result#*|}"
+
+  # Report Screen Sharing status
+  if [[ "${screen_status}" == "active" ]]; then
+    log "✅ Screen Sharing is ACTIVE - ${screen_details}"
   else
-    log "ℹ Screen Sharing agent not detected (may not be enabled)"
+    log "❌ Screen Sharing is INACTIVE - ${screen_details}"
   fi
 
-  # Check if Remote Management is running
-  if pgrep -f "/System/Library/CoreServices/RemoteManagement/ARDAgent" >/dev/null; then
-    log "✓ Remote Management agent is running"
+  # Report Remote Management status
+  if [[ "${rm_status}" == "active" ]]; then
+    log "✅ Remote Management is ACTIVE - ${rm_details}"
   else
-    log "ℹ Remote Management agent not running (may not be enabled)"
+    log "❌ Remote Management is INACTIVE - ${rm_details}"
   fi
 
-  # Check service status
-  local screen_sharing_status
-  screen_sharing_status=$(sudo launchctl list | grep com.apple.screensharing || echo "not found")
-  if [[ "${screen_sharing_status}" == *"com.apple.screensharing"* ]]; then
-    log "✓ Screen Sharing service is loaded"
-  else
-    log "ℹ Screen Sharing service not loaded"
-  fi
-
-  # Display connection information
+  # Determine overall status and provide appropriate feedback
+  local setup_success=true
   local hostname
   hostname=$(hostname)
+
   log ""
   log "========================================="
-  log "        CONNECTION INFORMATION"
+  log "         VERIFICATION RESULTS"
   log "========================================="
   log ""
-  log "If Remote Desktop is now enabled, you can connect using:"
-  log ""
-  log "• VNC URL: vnc://${hostname}.local"
-  log "• Screen Sharing: Connect from another Mac using Finder > Go > Connect to Server"
-  log "• Apple Remote Desktop: Use ARD app if Remote Management is enabled"
-  log ""
-  log "Test your connection from another Mac to verify setup is working."
+
+  if [[ "${screen_status}" == "active" ]] && [[ "${rm_status}" == "active" ]]; then
+    log "🎯 SUCCESS: Both Screen Sharing and Remote Management are active"
+    log "   Remote Desktop is fully functional with all features"
+  elif [[ "${screen_status}" == "active" ]]; then
+    log "📺 PARTIAL: Screen Sharing is active, Remote Management is not"
+    log "   Screen Sharing access available, but Apple Remote Desktop features not available"
+  elif [[ "${rm_status}" == "active" ]]; then
+    log "⚠️  UNUSUAL: Remote Management active but Screen Sharing is not"
+    log "   This is an unusual configuration that may not work properly"
+    setup_success=false
+  else
+    log "❌ FAILED: Neither Screen Sharing nor Remote Management is active"
+    log "   Remote Desktop is not functional"
+    setup_success=false
+  fi
+
+  # Show connection information if at least Screen Sharing works
+  if [[ "${screen_status}" == "active" ]]; then
+    log ""
+    log "========================================="
+    log "        CONNECTION INFORMATION"
+    log "========================================="
+    log ""
+    log "You can connect using:"
+    log ""
+    log "• Screen Sharing: Finder > Go > Connect to Server > ${hostname}.local"
+    if [[ "${rm_status}" == "active" ]]; then
+      log "• Apple Remote Desktop: Full ARD functionality available"
+    else
+      log "• Apple Remote Desktop: Not available (Remote Management not active)"
+    fi
+    log ""
+    log "Test your connection from another Mac to verify setup is working."
+  fi
+
+  # Show manual setup dialog if setup was not successful
+  if [[ "${setup_success}" != "true" ]]; then
+    log ""
+    log "Setup was not fully successful - showing manual setup instructions"
+    show_manual_setup_dialog
+
+    # Check status again after user completes manual setup
+    log ""
+    log "Re-checking status after manual setup opportunity..."
+    screen_result=$(check_screen_sharing_status)
+    rm_result=$(check_remote_management_status)
+
+    screen_status="${screen_result%|*}"
+    rm_status="${rm_result%|*}"
+
+    if [[ "${screen_status}" == "active" ]] || [[ "${rm_status}" == "active" ]]; then
+      log "✅ Status improved after manual setup"
+    else
+      log "⚠️  Services still not active - manual setup may be needed"
+      log "   This is not necessarily an error if you prefer to configure later"
+    fi
+  fi
 }
 
 # Main execution function
