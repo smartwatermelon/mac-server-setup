@@ -49,29 +49,50 @@ check_privileges() {
   fi
 }
 
+# Close System Settings if it's open
+close_system_settings() {
+  log "Pre-step: Closing System Settings if open..."
+  osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
+  log "System Settings closed (or wasn't running)"
+}
+
 # Disable Remote Management with verification
 disable_remote_management() {
   log "Disabling Remote Management..."
 
-  # Disable Remote Management (ignore errors)
+  # Method 1: kickstart deactivate
+  log "Method 1: Using kickstart -deactivate -stop"
   sudo -p "${LOG_PREFIX} Enter password to disable Remote Management: " \
     /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-    -deactivate -stop 2>/dev/null || true
+    -deactivate -stop 2>/dev/null || log "kickstart -deactivate failed (expected)"
 
-  # Wait for shutdown
-  sleep 2
+  # Method 2: kickstart uninstall settings
+  log "Method 2: Using kickstart -uninstall -settings"
+  sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+    -uninstall -settings 2>/dev/null || log "kickstart -uninstall failed (expected)"
 
-  # Verify it's off
-  local rm_result
-  rm_result=$(check_remote_management_status)
-  local rm_status="${rm_result%|*}"
+  # Method 3: Kill ARDAgent processes
+  log "Method 3: Killing ARDAgent processes"
+  sudo pkill -f "ARDAgent" 2>/dev/null || log "No ARDAgent processes to kill"
 
-  if [[ "${rm_status}" == "inactive" ]]; then
-    log "✅ Remote Management is disabled"
-    return 0
+  # Method 4: Kill RemoteManagement processes
+  log "Method 4: Killing RemoteManagement processes"
+  sudo pkill -f "RemoteManagement" 2>/dev/null || log "No RemoteManagement processes to kill"
+
+  # Verify Remote Management is off
+  log ""
+  log "Verifying Remote Management is off..."
+  if pgrep -f "ARDAgent" >/dev/null 2>&1; then
+    log "⚠️  ARDAgent processes still running"
+    pgrep -fl "ARDAgent"
   else
-    log "⚠️  Remote Management disable verification failed, but continuing"
-    return 0 # Don't fail the process
+    log "✅ No ARDAgent processes running"
+  fi
+
+  if launchctl list | grep -q "RemoteManagementAgent"; then
+    log "⚠️  RemoteManagementAgent service still loaded"
+  else
+    log "✅ No RemoteManagementAgent service loaded"
   fi
 }
 
@@ -79,44 +100,37 @@ disable_remote_management() {
 disable_screen_sharing() {
   log "Disabling Screen Sharing..."
 
-  # Disable Screen Sharing (ignore errors)
-  sudo launchctl unload -w /System/Library/LaunchDaemons/com.apple.screensharing.plist &>/dev/null || true
+  # Method 1: launchctl unload
+  log "Method 1: Using launchctl unload"
+  sudo launchctl unload -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || log "launchctl unload failed (expected)"
 
-  # Clear any conflicting settings
-  local overrides_plist="/var/db/launchd.db/com.apple.launchd/overrides.plist"
-  local original_perms
+  # Method 2: Remove overrides.plist entry
+  log "Method 2: Removing overrides.plist entry"
+  sudo defaults delete /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing 2>/dev/null || log "overrides.plist delete failed (expected)"
 
-  if sudo test -f "${overrides_plist}"; then
-    # Capture current permissions before modifying
-    original_perms=$(stat -f "%Mp%Lp" "${overrides_plist}" 2>/dev/null || echo "${DEFAULT_OVERRIDES_PERMS}")
+  # Method 3: Kill screensharing processes
+  log "Method 3: Killing screensharing processes"
+  sudo pkill -f "screensharing" 2>/dev/null || log "No screensharing processes to kill"
 
-    # Delete the conflicting setting
-    sudo defaults delete "${overrides_plist}" com.apple.screensharing &>/dev/null || true
+  # Method 4: Kill Screen Sharing agents
+  log "Method 4: Killing Screen Sharing agent processes"
+  sudo pkill -f "ScreensharingAgent" 2>/dev/null || log "No ScreensharingAgent processes to kill"
 
-    # Restore permissions if file still exists after deletion
-    if sudo test -f "${overrides_plist}"; then
-      if [[ "${original_perms}" =~ ^[0-7]*4[4-7]$ ]] || [[ "${original_perms}" =~ ^[0-7]*6[4-7]$ ]]; then
-        sudo chmod "${original_perms}" "${overrides_plist}"
-      else
-        sudo chmod a+r "${overrides_plist}"
-      fi
-    fi
+  # Verify Screen Sharing is off
+  log ""
+  log "Verifying Screen Sharing is off..."
+  if launchctl list | grep -q "screensharing"; then
+    log "⚠️  Screen sharing services still loaded:"
+    launchctl list | grep screensharing
+  else
+    log "✅ No screen sharing services loaded"
   fi
 
-  # Wait for shutdown
-  sleep 2
-
-  # Verify it's off
-  local screen_result
-  screen_result=$(check_screen_sharing_status)
-  local screen_status="${screen_result%|*}"
-
-  if [[ "${screen_status}" == "inactive" ]]; then
-    log "✅ Screen Sharing is disabled"
-    return 0
+  if pgrep -f "screensharing" >/dev/null 2>&1; then
+    log "⚠️  Screen sharing processes still running"
+    pgrep -fl "screensharing"
   else
-    log "⚠️  Screen Sharing disable verification failed, but continuing"
-    return 0 # Don't fail the process
+    log "✅ No screen sharing processes running"
   fi
 }
 
@@ -333,7 +347,7 @@ System Settings has been opened to the Sharing page for you.
 
 Please complete the setup manually:
 
-1. Turn ON 'Screen Sharing' 
+1. Turn ON 'Screen Sharing'
 2. Turn ON 'Remote Management' (if you need Apple Remote Desktop features)
 3. Configure user access and permissions as needed
 
@@ -437,6 +451,7 @@ main() {
   # Phase 1: Clean Slate - Disable both services
   log ""
   log "Phase 1: Creating clean slate..."
+  close_system_settings
   disable_remote_management
   disable_screen_sharing
 
