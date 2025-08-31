@@ -214,18 +214,21 @@ check_screen_sharing_status() {
   local status="inactive"
   local details=""
 
-  # Check launchd service (most reliable)
+  # Check if Screen Sharing is available through dedicated service
   if launchctl list | grep -q com.apple.screensharing; then
-    # Verify process is actually running for true active status
     if pgrep -f "/System/Library/CoreServices/RemoteManagement/ScreensharingAgent" >/dev/null 2>&1; then
       status="active"
-      details="launchd service loaded + agent process running"
+      details="dedicated Screen Sharing service active"
     else
       status="partial"
-      details="launchd service loaded + agent process NOT running"
+      details="Screen Sharing service loaded but agent not running"
     fi
+  # Check if Screen Sharing is available through Remote Management
+  elif pgrep -f "/System/Library/CoreServices/RemoteManagement/ARDAgent" >/dev/null 2>&1; then
+    status="active"
+    details="Screen Sharing available via Remote Management"
   else
-    details="launchd service not loaded"
+    details="no Screen Sharing service detected"
   fi
 
   echo "${status}|${details}"
