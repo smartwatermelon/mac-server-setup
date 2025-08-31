@@ -347,9 +347,14 @@ System Settings has been opened to the Sharing page for you.
 
 Please complete the setup manually:
 
-1. Turn ON 'Screen Sharing'
-2. Turn ON 'Remote Management' (if you need Apple Remote Desktop features)
-3. Configure user access and permissions as needed
+1. Click the ℹ️ button next to the Screen Sharing toggle.
+2. Turn ON 'Screen Sharing' from the Screen Sharing pop-up.
+3. Click Done.
+4. Click the ℹ️ button next to the Remote Management toggle.
+5. Turn ON 'Remote Management' from the Remote Management pop-up.
+6. Click Options.
+7. Turn on at least 'Observe' and 'Control', and click OK.
+8. Click Done.
 
 After completing these steps, click OK to re-test the configuration." buttons {"OK"} default button "OK" with title "Remote Desktop Manual Setup" with icon caution
 EOF
