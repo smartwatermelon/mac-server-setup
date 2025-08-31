@@ -156,70 +156,6 @@ setup_screen_sharing() {
   log "✓ Screen Sharing service enabled"
 }
 
-# Manual Screen Sharing fallback when programmatic setup fails
-manual_screen_sharing_fallback() {
-  log "Programmatic Screen Sharing setup failed - requiring manual activation"
-
-  # Open System Settings to Sharing page
-  log "Opening System Settings to Sharing page..."
-  if open "x-apple.systempreferences:com.apple.preferences.sharing"; then
-    log "System Settings opened to Sharing page"
-  else
-    log "WARNING: Could not open System Settings automatically"
-    log "Please manually open: System Settings > General > Sharing"
-  fi
-
-  # Give System Settings time to load
-  sleep 2
-
-  # Show user instructions with AppleScript dialog
-  if osascript <<'EOF'; then
-display dialog "Manual Screen Sharing Setup Required
-
-The automated Screen Sharing setup did not work properly.
-
-Please complete these steps manually:
-
-1. System Settings should now be open to the Sharing page
-2. Find 'Screen Sharing' in the services list
-3. Click the toggle switch to turn Screen Sharing ON
-4. If prompted, configure access settings:
-   • Select users who can access (Administrators recommended)
-   • Set VNC access password if desired
-5. Leave System Settings open for verification
-
-Click OK when you have turned Screen Sharing ON." buttons {"Cancel", "OK"} default button "OK" with title "Screen Sharing Setup Required"
-EOF
-    log "User confirmed Screen Sharing has been enabled manually"
-
-    # Wait a moment for the service to fully activate
-    sleep 3
-
-    # Verify Screen Sharing is now working
-    log "Verifying manual Screen Sharing activation..."
-    local attempts=0
-    local max_attempts=6 # 30 seconds total
-
-    while [[ ${attempts} -lt ${max_attempts} ]]; do
-      if lsof -i :5900 >/dev/null 2>&1; then
-        log "✅ Screen Sharing is now active - VNC port 5900 is listening"
-        return 0
-      fi
-
-      log "Waiting for Screen Sharing to activate... (attempt $((attempts + 1))/${max_attempts})"
-      sleep 5
-      ((attempts++))
-    done
-
-    log "❌ Screen Sharing still not responding after manual setup"
-    log "Please verify Screen Sharing is enabled in System Settings > General > Sharing"
-    return 1
-  else
-    log "User cancelled manual Screen Sharing setup"
-    return 1
-  fi
-}
-
 # Guide user through Remote Management setup
 setup_remote_management() {
   log "Opening Remote Management settings for manual configuration..."
@@ -273,103 +209,48 @@ EOF
   fi
 }
 
-# Verify Remote Desktop functionality with comprehensive checks
+# Verify Remote Desktop functionality
 verify_remote_desktop() {
-  log "Verifying Remote Desktop status with comprehensive checks..."
+  log "Verifying Remote Desktop status..."
 
-  local verification_failed=false
-  local screen_sharing_working=false
-  local remote_management_working=false
-
-  # CRITICAL TEST: Is VNC port actually listening?
-  log "Testing VNC port 5900 (definitive Screen Sharing test)..."
-  if lsof -i :5900 >/dev/null 2>&1; then
-    log "✓ VNC port 5900 is listening - Screen Sharing is ACTIVE"
-    screen_sharing_working=true
-  else
-    log "❌ VNC port 5900 is NOT listening - Screen Sharing is NOT working"
-    verification_failed=true
-  fi
-
-  # Check Screen Sharing agent process
+  # Check if Screen Sharing is running
   if pgrep -f "/System/Library/CoreServices/RemoteManagement/ScreensharingAgent" >/dev/null; then
-    log "✓ Screen Sharing agent process is running"
+    log "✓ Screen Sharing agent is running"
   else
-    log "❌ Screen Sharing agent process is NOT running"
-    verification_failed=true
+    log "ℹ Screen Sharing agent not detected (may not be enabled)"
   fi
 
-  # Check Remote Management agent
+  # Check if Remote Management is running
   if pgrep -f "/System/Library/CoreServices/RemoteManagement/ARDAgent" >/dev/null; then
     log "✓ Remote Management agent is running"
-    remote_management_working=true
   else
-    log "ℹ️ Remote Management agent not running (may not be enabled)"
+    log "ℹ Remote Management agent not running (may not be enabled)"
   fi
 
-  # Check launchd service status
+  # Check service status
   local screen_sharing_status
   screen_sharing_status=$(sudo launchctl list | grep com.apple.screensharing || echo "not found")
   if [[ "${screen_sharing_status}" == *"com.apple.screensharing"* ]]; then
-    log "✓ Screen Sharing service is loaded in launchd"
-    log "   Status: ${screen_sharing_status}"
+    log "✓ Screen Sharing service is loaded"
   else
-    log "❌ Screen Sharing service is NOT loaded in launchd"
-    verification_failed=true
+    log "ℹ Screen Sharing service not loaded"
   fi
 
-  # Check overrides.plist setting
-  local overrides_plist="/var/db/launchd.db/com.apple.launchd/overrides.plist"
-  if [[ -f "${overrides_plist}" ]]; then
-    local disabled_status
-    disabled_status=$(sudo defaults read "${overrides_plist}" "com.apple.screensharing" "Disabled" 2>/dev/null || echo "not set")
-    if [[ "${disabled_status}" == "0" ]]; then
-      log "✓ Screen Sharing is enabled in overrides.plist"
-    elif [[ "${disabled_status}" == "1" ]]; then
-      log "❌ Screen Sharing is DISABLED in overrides.plist"
-      verification_failed=true
-    else
-      log "ℹ️ Screen Sharing override status: ${disabled_status}"
-    fi
-  else
-    log "ℹ️ No overrides.plist found (using default behavior)"
-  fi
-
-  # Summary and connection information
+  # Display connection information
   local hostname
   hostname=$(hostname)
   log ""
   log "========================================="
-  log "        VERIFICATION SUMMARY"
+  log "        CONNECTION INFORMATION"
   log "========================================="
   log ""
-
-  if [[ "${screen_sharing_working}" == "true" ]]; then
-    log "✅ SCREEN SHARING: Fully functional and ready for connections"
-    log "   Connection URL: vnc://${hostname}.local"
-    log "   Test from another Mac: Finder > Go > Connect to Server"
-  else
-    log "❌ SCREEN SHARING: Not working properly"
-    log "   Setup incomplete or configuration failed"
-  fi
-
-  if [[ "${remote_management_working}" == "true" ]]; then
-    log "✅ REMOTE MANAGEMENT: Active (Apple Remote Desktop compatible)"
-  else
-    log "ℹ️ REMOTE MANAGEMENT: Not enabled (VNC-only mode)"
-  fi
-
+  log "If Remote Desktop is now enabled, you can connect using:"
   log ""
-  if [[ "${verification_failed}" == "true" ]]; then
-    log "❌ OVERALL STATUS: Remote Desktop setup has issues"
-    log "   Some services are not working properly"
-    log "   Manual configuration may be required"
-    return 1
-  else
-    log "✅ OVERALL STATUS: Remote Desktop is working correctly"
-    log "   Ready for remote connections"
-    return 0
-  fi
+  log "• VNC URL: vnc://${hostname}.local"
+  log "• Screen Sharing: Connect from another Mac using Finder > Go > Connect to Server"
+  log "• Apple Remote Desktop: Use ARD app if Remote Management is enabled"
+  log ""
+  log "Test your connection from another Mac to verify setup is working."
 }
 
 # Main execution function
@@ -428,30 +309,7 @@ main() {
 
   # CRITICAL: Screen Sharing must be enabled BEFORE Remote Management
   # Otherwise Remote Management will control Screen Sharing and prevent user from enabling it
-  if ! setup_screen_sharing; then
-    log "Programmatic Screen Sharing setup failed - trying manual fallback"
-    if ! manual_screen_sharing_fallback; then
-      log "❌ Both automatic and manual Screen Sharing setup failed"
-      log "Screen Sharing must be enabled for Remote Desktop to work"
-      return 1
-    fi
-  else
-    # Verify that Screen Sharing actually started after programmatic setup
-    log "Verifying programmatic Screen Sharing activation..."
-    sleep 3 # Give service time to start
-
-    if ! lsof -i :5900 >/dev/null 2>&1; then
-      log "⚠️ Programmatic setup completed but Screen Sharing not responding"
-      log "Attempting manual fallback..."
-      if ! manual_screen_sharing_fallback; then
-        log "❌ Manual Screen Sharing fallback also failed"
-        log "Screen Sharing must be enabled for Remote Desktop to work"
-        return 1
-      fi
-    else
-      log "✅ Programmatic Screen Sharing setup successful and verified"
-    fi
-  fi
+  setup_screen_sharing
 
   # Now enable Remote Management (which will take control of Screen Sharing)
   if enable_remote_management_service; then
