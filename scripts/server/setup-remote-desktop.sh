@@ -254,31 +254,20 @@ check_remote_management_status() {
 show_manual_setup_dialog() {
   log "Showing manual setup instructions dialog..."
 
-  # Open System Settings to the Sharing page first
-  log "Opening System Settings to Sharing page..."
-  if open "x-apple.systempreferences:com.apple.preferences.sharing"; then
-    log "System Settings opened to Sharing page"
-  else
-    log "WARNING: Could not open System Settings automatically"
-  fi
-
-  # Give System Settings time to load
-  sleep 2
-
   if osascript <<'EOF'; then
 display dialog "Remote Desktop Setup Incomplete
 
 Automatic setup was unable to fully activate Remote Desktop services.
 
-System Settings has been opened to the Sharing page for you.
-
 Please complete the setup manually:
 
-1. Turn ON 'Screen Sharing' 
-2. Turn ON 'Remote Management' (if you need Apple Remote Desktop features)
-3. Configure user access and permissions as needed
+1. Open System Settings
+2. Go to General > Sharing
+3. Turn ON 'Screen Sharing' 
+4. Turn ON 'Remote Management' (if you need Apple Remote Desktop features)
+5. Configure user access and permissions as needed
 
-After completing these steps, click OK to re-test the configuration." buttons {"OK"} default button "OK" with title "Remote Desktop Manual Setup" with icon caution
+After completing these steps, you can test the connection from another Mac." buttons {"OK"} default button "OK" with title "Remote Desktop Manual Setup" with icon caution
 EOF
     log "Manual setup dialog completed"
     return 0
@@ -370,53 +359,22 @@ verify_remote_desktop() {
   if [[ "${setup_success}" != "true" ]]; then
     log ""
     log "Setup was not fully successful - showing manual setup instructions"
-    if show_manual_setup_dialog; then
+    show_manual_setup_dialog
 
-      # Re-test after user completes manual setup
-      log ""
-      log "Re-checking Remote Desktop status after manual setup..."
-      screen_result=$(check_screen_sharing_status)
-      rm_result=$(check_remote_management_status)
+    # Check status again after user completes manual setup
+    log ""
+    log "Re-checking status after manual setup opportunity..."
+    screen_result=$(check_screen_sharing_status)
+    rm_result=$(check_remote_management_status)
 
-      local new_screen_status="${screen_result%|*}"
-      local new_screen_details="${screen_result#*|}"
-      local new_rm_status="${rm_result%|*}"
-      local new_rm_details="${rm_result#*|}"
+    screen_status="${screen_result%|*}"
+    rm_status="${rm_result%|*}"
 
-      # Report new status
-      if [[ "${new_screen_status}" == "active" ]]; then
-        log "✅ Screen Sharing is now ACTIVE - ${new_screen_details}"
-      elif [[ "${new_screen_status}" == "partial" ]]; then
-        log "⚠️  Screen Sharing is still PARTIAL - ${new_screen_details}"
-      else
-        log "❌ Screen Sharing is still INACTIVE - ${new_screen_details}"
-      fi
-
-      if [[ "${new_rm_status}" == "active" ]]; then
-        log "✅ Remote Management is now ACTIVE - ${new_rm_details}"
-      else
-        log "❌ Remote Management is still INACTIVE - ${new_rm_details}"
-      fi
-
-      # Show final assessment
-      log ""
-      if [[ "${new_screen_status}" == "active" ]] && [[ "${new_rm_status}" == "active" ]]; then
-        log "🎯 SUCCESS: Both services are now active after manual setup"
-      elif [[ "${new_screen_status}" == "active" ]]; then
-        log "📺 PARTIAL SUCCESS: Screen Sharing is active, Remote Management is not"
-      elif [[ "${new_rm_status}" == "active" ]]; then
-        log "⚠️  UNUSUAL: Remote Management active but Screen Sharing is not"
-      else
-        log "⚠️  WARNING: Neither service is active after manual setup"
-        log "   You may need to configure Remote Desktop services later"
-        log "   This will not prevent the script from completing successfully"
-      fi
-
-      # Close System Settings
-      log "Closing System Settings..."
-      osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
+    if [[ "${screen_status}" == "active" ]] || [[ "${rm_status}" == "active" ]]; then
+      log "✅ Status improved after manual setup"
     else
-      log "Manual setup was cancelled - continuing without Remote Desktop"
+      log "⚠️  Services still not active - manual setup may be needed"
+      log "   This is not necessarily an error if you prefer to configure later"
     fi
   fi
 }
