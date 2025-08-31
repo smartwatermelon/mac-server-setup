@@ -65,7 +65,7 @@ disable_all_services() {
   local overrides_plist="/var/db/launchd.db/com.apple.launchd/overrides.plist"
   local original_perms
 
-  if [[ -f "${overrides_plist}" ]]; then
+  if sudo test -f "${overrides_plist}"; then
     # Capture current permissions before modifying
     original_perms=$(stat -f "%Mp%Lp" "${overrides_plist}" 2>/dev/null || echo "${DEFAULT_OVERRIDES_PERMS}")
 
@@ -73,7 +73,7 @@ disable_all_services() {
     sudo defaults delete "${overrides_plist}" com.apple.screensharing &>/dev/null || true
 
     # Restore permissions if file still exists after deletion
-    if [[ -f "${overrides_plist}" ]]; then
+    if sudo test -f "${overrides_plist}"; then
       if [[ "${original_perms}" =~ ^[0-7]*4[4-7]$ ]] || [[ "${original_perms}" =~ ^[0-7]*6[4-7]$ ]]; then
         sudo chmod "${original_perms}" "${overrides_plist}"
       else
@@ -123,7 +123,7 @@ setup_screen_sharing() {
   local original_perms
 
   # Capture current permissions to restore them later
-  if [[ -f "${overrides_plist}" ]]; then
+  if sudo test -f "${overrides_plist}"; then
     original_perms=$(stat -f "%Mp%Lp" "${overrides_plist}" 2>/dev/null || echo "${DEFAULT_OVERRIDES_PERMS}")
     log "Current overrides.plist permissions: ${original_perms}"
   else
@@ -216,14 +216,13 @@ check_screen_sharing_status() {
 
   # Check launchd service (most reliable)
   if launchctl list | grep -q com.apple.screensharing; then
-    status="active"
-    details="launchd service loaded"
-
-    # Verify process is actually running
+    # Verify process is actually running for true active status
     if pgrep -f "/System/Library/CoreServices/RemoteManagement/ScreensharingAgent" >/dev/null 2>&1; then
-      details="${details} + agent process running"
+      status="active"
+      details="launchd service loaded + agent process running"
     else
-      details="${details} + agent process NOT running"
+      status="partial"
+      details="launchd service loaded + agent process NOT running"
     fi
   else
     details="launchd service not loaded"
@@ -320,6 +319,10 @@ verify_remote_desktop() {
   elif [[ "${screen_status}" == "active" ]]; then
     log "📺 PARTIAL: Screen Sharing is active, Remote Management is not"
     log "   Screen Sharing access available, but Apple Remote Desktop features not available"
+  elif [[ "${screen_status}" == "partial" ]]; then
+    log "⚠️  INCOMPLETE: Screen Sharing service loaded but agent not running"
+    log "   This indicates setup is incomplete and needs manual configuration"
+    setup_success=false
   elif [[ "${rm_status}" == "active" ]]; then
     log "⚠️  UNUSUAL: Remote Management active but Screen Sharing is not"
     log "   This is an unusual configuration that may not work properly"
