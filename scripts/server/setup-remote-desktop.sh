@@ -319,6 +319,9 @@ verify_remote_desktop() {
   if [[ "${screen_status}" == "active" ]] && [[ "${rm_status}" == "active" ]]; then
     log "🎯 SUCCESS: Both Screen Sharing and Remote Management are active"
     log "   Remote Desktop is fully functional with all features"
+  elif [[ "${rm_status}" == "active" ]]; then
+    log "🎯 SUCCESS: Remote Management is active"
+    log "   Remote Management provides both Screen Sharing and ARD functionality"
   elif [[ "${screen_status}" == "active" ]]; then
     log "📺 PARTIAL: Screen Sharing is active, Remote Management is not"
     log "   Screen Sharing access available, but Apple Remote Desktop features not available"
@@ -326,18 +329,14 @@ verify_remote_desktop() {
     log "⚠️  INCOMPLETE: Screen Sharing service loaded but agent not running"
     log "   This indicates setup is incomplete and needs manual configuration"
     setup_success=false
-  elif [[ "${rm_status}" == "active" ]]; then
-    log "⚠️  UNUSUAL: Remote Management active but Screen Sharing is not"
-    log "   This is an unusual configuration that may not work properly"
-    setup_success=false
   else
     log "❌ FAILED: Neither Screen Sharing nor Remote Management is active"
     log "   Remote Desktop is not functional"
     setup_success=false
   fi
 
-  # Show connection information if at least Screen Sharing works
-  if [[ "${screen_status}" == "active" ]]; then
+  # Show connection information if Screen Sharing or Remote Management works
+  if [[ "${screen_status}" == "active" ]] || [[ "${rm_status}" == "active" ]]; then
     log ""
     log "========================================="
     log "        CONNECTION INFORMATION"
@@ -370,8 +369,10 @@ verify_remote_desktop() {
     screen_status="${screen_result%|*}"
     rm_status="${rm_result%|*}"
 
-    if [[ "${screen_status}" == "active" ]] || [[ "${rm_status}" == "active" ]]; then
-      log "✅ Status improved after manual setup"
+    if [[ "${screen_status}" == "active" ]] && [[ "${rm_status}" == "active" ]]; then
+      log "✅ Both Screen Sharing and Remote Management are now active"
+    elif [[ "${screen_status}" == "active" ]] || [[ "${rm_status}" == "active" ]]; then
+      log "✅ Remote Desktop functionality is now available"
     else
       log "⚠️  Services still not active - manual setup may be needed"
       log "   This is not necessarily an error if you prefer to configure later"
