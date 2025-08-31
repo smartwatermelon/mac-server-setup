@@ -1441,143 +1441,32 @@ log "Disabled automatic app downloads"
 # HOMEBREW & PACKAGE INSTALLATION
 #
 
-# Install Xcode Command Line Tools if needed
+# Install Xcode Command Line Tools using dedicated script
 set_section "Installing Xcode Command Line Tools"
 
-# Check if CLT is already installed
-if softwareupdate --history 2>/dev/null | grep 'Command Line Tools for Xcode' >/dev/null; then
-  log "Xcode Command Line Tools already installed"
-else
-  show_log "Installing Xcode Command Line Tools..."
+# Use the dedicated CLT installation script with enhanced monitoring
+clt_script="${SETUP_DIR}/scripts/server/setup-command-line-tools.sh"
 
-  # Touch flag to indicate user has requested CLT installation
-  sudo touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+if [[ -f "${clt_script}" ]]; then
+  log "Using enhanced Command Line Tools installation script..."
 
-  # Find and install the latest CLT package
-  CLT_PACKAGE=$(softwareupdate -l 2>/dev/null | grep Label | tail -n 1 | cut -d ':' -f 2 | xargs)
-
-  if [[ -n "${CLT_PACKAGE}" ]]; then
-    # Monitored Command Line Tools installation with progress feedback
-    install_clt_with_monitoring() {
-      local clt_package="$1"
-      local install_pid
-      local monitor_pid
-      local max_wait_time=1800 # 30 minutes maximum
-      local elapsed_time=0
-
-      show_log "Installing Command Line Tools with progress monitoring: ${clt_package}"
-      show_log "This may take 10-30 minutes depending on your internet connection..."
-
-      # Start the installation in background
-      softwareupdate --verbose -i "${clt_package}" &
-      install_pid=$!
-
-      # Start log monitoring in background - write a temporary script to avoid shellcheck issues
-      local monitor_script="/tmp/clt_monitor_$$"
-      cat >"${monitor_script}" <<'MONITOR_EOF'
-#!/bin/bash
-sudo log stream --predicate "processImagePath Contains[c] 'softwareupdate'" 2>/dev/null | while read -r line; do
-  # Filter for relevant messages
-  if [[ "${line}" == *"progress"* ]] || [[ "${line}" == *"Installing"* ]] || [[ "${line}" == *"Downloaded"* ]] || [[ "${line}" == *"Preparing"* ]] || [[ "${line}" == *"Extracting"* ]]; then
-    # Extract just the relevant part and show with timestamp
-    timestamp=$(date '+%H:%M:%S')
-    message=$(echo "${line}" | sed -E 's/.*eventMessage:"([^"]*).*/\1/' | sed 's/\\n/ /g')
-    if [[ -n "${message}" && "${message}" != "${line}" ]]; then
-      echo "[${timestamp}] CLT: ${message}"
-    fi
+  # Prepare CLT installation arguments
+  clt_args=()
+  if [[ "${FORCE}" = true ]]; then
+    clt_args+=(--force)
   fi
-done
-MONITOR_EOF
-      chmod +x "${monitor_script}"
-      "${monitor_script}" &
-      monitor_pid=$!
 
-      # Wait for installation to complete with timeout
-      log "Monitoring Command Line Tools installation (max ${max_wait_time} seconds)..."
-
-      while kill -0 "${install_pid}" 2>/dev/null; do
-        if [[ ${elapsed_time} -ge ${max_wait_time} ]]; then
-          show_log "❌ Command Line Tools installation timed out after ${max_wait_time} seconds"
-          kill "${install_pid}" 2>/dev/null || true
-          kill "${monitor_pid}" 2>/dev/null || true
-          return 1
-        fi
-
-        sleep 10
-        elapsed_time=$((elapsed_time + 10))
-
-        # Show periodic status every 2 minutes
-        if [[ $((elapsed_time % 120)) -eq 0 ]]; then
-          local elapsed_min=$((elapsed_time / 60))
-          show_log "CLT installation still in progress... (${elapsed_min} minutes elapsed)"
-        fi
-      done
-
-      # Stop the log monitoring and cleanup temporary script
-      kill "${monitor_pid}" 2>/dev/null || true
-      rm -f "${monitor_script}" 2>/dev/null || true
-
-      # Wait for the install process to fully complete
-      wait "${install_pid}"
-      local install_result=$?
-
-      # Verify installation succeeded
-      if [[ ${install_result} -eq 0 ]] && xcode-select -p >/dev/null 2>&1; then
-        local install_time_min=$((elapsed_time / 60))
-        local install_time_sec=$((elapsed_time % 60))
-        show_log "✅ Command Line Tools installation completed successfully in ${install_time_min}m ${install_time_sec}s"
-        return 0
-      else
-        show_log "❌ Command Line Tools installation failed (exit code: ${install_result})"
-        return 1
-      fi
-    }
-
-    # Run the monitored installation
-    if install_clt_with_monitoring "${CLT_PACKAGE}"; then
-      log "Command Line Tools installation verified"
-    else
-      collect_error "Command Line Tools installation failed"
-      exit 1
-    fi
+  # Run the dedicated CLT installation script
+  if "${clt_script}" "${clt_args[@]}"; then
+    log "✅ Command Line Tools installation completed successfully"
   else
-    show_log "⚠️ Could not determine CLT package via softwareupdate"
-    show_log "Falling back to interactive xcode-select installation"
-
-    # Clean up the flag since we're switching methods
-    sudo rm -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
-
-    # Use xcode-select method (will prompt user)
-    if [[ "${FORCE}" = false ]]; then
-      show_log "This will open a dialog for Command Line Tools installation"
-      read -rp "Press any key to continue..." -n 1 -r
-      echo
-    fi
-
-    xcode-select --install
-
-    # Wait for installation to complete
-    show_log "Waiting for Command Line Tools installation to complete..."
-    show_log "Please complete the installation dialog, then press any key to continue"
-
-    if [[ "${FORCE}" = false ]]; then
-      read -rp "Press any key when installation is complete..." -n 1 -r
-      echo
-    else
-      # In force mode, poll for completion
-      while ! xcode-select -p >/dev/null 2>&1; do
-        sleep 5
-        log "Waiting for Command Line Tools installation..."
-      done
-    fi
-
-    check_success "Xcode Command Line Tools installation (interactive)"
+    collect_error "Command Line Tools installation failed"
+    exit 1
   fi
-
-  # Clean up the flag regardless of method used
-  sudo rm -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
-
-  show_log "✅ Xcode Command Line Tools installation completed"
+else
+  collect_error "CLT installation script not found: ${clt_script}"
+  log "Please ensure setup-command-line-tools.sh is present in the scripts/server directory"
+  exit 1
 fi
 
 # Install Homebrew
