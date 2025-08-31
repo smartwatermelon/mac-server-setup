@@ -454,49 +454,50 @@ main() {
   close_system_settings
   disable_remote_management
   disable_screen_sharing
+  local activation_success=false
 
-  # Phase 2: Sequential Activation - Screen Sharing first, then Remote Management
-  log ""
-  log "Phase 2: Sequential activation..."
-
-  local activation_success=true
-
-  # Step 1: Enable Screen Sharing
-  if enable_screen_sharing; then
-    log "Screen Sharing activation successful, proceeding to Remote Management"
-
-    # Step 2: Enable Remote Management
-    if enable_remote_management; then
-      log "Remote Management activation successful"
-      log "🎯 Automatic activation sequence completed successfully"
-    else
-      log "Remote Management activation failed - jumping to manual setup"
-      activation_success=false
-    fi
-  else
-    log "Screen Sharing activation failed - jumping to manual setup"
-    activation_success=false
-  fi
-
-  # Phase 3: Handle manual setup if needed, then verify final state
-  if [[ "${activation_success}" == "true" ]]; then
-    log ""
-    log "Phase 3: Verifying final state..."
-    log "Note: Only checking Remote Management (now controls Screen Sharing)"
-
-    local final_rm_result
-    final_rm_result=$(check_remote_management_status)
-    local final_rm_status="${final_rm_result%|*}"
-    local final_rm_details="${final_rm_result#*|}"
-
-    if [[ "${final_rm_status}" == "active" ]]; then
-      log "✅ Final verification: Remote Management active and controlling Screen Sharing"
-      log "Details: ${final_rm_details}"
-    else
-      log "❌ Final verification failed: Remote Management not active"
-      activation_success=false
-    fi
-  fi
+  #   # Phase 2: Sequential Activation - Screen Sharing first, then Remote Management
+  #   log ""
+  #   log "Phase 2: Sequential activation..."
+  #
+  #   local activation_success=true
+  #
+  #   # Step 1: Enable Screen Sharing
+  #   if enable_screen_sharing; then
+  #     log "Screen Sharing activation successful, proceeding to Remote Management"
+  #
+  #     # Step 2: Enable Remote Management
+  #     if enable_remote_management; then
+  #       log "Remote Management activation successful"
+  #       log "🎯 Automatic activation sequence completed successfully"
+  #     else
+  #       log "Remote Management activation failed - jumping to manual setup"
+  #       activation_success=false
+  #     fi
+  #   else
+  #     log "Screen Sharing activation failed - jumping to manual setup"
+  #     activation_success=false
+  #   fi
+  #
+  #   # Phase 3: Handle manual setup if needed, then verify final state
+  #   if [[ "${activation_success}" == "true" ]]; then
+  #     log ""
+  #     log "Phase 3: Verifying final state..."
+  #     log "Note: Only checking Remote Management (now controls Screen Sharing)"
+  #
+  #     local final_rm_result
+  #     final_rm_result=$(check_remote_management_status)
+  #     local final_rm_status="${final_rm_result%|*}"
+  #     local final_rm_details="${final_rm_result#*|}"
+  #
+  #     if [[ "${final_rm_status}" == "active" ]]; then
+  #       log "✅ Final verification: Remote Management active and controlling Screen Sharing"
+  #       log "Details: ${final_rm_details}"
+  #     else
+  #       log "❌ Final verification failed: Remote Management not active"
+  #       activation_success=false
+  #     fi
+  #   fi
 
   # If activation failed at any point, run manual setup
   if [[ "${activation_success}" != "true" ]]; then
