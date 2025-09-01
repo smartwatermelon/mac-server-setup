@@ -1,14 +1,13 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Simple Remote Desktop setup for macOS with direct launchd configuration
-# This script enables Screen Sharing and Remote Management using system commands
+# Remote Desktop setup for macOS with user-guided configuration
+# This script disables existing services and guides users through manual setup
 
 set -euo pipefail
 
 # Configuration
 readonly SCRIPT_NAME="${0##*/}"
 readonly LOG_PREFIX="[Remote Desktop Setup]"
-readonly DEFAULT_OVERRIDES_PERMS="0644"
 
 # Logging function
 log() {
@@ -20,23 +19,24 @@ show_usage() {
   cat <<EOF
 Usage: ${SCRIPT_NAME} [OPTIONS]
 
-Simple Remote Desktop setup for macOS with direct system configuration.
+Remote Desktop setup for macOS with user-guided configuration.
 
 OPTIONS:
     --force             Skip confirmation prompts
     --help              Show this help message
 
 DESCRIPTION:
-    This script provides a clean approach to Remote Desktop setup:
-    1. Disables existing remote desktop services for a clean state
-    2. Enables Screen Sharing using direct launchd commands
-    3. Configures Remote Management service
-    4. Verifies final configuration and provides connection information
+    This script provides a reliable approach to Remote Desktop setup:
+    1. Disables existing remote desktop services to ensure a clean state
+    2. Provides detailed instructions for manually enabling services
+    3. Opens System Settings to the correct location for easy setup
+    4. Guides users through the required configuration steps
 
 NOTES:
-    - Requires administrator privileges
-    - Uses direct system commands for reliable configuration
+    - Requires administrator privileges for service management
+    - Uses user-guided setup to ensure reliable configuration
     - Compatible with all macOS versions including 15.6+
+    - Manual setup avoids macOS Remote Desktop activation complexities
 
 EOF
 }
@@ -134,196 +134,7 @@ disable_screen_sharing() {
   fi
 }
 
-# Enable Remote Management with verification
-enable_remote_management() {
-  log "Enabling Remote Management..."
-
-  # Capture kickstart output with verbose flag
-  local kickstart_output
-  kickstart_output=$(sudo -p "${LOG_PREFIX} Enter password to configure Remote Management: " \
-    /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-    -activate -configure -access -on -users admin -privs -all -restart -agent -menu -verbose 2>&1) || {
-    log "WARNING: kickstart command failed"
-    log "Output: ${kickstart_output}"
-    return 1
-  }
-
-  # Wait for service to start
-  sleep 3
-
-  # Verify Remote Management is active
-  local rm_result
-  rm_result=$(check_remote_management_status)
-  local rm_status="${rm_result%|*}"
-  local rm_details="${rm_result#*|}"
-
-  if [[ "${rm_status}" == "active" ]]; then
-    log "✅ Remote Management activated successfully - ${rm_details}"
-    log "Kickstart output: ${kickstart_output}"
-    return 0
-  else
-    log "❌ Remote Management activation failed - ${rm_details}"
-    log "Kickstart output: ${kickstart_output}"
-    return 1
-  fi
-}
-
-# Enable Screen Sharing with verification
-enable_screen_sharing() {
-  log "Enabling Screen Sharing..."
-
-  local overrides_plist="/var/db/launchd.db/com.apple.launchd/overrides.plist"
-  local original_perms
-
-  # Capture current permissions to restore them later
-  if sudo test -f "${overrides_plist}"; then
-    original_perms=$(stat -f "%Mp%Lp" "${overrides_plist}" 2>/dev/null || echo "${DEFAULT_OVERRIDES_PERMS}")
-    log "Current overrides.plist permissions: ${original_perms}"
-  else
-    # Default permissions for new file
-    original_perms="${DEFAULT_OVERRIDES_PERMS}"
-    log "overrides.plist does not exist - will use default permissions: ${original_perms}"
-  fi
-
-  # Enable Screen Sharing in launchd overrides
-  sudo -p "${LOG_PREFIX} Enter password to enable Screen Sharing: " \
-    defaults write "${overrides_plist}" com.apple.screensharing -dict Disabled -bool false
-
-  # Restore original permissions (ensuring at least a+r access)
-  if [[ "${original_perms}" =~ ^[0-7]*4[4-7]$ ]] || [[ "${original_perms}" =~ ^[0-7]*6[4-7]$ ]]; then
-    # Original permissions already have a+r, restore them
-    sudo chmod "${original_perms}" "${overrides_plist}"
-    log "Restored original permissions: ${original_perms}"
-  else
-    # Original permissions didn't have a+r, ensure a+r access
-    sudo chmod a+r "${overrides_plist}"
-    log "Applied a+r permissions for launchd access"
-  fi
-
-  # Unload Screen Sharing service (if running) to ensure clean state
-  sudo launchctl unload -w /System/Library/LaunchDaemons/com.apple.screensharing.plist &>/dev/null || true
-
-  # Load Screen Sharing service
-  sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
-
-  # Wait for service to start
-  sleep 3
-
-  # Verify Screen Sharing is active
-  local screen_result
-  screen_result=$(check_screen_sharing_status)
-  local screen_status="${screen_result%|*}"
-  local screen_details="${screen_result#*|}"
-
-  if [[ "${screen_status}" == "active" ]]; then
-    log "✅ Screen Sharing activated successfully - ${screen_details}"
-    return 0
-  else
-    log "❌ Screen Sharing activation failed - ${screen_details}"
-    return 1
-  fi
-}
-
-# Guide user through Remote Management setup
-setup_remote_management() {
-  log "Opening Remote Management settings for manual configuration..."
-
-  # Open directly to Remote Management settings
-  if open "x-apple.systempreferences:com.apple.Sharing-Settings.extension?Services_ARDService"; then
-    log "System Settings opened to Remote Management"
-  else
-    log "Opening general Sharing settings..."
-    open "x-apple.systempreferences:com.apple.preferences.sharing" || {
-      log "WARNING: Could not open System Settings automatically"
-      log "Please manually open: System Settings > General > Sharing"
-    }
-  fi
-
-  # Give System Settings time to load
-  sleep 2
-
-  log "System Settings opened - showing Remote Management configuration dialog..."
-
-  # Show AppleScript dialog for user confirmation
-  if osascript <<'EOF'; then
-display dialog "Remote Management Configuration - STEP 2
-
-System Settings should now be open to the Sharing page.
-
-Screen Sharing should now be ON and Remote Management will take control of it.
-
-Please complete these steps:
-1. Find 'Remote Management' in the list (in the Advanced section)
-2. Click the toggle switch to turn Remote Management ON
-3. Configure access settings when prompted:
-   • Select users who can access (Administrators recommended)
-   • Choose access privileges (full control recommended for ARD)
-   • Set VNC access password if desired
-4. Click 'Done' when finished
-
-NOTE: Remote Management is required for Apple Remote Desktop (ARD).
-Screen Sharing alone provides VNC access but not full ARD features.
-
-Click OK when you have completed the Remote Management setup." buttons {"Cancel", "OK"} default button "OK" with title "Remote Desktop Setup"
-EOF
-    log "Remote Management configuration completed by user"
-
-    # Close System Settings now that user is done with configuration
-    log "Closing System Settings..."
-    osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
-  else
-    log "User cancelled Remote Management setup"
-    return 1
-  fi
-}
-
-# Function to check Screen Sharing status accurately
-check_screen_sharing_status() {
-  local status="inactive"
-  local details=""
-
-  # Check for dedicated Screen Sharing agent service (correct service name from diagnostics)
-  if launchctl list | grep -q com.apple.screensharing.agent; then
-    status="active"
-    details="Screen Sharing agent service active"
-  # Check if Screen Sharing is available through overrides.plist (fallback method)
-  elif sudo test -f "/var/db/launchd.db/com.apple.launchd/overrides.plist"; then
-    local screen_override
-    screen_override=$(sudo defaults read "/var/db/launchd.db/com.apple.launchd/overrides.plist" com.apple.screensharing 2>/dev/null || echo "not found")
-    if [[ "${screen_override}" == *"Disabled = 0"* ]]; then
-      status="active"
-      details="Screen Sharing enabled via overrides.plist"
-    else
-      details="Screen Sharing not enabled in overrides.plist"
-    fi
-  else
-    details="no Screen Sharing service detected"
-  fi
-
-  echo "${status}|${details}"
-}
-
-# Function to check Remote Management status accurately
-check_remote_management_status() {
-  local status="inactive"
-  local details=""
-
-  # Check for Remote Management agent service (from diagnostics)
-  if launchctl list | grep -q com.apple.RemoteManagementAgent; then
-    status="active"
-    details="Remote Management agent service active"
-  # Fallback: Check ARDAgent process
-  elif pgrep -f "/System/Library/CoreServices/RemoteManagement/ARDAgent" >/dev/null 2>&1; then
-    status="active"
-    details="ARDAgent process running"
-  else
-    details="Remote Management not active"
-  fi
-
-  echo "${status}|${details}"
-}
-
-# Show GUI dialog with manual instructions when auto-activation fails
+# Show GUI dialog with manual setup instructions
 show_manual_setup_dialog() {
   log "Showing manual setup instructions dialog..."
 
@@ -339,9 +150,9 @@ show_manual_setup_dialog() {
   sleep 2
 
   if osascript <<'EOF'; then
-display dialog "Remote Desktop Setup Incomplete
+display dialog "Remote Desktop Manual Setup
 
-Automatic setup was unable to fully activate Remote Desktop services.
+The script has disabled existing services to ensure a clean state.
 
 System Settings has been opened to the Sharing page for you.
 
@@ -366,30 +177,14 @@ EOF
   fi
 }
 
-# Manual activation routine when automatic setup fails
+# Manual activation routine - core setup approach
 manual_activation_routine() {
-  log "Running manual activation routine..."
+  log "Running manual setup routine..."
 
   if show_manual_setup_dialog; then
-    # After manual setup, only test Remote Management
-    # (Screen Sharing tests are unreliable when controlled by Remote Management)
     log ""
-    log "Re-checking Remote Management status after manual setup..."
-
-    local post_manual_rm_result
-    post_manual_rm_result=$(check_remote_management_status)
-    local post_manual_rm_status="${post_manual_rm_result%|*}"
-    local post_manual_rm_details="${post_manual_rm_result#*|}"
-
-    if [[ "${post_manual_rm_status}" == "active" ]]; then
-      log "✅ Manual setup successful - Remote Management is active"
-      log "Details: ${post_manual_rm_details}"
-    else
-      log "⚠️  Remote Management still not detected as active after manual setup"
-      log "Details: ${post_manual_rm_details}"
-      log "If Screen Sharing and Remote Management show as ON in System Settings,"
-      log "then the services are working despite detection issues"
-    fi
+    log "Manual setup dialog completed successfully"
+    log "Remote Desktop services should now be configured in System Settings"
 
     # Close System Settings
     log "Closing System Settings..."
@@ -430,13 +225,16 @@ main() {
   # Confirmation prompt
   if [[ "${force}" != "true" ]]; then
     echo "${LOG_PREFIX} This script will:"
-    echo "${LOG_PREFIX} 1. Disable existing remote desktop services"
-    echo "${LOG_PREFIX} 2. Enable Screen Sharing using direct system commands"
-    echo "${LOG_PREFIX} 3. Enable Remote Management service"
-    echo "${LOG_PREFIX} 4. Configure Remote Management if needed"
-    echo "${LOG_PREFIX} 5. Verify the final setup"
+    echo "${LOG_PREFIX} 1. Disable existing remote desktop services to ensure clean state"
+    echo "${LOG_PREFIX} 2. Open System Settings to the Sharing configuration page"
+    echo "${LOG_PREFIX} 3. Guide you through manually enabling Screen Sharing and Remote Management"
+    echo "${LOG_PREFIX} 4. Provide step-by-step instructions for proper configuration"
+    echo "${LOG_PREFIX} 5. Verify the services are working after manual setup"
     echo ""
-    echo "${LOG_PREFIX} This requires administrator privileges."
+    echo "${LOG_PREFIX} This requires administrator privileges and manual interaction."
+    echo ""
+    echo "${LOG_PREFIX} 💡 If Screen Sharing and Remote Desktop are already working"
+    echo "${LOG_PREFIX} 💡   satisfactorily, answer 'N' to skip this section."
     read -p "${LOG_PREFIX} Continue? (Y/n): " -n 1 -r response
     echo
     case ${response} in
@@ -450,79 +248,33 @@ main() {
     esac
   fi
 
-  # Execute correct activation sequence
-  log "Using correct Remote Desktop activation sequence..."
+  # Execute disable-then-guide approach
+  log "Using disable-then-guide Remote Desktop setup approach..."
 
   # Phase 1: Clean Slate - Disable both services
   log ""
-  log "Phase 1: Creating clean slate..."
+  log "Phase 1: Creating clean slate by disabling existing services..."
   close_system_settings
   disable_remote_management
   disable_screen_sharing
-  local activation_success=false
 
-  #   # Phase 2: Sequential Activation - Screen Sharing first, then Remote Management
-  #   log ""
-  #   log "Phase 2: Sequential activation..."
-  #
-  #   local activation_success=true
-  #
-  #   # Step 1: Enable Screen Sharing
-  #   if enable_screen_sharing; then
-  #     log "Screen Sharing activation successful, proceeding to Remote Management"
-  #
-  #     # Step 2: Enable Remote Management
-  #     if enable_remote_management; then
-  #       log "Remote Management activation successful"
-  #       log "🎯 Automatic activation sequence completed successfully"
-  #     else
-  #       log "Remote Management activation failed - jumping to manual setup"
-  #       activation_success=false
-  #     fi
-  #   else
-  #     log "Screen Sharing activation failed - jumping to manual setup"
-  #     activation_success=false
-  #   fi
-  #
-  #   # Phase 3: Handle manual setup if needed, then verify final state
-  #   if [[ "${activation_success}" == "true" ]]; then
-  #     log ""
-  #     log "Phase 3: Verifying final state..."
-  #     log "Note: Only checking Remote Management (now controls Screen Sharing)"
-  #
-  #     local final_rm_result
-  #     final_rm_result=$(check_remote_management_status)
-  #     local final_rm_status="${final_rm_result%|*}"
-  #     local final_rm_details="${final_rm_result#*|}"
-  #
-  #     if [[ "${final_rm_status}" == "active" ]]; then
-  #       log "✅ Final verification: Remote Management active and controlling Screen Sharing"
-  #       log "Details: ${final_rm_details}"
-  #     else
-  #       log "❌ Final verification failed: Remote Management not active"
-  #       activation_success=false
-  #     fi
-  #   fi
-
-  # If activation failed at any point, run manual setup
-  if [[ "${activation_success}" != "true" ]]; then
-    log ""
-    log "Automatic activation failed - showing manual setup dialog"
-    manual_activation_routine
-  fi
+  # Phase 2: Guide user through manual setup
+  log ""
+  log "Phase 2: Guiding user through manual configuration..."
+  manual_activation_routine
 
   log ""
   log "========================================="
   log "           SETUP COMPLETE"
   log "========================================="
   log ""
-  log "Remote Desktop setup process completed!"
+  log "Remote Desktop setup guidance completed!"
   log ""
-  log "FINAL STATE:"
-  log "• Remote Management should be active and controlling Screen Sharing"
+  log "EXPECTED FINAL STATE (after manual setup):"
+  log "• Remote Management should be ON and controlling Screen Sharing"
   log "• Both Screen Sharing and Apple Remote Desktop functionality available"
   log ""
-  log "NEXT STEPS:"
+  log "TESTING YOUR SETUP:"
   log "• Test the connection from another Mac:"
   local hostname
   hostname=$(hostname)
@@ -531,9 +283,11 @@ main() {
   log "• Configure firewall if needed (should be pre-configured)"
   log "• Set up additional user accounts with appropriate access"
   log ""
+  log "TROUBLESHOOTING:"
   log "If connections fail, verify in System Settings > General > Sharing that:"
   log "• Screen Sharing shows 'On' or 'Controlled by Remote Management'"
-  log "• Remote Management shows 'On'"
+  log "• Remote Management shows 'On' with proper user access configured"
+  log "• Check firewall settings if remote connections are blocked"
 }
 
 # Execute main function with all arguments

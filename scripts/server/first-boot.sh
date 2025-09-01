@@ -1471,7 +1471,7 @@ log "Disabled automatic app downloads"
 set_section "Installing Xcode Command Line Tools"
 
 # Use the dedicated CLT installation script with enhanced monitoring
-clt_script="${SETUP_DIR}/scripts/server/setup-command-line-tools.sh"
+clt_script="${SETUP_DIR}/scripts/setup-command-line-tools.sh"
 
 if [[ -f "${clt_script}" ]]; then
   log "Using enhanced Command Line Tools installation script..."
@@ -1491,7 +1491,7 @@ if [[ -f "${clt_script}" ]]; then
   fi
 else
   collect_error "CLT installation script not found: ${clt_script}"
-  log "Please ensure setup-command-line-tools.sh is present in the scripts/server directory"
+  log "Please ensure setup-command-line-tools.sh is present in the scripts directory"
   exit 1
 fi
 
