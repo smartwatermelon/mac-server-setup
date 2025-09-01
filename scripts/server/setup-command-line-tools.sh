@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Command Line Tools installation for macOS with enhanced monitoring
 # This script provides comprehensive CLT installation with progress tracking and verification
@@ -116,7 +116,7 @@ install_clt_with_enhanced_monitoring() {
     # Enhanced log monitoring with better filtering and phase detection
     local monitor_script="/tmp/enhanced_clt_monitor_$$"
     cat >"${monitor_script}" <<'ENHANCED_MONITOR_EOF'
-#!/bin/bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 log() {

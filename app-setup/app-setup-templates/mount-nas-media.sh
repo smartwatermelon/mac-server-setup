@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # mount-nas-media.sh - User-specific SMB mount script for NAS media access
 # This script is designed to be called by a per-user LaunchAgent
