@@ -10,6 +10,7 @@ readonly SCRIPT_NAME="${0##*/}"
 readonly LOG_PREFIX="[CLT Setup]"
 readonly MAX_RETRIES=2
 readonly DEFAULT_TIMEOUT=1800 # 30 minutes
+readonly LOG_INTERVAL=60      # 1 minute
 
 # Logging function
 log() {
@@ -213,7 +214,7 @@ ENHANCED_MONITOR_EOF
       if [[ ${elapsed_time} -ge ${install_timeout} ]]; then
         show_log "❌ Command Line Tools installation timed out after ${install_timeout} seconds"
         kill "${install_pid}" 2>/dev/null || true
-        kill "${monitor_pid}" 2>/dev/null || true
+        (kill "${monitor_pid}" && wait "${monitor_pid}") 2>/dev/null || true
         break
       fi
 
@@ -221,7 +222,7 @@ ENHANCED_MONITOR_EOF
       elapsed_time=$((elapsed_time + 10))
 
       # Enhanced progress reporting with phase awareness
-      if [[ $((elapsed_time % 120)) -eq 0 ]]; then
+      if [[ $((elapsed_time % LOG_INTERVAL)) -eq 0 ]]; then
         local elapsed_min=$((elapsed_time / 60))
         local remaining_min=$(((install_timeout - elapsed_time) / 60))
         local log_msg="CLT installation in progress... (${elapsed_min}m elapsed, ~${remaining_min}m remaining)"
@@ -230,8 +231,8 @@ ENHANCED_MONITOR_EOF
       fi
     done
 
-    # Stop monitoring and cleanup
-    kill "${monitor_pid}" 2>/dev/null || true
+    # Stop monitoring and cleanup (suppress job termination messages)
+    (kill "${monitor_pid}" && wait "${monitor_pid}") 2>/dev/null || true
     rm -f "${monitor_script}" 2>/dev/null || true
 
     # Wait for the install process to fully complete
