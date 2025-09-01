@@ -5,7 +5,7 @@ This directory contains all the necessary files for setting up the Mac Mini serv
 ## Contents
 
 - `ssh_keys/`: SSH public keys for secure remote access
-- `scripts/`: Setup scripts for the server  
+- `scripts/`: Setup scripts for the server
 - `config/`: Server configuration and encrypted credential keychain
 - `URLs/`: Internet shortcuts used by Setup
 - `wifi/`: WiFi network configuration
@@ -31,7 +31,7 @@ For detailed instructions, refer to the complete runbook.
 
 ## Notes
 
-- The operator account password is retrieved from 1Password using configured credentials
+- The operator account password was retrieved from 1Password in `prep-airdrop` using configured credentials
 - After setup, you can access the server via SSH using the admin or operator account
 - TouchID sudo will be configured during first-boot setup (you'll be prompted to enable it)
 - WiFi will be configured automatically using the saved network information

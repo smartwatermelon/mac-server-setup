@@ -27,6 +27,7 @@ set -euo pipefail
 
 # Configuration variables - adjust as needed
 ADMIN_USERNAME=$(whoami)                                  # Set this once and use throughout
+ADMINISTRATOR_PASSWORD=""                                 # Get it interactively later
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" # Directory where AirDropped files are located (script now at root)
 SSH_KEY_SOURCE="${SETUP_DIR}/ssh_keys"
 WIFI_CONFIG_FILE="${SETUP_DIR}/config/wifi_network.conf"
@@ -37,11 +38,12 @@ NEED_SYSTEMUI_RESTART=false
 NEED_CONTROLCENTER_RESTART=false
 # Safety: Development machine fingerprint (to prevent accidental execution)
 DEV_FINGERPRINT_FILE="${SETUP_DIR}/config/dev_fingerprint.conf"
-DEV_MACHINE_FINGERPRINT="" # Default blank - will be populated from file
+DEV_MACHINE_FINGERPRINT=""      # Default blank - will be populated from file
+HOMEBREW_PREFIX="/opt/homebrew" # Apple Silicon
 
 # Parse command line arguments
 FORCE=false
-SKIP_UPDATE=false
+SKIP_UPDATE=true # this is unreliable during setup
 SKIP_HOMEBREW=false
 SKIP_PACKAGES=false
 
@@ -94,6 +96,21 @@ OPERATOR_FULLNAME="${SERVER_NAME} Operator"
 export LOG_DIR
 LOG_DIR="${HOME}/.local/state" # XDG_STATE_HOME
 LOG_FILE="${LOG_DIR}/${HOSTNAME_LOWER}-setup.log"
+
+# _timeout function - uses timeout utility if installed, otherwise Perl
+# https://gist.github.com/jaytaylor/6527607
+function _timeout() {
+  if command -v timeout; then
+    timeout "$@"
+  else
+    if ! command -v perl; then
+      echo "perl not found 😿"
+      exit 1
+    else
+      perl -e 'alarm shift; exec @ARGV' "$@"
+    fi
+  fi
+}
 
 # log function - only writes to log file
 log() {
@@ -264,7 +281,7 @@ if [[ "${SESSION_TYPE}" != "Aqua" ]]; then
   echo "Please run this script from the Mac's local desktop session."
   exit 1
 fi
-echo "✓ GUI session detected (${SESSION_TYPE}) - setup can proceed"
+show_log "✓ GUI session detected (${SESSION_TYPE}) - setup can proceed"
 
 # Get current machine fingerprint
 CURRENT_FINGERPRINT=$(system_profiler SPHardwareDataType | grep "Hardware UUID" | awk '{print $3}')
@@ -279,8 +296,139 @@ if [[ "${CURRENT_FINGERPRINT}" == "${DEV_MACHINE_FINGERPRINT}" ]]; then
   exit 1
 fi
 
-log "✅ Safety check passed - not running on development machine"
+show_log "✅ Safety check passed - not running on development machine"
 log "Current machine: ${CURRENT_FINGERPRINT}"
+
+# CRITICAL CHECK: FileVault compatibility for auto-login functionality
+set_section "FileVault Compatibility Check"
+
+log "Checking FileVault status (critical for auto-login functionality)..."
+
+if ! command -v fdesetup >/dev/null 2>&1; then
+  collect_warning "fdesetup not available, skipping FileVault check"
+else
+  filevault_status=$(fdesetup status 2>/dev/null || echo "unknown")
+
+  if [[ "${filevault_status}" == *"FileVault is On"* ]]; then
+    echo ""
+    echo "=================================================================="
+    echo "                    ⚠️  CRITICAL ISSUE DETECTED  ⚠️"
+    echo "=================================================================="
+    echo ""
+    echo "FileVault disk encryption is ENABLED on this system."
+    echo ""
+    echo "This is incompatible with automatic login functionality,"
+    echo "which is required for the operator account setup."
+    echo ""
+    echo "RESOLUTION OPTIONS:"
+    echo "1. Try disabling FileVault via command line (fastest):"
+    echo "   • Run: sudo fdesetup disable"
+    echo "   • This requires decryption which may take several hours"
+    echo "   • Then re-run this setup script"
+    echo ""
+    echo "2. Try disabling FileVault in System Settings:"
+    echo "   • Open System Settings > Privacy & Security > FileVault"
+    echo "   • Click 'Turn Off...' and follow the prompts"
+    echo "   • This requires decryption which may take several hours"
+    echo "   • Then re-run this setup script"
+    echo ""
+    echo "3. If FileVault cannot be disabled:"
+    echo "   • Wipe this Mac completely and start over"
+    echo "   • During macOS setup, DO NOT enable FileVault"
+    echo "   • Ensure automatic login is enabled for admin account"
+    echo ""
+    echo "FileVault prevents automatic login for security reasons."
+    echo "This Mac Mini server setup requires auto-login for the"
+    echo "operator account to work properly."
+    echo ""
+    echo "=================================================================="
+    echo ""
+
+    collect_error "FileVault is enabled - incompatible with auto-login setup"
+
+    if [[ "${FORCE}" != "true" ]]; then
+      read -p "Would you like to disable FileVault now? (y/N): " -n 1 -r response
+      echo
+      case ${response} in
+        [yY])
+          show_log "Disabling FileVault - this may take 30-60+ minutes..."
+          if sudo -p "[FileVault] Enter password to disable FileVault: " fdesetup disable; then
+            show_log "✅ FileVault disabled successfully"
+            show_log "Auto-login should now work properly"
+          else
+            collect_error "Failed to disable FileVault"
+            show_log ""
+            show_log "ALTERNATIVE OPTIONS (choose ONE):"
+            show_log "1. System Settings > Privacy & Security > FileVault > Turn Off"
+            show_log "2. Run 'sudo fdesetup disable' manually later"
+            show_log "3. Perform clean system installation without FileVault"
+          fi
+          ;;
+        *)
+          show_log "FileVault remains enabled - setup will continue but auto-login may not work"
+          collect_warning "User chose to continue with FileVault enabled"
+          show_log ""
+          show_log "ALTERNATIVE OPTIONS (choose ONE):"
+          show_log "1. Disable via System Settings:"
+          show_log "   • Open System Settings > Privacy & Security > FileVault"
+          show_log "   • Click 'Turn Off...' and follow the prompts"
+          show_log ""
+          show_log "2. Disable via command line:"
+          show_log "   • Run: sudo fdesetup disable"
+          show_log ""
+          show_log "3. If FileVault cannot be disabled:"
+          show_log "   • Wipe this Mac completely and start over"
+          show_log "   • During macOS setup, DO NOT enable FileVault"
+          ;;
+      esac
+    else
+      collect_warning "Force mode - continuing despite FileVault being enabled"
+      show_log "Auto-login functionality will NOT work with FileVault enabled"
+    fi
+
+  elif [[ "${filevault_status}" == *"Deferred"* ]]; then
+    echo ""
+    echo "=================================================================="
+    echo "                    ⚠️  POTENTIAL ISSUE DETECTED  ⚠️"
+    echo "=================================================================="
+    echo ""
+    echo "FileVault has DEFERRED ENABLEMENT scheduled."
+    echo "This means it will be enabled after the next reboot."
+    echo ""
+    echo "This will disable automatic login functionality required"
+    echo "for the operator account."
+    echo ""
+    echo "RECOMMENDATION:"
+    echo "Cancel FileVault enablement before it takes effect:"
+    echo "  sudo fdesetup disable"
+    echo ""
+    echo "=================================================================="
+    echo ""
+
+    collect_warning "FileVault deferred enablement detected - will disable auto-login after reboot"
+
+    if [[ "${FORCE}" != "true" ]]; then
+      read -p "Continue with setup? (Y/n): " -n 1 -r response
+      echo
+      case ${response} in
+        [nN])
+          show_log "Setup cancelled to resolve FileVault deferred enablement"
+          exit 1
+          ;;
+        *)
+          show_log "Continuing setup - recommend disabling FileVault deferred enablement"
+          ;;
+      esac
+    fi
+
+  elif [[ "${filevault_status}" == *"FileVault is Off"* ]]; then
+    show_log "✅ FileVault is disabled - automatic login will work properly"
+
+  else
+    collect_warning "FileVault status unclear: ${filevault_status}"
+    show_log "Manual verification recommended for auto-login compatibility"
+  fi
+fi
 
 # Create log file if it doesn't exist, rotate if it exists
 if [[ -f "${LOG_FILE}" ]]; then
@@ -325,10 +473,10 @@ fi
 # Print header
 set_section "Starting Mac Mini '${SERVER_NAME}' Server Setup"
 log "Running as user: ${ADMIN_USERNAME}"
-log -n "Date: "
-date
-log -n "macOS Version: "
-sw_vers -productVersion
+timestamp="$(date)"
+log "Date: ${timestamp}"
+productversion="$(sw_vers -productVersion)"
+log "macOS Version: ${productversion}"
 log "Setup directory: ${SETUP_DIR}"
 
 # Look for evidence we're being re-run after FDA grant
@@ -337,17 +485,6 @@ if [[ -f "/tmp/${HOSTNAME_LOWER}_fda_requested" ]]; then
   rm -f "/tmp/${HOSTNAME_LOWER}_fda_requested"
   log "Detected re-run after Full Disk Access grant"
 fi
-
-# Configure sudo timeout to reduce password prompts during setup
-section "Configuring sudo timeout"
-log "Setting sudo timeout to 30 minutes for smoother setup experience"
-sudo -p "[System setup] Enter password to configure sudo timeout: " tee /etc/sudoers.d/10_setup_timeout >/dev/null <<EOF
-# Temporary sudo timeout extension for setup - 30 minutes
-Defaults timestamp_timeout=30
-EOF
-# Fix permissions for sudoers file
-sudo chmod 0440 /etc/sudoers.d/10_setup_timeout
-check_success "Sudo timeout configuration"
 
 # Confirm operation if not forced
 if [[ "${FORCE}" = false ]] && [[ "${RERUN_AFTER_FDA}" = false ]]; then
@@ -358,6 +495,25 @@ if [[ "${FORCE}" = false ]] && [[ "${RERUN_AFTER_FDA}" = false ]]; then
     log "Setup cancelled by user"
     exit 0
   fi
+fi
+
+# Collect administrator password for keychain operations
+if [[ "${FORCE}" != "true" && "${RERUN_AFTER_FDA}" != "true" ]]; then
+  echo
+  echo "This script will need your Mac account password for keychain operations."
+  read -r -e -p "Enter your Mac ${ADMIN_USERNAME} account password: " -s ADMINISTRATOR_PASSWORD
+  echo # Add newline after hidden input
+
+  # Validate password by testing with dscl
+  until _timeout 1 dscl /Local/Default -authonly "${USER}" "${ADMINISTRATOR_PASSWORD}" &>/dev/null; do
+    echo "Invalid ${ADMIN_USERNAME} account password. Try again or ctrl-C to exit."
+    read -r -e -p "Enter your Mac ${ADMIN_USERNAME} account password: " -s ADMINISTRATOR_PASSWORD
+    echo # Add newline after hidden input
+  done
+
+  show_log "✅ Administrator password validated"
+else
+  log "🆗 Skipping password prompt (force mode or FDA re-run)"
 fi
 
 #
@@ -372,7 +528,7 @@ if [[ -f "/etc/pam.d/sudo_local" ]]; then
   # Verify the content is correct
   expected_content="auth       sufficient     pam_tid.so"
   if grep -q "${expected_content}" "/etc/pam.d/sudo_local" 2>/dev/null; then
-    log "TouchID sudo is already properly configured"
+    show_log "✅ TouchID sudo is already properly configured"
   else
     log "TouchID sudo configuration exists but content may be incorrect"
     log "Current content:"
@@ -431,8 +587,20 @@ EOF
   fi
 fi
 
+# Configure sudo timeout to reduce password prompts during setup
+section "Configuring sudo timeout"
+show_log "Setting sudo timeout to 30 minutes for smoother setup experience"
+sudo -p "[System setup] Enter password to configure sudo timeout: " tee /etc/sudoers.d/10_setup_timeout >/dev/null <<EOF
+# Temporary sudo timeout extension for setup - 30 minutes
+Defaults timestamp_timeout=30
+EOF
+# Fix permissions for sudoers file
+sudo chmod 0440 /etc/sudoers.d/10_setup_timeout
+check_success "Sudo timeout configuration"
+
 # WiFi Network Assessment and Configuration
 section "WiFi Network Assessment and Configuration"
+show_log "WiFi Network Assessment and Configuration; this may take a moment..."
 
 # Detect active WiFi interface
 WIFI_INTERFACE=$(networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}' || echo "en0")
@@ -461,11 +629,24 @@ fi
 if [[ "${WIFI_CONFIGURED}" != true ]] && [[ -f "${WIFI_CONFIG_FILE}" ]]; then
   log "Found WiFi configuration file - attempting setup"
 
-  # Source the WiFi configuration file to get SSID and password
+  # Source the WiFi configuration file to get SSID
   # shellcheck source=/dev/null
   source "${WIFI_CONFIG_FILE}"
 
-  if [[ -n "${WIFI_SSID}" ]] && [[ -n "${WIFI_PASSWORD}" ]]; then
+  # Retrieve WiFi password from Keychain (if available)
+  wifi_password=""
+  if [[ -n "${KEYCHAIN_WIFI_SERVICE:-}" ]] && [[ -n "${KEYCHAIN_ACCOUNT:-}" ]]; then
+    log "Attempting to retrieve WiFi password from Keychain..."
+    if wifi_password=$(get_keychain_credential "${KEYCHAIN_WIFI_SERVICE}" "${KEYCHAIN_ACCOUNT}" 2>/dev/null); then
+      # Extract password from combined credential (format: "ssid:password")
+      wifi_password="${wifi_password#*:}"
+      log "✅ WiFi password retrieved from Keychain"
+    else
+      log "⚠️ WiFi password not found in Keychain - manual configuration will be needed"
+    fi
+  fi
+
+  if [[ -n "${WIFI_SSID}" ]] && [[ -n "${wifi_password}" ]]; then
     log "Configuring WiFi network: ${WIFI_SSID}"
 
     # Check if SSID is already in preferred networks list
@@ -475,13 +656,13 @@ if [[ "${WIFI_CONFIGURED}" != true ]] && [[ -f "${WIFI_CONFIG_FILE}" ]]; then
       # Add WiFi network to preferred networks
       networksetup -addpreferredwirelessnetworkatindex "${WIFI_INTERFACE}" "${WIFI_SSID}" 0 WPA2
       check_success "Add preferred WiFi network"
-      security add-generic-password -D "AirPort network password" -a "${WIFI_SSID}" -s "AirPort" -w "${WIFI_PASSWORD}" || true
+      security add-generic-password -D "AirPort network password" -a "${WIFI_SSID}" -s "AirPort" -w "${wifi_password}" || true
       check_success "Store password in keychain"
     fi
 
     # Try to join the network
     log "Attempting to join WiFi network ${WIFI_SSID}..."
-    networksetup -setairportnetwork "${WIFI_INTERFACE}" "${WIFI_SSID}" "${WIFI_PASSWORD}" &>/dev/null || true
+    networksetup -setairportnetwork "${WIFI_INTERFACE}" "${WIFI_SSID}" "${wifi_password}" &>/dev/null || true
 
     # Give it a few seconds and check if we connected
     sleep 5
@@ -492,9 +673,9 @@ if [[ "${WIFI_CONFIGURED}" != true ]] && [[ -f "${WIFI_CONFIG_FILE}" ]]; then
       show_log "⚠️ WiFi network will be automatically joined after reboot"
     fi
 
-    # Securely remove the WiFi password from the configuration file
-    sed -i '' "s/WIFI_PASSWORD=.*/WIFI_PASSWORD=\"REMOVED\"/" "${WIFI_CONFIG_FILE}"
-    log "WiFi password removed from configuration file for security"
+    # Clear password from memory for security
+    unset wifi_password
+    log "WiFi password cleared from memory for security"
   else
     log "WiFi configuration file does not contain valid SSID and password"
   fi
@@ -518,7 +699,7 @@ elif [[ "${WIFI_CONFIGURED}" != true ]]; then
     show_log "Force mode: continuing without WiFi - may affect subsequent steps"
   fi
 else
-  log "WiFi already working - skipping configuration"
+  log "✅ WiFi already working - skipping configuration"
 fi
 
 # Set hostname and HD name
@@ -640,21 +821,25 @@ section "Configuring Remote Desktop"
 
 log "Remote Desktop requires GUI interaction to enable services, then automated permission setup"
 
-# Run the user-guided setup script
+# Run the user-guided setup script with proper verification
 if [[ "${FORCE}" == "true" ]]; then
   log "Running Remote Desktop setup with --force flag"
-  "${SETUP_DIR}/scripts/setup-remote-desktop.sh" --force || {
-    collect_warning "Remote Desktop setup failed or was cancelled"
-    log "You can run it manually later: ${SETUP_DIR}/scripts/setup-remote-desktop.sh"
-    return 0 # Don't fail the entire setup if this is skipped
-  }
+  if "${SETUP_DIR}/scripts/setup-remote-desktop.sh" --force; then
+    log "✅ Remote Desktop setup completed successfully with verification"
+  else
+    collect_error "Remote Desktop setup failed verification - Screen Sharing may not be working"
+    log "Manual setup required: ${SETUP_DIR}/scripts/setup-remote-desktop.sh"
+    log "Check System Settings > General > Sharing to enable Screen Sharing manually"
+  fi
 else
-  log "Remote Desktop setup will guide you through System Settings configuration"
-  "${SETUP_DIR}/scripts/setup-remote-desktop.sh" || {
-    collect_warning "Remote Desktop setup failed or was cancelled"
-    log "You can run it manually later: ${SETUP_DIR}/scripts/setup-remote-desktop.sh"
-    return 0 # Don't fail the entire setup if this is skipped
-  }
+  log "Remote Desktop setup will automatically configure System Settings"
+  if "${SETUP_DIR}/scripts/setup-remote-desktop.sh"; then
+    log "✅ Remote Desktop setup completed successfully with verification"
+  else
+    collect_error "Remote Desktop setup failed verification - Screen Sharing may not be working"
+    log "Manual setup required: ${SETUP_DIR}/scripts/setup-remote-desktop.sh"
+    log "Check System Settings > General > Sharing to enable Screen Sharing manually"
+  fi
 fi
 
 # After GUI setup, configure automated permissions for admin user
@@ -667,7 +852,6 @@ sudo -p "[Remote management] Enter password to configure admin privileges: " /Sy
 }
 check_success "Admin Remote Management privileges (if services enabled)"
 
-show_log "✅ Remote Desktop setup completed"
 log "Note: Operator user privileges will be configured after account creation"
 
 # Configure Apple ID
@@ -791,8 +975,8 @@ get_keychain_credential() {
 
 # Import credentials from external keychain and populate user keychains
 import_external_keychain_credentials() {
-  set_section "Importing Credentials from External Keychain"
 
+  set_section "Importing Credentials from External Keychain"
   # Load keychain manifest
   local manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
   if [[ ! -f "${manifest_file}" ]]; then
@@ -814,8 +998,13 @@ import_external_keychain_credentials() {
   local user_keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}-db"
 
   if [[ ! -f "${external_keychain_file}" ]]; then
-    collect_error "External keychain file not found: ${external_keychain_file}"
-    return 1
+    if [[ -f "${user_keychain_file}" ]]; then
+      log "External keychain file not found in setup package, but located in local keychains."
+      cp "${user_keychain_file}" "${external_keychain_file}"
+    else
+      collect_error "External keychain file not found: ${external_keychain_file}"
+      return 1
+    fi
   fi
 
   log "Copying external keychain to user's keychain directory..."
@@ -826,7 +1015,7 @@ import_external_keychain_credentials() {
   # Unlock external keychain
   log "Unlocking external keychain with dev machine fingerprint..."
   if security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${EXTERNAL_KEYCHAIN}"; then
-    log "✅ External keychain unlocked successfully"
+    show_log "✅ External keychain unlocked successfully"
   else
     collect_error "Failed to unlock external keychain"
     return 1
@@ -835,15 +1024,24 @@ import_external_keychain_credentials() {
   # Import administrator credentials to default keychain
   log "Importing administrator credentials to default keychain..."
 
+  # Unlock admin keychain first
+  show_log "Unlocking administrator keychain for credential import..."
+
+  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}"; then
+    collect_error "Failed to unlock administrator keychain"
+    return 1
+  fi
+
   # Import operator credential
+  # shellcheck disable=SC2154 # KEYCHAIN_OPERATOR_SERVICE loaded from sourced manifest
   if operator_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
     # Store in default keychain
-    security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
     if security add-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${operator_password}" -D "Mac Server Setup - Operator Account Password" -A -U; then
       # Verify storage
       if compare_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w 2>/dev/null); then
         if [[ "${operator_password}" == "${compare_password}" ]]; then
-          log "✅ Operator credential imported to administrator keychain"
+          show_log "✅ Operator credential imported to administrator keychain"
         else
           collect_error "Operator credential verification failed after import"
           return 1
@@ -863,10 +1061,11 @@ import_external_keychain_credentials() {
   fi
 
   # Import Plex NAS credential
+  # shellcheck disable=SC2154 # KEYCHAIN_PLEX_NAS_SERVICE loaded from sourced manifest
   if plex_nas_credential=$(security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
     if security add-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_nas_credential}" -D "Mac Server Setup - Plex NAS Credentials" -A -U; then
-      log "✅ Plex NAS credential imported to administrator keychain"
+      show_log "✅ Plex NAS credential imported to administrator keychain"
     else
       collect_error "Failed to import Plex NAS credential to administrator keychain"
       return 1
@@ -877,29 +1076,30 @@ import_external_keychain_credentials() {
   fi
 
   # Import TimeMachine credential (optional)
+  # shellcheck disable=SC2154 # KEYCHAIN_TIMEMACHINE_SERVICE loaded from sourced manifest
   if timemachine_credential=$(security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
     if security add-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${timemachine_credential}" -D "Mac Server Setup - TimeMachine Credentials" -A -U; then
-      log "✅ TimeMachine credential imported to administrator keychain"
+      show_log "✅ TimeMachine credential imported to administrator keychain"
     else
       collect_warning "Failed to import TimeMachine credential to administrator keychain"
     fi
     unset timemachine_credential
   else
-    log "⚠️ TimeMachine credential not found in external keychain (optional)"
+    show_log "⚠️ TimeMachine credential not found in external keychain (optional)"
   fi
 
   # Import WiFi credential (optional)
   if wifi_credential=$(security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
+    security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
     if security add-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${wifi_credential}" -D "Mac Server Setup - WiFi Credentials" -A -U; then
-      log "✅ WiFi credential imported to administrator keychain"
+      show_log "✅ WiFi credential imported to administrator keychain"
     else
       collect_warning "Failed to import WiFi credential to administrator keychain"
     fi
     unset wifi_credential
   else
-    log "⚠️ WiFi credential not found in external keychain (optional)"
+    show_log "⚠️ WiFi credential not found in external keychain (optional)"
   fi
 
   return 0
@@ -935,11 +1135,56 @@ else
   sudo -p "[Account setup] Enter password to create operator account: " sysadminctl -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${operator_password}" -hint "See 1Password ${ONEPASSWORD_OPERATOR_ITEM} for password" 2>/dev/null
   check_success "Operator account creation"
 
-  # Verify the password works
-  if dscl /Local/Default -authonly "${OPERATOR_USERNAME}" "${operator_password}"; then
-    show_log "✅ Password verification successful"
-  else
-    collect_error "Password verification failed"
+  # Comprehensive verification of operator account creation
+  verify_operator_account_creation() {
+    local verification_failed=false
+
+    log "Performing comprehensive operator account verification..."
+
+    # Test 1: Account exists in directory services
+    if ! dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
+      collect_error "Operator account does not exist in directory services"
+      verification_failed=true
+    else
+      log "✓ Operator account exists in directory services"
+    fi
+
+    # Test 2: Password authentication works
+    if ! dscl /Local/Default -authonly "${OPERATOR_USERNAME}" "${operator_password}" 2>/dev/null; then
+      collect_error "Operator account password authentication failed"
+      verification_failed=true
+    else
+      log "✓ Operator account password authentication successful"
+    fi
+
+    # Test 3: Home directory exists and is accessible
+    local home_dir="/Users/${OPERATOR_USERNAME}"
+    if [[ ! -d "${home_dir}" ]]; then
+      collect_error "Operator home directory does not exist: ${home_dir}"
+      verification_failed=true
+    else
+      # Check ownership using stat
+      local owner_info
+      owner_info=$(stat -f "%Su:%Sg" "${home_dir}" 2>/dev/null || echo "unknown:unknown")
+      if [[ "${owner_info}" == "${OPERATOR_USERNAME}:staff" ]]; then
+        log "✓ Operator home directory exists with correct ownership"
+      else
+        collect_warning "Operator home directory ownership may be incorrect: ${owner_info}"
+      fi
+    fi
+
+    # Overall status
+    if [[ "${verification_failed}" == "true" ]]; then
+      collect_error "Operator account creation verification FAILED"
+      return 1
+    else
+      show_log "✅ Operator account creation verification PASSED"
+      return 0
+    fi
+  }
+
+  # Run the verification
+  if ! verify_operator_account_creation; then
     unset operator_password
     exit 1
   fi
@@ -950,66 +1195,13 @@ else
 
   show_log "Operator account created successfully"
 
-  # Populate operator's keychain with credentials
-  log "Populating operator keychain with credentials..."
+  # Note: Operator keychain population no longer needed
+  # SMB credentials are now embedded directly in mount scripts during plex-setup.sh
+  # This eliminates the need to unlock operator keychain before first login
+  log "✅ Operator keychain operations skipped - credentials embedded in service scripts"
 
-  # Load keychain manifest for external keychain access
-  manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
-  # shellcheck source=/dev/null
-  source "${manifest_file}"
-
-  # Validate required variables from manifest
-  if [[ -z "${KEYCHAIN_OPERATOR_SERVICE:-}" || -z "${KEYCHAIN_ACCOUNT:-}" || -z "${KEYCHAIN_PLEX_NAS_SERVICE:-}" ]]; then
-    collect_error "Required keychain variables not found in manifest for operator setup"
-    return 1
-  fi
-
-  # Set optional variables to empty if not defined (suppresses shellcheck warnings)
-  KEYCHAIN_TIMEMACHINE_SERVICE="${KEYCHAIN_TIMEMACHINE_SERVICE:-}"
-  KEYCHAIN_WIFI_SERVICE="${KEYCHAIN_WIFI_SERVICE:-}"
-
-  # Unlock operator's keychain
-  sudo -p "[Operator keychain] Enter password to unlock operator keychain: " -iu "${OPERATOR_USERNAME}" security unlock-keychain -p "${operator_password}"
-
-  # Clear password from memory after all uses are complete
+  # Clear password from memory since we don't need it for keychain operations
   unset operator_password
-
-  # Import operator credentials to operator's keychain
-  if operator_credential=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
-    if sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${operator_credential}" -D "Mac Server Setup - Operator Account Password" -A -U; then
-      log "✅ Operator credential imported to operator keychain"
-    else
-      collect_warning "Failed to import operator credential to operator keychain"
-    fi
-    unset operator_credential
-  fi
-
-  # Import Plex NAS credential to operator's keychain
-  if plex_nas_credential=$(security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
-    if sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_nas_credential}" -D "Mac Server Setup - Plex NAS Credentials" -A -U; then
-      log "✅ Plex NAS credential imported to operator keychain"
-    else
-      collect_warning "Failed to import Plex NAS credential to operator keychain"
-    fi
-    unset plex_nas_credential
-  fi
-
-  # Import optional credentials to operator's keychain
-  if timemachine_credential=$(security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
-    sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${timemachine_credential}" -D "Mac Server Setup - TimeMachine Credentials" -A -U 2>/dev/null || true
-    unset timemachine_credential
-  fi
-
-  if wifi_credential=$(security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    sudo -iu "${OPERATOR_USERNAME}" security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" 2>/dev/null || true
-    sudo -iu "${OPERATOR_USERNAME}" security add-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${wifi_credential}" -D "Mac Server Setup - WiFi Credentials" -A -U 2>/dev/null || true
-    unset wifi_credential
-  fi
-
-  log "✅ Operator keychain populated with credentials"
 
   # Skip setup screens for operator account (more aggressive approach)
   log "Configuring operator account to skip setup screens"
@@ -1083,7 +1275,8 @@ manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
 # shellcheck source=/dev/null
 source "${manifest_file}"
 
-# Get credential securely from Keychain for auto-login
+# Get credential securely from admin Keychain for auto-login
+log "Retrieving operator password from admin keychain for automatic login setup"
 if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "${KEYCHAIN_ACCOUNT}"); then
   # Create the encoded password file that macOS uses for auto-login
   encoded_password=$(echo "${operator_password}" | openssl enc -base64)
@@ -1098,9 +1291,68 @@ if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "$
   # Clear passwords from memory immediately
   unset operator_password encoded_password
 
-  show_log "✅ Automatic login configured for ${OPERATOR_USERNAME}"
+  # Comprehensive verification of auto-login configuration
+  verify_autologin_configuration() {
+    local verification_failed=false
+
+    log "Performing comprehensive auto-login verification..."
+
+    # Test 1: Auto-login user is correctly configured
+    local auto_login_user
+    auto_login_user=$(defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser 2>/dev/null || echo "")
+    if [[ "${auto_login_user}" != "${OPERATOR_USERNAME}" ]]; then
+      collect_error "Auto-login is not configured for operator account (current: ${auto_login_user:-none})"
+      verification_failed=true
+    else
+      log "✓ Auto-login is configured for operator account"
+    fi
+
+    # Test 2: Auto-login password file exists
+    if [[ ! -f "/etc/kcpassword" ]]; then
+      collect_error "Auto-login password file missing (/etc/kcpassword)"
+      verification_failed=true
+    else
+      local kcpassword_perms
+      kcpassword_perms=$(stat -f "%Mp%Lp" /etc/kcpassword 2>/dev/null || echo "unknown")
+      if [[ "${kcpassword_perms}" == "600" || "${kcpassword_perms}" == "0600" ]]; then
+        log "✓ Auto-login password file exists with correct permissions"
+      else
+        collect_error "Auto-login password file has incorrect permissions: ${kcpassword_perms} (should be 600)"
+        verification_failed=true
+      fi
+    fi
+
+    # Test 3: FileVault compatibility check (if not already done)
+    local filevault_status
+    filevault_status=$(fdesetup status 2>/dev/null || echo "unknown")
+    if [[ "${filevault_status}" == *"FileVault is On"* ]]; then
+      collect_error "FileVault is enabled - this will prevent auto-login from working"
+      verification_failed=true
+    elif [[ "${filevault_status}" == *"FileVault is Off"* ]]; then
+      log "✓ FileVault is disabled - auto-login compatibility confirmed"
+    else
+      collect_warning "FileVault status unclear for auto-login: ${filevault_status}"
+    fi
+
+    # Overall status
+    if [[ "${verification_failed}" == "true" ]]; then
+      collect_error "Auto-login configuration verification FAILED - operator may not auto-login"
+      return 1
+    else
+      show_log "✅ Auto-login configuration verification PASSED"
+      return 0
+    fi
+  }
+
+  # Run auto-login verification
+  if verify_autologin_configuration; then
+    show_log "✅ Automatic login configured and verified for ${OPERATOR_USERNAME}"
+  else
+    collect_error "Auto-login configuration failed verification"
+  fi
 else
-  log "Failed to retrieve operator password from Keychain - skipping automatic login setup"
+  collect_warning "Failed to retrieve operator password from admin keychain - skipping automatic login setup"
+  log "⚠️ Operator will need to log in manually on first boot"
 fi
 
 # Add operator to sudoers
@@ -1215,63 +1467,32 @@ log "Disabled automatic app downloads"
 # HOMEBREW & PACKAGE INSTALLATION
 #
 
-# Install Xcode Command Line Tools if needed
+# Install Xcode Command Line Tools using dedicated script
 set_section "Installing Xcode Command Line Tools"
 
-# Check if CLT is already installed
-if softwareupdate --history 2>/dev/null | grep 'Command Line Tools for Xcode' >/dev/null; then
-  log "Xcode Command Line Tools already installed"
-else
-  show_log "Installing Xcode Command Line Tools silently..."
+# Use the dedicated CLT installation script with enhanced monitoring
+clt_script="${SETUP_DIR}/scripts/setup-command-line-tools.sh"
 
-  # Touch flag to indicate user has requested CLT installation
-  sudo touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
+if [[ -f "${clt_script}" ]]; then
+  log "Using enhanced Command Line Tools installation script..."
 
-  # Find and install the latest CLT package
-  CLT_PACKAGE=$(softwareupdate -l 2>/dev/null | grep Label | tail -n 1 | cut -d ':' -f 2 | xargs)
-
-  if [[ -n "${CLT_PACKAGE}" ]]; then
-    log "Installing package: ${CLT_PACKAGE}"
-    softwareupdate -i "${CLT_PACKAGE}"
-    check_success "Xcode Command Line Tools installation"
-  else
-    show_log "⚠️ Could not determine CLT package via softwareupdate"
-    show_log "Falling back to interactive xcode-select installation"
-
-    # Clean up the flag since we're switching methods
-    sudo rm -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
-
-    # Use xcode-select method (will prompt user)
-    if [[ "${FORCE}" = false ]]; then
-      show_log "This will open a dialog for Command Line Tools installation"
-      read -rp "Press any key to continue..." -n 1 -r
-      echo
-    fi
-
-    xcode-select --install
-
-    # Wait for installation to complete
-    show_log "Waiting for Command Line Tools installation to complete..."
-    show_log "Please complete the installation dialog, then press any key to continue"
-
-    if [[ "${FORCE}" = false ]]; then
-      read -rp "Press any key when installation is complete..." -n 1 -r
-      echo
-    else
-      # In force mode, poll for completion
-      while ! xcode-select -p >/dev/null 2>&1; do
-        sleep 5
-        log "Waiting for Command Line Tools installation..."
-      done
-    fi
-
-    check_success "Xcode Command Line Tools installation (interactive)"
+  # Prepare CLT installation arguments
+  clt_args=()
+  if [[ "${FORCE}" = true ]]; then
+    clt_args+=(--force)
   fi
 
-  # Clean up the flag regardless of method used
-  sudo rm -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
-
-  show_log "✅ Xcode Command Line Tools installation completed"
+  # Run the dedicated CLT installation script
+  if "${clt_script}" "${clt_args[@]}"; then
+    log "✅ Command Line Tools installation completed successfully"
+  else
+    collect_error "Command Line Tools installation failed"
+    exit 1
+  fi
+else
+  collect_error "CLT installation script not found: ${clt_script}"
+  log "Please ensure setup-command-line-tools.sh is present in the scripts directory"
+  exit 1
 fi
 
 # Install Homebrew
@@ -1300,9 +1521,6 @@ if [[ "${SKIP_HOMEBREW}" = false ]]; then
 
     # Follow Homebrew's suggested post-installation steps
     log "Running Homebrew's suggested post-installation steps"
-
-    # Add Homebrew to path for current session
-    HOMEBREW_PREFIX="$(brew --prefix)"
 
     # Add to .zprofile (Homebrew's recommended approach)
     echo >>"/Users/${ADMIN_USERNAME}/.zprofile"
@@ -1792,6 +2010,7 @@ show_log "You can now set up individual applications with scripts in: ${APP_SETU
 show_log ""
 show_log "Next steps:"
 show_log "1. Set up applications: cd ${APP_SETUP_DIR} && ./plex-setup.sh"
+show_log "   (The script will prompt for your Mac account password)"
 show_log "2. Test SSH access from your dev machine:"
 show_log "   ssh ${ADMIN_USERNAME}@${HOSTNAME_LOWER}.local"
 show_log "   ssh operator@${HOSTNAME_LOWER}.local"
@@ -1814,6 +2033,12 @@ if [[ -n "${EXTERNAL_KEYCHAIN:-}" ]]; then
     rm -f "${setup_keychain_file}"
     log "✅ Setup keychain file cleaned up"
   fi
+fi
+
+# Clean up administrator password from memory
+if [[ -n "${ADMINISTRATOR_PASSWORD:-}" ]]; then
+  unset ADMINISTRATOR_PASSWORD
+  log "✅ Administrator password cleared from memory"
 fi
 
 # Show collected errors and warnings

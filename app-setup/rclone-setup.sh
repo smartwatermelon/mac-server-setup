@@ -23,8 +23,40 @@
 # Exit on error
 set -euo pipefail
 
-# Load server configuration
+# Ensure Homebrew environment is available
+# Don't rely on profile files - set up Homebrew PATH directly
+HOMEBREW_PREFIX="/opt/homebrew" # Apple Silicon
+if [[ -x "${HOMEBREW_PREFIX}/bin/brew" ]]; then
+  # Apply Homebrew environment directly
+  brew_env=$("${HOMEBREW_PREFIX}/bin/brew" shellenv)
+  eval "${brew_env}"
+  echo "Homebrew environment configured for rclone setup"
+elif command -v brew >/dev/null 2>&1; then
+  # Homebrew is already in PATH
+  echo "Homebrew already available in current environment"
+else
+  echo "❌ Homebrew not found - rclone setup requires Homebrew"
+  echo "Please ensure first-boot.sh completed successfully before running app setup"
+  exit 1
+fi
+
+# Determine script directory first
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Validate working directory before loading config
+if [[ "${PWD}" != "${SCRIPT_DIR}" ]] || [[ "$(basename "${SCRIPT_DIR}")" != "app-setup" ]]; then
+  echo "❌ Error: This script must be run from the app-setup directory"
+  echo ""
+  echo "Current directory: ${PWD}"
+  echo "Script directory: ${SCRIPT_DIR}"
+  echo ""
+  echo "Please change to the app-setup directory and try again:"
+  echo "  cd \"${SCRIPT_DIR}\" && ./rclone-setup.sh"
+  echo ""
+  exit 1
+fi
+
+# Load server configuration
 CONFIG_FILE="${SCRIPT_DIR}/config/config.conf"
 
 if [[ -f "${CONFIG_FILE}" ]]; then

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
-# plex-setup.sh - Native Plex Media Server setup script for Mac Mini server
+# plex-setup.sh - Plex Media Server setup script for Mac Mini server
 #
-# This script sets up Plex Media Server natively on macOS with:
+# This script sets up Plex Media Server on macOS with:
 # - SMB mount to NAS for media storage (retrieved from config.conf)
-# - Native Plex installation via official installer
+# - Plex installation via official installer
 # - Configuration migration from existing Plex server
 # - Auto-start configuration
 #
-# Usage: ./plex-setup.sh [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST]
+# Usage: ./plex-setup.sh [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--password PASSWORD]
 #   --force: Skip all confirmation prompts
 #   --skip-migration: Skip Plex config migration
 #   --skip-mount: Skip SMB mount setup
@@ -28,8 +28,23 @@
 # Exit on error
 set -euo pipefail
 
-# Load server configuration
+# Determine script directory first
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Validate working directory before loading config
+if [[ "${PWD}" != "${SCRIPT_DIR}" ]] || [[ "$(basename "${SCRIPT_DIR}")" != "app-setup" ]]; then
+  echo "❌ Error: This script must be run from the app-setup directory"
+  echo ""
+  echo "Current directory: ${PWD}"
+  echo "Script directory: ${SCRIPT_DIR}"
+  echo ""
+  echo "Please change to the app-setup directory and try again:"
+  echo "  cd \"${SCRIPT_DIR}\" && ./plex-setup.sh"
+  echo ""
+  exit 1
+fi
+
+# Load server configuration
 CONFIG_FILE="${SCRIPT_DIR}/config/config.conf"
 
 if [[ -f "${CONFIG_FILE}" ]]; then
@@ -61,6 +76,7 @@ FORCE=false
 SKIP_MIGRATION=false
 SKIP_MOUNT=false
 MIGRATE_FROM=""
+ADMINISTRATOR_PASSWORD=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -84,9 +100,13 @@ while [[ $# -gt 0 ]]; do
       MIGRATE_FROM="$2"
       shift 2
       ;;
+    --password)
+      ADMINISTRATOR_PASSWORD="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST]"
+      echo "Usage: $0 [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--password PASSWORD]"
       exit 1
       ;;
   esac
@@ -96,6 +116,38 @@ done
 if [[ "${SKIP_MIGRATION}" == "true" && -n "${MIGRATE_FROM}" ]]; then
   echo "Error: --skip-migration and --migrate-from cannot be used together"
   exit 1
+fi
+
+# _timeout function - uses timeout utility if installed, otherwise Perl
+# https://gist.github.com/jaytaylor/6527607
+function _timeout() {
+  if command -v timeout; then
+    timeout "$@"
+  else
+    if ! command -v perl; then
+      echo "perl not found 😿"
+      exit 1
+    else
+      perl -e 'alarm shift; exec @ARGV' "$@"
+    fi
+  fi
+}
+
+# Ensure we have administrator password for keychain operations
+if [[ -z "${ADMINISTRATOR_PASSWORD}" ]]; then
+  echo
+  echo "This script needs your Mac account password for keychain operations."
+  read -r -e -p "Enter your Mac account password: " -s ADMINISTRATOR_PASSWORD
+  echo # Add newline after hidden input
+
+  # Validate password by testing with dscl
+  until _timeout 1 dscl /Local/Default -authonly "${USER}" "${ADMINISTRATOR_PASSWORD}" &>/dev/null; do
+    echo "Invalid ${USER} account password. Try again or ctrl-C to exit."
+    read -r -e -p "Enter your Mac ${USER} account password: " -s ADMINISTRATOR_PASSWORD
+    echo # Add newline after hidden input
+  done
+
+  echo "✅ Administrator password validated for keychain operations"
 fi
 
 # Set up logging
@@ -214,6 +266,12 @@ get_keychain_credential() {
   local account="$2"
   local credential
 
+  # Ensure keychain is unlocked before accessing
+  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}" 2>/dev/null; then
+    collect_error "Failed to unlock keychain for credential retrieval"
+    return 1
+  fi
+
   if credential=$(security find-generic-password -s "${service}" -a "${account}" -w 2>/dev/null); then
     echo "${credential}"
     return 0
@@ -285,31 +343,63 @@ setup_persistent_smb_mount() {
   log "   Admin mount: ${HOME}/.local/mnt/${NAS_SHARE_NAME}"
   log "   Operator mount: /Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
 
-  log "Mount scripts will retrieve NAS credentials from Keychain at runtime"
+  # Step 1: Retrieve NAS credentials from Keychain for embedding
+  log "Retrieving NAS credentials from Keychain for mount script embedding"
 
-  # Step 1: Configure the template with non-sensitive values
-  local template_script="${SCRIPT_DIR}/app-setup-templates/mount-nas-media.sh"
+  local keychain_service="plex-nas-${HOSTNAME_LOWER}"
+  local keychain_account="${HOSTNAME_LOWER}"
+  local combined_credential
+
+  if ! combined_credential=$(get_keychain_credential "${keychain_service}" "${keychain_account}"); then
+    collect_error "Failed to retrieve NAS credentials from Keychain"
+    collect_error "Service: ${keychain_service}, Account: ${keychain_account}"
+    collect_error "Ensure credentials were imported during first-boot.sh"
+    return 1
+  fi
+
+  # Split combined credential (format: "username:password")
+  # Use %% and # to split only on first colon (handles passwords with colons)
+  local plex_nas_username="${combined_credential%%:*}"
+  local plex_nas_password="${combined_credential#*:}"
+
+  # Validate credentials were properly extracted
+  if [[ -z "${plex_nas_username}" || -z "${plex_nas_password}" ]]; then
+    collect_error "Failed to parse NAS credentials from Keychain"
+    unset combined_credential plex_nas_username plex_nas_password
+    return 1
+  fi
+
+  unset combined_credential
+  log "✅ NAS credentials retrieved from Keychain (username: ${plex_nas_username})"
+
+  # Step 2: Configure the template with all values including credentials
+  local template_script="${SCRIPT_DIR}/templates/mount-nas-media.sh"
   local configured_script="${SCRIPT_DIR}/mount-nas-media-configured.sh"
 
-  log "Configuring mount script template (credentials retrieved from Keychain at runtime)"
+  log "Configuring mount script template with embedded credentials"
 
   # Verify template exists
   if [[ ! -f "${template_script}" ]]; then
-    log "❌ Mount script template not found at ${template_script}"
-    exit 1
+    collect_error "Mount script template not found at ${template_script}"
+    return 1
   fi
 
   # Create configured version
   cp "${template_script}" "${configured_script}"
 
-  # Replace placeholders with actual values (no sensitive data)
+  # Replace placeholders with actual values (including sensitive credentials)
   sed -i '' \
     -e "s|__NAS_HOSTNAME__|${NAS_HOSTNAME}|g" \
     -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
     -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
+    -e "s|__PLEX_NAS_USERNAME__|${plex_nas_username}|g" \
+    -e "s|__PLEX_NAS_PASSWORD__|${plex_nas_password}|g" \
     "${configured_script}"
 
-  log "✅ Mount script configured (credentials will be retrieved from Keychain at runtime)"
+  # Clear sensitive variables from memory
+  unset plex_nas_username plex_nas_password
+
+  log "✅ Mount script configured with embedded NAS credentials"
 
   # Function to deploy configured script to a specific user
   deploy_user_mount() {
@@ -353,6 +443,8 @@ setup_persistent_smb_mount() {
         <key>SuccessfulExit</key>
         <false/>
     </dict>
+    <key>StartInterval</key>
+        <integer>120</integer>
     <key>LimitLoadToSessionType</key>
     <string>Aqua</string>
     <key>StandardOutPath</key>
@@ -654,7 +746,7 @@ configure_plex_autostart() {
 
   # Deploy Plex startup wrapper script
   OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
-  WRAPPER_TEMPLATE="${SCRIPT_DIR}/app-setup-templates/start-plex-with-mount.sh"
+  WRAPPER_TEMPLATE="${SCRIPT_DIR}/templates/start-plex-with-mount.sh"
   WRAPPER_SCRIPT="${OPERATOR_HOME}/.local/bin/start-plex-with-mount.sh"
   LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
   PLIST_FILE="${LAUNCH_AGENTS_DIR}/com.plexapp.plexmediaserver.plist"
@@ -733,7 +825,7 @@ start_plex() {
   # Start Plex as the current user first for initial setup
   log "Starting Plex Media Server for initial configuration..."
   log "Using shared configuration directory: ${PLEX_NEW_CONFIG}"
-  log "Note: Plex will request Local Network permission - click Allow when prompted"
+  log "Note: Plex may request Local Network permission - click Allow when prompted"
   open "/Applications/Plex Media Server.app"
 
   # Wait a moment for startup
@@ -763,12 +855,12 @@ start_plex() {
 # Main execution
 main() {
   section "Plex Media Server Setup"
-  log "Starting native Plex setup for ${HOSTNAME}"
+  log "Starting Plex setup for ${HOSTNAME}"
   log "Media mount target: ${PLEX_MEDIA_MOUNT}"
   log "Server name: ${PLEX_SERVER_NAME}"
 
   # Confirm setup
-  if ! confirm "Set up native Plex Media Server?" "y"; then
+  if ! confirm "Set up Plex Media Server?" "y"; then
     log "Setup cancelled by user"
     exit 0
   fi
@@ -854,7 +946,7 @@ main() {
   start_plex
 
   section "Setup Complete"
-  log "✅ Native Plex Media Server setup completed successfully"
+  log "✅ Plex Media Server setup completed successfully"
   log "Configuration directory: ${PLEX_NEW_CONFIG}"
   log "Media directory: ${PLEX_MEDIA_MOUNT}"
 
@@ -885,6 +977,12 @@ main() {
 
 # Run main function
 main "$@"
+
+# Clean up administrator password from memory
+if [[ -n "${ADMINISTRATOR_PASSWORD:-}" ]]; then
+  unset ADMINISTRATOR_PASSWORD
+  log "✅ Administrator password cleared from memory"
+fi
 
 # Show collected errors and warnings
 show_collected_issues

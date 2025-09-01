@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # mount-nas-media.sh - User-specific SMB mount script for NAS media access
 # This script is designed to be called by a per-user LaunchAgent
@@ -41,35 +41,9 @@ log() {
   echo "${timestamp} [mount-nas-media] $*" | tee -a "${LOG_FILE}"
 }
 
-# Function to retrieve credentials from Keychain
-get_nas_credentials() {
-  local hostname_lower
-  hostname_lower="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
-  local keychain_service="plex-nas-${hostname_lower}"
-  local keychain_account
-  keychain_account="$(whoami)"
-
-  local combined_credential
-  if combined_credential=$(security find-generic-password -s "${keychain_service}" -a "${keychain_account}" -w 2>/dev/null); then
-    # Split combined credential (format: "username:password")
-    PLEX_NAS_USERNAME="${combined_credential%:*}"
-    PLEX_NAS_PASSWORD="${combined_credential#*:}"
-
-    # Validate credentials were properly extracted
-    if [[ -z "${PLEX_NAS_USERNAME}" || -z "${PLEX_NAS_PASSWORD}" ]]; then
-      log "❌ Failed to extract NAS credentials from Keychain"
-      unset combined_credential PLEX_NAS_USERNAME PLEX_NAS_PASSWORD
-      return 1
-    fi
-
-    unset combined_credential
-    log "✅ NAS credentials retrieved from Keychain"
-    return 0
-  else
-    log "❌ NAS credentials not found in Keychain (service: ${keychain_service}, account: ${keychain_account})"
-    return 1
-  fi
-}
+# SMB credentials - these will be set during installation
+PLEX_NAS_USERNAME="__PLEX_NAS_USERNAME__"
+PLEX_NAS_PASSWORD="__PLEX_NAS_PASSWORD__"
 
 # Wait for network connectivity
 wait_for_network() {
@@ -93,17 +67,21 @@ wait_for_network() {
   return 1
 }
 
+test_mount() {
+  # Test basic mount verification using user-based pattern
+  if ! mount | grep "${WHOAMI}" | grep -q "${PLEX_MEDIA_MOUNT}"; then
+    log "❌ Mount not visible in system mount table for user ${WHOAMI}"
+    return 1
+  fi
+  log "✅ Mount verification successful (active mount found for ${WHOAMI})"
+  return 0
+}
+
 # Main execution - idempotent mounting process
 main() {
   log "Starting idempotent NAS media mount process"
   log "Target: ${PLEX_MEDIA_MOUNT}"
   log "Running as: ${WHOAMI} (${IDU}:${IDG})"
-
-  # Retrieve NAS credentials from Keychain
-  if ! get_nas_credentials; then
-    log "❌ Cannot proceed without NAS credentials"
-    exit 1
-  fi
 
   log "Source: //${PLEX_NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
 
@@ -111,6 +89,12 @@ main() {
   if ! wait_for_network; then
     log "❌ Cannot proceed without network connectivity"
     exit 1
+  fi
+
+  # Step 0: Check for existing mount; return 0 if true
+  log "Step 0: Check for existing mount..."
+  if test_mount; then
+    return 0
   fi
 
   # Step 1: Unmount existing mount (ignore failures)
@@ -146,15 +130,12 @@ main() {
   # Wait a moment for mount to be fully accessible
   sleep 2
 
-  # Step 5: Test read/write access for all users
-  log "Step 5: Testing read/write access..."
+  # Step 5: Test access for current user
+  log "Step 5: Testing access..."
 
-  # Test basic mount verification using user-based pattern
-  if ! mount | grep "${WHOAMI}" | grep -q "${PLEX_MEDIA_MOUNT}"; then
-    log "❌ Mount not visible in system mount table for user ${WHOAMI}"
+  if ! test_mount; then
     exit 1
   fi
-  log "✅ Mount verification successful (active mount found for ${WHOAMI})"
 
   # Clear sensitive credentials from memory
   unset PLEX_NAS_USERNAME PLEX_NAS_PASSWORD

@@ -56,7 +56,7 @@ ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"  # 1Password item for NAS credentials
 ## Prerequisites
 
 - Setup completed via first-boot.sh (includes credential import via keychain)
-- NAS credentials available in operator keychain (see [Credential Management](../keychain-credential-management.md))
+- NAS credentials will be embedded into mount scripts during setup (see [Credential Management](../keychain-credential-management.md))
 - For migration: Plex config files in `~/plex-migration/Plex Media Server/`
 
 ## Architecture
@@ -65,14 +65,14 @@ ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"  # 1Password item for NAS credentials
 
 1. **Admin setup**: `plex-setup.sh` runs as administrator
    - Installs Plex Media Server application
-   - Configures SMB mount with NAS credentials
+   - Embeds NAS credentials directly into SMB mount scripts
    - Creates shared configuration directory (`/Users/Shared/PlexMediaServer`)
    - Migrates existing Plex configuration if requested
-   - Deploys LaunchAgent to operator account
+   - Deploys LaunchAgent and mount scripts to operator account
 
 2. **Operator runtime**: Automatic on operator login
    - LaunchAgent starts Plex with shared configuration
-   - SMB mount provides media access
+   - SMB mount uses embedded credentials for media access
    - Plex runs under operator account
 
 ### File Locations

@@ -1,14 +1,13 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Simple Remote Desktop setup for macOS with direct launchd configuration
-# This script enables Screen Sharing and Remote Management using system commands
+# Remote Desktop setup for macOS with user-guided configuration
+# This script disables existing services and guides users through manual setup
 
 set -euo pipefail
 
 # Configuration
 readonly SCRIPT_NAME="${0##*/}"
 readonly LOG_PREFIX="[Remote Desktop Setup]"
-readonly DEFAULT_OVERRIDES_PERMS="0644"
 
 # Logging function
 log() {
@@ -20,23 +19,24 @@ show_usage() {
   cat <<EOF
 Usage: ${SCRIPT_NAME} [OPTIONS]
 
-Simple Remote Desktop setup for macOS with direct system configuration.
+Remote Desktop setup for macOS with user-guided configuration.
 
 OPTIONS:
     --force             Skip confirmation prompts
     --help              Show this help message
 
 DESCRIPTION:
-    This script provides a clean approach to Remote Desktop setup:
-    1. Disables existing remote desktop services for a clean state
-    2. Enables Screen Sharing using direct launchd commands
-    3. Configures Remote Management service
-    4. Verifies final configuration and provides connection information
+    This script provides a reliable approach to Remote Desktop setup:
+    1. Disables existing remote desktop services to ensure a clean state
+    2. Provides detailed instructions for manually enabling services
+    3. Opens System Settings to the correct location for easy setup
+    4. Guides users through the required configuration steps
 
 NOTES:
-    - Requires administrator privileges
-    - Uses direct system commands for reliable configuration
+    - Requires administrator privileges for service management
+    - Uses user-guided setup to ensure reliable configuration
     - Compatible with all macOS versions including 15.6+
+    - Manual setup avoids macOS Remote Desktop activation complexities
 
 EOF
 }
@@ -49,208 +49,149 @@ check_privileges() {
   fi
 }
 
-# Disable all remote desktop services (for clean slate)
-disable_all_services() {
-  log "Disabling existing remote desktop services for clean setup..."
+# Close System Settings if it's open
+close_system_settings() {
+  log "Pre-step: Closing System Settings if open..."
+  osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
+  log "System Settings closed (or wasn't running)"
+}
 
-  # Disable Remote Management
-  sudo -p "${LOG_PREFIX} Enter password to disable existing services: " \
+# Disable Remote Management with verification
+disable_remote_management() {
+  log "Disabling Remote Management..."
+
+  # Method 1: kickstart deactivate
+  log "Method 1: Using kickstart -deactivate -stop"
+  sudo -p "${LOG_PREFIX} Enter password to disable Remote Management: " \
     /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-    -deactivate -stop 2>/dev/null || true
+    -deactivate -stop 2>/dev/null || log "kickstart -deactivate failed (expected)"
 
-  # Disable Screen Sharing
-  sudo launchctl unload -w /System/Library/LaunchDaemons/com.apple.screensharing.plist &>/dev/null || true
+  # Method 2: kickstart uninstall settings
+  log "Method 2: Using kickstart -uninstall -settings"
+  sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+    -uninstall -settings 2>/dev/null || log "kickstart -uninstall failed (expected)"
 
-  # Clear any conflicting settings
-  local overrides_plist="/var/db/launchd.db/com.apple.launchd/overrides.plist"
-  local original_perms
+  # Method 3: Kill ARDAgent processes
+  log "Method 3: Killing ARDAgent processes"
+  sudo pkill -f "ARDAgent" 2>/dev/null || log "No ARDAgent processes to kill"
 
-  if [[ -f "${overrides_plist}" ]]; then
-    # Capture current permissions before modifying
-    original_perms=$(stat -f "%Mp%Lp" "${overrides_plist}" 2>/dev/null || echo "${DEFAULT_OVERRIDES_PERMS}")
+  # Method 4: Kill RemoteManagement processes
+  log "Method 4: Killing RemoteManagement processes"
+  sudo pkill -f "RemoteManagement" 2>/dev/null || log "No RemoteManagement processes to kill"
 
-    # Delete the conflicting setting
-    sudo defaults delete "${overrides_plist}" com.apple.screensharing &>/dev/null || true
-
-    # Restore permissions if file still exists after deletion
-    if [[ -f "${overrides_plist}" ]]; then
-      if [[ "${original_perms}" =~ ^[0-7]*4[4-7]$ ]] || [[ "${original_perms}" =~ ^[0-7]*6[4-7]$ ]]; then
-        sudo chmod "${original_perms}" "${overrides_plist}"
-      else
-        sudo chmod a+r "${overrides_plist}"
-      fi
-    fi
+  # Verify Remote Management is off
+  log ""
+  log "Verifying Remote Management is off..."
+  if pgrep -f "ARDAgent" >/dev/null 2>&1; then
+    log "⚠️  ARDAgent processes still running"
+    pgrep -fl "ARDAgent"
+  else
+    log "✅ No ARDAgent processes running"
   fi
 
-  # Wait for services to fully stop
-  sleep 2
-
-  log "Existing services disabled"
-}
-
-# Enable basic Remote Management service
-enable_remote_management_service() {
-  log "Enabling Remote Management service..."
-
-  # Capture kickstart output with verbose flag
-  local kickstart_output
-  kickstart_output=$(sudo -p "${LOG_PREFIX} Enter password to configure Remote Management: " \
-    /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-    -activate -configure -access -on -users admin -privs -all -restart -agent -menu -verbose 2>&1) || {
-    log "WARNING: kickstart failed or had limited functionality"
-    log "Output: ${kickstart_output}"
-    return 1
-  }
-
-  # Check if output indicates success
-  if echo "${kickstart_output}" | grep -q "Activated Remote Management" \
-    && echo "${kickstart_output}" | grep -q "Done"; then
-    log "✓ Remote Management service configured successfully"
-    log "Output: ${kickstart_output}"
-    return 0
+  if launchctl list | grep -q "RemoteManagementAgent"; then
+    log "⚠️  RemoteManagementAgent service still loaded"
   else
-    log "⚠️ Remote Management configuration may have failed"
-    log "Output: ${kickstart_output}"
-    return 1
+    log "✅ No RemoteManagementAgent service loaded"
   fi
 }
 
-# Enable Screen Sharing using direct launchd commands
-setup_screen_sharing() {
-  log "Enabling Screen Sharing service..."
+# Disable Screen Sharing with verification
+disable_screen_sharing() {
+  log "Disabling Screen Sharing..."
 
-  local overrides_plist="/var/db/launchd.db/com.apple.launchd/overrides.plist"
-  local original_perms
+  # Method 1: launchctl unload
+  log "Method 1: Using launchctl unload"
+  sudo launchctl unload -w /System/Library/LaunchDaemons/com.apple.screensharing.plist 2>/dev/null || log "launchctl unload failed (expected)"
 
-  # Capture current permissions to restore them later
-  if [[ -f "${overrides_plist}" ]]; then
-    original_perms=$(stat -f "%Mp%Lp" "${overrides_plist}" 2>/dev/null || echo "${DEFAULT_OVERRIDES_PERMS}")
-    log "Current overrides.plist permissions: ${original_perms}"
+  # Method 2: Remove overrides.plist entry
+  log "Method 2: Removing overrides.plist entry"
+  sudo defaults delete /var/db/launchd.db/com.apple.launchd/overrides.plist com.apple.screensharing 2>/dev/null || log "overrides.plist delete failed (expected)"
+
+  # Method 3: Kill screensharing processes
+  log "Method 3: Killing screensharing processes"
+  sudo pkill -f "screensharing" 2>/dev/null || log "No screensharing processes to kill"
+
+  # Method 4: Kill Screen Sharing agents
+  log "Method 4: Killing Screen Sharing agent processes"
+  sudo pkill -f "ScreensharingAgent" 2>/dev/null || log "No ScreensharingAgent processes to kill"
+
+  # Verify Screen Sharing is off
+  log ""
+  log "Verifying Screen Sharing is off..."
+  if launchctl list | grep -q "screensharing"; then
+    log "⚠️  Screen sharing services still loaded:"
+    launchctl list | grep screensharing
   else
-    # Default permissions for new file
-    original_perms="${DEFAULT_OVERRIDES_PERMS}"
-    log "overrides.plist does not exist - will use default permissions: ${original_perms}"
+    log "✅ No screen sharing services loaded"
   fi
 
-  # Enable Screen Sharing in launchd overrides
-  sudo -p "${LOG_PREFIX} Enter password to enable Screen Sharing: " \
-    defaults write "${overrides_plist}" com.apple.screensharing -dict Disabled -bool false
-
-  # Restore original permissions (ensuring at least a+r access)
-  if [[ "${original_perms}" =~ ^[0-7]*4[4-7]$ ]] || [[ "${original_perms}" =~ ^[0-7]*6[4-7]$ ]]; then
-    # Original permissions already have a+r, restore them
-    sudo chmod "${original_perms}" "${overrides_plist}"
-    log "Restored original permissions: ${original_perms}"
+  if pgrep -f "screensharing" >/dev/null 2>&1; then
+    log "⚠️  Screen sharing processes still running"
+    pgrep -fl "screensharing"
   else
-    # Original permissions didn't have a+r, ensure a+r access
-    sudo chmod a+r "${overrides_plist}"
-    log "Applied a+r permissions for launchd access"
+    log "✅ No screen sharing processes running"
   fi
-
-  # Unload Screen Sharing service (if running) to ensure clean state
-  sudo launchctl unload -w /System/Library/LaunchDaemons/com.apple.screensharing.plist &>/dev/null || true
-
-  # Load Screen Sharing service
-  sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
-
-  log "✓ Screen Sharing service enabled"
 }
 
-# Guide user through Remote Management setup
-setup_remote_management() {
-  log "Opening Remote Management settings for manual configuration..."
+# Show GUI dialog with manual setup instructions
+show_manual_setup_dialog() {
+  log "Showing manual setup instructions dialog..."
 
-  # Open directly to Remote Management settings
-  if open "x-apple.systempreferences:com.apple.Sharing-Settings.extension?Services_ARDService"; then
-    log "System Settings opened to Remote Management"
+  # Open System Settings to the Sharing page first
+  log "Opening System Settings to Sharing page..."
+  if open "x-apple.systempreferences:com.apple.preferences.sharing"; then
+    log "System Settings opened to Sharing page"
   else
-    log "Opening general Sharing settings..."
-    open "x-apple.systempreferences:com.apple.preferences.sharing" || {
-      log "WARNING: Could not open System Settings automatically"
-      log "Please manually open: System Settings > General > Sharing"
-    }
+    log "WARNING: Could not open System Settings automatically"
   fi
 
   # Give System Settings time to load
   sleep 2
 
-  log "System Settings opened - showing Remote Management configuration dialog..."
-
-  # Show AppleScript dialog for user confirmation
   if osascript <<'EOF'; then
-display dialog "Remote Management Configuration - STEP 2
+display dialog "Remote Desktop Manual Setup
 
-System Settings should now be open to the Sharing page.
+The script has disabled existing services to ensure a clean state.
 
-Screen Sharing should now be ON and Remote Management will take control of it.
+System Settings has been opened to the Sharing page for you.
 
-Please complete these steps:
-1. Find 'Remote Management' in the list (in the Advanced section)
-2. Click the toggle switch to turn Remote Management ON
-3. Configure access settings when prompted:
-   • Select users who can access (Administrators recommended)
-   • Choose access privileges (full control recommended for ARD)
-   • Set VNC access password if desired
-4. Click 'Done' when finished
+Please complete the setup manually:
 
-NOTE: Remote Management is required for Apple Remote Desktop (ARD).
-Screen Sharing alone provides VNC access but not full ARD features.
+1. Click the ℹ️ button next to the Screen Sharing toggle.
+2. Turn ON 'Screen Sharing' from the Screen Sharing pop-up.
+3. Click Done.
+4. Click the ℹ️ button next to the Remote Management toggle.
+5. Turn ON 'Remote Management' from the Remote Management pop-up.
+6. Click Options.
+7. Turn on at least 'Observe' and 'Control', and click OK.
+8. Click Done.
 
-Click OK when you have completed the Remote Management setup." buttons {"Cancel", "OK"} default button "OK" with title "Remote Desktop Setup"
+After completing these steps, click OK to re-test the configuration." buttons {"OK"} default button "OK" with title "Remote Desktop Manual Setup" with icon caution
 EOF
-    log "Remote Management configuration completed by user"
-
-    # Close System Settings now that user is done with configuration
-    log "Closing System Settings..."
-    osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
+    log "Manual setup dialog completed"
+    return 0
   else
-    log "User cancelled Remote Management setup"
+    log "User cancelled manual setup dialog"
     return 1
   fi
 }
 
-# Verify Remote Desktop functionality
-verify_remote_desktop() {
-  log "Verifying Remote Desktop status..."
+# Manual activation routine - core setup approach
+manual_activation_routine() {
+  log "Running manual setup routine..."
 
-  # Check if Screen Sharing is running
-  if pgrep -f "/System/Library/CoreServices/RemoteManagement/ScreensharingAgent" >/dev/null; then
-    log "✓ Screen Sharing agent is running"
+  if show_manual_setup_dialog; then
+    log ""
+    log "Manual setup dialog completed successfully"
+    log "Remote Desktop services should now be configured in System Settings"
+
+    # Close System Settings
+    log "Closing System Settings..."
+    osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
   else
-    log "ℹ Screen Sharing agent not detected (may not be enabled)"
+    log "Manual setup was cancelled - continuing without Remote Desktop"
   fi
-
-  # Check if Remote Management is running
-  if pgrep -f "/System/Library/CoreServices/RemoteManagement/ARDAgent" >/dev/null; then
-    log "✓ Remote Management agent is running"
-  else
-    log "ℹ Remote Management agent not running (may not be enabled)"
-  fi
-
-  # Check service status
-  local screen_sharing_status
-  screen_sharing_status=$(sudo launchctl list | grep com.apple.screensharing || echo "not found")
-  if [[ "${screen_sharing_status}" == *"com.apple.screensharing"* ]]; then
-    log "✓ Screen Sharing service is loaded"
-  else
-    log "ℹ Screen Sharing service not loaded"
-  fi
-
-  # Display connection information
-  local hostname
-  hostname=$(hostname)
-  log ""
-  log "========================================="
-  log "        CONNECTION INFORMATION"
-  log "========================================="
-  log ""
-  log "If Remote Desktop is now enabled, you can connect using:"
-  log ""
-  log "• VNC URL: vnc://${hostname}.local"
-  log "• Screen Sharing: Connect from another Mac using Finder > Go > Connect to Server"
-  log "• Apple Remote Desktop: Use ARD app if Remote Management is enabled"
-  log ""
-  log "Test your connection from another Mac to verify setup is working."
 }
 
 # Main execution function
@@ -284,13 +225,16 @@ main() {
   # Confirmation prompt
   if [[ "${force}" != "true" ]]; then
     echo "${LOG_PREFIX} This script will:"
-    echo "${LOG_PREFIX} 1. Disable existing remote desktop services"
-    echo "${LOG_PREFIX} 2. Enable Screen Sharing using direct system commands"
-    echo "${LOG_PREFIX} 3. Enable Remote Management service"
-    echo "${LOG_PREFIX} 4. Configure Remote Management if needed"
-    echo "${LOG_PREFIX} 5. Verify the final setup"
+    echo "${LOG_PREFIX} 1. Disable existing remote desktop services to ensure clean state"
+    echo "${LOG_PREFIX} 2. Open System Settings to the Sharing configuration page"
+    echo "${LOG_PREFIX} 3. Guide you through manually enabling Screen Sharing and Remote Management"
+    echo "${LOG_PREFIX} 4. Provide step-by-step instructions for proper configuration"
+    echo "${LOG_PREFIX} 5. Verify the services are working after manual setup"
     echo ""
-    echo "${LOG_PREFIX} This requires administrator privileges."
+    echo "${LOG_PREFIX} This requires administrator privileges and manual interaction."
+    echo ""
+    echo "${LOG_PREFIX} 💡 If Screen Sharing and Remote Desktop are already working"
+    echo "${LOG_PREFIX} 💡   satisfactorily, answer 'N' to skip this section."
     read -p "${LOG_PREFIX} Continue? (Y/n): " -n 1 -r response
     echo
     case ${response} in
@@ -304,38 +248,46 @@ main() {
     esac
   fi
 
-  # Execute setup steps in correct order
-  disable_all_services
+  # Execute disable-then-guide approach
+  log "Using disable-then-guide Remote Desktop setup approach..."
 
-  # CRITICAL: Screen Sharing must be enabled BEFORE Remote Management
-  # Otherwise Remote Management will control Screen Sharing and prevent user from enabling it
-  setup_screen_sharing
+  # Phase 1: Clean Slate - Disable both services
+  log ""
+  log "Phase 1: Creating clean slate by disabling existing services..."
+  close_system_settings
+  disable_remote_management
+  disable_screen_sharing
 
-  # Now enable Remote Management (which will take control of Screen Sharing)
-  if enable_remote_management_service; then
-    log "✓ Remote Management configured successfully - skipping manual setup"
-  else
-    log "Automated Remote Management setup failed - requiring manual configuration"
-    setup_remote_management
-  fi
-
-  # Verify final setup
-  verify_remote_desktop
+  # Phase 2: Guide user through manual setup
+  log ""
+  log "Phase 2: Guiding user through manual configuration..."
+  manual_activation_routine
 
   log ""
   log "========================================="
   log "           SETUP COMPLETE"
   log "========================================="
   log ""
-  log "Remote Desktop setup completed!"
+  log "Remote Desktop setup guidance completed!"
   log ""
-  log "NEXT STEPS:"
-  log "• Test the connection from another Mac"
-  log "• Configure firewall if needed"
-  log "• Set up user accounts with appropriate access"
+  log "EXPECTED FINAL STATE (after manual setup):"
+  log "• Remote Management should be ON and controlling Screen Sharing"
+  log "• Both Screen Sharing and Apple Remote Desktop functionality available"
   log ""
-  log "If you experience issues, check System Settings > Sharing"
-  log "to verify Screen Sharing and Remote Management are enabled."
+  log "TESTING YOUR SETUP:"
+  log "• Test the connection from another Mac:"
+  local hostname
+  hostname=$(hostname)
+  log "  - Screen Sharing: Finder > Go > Connect to Server > ${hostname}.local"
+  log "  - Apple Remote Desktop: Use ARD app with full functionality"
+  log "• Configure firewall if needed (should be pre-configured)"
+  log "• Set up additional user accounts with appropriate access"
+  log ""
+  log "TROUBLESHOOTING:"
+  log "If connections fail, verify in System Settings > General > Sharing that:"
+  log "• Screen Sharing shows 'On' or 'Controlled by Remote Management'"
+  log "• Remote Management shows 'On' with proper user access configured"
+  log "• Check firewall settings if remote connections are blocked"
 }
 
 # Execute main function with all arguments

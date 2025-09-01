@@ -66,8 +66,19 @@ if [[ -n "${DROPBOX_SYNC_FOLDER:-}" ]]; then
     # Copy the rclone config file to the setup package
     RCLONE_CONFIG_PATH="${HOME}/.config/rclone/rclone.conf"
 
-    # Give rclone a moment to write the config file
-    sleep 1
+    # Wait for rclone to write the config file (with timeout)
+    echo "Waiting for rclone configuration file to be created..."
+    config_wait_timeout=10
+    config_wait_elapsed=0
+
+    while [[ ${config_wait_elapsed} -lt ${config_wait_timeout} ]]; do
+      if [[ -f "${RCLONE_CONFIG_PATH}" ]]; then
+        echo "✅ rclone configuration file found"
+        break
+      fi
+      sleep 1
+      ((config_wait_elapsed++))
+    done
 
     if [[ -f "${RCLONE_CONFIG_PATH}" ]]; then
       if cp "${RCLONE_CONFIG_PATH}" "${OUTPUT_PATH}/app-setup/config/rclone.conf"; then
@@ -75,11 +86,13 @@ if [[ -n "${DROPBOX_SYNC_FOLDER:-}" ]]; then
         echo "✅ rclone configuration saved for transfer"
       else
         echo "❌ Failed to copy rclone configuration file"
+        exit 1
       fi
     else
-      echo "❌ rclone configuration file not found at ${RCLONE_CONFIG_PATH}"
+      echo "❌ rclone configuration file not found at ${RCLONE_CONFIG_PATH} after ${config_wait_timeout}s"
       echo "Config directory contents:"
-      ls -la "${HOME}/.config/rclone/" || echo "Directory does not exist"
+      ls -la "${HOME}/.config/rclone/" 2>/dev/null || echo "Directory does not exist"
+      exit 1
     fi
 
     # Create Dropbox sync configuration file
