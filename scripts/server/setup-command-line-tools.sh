@@ -51,104 +51,39 @@ FEATURES:
 EOF
 }
 
-# Enhanced CLT verification with comprehensive checks
+# Simple CLT verification with 3 essential checks
 verify_clt_installation() {
-  local verification_passed=true
+  local install_result="$1" # Pass in softwareupdate exit code
 
-  log "Performing comprehensive CLT verification..."
+  log "Performing CLT verification..."
 
-  # Test 1: Basic xcode-select path verification
+  # Check 1: softwareupdate succeeded
+  if [[ "${install_result}" -ne 0 ]]; then
+    log "❌ softwareupdate failed (exit code: ${install_result})"
+    return 1
+  fi
+  log "✅ softwareupdate completed successfully"
+
+  # Check 2: xcode-select path exists
   if ! xcode-select -p >/dev/null 2>&1; then
     log "❌ xcode-select path verification failed"
     return 1
   fi
-
   local clt_path
-  clt_path=$(xcode-select -p 2>/dev/null)
-  if [[ ! -d "${clt_path}" ]]; then
-    log "❌ CLT directory does not exist: ${clt_path}"
-    return 1
-  fi
-
+  clt_path=$(xcode-select -p)
   log "✅ CLT path verified: ${clt_path}"
 
-  # Test 2: Essential development tools verification
-  local essential_tools=("clang" "git" "make" "cc" "c++")
-  local missing_tools=()
-
-  for tool in "${essential_tools[@]}"; do
-    if ! command -v "${tool}" >/dev/null 2>&1; then
-      missing_tools+=("${tool}")
-      verification_passed=false
-    fi
-  done
-
-  if [[ ${#missing_tools[@]} -gt 0 ]]; then
-    log "❌ Missing essential tools: ${missing_tools[*]}"
+  # Check 3: pkgutil shows installed version
+  if ! pkgutil --pkg-info=com.apple.pkg.CLTools_Executables | grep version >/dev/null 2>&1; then
+    log "❌ CLT package verification failed"
     return 1
   fi
+  local version
+  version=$(pkgutil --pkg-info=com.apple.pkg.CLTools_Executables | grep version | cut -d: -f2 | xargs)
+  log "✅ CLT package verified, version: ${version}"
 
-  log "✅ All essential development tools verified"
-
-  # Test 3: Compiler functionality test
-  local test_c_file="/tmp/clt_verify_$$.c"
-  local test_executable="/tmp/clt_verify_$$"
-
-  cat >"${test_c_file}" <<'C_TEST_CODE'
-#include <stdio.h>
-int main() {
-    printf("CLT verification test\n");
-    return 0;
-}
-C_TEST_CODE
-
-  if clang "${test_c_file}" -o "${test_executable}" 2>/dev/null; then
-    if "${test_executable}" >/dev/null 2>&1; then
-      log "✅ Compiler functionality verified"
-    else
-      log "❌ Compiled program execution failed"
-      verification_passed=false
-    fi
-  else
-    log "❌ Compiler functionality test failed"
-    verification_passed=false
-  fi
-
-  # Cleanup test files
-  rm -f "${test_c_file}" "${test_executable}" 2>/dev/null || true
-
-  # Test 4: System headers verification
-  if command -v clang >/dev/null 2>&1; then
-    local clang_version
-    clang_version=$(clang --version 2>/dev/null | head -n 1 | awk '{print $4}' || echo "unknown")
-    log "✅ Clang version: ${clang_version}"
-
-    # Verify system headers are accessible
-    if clang -v -E -x c /dev/null 2>&1 | grep -q "include.*search.*starts"; then
-      log "✅ System headers accessible"
-    else
-      log "❌ System headers not accessible - CLT installation may be incomplete"
-      verification_passed=false
-    fi
-  else
-    log "❌ Cannot verify clang version"
-    verification_passed=false
-  fi
-
-  # Test 5: Software history verification
-  if softwareupdate --history 2>/dev/null | grep -q 'Command Line Tools for Xcode'; then
-    log "✅ CLT installation confirmed in software update history"
-  else
-    log "⚠️  CLT installation not found in software update history (may be pre-installed)"
-  fi
-
-  if [[ "${verification_passed}" == "true" ]]; then
-    log "✅ Comprehensive CLT verification passed all tests"
-    return 0
-  else
-    log "❌ CLT verification failed - installation incomplete or corrupted"
-    return 1
-  fi
+  log "✅ CLT verification passed all checks"
+  return 0
 }
 
 # Enhanced CLT installation with improved monitoring and retry logic
@@ -199,62 +134,62 @@ monitor_installation() {
   sudo -p "[CLT Setup] Enter password for installation monitoring: " log stream \
     --predicate '(subsystem == "com.apple.SoftwareUpdate" OR subsystem == "com.apple.installer" OR processImagePath CONTAINS[c] "softwareupdate") AND (category == "default" OR category == "install")' \
     --info 2>/dev/null | while IFS= read -r line; do
-    
+
     # Enhanced pattern matching with more specific filters
     case "$line" in
       *"Command Line Tools"*|*"CommandLineTools"*|*"Xcode"*)
         # Download phase detection
         if echo "$line" | grep -qiE "(download|fetch|retrieving|getting|progress.*download)"; then
           if [[ "${download_detected}" == "false" ]]; then
-            log "📥 Download phase started"
+            echo "[CLT Monitor] 📥 Download phase started"
             download_detected=true
           fi
           # Extract meaningful message from log entry
           local clean_message
           clean_message=$(echo "$line" | sed -E 's/.*eventMessage:"([^"]*).*/\1/' | sed 's/\\n/ /g' | head -c 100)
           if [[ -n "${clean_message}" && "${clean_message}" != "${line}" ]]; then
-            log "📥 Download: ${clean_message}"
+            echo "[CLT Monitor] 📥 Download: ${clean_message}"
           else
-            log "📥 Download activity detected"
+            echo "[CLT Monitor] 📥 Download activity detected"
           fi
-          
+
         # Installation phase detection
         elif echo "$line" | grep -qiE "(install|configur|setup|deploy|extract|prepar)"; then
           if [[ "${install_detected}" == "false" ]]; then
-            log "⚙️  Installation phase started"
+            echo "[CLT Monitor] ⚙️  Installation phase started"
             install_detected=true
           fi
           local clean_message
           clean_message=$(echo "$line" | sed -E 's/.*eventMessage:"([^"]*).*/\1/' | sed 's/\\n/ /g' | head -c 100)
           if [[ -n "${clean_message}" && "${clean_message}" != "${line}" ]]; then
-            log "⚙️  Install: ${clean_message}"
+            echo "[CLT Monitor] ⚙️  Install: ${clean_message}"
           else
-            log "⚙️  Installation activity detected"
+            echo "[CLT Monitor] ⚙️  Installation activity detected"
           fi
-          
+
         # Success detection
         elif echo "$line" | grep -qiE "(success|complete|finish|done|successfully)"; then
-          log "✅ Installation phase completed successfully"
+          echo "[CLT Monitor] ✅ Installation phase completed successfully"
           break
-          
+
         # Generic CLT activity
         else
           local clean_message
           clean_message=$(echo "$line" | sed -E 's/.*eventMessage:"([^"]*).*/\1/' | sed 's/\\n/ /g' | head -c 80)
           if [[ -n "${clean_message}" && "${clean_message}" != "${line}" ]]; then
-            log "🔧 CLT: ${clean_message}"
+            echo "[CLT Monitor] 🔧 CLT: ${clean_message}"
           fi
         fi
         ;;
-        
+
       # Network and error detection
       *"network"*|*"connection"*|*"timeout"*|*"failed"*|*"error"*)
         if echo "$line" | grep -qiE "(network.*error|connection.*fail|timeout|download.*fail)"; then
           network_issues=$((network_issues + 1))
-          log "⚠️  Network issue ${network_issues}/${max_network_issues}: $(echo "$line" | head -c 100)"
-          
+          echo "[CLT Monitor] ⚠️  Network issue ${network_issues}/${max_network_issues}: $(echo "$line" | head -c 100)"
+
           if [[ ${network_issues} -ge ${max_network_issues} ]]; then
-            log "❌ Too many network issues detected, installation may need retry"
+            echo "[CLT Monitor] ❌ Too many network issues detected, installation may need retry"
             break
           fi
         fi
@@ -289,7 +224,9 @@ ENHANCED_MONITOR_EOF
       if [[ $((elapsed_time % 120)) -eq 0 ]]; then
         local elapsed_min=$((elapsed_time / 60))
         local remaining_min=$(((install_timeout - elapsed_time) / 60))
-        show_log "CLT installation in progress... (${elapsed_min}m elapsed, ~${remaining_min}m remaining)"
+        local log_msg="CLT installation in progress... (${elapsed_min}m elapsed, ~${remaining_min}m remaining)"
+        echo -e "\n"
+        log "${log_msg}"
       fi
     done
 
@@ -309,7 +246,7 @@ ENHANCED_MONITOR_EOF
     fi
 
     # Enhanced verification with comprehensive checks
-    if [[ ${install_result} -eq 0 ]] && verify_clt_installation; then
+    if verify_clt_installation "${install_result}"; then
       local install_time_min=$((elapsed_time / 60))
       local install_time_sec=$((elapsed_time % 60))
       show_log "✅ Command Line Tools installation completed successfully in ${install_time_min}m ${install_time_sec}s"
@@ -357,7 +294,7 @@ interactive_clt_installation() {
   else
     # In force mode, poll for completion with enhanced feedback
     local wait_time=0
-    while ! verify_clt_installation 2>/dev/null; do
+    while ! verify_clt_installation "0" 2>/dev/null; do
       sleep 10
       wait_time=$((wait_time + 10))
       if [[ $((wait_time % 60)) -eq 0 ]]; then
@@ -368,7 +305,7 @@ interactive_clt_installation() {
   fi
 
   # Verify installation
-  if verify_clt_installation; then
+  if verify_clt_installation "0"; then
     show_log "✅ Interactive Command Line Tools installation completed successfully"
     return 0
   else
@@ -420,7 +357,7 @@ main() {
   log "Architecture: ${architecture}"
 
   # Check if CLT is already installed with enhanced verification
-  if verify_clt_installation 2>/dev/null; then
+  if verify_clt_installation "0" 2>/dev/null; then
     log "✅ Command Line Tools already installed and verified"
     exit 0
   fi
