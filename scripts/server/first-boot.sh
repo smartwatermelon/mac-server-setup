@@ -1213,71 +1213,99 @@ fi
 # Configure Time Machine backup
 set_section "Configuring Time Machine"
 
-# Check if Time Machine configuration is available
+# Check if Time Machine URL configuration is available
 TIMEMACHINE_CONFIG_FILE="${SETUP_DIR}/config/timemachine.conf"
 if [[ -f "${TIMEMACHINE_CONFIG_FILE}" ]]; then
-  # Source the Time Machine configuration
+  # Source the Time Machine URL configuration
   # shellcheck source=/dev/null
   source "${TIMEMACHINE_CONFIG_FILE}"
 
-  # Validate required variables were sourced
-  if [[ -z "${TM_USERNAME:-}" || -z "${TM_PASSWORD:-}" || -z "${TM_URL:-}" ]]; then
-    log "Error: Time Machine configuration incomplete - missing required variables"
-    log "Skipping Time Machine setup"
+  # Validate that TM_URL was sourced
+  if [[ -z "${TM_URL:-}" ]]; then
+    collect_warning "Time Machine URL not found in configuration file - skipping Time Machine setup"
   else
-    log "Checking existing Time Machine configuration"
+    log "Found Time Machine URL configuration: ${TM_URL}"
 
-    # Check if Time Machine is already configured with our destination
-    EXPECTED_URL="smb://${TM_USERNAME}@${TM_URL}"
+    # Load keychain manifest for service names
+    manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
+    if [[ -f "${manifest_file}" ]]; then
+      # shellcheck source=/dev/null
+      source "${manifest_file}"
 
-    # Handle case where no destinations exist yet (tmutil destinationinfo fails)
-    if EXISTING_DESTINATIONS=$(tmutil destinationinfo 2>/dev/null | grep "^URL" | awk '{print $3}'); then
-      log "Found existing Time Machine destinations"
-    else
-      log "No existing Time Machine destinations found"
-      EXISTING_DESTINATIONS=""
-    fi
+      # Get TimeMachine credentials from keychain (stored as username:password)
+      if tm_credentials=$(get_keychain_credential "${KEYCHAIN_TIMEMACHINE_SERVICE}" "${KEYCHAIN_ACCOUNT}"); then
+        log "Retrieved TimeMachine credentials from keychain"
 
-    # Escape special regex characters using bash parameter expansion
-    ESCAPED_URL="${EXPECTED_URL//\./\\.}"
-    ESCAPED_URL="${ESCAPED_URL//\//\\/}"
+        # Parse username:password format
+        TM_USERNAME="${tm_credentials%%:*}"
+        TM_PASSWORD="${tm_credentials#*:}"
 
-    if [[ -n "${EXISTING_DESTINATIONS}" ]] && echo "${EXISTING_DESTINATIONS}" | grep -q "${ESCAPED_URL}"; then
-      show_log "✅ Time Machine already configured with destination: ${TM_URL}"
-
-      # Add to menu bar
-      log "Adding Time Machine to menu bar"
-      defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
-      NEED_SYSTEMUI_RESTART=true
-      check_success "Time Machine menu bar addition"
-      sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
-      check_success "Time Machine menu bar addition for operator"
-    else
-      log "Configuring Time Machine destination: ${TM_URL}"
-      # Construct the full SMB URL with credentials
-      TIMEMACHINE_URL="smb://${TM_USERNAME}:${TM_PASSWORD}@${TM_URL#*://}"
-
-      if sudo -p "[Time Machine] Enter password to set backup destination: " tmutil setdestination -a "${TIMEMACHINE_URL}"; then
-        check_success "Time Machine destination configuration"
-
-        log "Enabling Time Machine"
-        if sudo -p "[Time Machine] Enter password to enable backups: " tmutil enable; then
-          show_log "✅ Time Machine backup configured and enabled"
-          check_success "Time Machine enable"
-
-          # Add Time Machine to menu bar for admin user
-          log "Adding Time Machine to menu bar"
-          defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
-          NEED_SYSTEMUI_RESTART=true
-          check_success "Time Machine menu bar addition"
-          sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
-          check_success "Time Machine menu bar addition for operator"
+        if [[ -z "${TM_USERNAME}" || -z "${TM_PASSWORD}" || "${TM_USERNAME}" == "${TM_PASSWORD}" ]]; then
+          collect_error "Invalid TimeMachine credential format in keychain - expected username:password"
         else
-          log "❌ Failed to enable Time Machine"
+          log "Checking existing Time Machine configuration"
+
+          # Check if Time Machine is already configured with our destination
+          EXPECTED_URL="smb://${TM_USERNAME}@${TM_URL}"
+
+          # Handle case where no destinations exist yet (tmutil destinationinfo fails)
+          if EXISTING_DESTINATIONS=$(tmutil destinationinfo 2>/dev/null | grep "^URL" | awk '{print $3}'); then
+            log "Found existing Time Machine destinations"
+          else
+            log "No existing Time Machine destinations found"
+            EXISTING_DESTINATIONS=""
+          fi
+
+          # Escape special regex characters using bash parameter expansion
+          ESCAPED_URL="${EXPECTED_URL//\./\\.}"
+          ESCAPED_URL="${ESCAPED_URL//\//\\/}"
+
+          if [[ -n "${EXISTING_DESTINATIONS}" ]] && echo "${EXISTING_DESTINATIONS}" | grep -q "${ESCAPED_URL}"; then
+            show_log "✅ Time Machine already configured with destination: ${TM_URL}"
+
+            # Add to menu bar
+            log "Adding Time Machine to menu bar"
+            defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
+            NEED_SYSTEMUI_RESTART=true
+            check_success "Time Machine menu bar addition"
+            sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
+            check_success "Time Machine menu bar addition for operator"
+          else
+            log "Configuring Time Machine destination: ${TM_URL}"
+            # Construct the full SMB URL with credentials
+            TIMEMACHINE_URL="smb://${TM_USERNAME}:${TM_PASSWORD}@${TM_URL#*://}"
+
+            if sudo -p "[Time Machine] Enter password to set backup destination: " tmutil setdestination -a "${TIMEMACHINE_URL}"; then
+              check_success "Time Machine destination configuration"
+
+              log "Enabling Time Machine"
+              if sudo -p "[Time Machine] Enter password to enable backups: " tmutil enable; then
+                show_log "✅ Time Machine backup configured and enabled"
+                check_success "Time Machine enable"
+
+                # Add Time Machine to menu bar for admin user
+                log "Adding Time Machine to menu bar"
+                defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
+                NEED_SYSTEMUI_RESTART=true
+                check_success "Time Machine menu bar addition"
+                sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
+                check_success "Time Machine menu bar addition for operator"
+              else
+                collect_error "Failed to enable Time Machine"
+              fi
+            else
+              collect_error "Failed to set Time Machine destination"
+            fi
+          fi
         fi
+
+        # Clear credentials from memory
+        unset tm_credentials TM_USERNAME TM_PASSWORD TIMEMACHINE_URL
       else
-        log "❌ Failed to set Time Machine destination"
+        collect_warning "TimeMachine credentials not found in keychain - skipping Time Machine setup"
       fi
+    else
+      collect_warning "Keychain manifest not found - cannot retrieve TimeMachine credentials"
     fi
   fi
 else
