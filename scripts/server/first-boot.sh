@@ -1943,12 +1943,14 @@ if [[ -d "${BASH_CONFIG_SOURCE}" ]]; then
       sudo -p "[Bash config] Enter password to create config directory for ${username}: " -iu "${username}" mkdir -p "${user_config_dir}"
     fi
 
-    # Copy bash configuration directory
+    # Copy bash configuration directory (ensure idempotency by copying contents)
     if [[ "${username}" == "${ADMIN_USERNAME}" ]]; then
-      cp -r "${BASH_CONFIG_SOURCE}" "${user_bash_config_dir}"
+      mkdir -p "${user_bash_config_dir}"
+      cp -r "${BASH_CONFIG_SOURCE}/"* "${user_bash_config_dir}/"
       chown -R "${username}:staff" "${user_bash_config_dir}"
     else
-      sudo -p "[Bash config] Enter password to copy bash config for ${username}: " cp -r "${BASH_CONFIG_SOURCE}" "${user_bash_config_dir}"
+      sudo -p "[Bash config] Enter password to create bash config directory for ${username}: " mkdir -p "${user_bash_config_dir}"
+      sudo -p "[Bash config] Enter password to copy bash config for ${username}: " cp -r "${BASH_CONFIG_SOURCE}/"* "${user_bash_config_dir}/"
       sudo -p "[Bash config] Enter password to set ownership for ${username}: " chown -R "${username}:staff" "${user_bash_config_dir}"
     fi
 
