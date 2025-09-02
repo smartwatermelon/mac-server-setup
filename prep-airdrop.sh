@@ -593,7 +593,7 @@ BASH_CONFIG_DEST="${OUTPUT_PATH}/bash"
 
 if [[ -d "${BASH_CONFIG_SOURCE}" ]]; then
   echo "Copying Bash configuration from ${BASH_CONFIG_SOURCE}"
-  
+
   # Use rsync to copy files while respecting .gitignore
   if command -v rsync >/dev/null 2>&1; then
     # Copy with rsync, excluding files from .gitignore
@@ -606,17 +606,17 @@ if [[ -d "${BASH_CONFIG_SOURCE}" ]]; then
   else
     # Fallback to cp if rsync not available, manually exclude known sensitive files
     cp -r "${BASH_CONFIG_SOURCE}"/* "${BASH_CONFIG_DEST}/"
-    
+
     # Remove sensitive files if they exist
     rm -f "${BASH_CONFIG_DEST}/secrets.sh"
     rm -rf "${BASH_CONFIG_DEST}/backups"
     rm -f "${BASH_CONFIG_DEST}/"*.bak.*
   fi
-  
+
   # Set appropriate permissions
   chmod -R 644 "${BASH_CONFIG_DEST}/"*.sh 2>/dev/null || true
   chmod 644 "${BASH_CONFIG_DEST}/.bash_profile" 2>/dev/null || true
-  
+
   echo "✅ Bash configuration copied to setup package"
 else
   collect_warning "Bash configuration directory not found at ${BASH_CONFIG_SOURCE}"
