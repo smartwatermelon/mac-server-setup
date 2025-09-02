@@ -172,6 +172,7 @@ mkdir -p "${OUTPUT_PATH}/scripts"
 mkdir -p "${OUTPUT_PATH}/app-setup/config"
 mkdir -p "${OUTPUT_PATH}/app-setup/templates"
 mkdir -p "${OUTPUT_PATH}/config"
+mkdir -p "${OUTPUT_PATH}/bash"
 
 # Generate development machine fingerprint to prevent accidental execution
 DEV_FINGERPRINT=$(system_profiler SPHardwareDataType | grep "Hardware UUID" | awk '{print $3}')
@@ -581,6 +582,53 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
 else
   collect_error "No script source found. Please provide a local script source directory."
   exit 1
+fi
+
+# Copy Bash configuration
+set_section "Copying Bash Configuration"
+
+# Define source and destination paths for bash config
+BASH_CONFIG_SOURCE="${HOME}/.config/bash"
+BASH_CONFIG_DEST="${OUTPUT_PATH}/bash"
+
+if [[ -d "${BASH_CONFIG_SOURCE}" ]]; then
+  echo "Copying Bash configuration from ${BASH_CONFIG_SOURCE}"
+
+  # Use rsync to copy files while respecting .gitignore
+  if command -v rsync >/dev/null 2>&1; then
+    # Copy with rsync, excluding files from .gitignore
+    if [[ -f "${BASH_CONFIG_SOURCE}/.gitignore" ]]; then
+      rsync -av --exclude-from="${BASH_CONFIG_SOURCE}/.gitignore" "${BASH_CONFIG_SOURCE}/" "${BASH_CONFIG_DEST}/"
+    else
+      # No .gitignore, copy everything
+      rsync -av "${BASH_CONFIG_SOURCE}/" "${BASH_CONFIG_DEST}/"
+    fi
+  else
+    # Fallback to cp if rsync not available, manually exclude known sensitive files
+    cp -r "${BASH_CONFIG_SOURCE}"/* "${BASH_CONFIG_DEST}/"
+
+    # Remove sensitive files if they exist
+    rm -f "${BASH_CONFIG_DEST}/secrets.sh"
+    rm -rf "${BASH_CONFIG_DEST}/backups"
+    rm -f "${BASH_CONFIG_DEST}/"*.bak.*
+  fi
+
+  # Set appropriate permissions
+  chmod -R 644 "${BASH_CONFIG_DEST}/"*.sh 2>/dev/null || true
+  chmod 644 "${BASH_CONFIG_DEST}/.bash_profile" 2>/dev/null || true
+
+  # Remove development-specific files that shouldn't be deployed
+  rm -rf "${BASH_CONFIG_DEST}/.claude/"
+  rm -rf "${BASH_CONFIG_DEST}/.git/"
+  rm -f "${BASH_CONFIG_DEST}/.DS_Store"
+  rm -f "${BASH_CONFIG_DEST}/.gitignore"
+  rm -f "${BASH_CONFIG_DEST}/.shellcheckrc"
+  rm -f "${BASH_CONFIG_DEST}/.yamllint"
+
+  echo "✅ Bash configuration copied to setup package"
+else
+  collect_warning "Bash configuration directory not found at ${BASH_CONFIG_SOURCE}"
+  echo "Bash configuration will not be available on the server"
 fi
 
 # Copy README with variable substitution

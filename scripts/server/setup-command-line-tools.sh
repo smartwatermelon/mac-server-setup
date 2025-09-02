@@ -10,7 +10,7 @@ readonly SCRIPT_NAME="${0##*/}"
 readonly LOG_PREFIX="[CLT Setup]"
 readonly MAX_RETRIES=2
 readonly DEFAULT_TIMEOUT=1800 # 30 minutes
-readonly LOG_INTERVAL=60      # 1 minute
+readonly LOG_INTERVAL=30      # 30 seconds
 
 # Logging function
 log() {
