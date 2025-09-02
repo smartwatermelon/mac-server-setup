@@ -22,6 +22,50 @@ show_log() {
   echo "${LOG_PREFIX} $*" >&2
 }
 
+# Error and warning collection functions for module context
+# These write to temporary files shared with first-boot.sh
+collect_error() {
+  local message="$1"
+  local line_number="${2:-${LINENO}}"
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+  local script_name
+  script_name="$(basename "${BASH_SOURCE[1]:-${0}}")"
+
+  # Normalize message to single line
+  local clean_message
+  clean_message="$(echo "${message}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
+
+  show_log "❌ ${clean_message}"
+  # Append to shared temporary file (exported from first-boot.sh)
+  if [[ -n "${SETUP_ERRORS_FILE:-}" ]]; then
+    echo "[${script_name}:${line_number}] ${context}: ${clean_message}" >>"${SETUP_ERRORS_FILE}"
+  fi
+}
+
+collect_warning() {
+  local message="$1"
+  local line_number="${2:-${LINENO}}"
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+  local script_name
+  script_name="$(basename "${BASH_SOURCE[1]:-${0}}")"
+
+  # Normalize message to single line
+  local clean_message
+  clean_message="$(echo "${message}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
+
+  show_log "⚠️ ${clean_message}"
+  # Append to shared temporary file (exported from first-boot.sh)
+  if [[ -n "${SETUP_WARNINGS_FILE:-}" ]]; then
+    echo "[${script_name}:${line_number}] ${context}: ${clean_message}" >>"${SETUP_WARNINGS_FILE}"
+  fi
+}
+
+# Function to set current script section for context
+set_section() {
+  CURRENT_SCRIPT_SECTION="$1"
+  log "====== $1 ======"
+}
+
 # Show usage information
 show_usage() {
   cat <<EOF
@@ -56,7 +100,7 @@ EOF
 verify_clt_installation() {
   local install_result="$1" # Pass in softwareupdate exit code
 
-  log "Performing CLT verification..."
+  set_section "CLT Verification"
 
   # Check 1: softwareupdate succeeded
   if [[ "${install_result}" -ne 0 ]]; then
@@ -97,7 +141,7 @@ install_clt_with_enhanced_monitoring() {
   local retry_count=0
   local install_successful=false
 
-  show_log "Installing Command Line Tools with enhanced monitoring: ${clt_package}"
+  set_section "CLT Installation with Enhanced Monitoring"
   show_log "This may take 10-30 minutes depending on your internet connection..."
   show_log "Installation timeout: ${install_timeout} seconds ($((install_timeout / 60)) minutes)"
 
@@ -285,7 +329,7 @@ ENHANCED_MONITOR_EOF
 interactive_clt_installation() {
   local force="$1"
 
-  show_log "Using interactive xcode-select installation method..."
+  set_section "Interactive CLT Installation"
 
   if [[ "${force}" = "false" ]]; then
     show_log "This will open a dialog for Command Line Tools installation"

@@ -14,6 +14,55 @@ log() {
   echo "${LOG_PREFIX} $*" >&2
 }
 
+# Enhanced logging function for important messages
+show_log() {
+  echo "${LOG_PREFIX} $*" >&2
+}
+
+# Error and warning collection functions for module context
+# These write to temporary files shared with first-boot.sh
+collect_error() {
+  local message="$1"
+  local line_number="${2:-${LINENO}}"
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+  local script_name
+  script_name="$(basename "${BASH_SOURCE[1]:-${0}}")"
+
+  # Normalize message to single line
+  local clean_message
+  clean_message="$(echo "${message}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
+
+  show_log "❌ ${clean_message}"
+  # Append to shared temporary file (exported from first-boot.sh)
+  if [[ -n "${SETUP_ERRORS_FILE:-}" ]]; then
+    echo "[${script_name}:${line_number}] ${context}: ${clean_message}" >>"${SETUP_ERRORS_FILE}"
+  fi
+}
+
+collect_warning() {
+  local message="$1"
+  local line_number="${2:-${LINENO}}"
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+  local script_name
+  script_name="$(basename "${BASH_SOURCE[1]:-${0}}")"
+
+  # Normalize message to single line
+  local clean_message
+  clean_message="$(echo "${message}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
+
+  show_log "⚠️ ${clean_message}"
+  # Append to shared temporary file (exported from first-boot.sh)
+  if [[ -n "${SETUP_WARNINGS_FILE:-}" ]]; then
+    echo "[${script_name}:${line_number}] ${context}: ${clean_message}" >>"${SETUP_WARNINGS_FILE}"
+  fi
+}
+
+# Function to set current script section for context
+set_section() {
+  CURRENT_SCRIPT_SECTION="$1"
+  log "====== $1 ======"
+}
+
 # Show usage information
 show_usage() {
   cat <<EOF
@@ -58,7 +107,7 @@ close_system_settings() {
 
 # Disable Remote Management with verification
 disable_remote_management() {
-  log "Disabling Remote Management..."
+  set_section "Disabling Remote Management"
 
   # Method 1: kickstart deactivate
   log "Method 1: Using kickstart -deactivate -stop"
@@ -98,7 +147,7 @@ disable_remote_management() {
 
 # Disable Screen Sharing with verification
 disable_screen_sharing() {
-  log "Disabling Screen Sharing..."
+  set_section "Disabling Screen Sharing"
 
   # Method 1: launchctl unload
   log "Method 1: Using launchctl unload"
@@ -179,7 +228,7 @@ EOF
 
 # Manual activation routine - core setup approach
 manual_activation_routine() {
-  log "Running manual setup routine..."
+  set_section "Manual Remote Desktop Setup"
 
   if show_manual_setup_dialog; then
     log ""

@@ -75,19 +75,64 @@ section() {
   log "====== $1 ======"
 }
 
+# Error and warning collection functions for module context
+# These write to temporary files shared with first-boot.sh
+collect_error() {
+  local message="$1"
+  local line_number="${2:-${LINENO}}"
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+  local script_name
+  script_name="$(basename "${BASH_SOURCE[1]:-${0}}")"
+
+  # Normalize message to single line
+  local clean_message
+  clean_message="$(echo "${message}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
+
+  show_log "❌ ${clean_message}"
+  # Append to shared temporary file (exported from first-boot.sh)
+  if [[ -n "${SETUP_ERRORS_FILE:-}" ]]; then
+    echo "[${script_name}:${line_number}] ${context}: ${clean_message}" >>"${SETUP_ERRORS_FILE}"
+  fi
+}
+
+collect_warning() {
+  local message="$1"
+  local line_number="${2:-${LINENO}}"
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+  local script_name
+  script_name="$(basename "${BASH_SOURCE[1]:-${0}}")"
+
+  # Normalize message to single line
+  local clean_message
+  clean_message="$(echo "${message}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
+
+  show_log "⚠️ ${clean_message}"
+  # Append to shared temporary file (exported from first-boot.sh)
+  if [[ -n "${SETUP_WARNINGS_FILE:-}" ]]; then
+    echo "[${script_name}:${line_number}] ${context}: ${clean_message}" >>"${SETUP_WARNINGS_FILE}"
+  fi
+}
+
 # Function to set current script section for context
 set_section() {
+  CURRENT_SCRIPT_SECTION="$1"
   section "$1"
 }
 
 # Function to check if a command was successful
 check_success() {
-  if [[ $? -eq 0 ]]; then
-    show_log "✅ $1"
+  local operation_name="$1"
+  local exit_code=$?
+
+  if [[ ${exit_code} -eq 0 ]]; then
+    show_log "✅ ${operation_name}"
   else
-    show_log "❌ $1 failed"
-    if [[ "${FORCE}" = false ]]; then
-      read -p "Continue anyway? (y/N) " -n 1 -r
+    if [[ "${FORCE}" = true ]]; then
+      collect_warning "${operation_name} failed but continuing due to --force flag"
+    else
+      collect_error "${operation_name} failed"
+      show_log "❌ ${operation_name} failed (exit code: ${exit_code})"
+      read -p "Continue anyway? (y/N): " -n 1 -r
       echo
       if [[ ! ${REPLY} =~ ^[Yy]$ ]]; then
         log "Exiting due to error"
@@ -115,32 +160,6 @@ fi
 
 # Set derived variables
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
-
-# Set up logging
-export LOG_DIR
-LOG_DIR="${HOME}/.local/state" # XDG_STATE_HOME
-current_hostname="$(hostname)"
-HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${current_hostname}")"
-LOG_FILE="${LOG_DIR}/${HOSTNAME_LOWER}-setup.log"
-
-# log function - only writes to log file
-log() {
-  mkdir -p "${LOG_DIR}"
-  local timestamp no_newline=false
-  timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-
-  # Check for -n flag
-  if [[ "$1" == "-n" ]]; then
-    no_newline=true
-    shift
-  fi
-
-  if [[ "${no_newline}" == true ]]; then
-    echo -n "[${timestamp}] $1" >>"${LOG_FILE}"
-  else
-    echo "[${timestamp}] $1" >>"${LOG_FILE}"
-  fi
-}
 
 #
 # SYSTEM IDENTITY SETUP
