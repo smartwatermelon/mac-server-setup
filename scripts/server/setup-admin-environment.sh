@@ -338,7 +338,7 @@ if [[ -f "${SETUP_DIR}/scripts/operator-first-login.sh" ]]; then
 
   # Add ~/.local/bin to operator's PATH in bash configuration
   OPERATOR_BASHRC="${OPERATOR_HOME}/.bashrc"
-  if ! sudo -u "${OPERATOR_USERNAME}" test -f "${OPERATOR_BASHRC}" || ! sudo -u "${OPERATOR_USERNAME}" grep -q '/.local/bin' "${OPERATOR_BASHRC}"; then
+  if ! sudo -iu "${OPERATOR_USERNAME}" test -f "${OPERATOR_BASHRC}" || ! sudo -iu "${OPERATOR_USERNAME}" grep -q '/.local/bin' "${OPERATOR_BASHRC}"; then
     log "Adding ~/.local/bin to operator's PATH"
     sudo -p "[Operator setup] Enter password to configure operator PATH: " tee -a "${OPERATOR_BASHRC}" >/dev/null <<EOF
 
