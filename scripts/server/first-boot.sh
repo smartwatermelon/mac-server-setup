@@ -521,9 +521,9 @@ fi
 
 # TouchID sudo setup - delegated to module
 if [[ "${FORCE}" = true ]]; then
-  "${SETUP_DIR}/scripts/server/setup-touchid-sudo.sh" --force
+  "${SETUP_DIR}/scripts/setup-touchid-sudo.sh" --force
 else
-  "${SETUP_DIR}/scripts/server/setup-touchid-sudo.sh"
+  "${SETUP_DIR}/scripts/setup-touchid-sudo.sh"
 fi
 
 # Configure sudo timeout to reduce password prompts during setup
@@ -539,16 +539,16 @@ check_success "Sudo timeout configuration"
 
 # WiFi Network Assessment and Configuration - delegated to module
 if [[ "${FORCE}" = true ]]; then
-  "${SETUP_DIR}/scripts/server/setup-network.sh" --force
+  "${SETUP_DIR}/scripts/setup-network.sh" --force
 else
-  "${SETUP_DIR}/scripts/server/setup-network.sh"
+  "${SETUP_DIR}/scripts/setup-network.sh"
 fi
 
 # Set hostname and HD name - delegated to module
 if [[ "${FORCE}" = true ]]; then
-  "${SETUP_DIR}/scripts/server/setup-system-identity.sh" --force
+  "${SETUP_DIR}/scripts/setup-system-identity.sh" --force
 else
-  "${SETUP_DIR}/scripts/server/setup-system-identity.sh"
+  "${SETUP_DIR}/scripts/setup-system-identity.sh"
 fi
 
 # Setup SSH access
