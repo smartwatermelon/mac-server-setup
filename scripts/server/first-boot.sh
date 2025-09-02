@@ -1102,9 +1102,9 @@ fi
 
 # Bash configuration setup - delegated to module
 if [[ "${FORCE}" == true ]]; then
-  "${SETUP_DIR}/scripts/server/setup-bash-configuration.sh" --force
+  "${SETUP_DIR}/scripts/setup-bash-configuration.sh" --force
 else
-  "${SETUP_DIR}/scripts/server/setup-bash-configuration.sh"
+  "${SETUP_DIR}/scripts/setup-bash-configuration.sh"
 fi
 
 # TIME MACHINE CONFIGURATION
@@ -1112,9 +1112,9 @@ fi
 
 # Time Machine configuration - delegated to module
 if [[ "${FORCE}" == true ]]; then
-  "${SETUP_DIR}/scripts/server/setup-timemachine.sh" --force
+  "${SETUP_DIR}/scripts/setup-timemachine.sh" --force
 else
-  "${SETUP_DIR}/scripts/server/setup-timemachine.sh"
+  "${SETUP_DIR}/scripts/setup-timemachine.sh"
 fi
 
 # SETUP COMPLETION SUMMARY
