@@ -150,14 +150,19 @@ section() {
   log "====== $1 ======"
 }
 
-# Error and warning collection system
-COLLECTED_ERRORS=()
-COLLECTED_WARNINGS=()
+# Error and warning collection system using temporary files
+# (Arrays cannot be exported to child processes in bash)
+SETUP_ERRORS_FILE="/tmp/first-boot-setup-errors-$$"
+SETUP_WARNINGS_FILE="/tmp/first-boot-setup-warnings-$$"
 CURRENT_SCRIPT_SECTION=""
 
-# Export error collection arrays for module access
-export COLLECTED_ERRORS
-export COLLECTED_WARNINGS
+# Initialize temporary files
+true >"${SETUP_ERRORS_FILE}"
+true >"${SETUP_WARNINGS_FILE}"
+
+# Export file paths and section for module access
+export SETUP_ERRORS_FILE
+export SETUP_WARNINGS_FILE
 export CURRENT_SCRIPT_SECTION
 
 # Function to set current script section for context
@@ -179,7 +184,8 @@ collect_error() {
   clean_message="$(echo "${message}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
 
   show_log "❌ ${clean_message}"
-  COLLECTED_ERRORS+=("[${script_name}:${line_number}] ${context}: ${clean_message}")
+  # Append to temporary file for cross-process collection
+  echo "[${script_name}:${line_number}] ${context}: ${clean_message}" >>"${SETUP_ERRORS_FILE}"
 }
 
 # Function to collect a warning (with immediate display)
@@ -195,7 +201,8 @@ collect_warning() {
   clean_message="$(echo "${message}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
 
   show_log "⚠️ ${clean_message}"
-  COLLECTED_WARNINGS+=("[${script_name}:${line_number}] ${context}: ${clean_message}")
+  # Append to temporary file for cross-process collection
+  echo "[${script_name}:${line_number}] ${context}: ${clean_message}" >>"${SETUP_WARNINGS_FILE}"
 }
 
 # Export error collection functions for module access
@@ -205,11 +212,22 @@ export -f set_section
 
 # Function to show collected errors and warnings at end
 show_collected_issues() {
-  local error_count=${#COLLECTED_ERRORS[@]}
-  local warning_count=${#COLLECTED_WARNINGS[@]}
+  # Count errors and warnings from temporary files
+  local error_count=0
+  local warning_count=0
+
+  if [[ -f "${SETUP_ERRORS_FILE}" ]]; then
+    error_count=$(wc -l <"${SETUP_ERRORS_FILE}" 2>/dev/null || echo "0")
+  fi
+
+  if [[ -f "${SETUP_WARNINGS_FILE}" ]]; then
+    warning_count=$(wc -l <"${SETUP_WARNINGS_FILE}" 2>/dev/null || echo "0")
+  fi
 
   if [[ ${error_count} -eq 0 && ${warning_count} -eq 0 ]]; then
     show_log "✅ Setup completed successfully with no errors or warnings!"
+    # Clean up temporary files
+    rm -f "${SETUP_ERRORS_FILE}" "${SETUP_WARNINGS_FILE}"
     return
   fi
 
@@ -220,21 +238,24 @@ show_collected_issues() {
 
   if [[ ${error_count} -gt 0 ]]; then
     show_log "ERRORS:"
-    for error in "${COLLECTED_ERRORS[@]}"; do
+    while IFS= read -r error; do
       show_log "  ${error}"
-    done
+    done <"${SETUP_ERRORS_FILE}"
     show_log ""
   fi
 
   if [[ ${warning_count} -gt 0 ]]; then
     show_log "WARNINGS:"
-    for warning in "${COLLECTED_WARNINGS[@]}"; do
+    while IFS= read -r warning; do
       show_log "  ${warning}"
-    done
+    done <"${SETUP_WARNINGS_FILE}"
     show_log ""
   fi
 
   show_log "Review the full log for details: ${LOG_FILE}"
+
+  # Clean up temporary files
+  rm -f "${SETUP_ERRORS_FILE}" "${SETUP_WARNINGS_FILE}"
 }
 
 # Function to check if a command was successful
