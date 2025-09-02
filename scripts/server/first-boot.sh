@@ -217,11 +217,11 @@ show_collected_issues() {
   local warning_count=0
 
   if [[ -f "${SETUP_ERRORS_FILE}" ]]; then
-    error_count=$(wc -l <"${SETUP_ERRORS_FILE}" 2>/dev/null || echo "0")
+    error_count=$(wc -l <"${SETUP_ERRORS_FILE}" 2>/dev/null | tr -d '[:space:]' || echo "0")
   fi
 
   if [[ -f "${SETUP_WARNINGS_FILE}" ]]; then
-    warning_count=$(wc -l <"${SETUP_WARNINGS_FILE}" 2>/dev/null || echo "0")
+    warning_count=$(wc -l <"${SETUP_WARNINGS_FILE}" 2>/dev/null | tr -d '[:space:]' || echo "0")
   fi
 
   if [[ ${error_count} -eq 0 && ${warning_count} -eq 0 ]]; then
