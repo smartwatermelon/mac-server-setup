@@ -29,25 +29,6 @@ for arg in "$@"; do
   esac
 done
 
-# Configuration variables
-SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG_FILE="${SETUP_DIR}/config/config.conf"
-
-# Load configuration
-if [[ -f "${CONFIG_FILE}" ]]; then
-  # shellcheck source=/dev/null
-  source "${CONFIG_FILE}"
-  log "Loaded configuration from ${CONFIG_FILE}"
-else
-  echo "Warning: Configuration file not found at ${CONFIG_FILE}"
-  echo "Using default values - you may want to create config.conf"
-  # Set fallback defaults
-  SERVER_NAME="MACMINI"
-fi
-
-# Set derived variables
-HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
-
 # Set up logging
 export LOG_DIR
 LOG_DIR="${HOME}/.local/state" # XDG_STATE_HOME
@@ -113,6 +94,51 @@ check_success() {
         exit 1
       fi
     fi
+  fi
+}
+
+# Configuration variables
+SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG_FILE="${SETUP_DIR}/config/config.conf"
+
+# Load configuration
+if [[ -f "${CONFIG_FILE}" ]]; then
+  # shellcheck source=/dev/null
+  source "${CONFIG_FILE}"
+  log "Loaded configuration from ${CONFIG_FILE}"
+else
+  echo "Warning: Configuration file not found at ${CONFIG_FILE}"
+  echo "Using default values - you may want to create config.conf"
+  # Set fallback defaults
+  SERVER_NAME="MACMINI"
+fi
+
+# Set derived variables
+HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
+
+# Set up logging
+export LOG_DIR
+LOG_DIR="${HOME}/.local/state" # XDG_STATE_HOME
+current_hostname="$(hostname)"
+HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${current_hostname}")"
+LOG_FILE="${LOG_DIR}/${HOSTNAME_LOWER}-setup.log"
+
+# log function - only writes to log file
+log() {
+  mkdir -p "${LOG_DIR}"
+  local timestamp no_newline=false
+  timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+
+  # Check for -n flag
+  if [[ "$1" == "-n" ]]; then
+    no_newline=true
+    shift
+  fi
+
+  if [[ "${no_newline}" == true ]]; then
+    echo -n "[${timestamp}] $1" >>"${LOG_FILE}"
+  else
+    echo "[${timestamp}] $1" >>"${LOG_FILE}"
   fi
 }
 
