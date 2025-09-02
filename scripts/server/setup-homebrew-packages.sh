@@ -81,8 +81,49 @@ section() {
   show_log "=== $1 ==="
 }
 
-# Error and warning collection functions are imported from first-boot.sh via export
-# No local definitions needed - use the shared global error collection system
+# Error and warning collection functions for module context
+# These write to temporary files shared with first-boot.sh
+collect_error() {
+  local message="$1"
+  local line_number="${2:-${LINENO}}"
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+  local script_name
+  script_name="$(basename "${BASH_SOURCE[1]:-${0}}")"
+
+  # Normalize message to single line
+  local clean_message
+  clean_message="$(echo "${message}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
+
+  show_log "❌ ${clean_message}"
+  # Append to shared temporary file (exported from first-boot.sh)
+  if [[ -n "${SETUP_ERRORS_FILE:-}" ]]; then
+    echo "[${script_name}:${line_number}] ${context}: ${clean_message}" >>"${SETUP_ERRORS_FILE}"
+  fi
+}
+
+collect_warning() {
+  local message="$1"
+  local line_number="${2:-${LINENO}}"
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+  local script_name
+  script_name="$(basename "${BASH_SOURCE[1]:-${0}}")"
+
+  # Normalize message to single line
+  local clean_message
+  clean_message="$(echo "${message}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
+
+  show_log "⚠️ ${clean_message}"
+  # Append to shared temporary file (exported from first-boot.sh)
+  if [[ -n "${SETUP_WARNINGS_FILE:-}" ]]; then
+    echo "[${script_name}:${line_number}] ${context}: ${clean_message}" >>"${SETUP_WARNINGS_FILE}"
+  fi
+}
+
+set_section() {
+  CURRENT_SCRIPT_SECTION="$1"
+  show_log ""
+  show_log "=== $1 ==="
+}
 
 # check_success function
 check_success() {
