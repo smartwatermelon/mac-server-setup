@@ -120,7 +120,7 @@ fi
 
 # Source the keychain credentials helper
 # shellcheck source=/dev/null
-if [[ -f "${SETUP_DIR}/scripts/server/first-boot.sh" ]]; then
+if [[ -f "${SETUP_DIR}/first-boot.sh" ]]; then
   # Extract the get_keychain_credential function from first-boot.sh
   # Enhanced version for module context with automatic keychain unlocking
   get_keychain_credential() {
