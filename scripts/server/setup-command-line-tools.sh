@@ -142,6 +142,7 @@ monitor_installation() {
         # Download phase detection
         if echo "$line" | grep -qiE "(download|fetch|retrieving|getting|progress.*download)"; then
           if [[ "${download_detected}" == "false" ]]; then
+            echo ""
             echo "[CLT Monitor] 📥 Download phase started"
             download_detected=true
           fi
@@ -149,27 +150,33 @@ monitor_installation() {
           local clean_message
           clean_message=$(echo "$line" | sed -E 's/.*eventMessage:"([^"]*).*/\1/' | sed 's/\\n/ /g' | head -c 100)
           if [[ -n "${clean_message}" && "${clean_message}" != "${line}" ]]; then
+            echo ""
             echo "[CLT Monitor] 📥 Download: ${clean_message}"
           else
+            echo ""
             echo "[CLT Monitor] 📥 Download activity detected"
           fi
 
         # Installation phase detection
         elif echo "$line" | grep -qiE "(install|configur|setup|deploy|extract|prepar)"; then
           if [[ "${install_detected}" == "false" ]]; then
+            echo ""
             echo "[CLT Monitor] ⚙️  Installation phase started"
             install_detected=true
           fi
           local clean_message
           clean_message=$(echo "$line" | sed -E 's/.*eventMessage:"([^"]*).*/\1/' | sed 's/\\n/ /g' | head -c 100)
           if [[ -n "${clean_message}" && "${clean_message}" != "${line}" ]]; then
+            echo ""
             echo "[CLT Monitor] ⚙️  Install: ${clean_message}"
           else
+            echo ""
             echo "[CLT Monitor] ⚙️  Installation activity detected"
           fi
 
         # Success detection
         elif echo "$line" | grep -qiE "(success|complete|finish|done|successfully)"; then
+          echo ""
           echo "[CLT Monitor] ✅ Installation phase completed successfully"
           break
 
@@ -178,6 +185,7 @@ monitor_installation() {
           local clean_message
           clean_message=$(echo "$line" | sed -E 's/.*eventMessage:"([^"]*).*/\1/' | sed 's/\\n/ /g' | head -c 80)
           if [[ -n "${clean_message}" && "${clean_message}" != "${line}" ]]; then
+            echo ""
             echo "[CLT Monitor] 🔧 CLT: ${clean_message}"
           fi
         fi
@@ -187,9 +195,11 @@ monitor_installation() {
       *"network"*|*"connection"*|*"timeout"*|*"failed"*|*"error"*)
         if echo "$line" | grep -qiE "(network.*error|connection.*fail|timeout|download.*fail)"; then
           network_issues=$((network_issues + 1))
+          echo ""
           echo "[CLT Monitor] ⚠️  Network issue ${network_issues}/${max_network_issues}: $(echo "$line" | head -c 100)"
 
           if [[ ${network_issues} -ge ${max_network_issues} ]]; then
+            echo ""
             echo "[CLT Monitor] ❌ Too many network issues detected, installation may need retry"
             break
           fi
