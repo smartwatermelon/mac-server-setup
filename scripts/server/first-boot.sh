@@ -1054,22 +1054,37 @@ fi
 
 # HOMEBREW & PACKAGE INSTALLATION - delegated to module
 #
-
+set -x
 # Homebrew and package installation - delegated to module
-if [[ "${FORCE}" == true ]]; then
-  "${SETUP_DIR}/scripts/setup-homebrew-packages.sh" --force ${SKIP_HOMEBREW:+--skip-homebrew} ${SKIP_PACKAGES:+--skip-packages}
+if [[ "${SKIP_HOMEBREW}" == true ]]; then
+  set_hb_flag="--skip-homebrew"
 else
-  "${SETUP_DIR}/scripts/setup-homebrew-packages.sh" ${SKIP_HOMEBREW:+--skip-homebrew} ${SKIP_PACKAGES:+--skip-packages}
+  set_hb_flag=""
 fi
-
+if [[ "${SKIP_PACKAGES}" == true ]]; then
+  set_package_flag="--skip-homebrew"
+else
+  set_package_flag=""
+fi
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-homebrew-packages.sh" --force "${set_hb_flag}" "${set_package_flag}"
+else
+  "${SETUP_DIR}/scripts/setup-homebrew-packages.sh" "${set_hb_flag}" "${set_package_flag}"
+fi
+set +x
 # SYSTEM PREFERENCES CONFIGURATION - delegated to module
 #
 
 # System preferences configuration - delegated to module
-if [[ "${FORCE}" == true ]]; then
-  "${SETUP_DIR}/scripts/setup-system-preferences.sh" --force ${SKIP_UPDATE:+--skip-update}
+if [[ "${SKIP_UPDATE}" == true ]]; then
+  set_update_flag="--skip-update"
 else
-  "${SETUP_DIR}/scripts/setup-system-preferences.sh" ${SKIP_UPDATE:+--skip-update}
+  set_update_flag=""
+fi
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-system-preferences.sh" --force "${set_update_flag}"
+else
+  "${SETUP_DIR}/scripts/setup-system-preferences.sh" "${set_update_flag}"
 fi
 
 # ADMIN ENVIRONMENT SETUP - delegated to module

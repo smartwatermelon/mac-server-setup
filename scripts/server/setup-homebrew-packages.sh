@@ -171,7 +171,6 @@ HOMEBREW_PREFIX="/opt/homebrew" # Apple Silicon
 #
 # HOMEBREW & PACKAGE INSTALLATION
 #
-set -x
 # Install Xcode Command Line Tools using dedicated script
 set_section "Installing Xcode Command Line Tools"
 
@@ -199,7 +198,7 @@ else
   log "Please ensure setup-command-line-tools.sh is present in the scripts directory"
   exit 1
 fi
-
+set -x
 # Install Homebrew
 if [[ "${SKIP_HOMEBREW}" == false ]]; then
   set_section "Installing Homebrew"
@@ -259,6 +258,9 @@ if [[ "${SKIP_HOMEBREW}" == false ]]; then
       exit 1
     fi
   fi
+else
+  echo "❌ Value of SKIP_HOMEBREW was ${SKIP_HOMEBREW}"
+  exit 1
 fi
 set +x
 # Add concurrent download configuration
