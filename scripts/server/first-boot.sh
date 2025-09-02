@@ -30,7 +30,6 @@ ADMIN_USERNAME=$(whoami)                                  # Set this once and us
 ADMINISTRATOR_PASSWORD=""                                 # Get it interactively later
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" # Directory where AirDropped files are located (script now at root)
 SSH_KEY_SOURCE="${SETUP_DIR}/ssh_keys"
-WIFI_CONFIG_FILE="${SETUP_DIR}/config/wifi_network.conf"
 FORMULAE_FILE="${SETUP_DIR}/config/formulae.txt"
 CASKS_FILE="${SETUP_DIR}/config/casks.txt"
 RERUN_AFTER_FDA=false
@@ -520,71 +519,11 @@ fi
 # SYSTEM CONFIGURATION
 #
 
-# TouchID sudo setup
-section "TouchID sudo setup"
-
-# Check if TouchID sudo is already configured
-if [[ -f "/etc/pam.d/sudo_local" ]]; then
-  # Verify the content is correct
-  expected_content="auth       sufficient     pam_tid.so"
-  if grep -q "${expected_content}" "/etc/pam.d/sudo_local" 2>/dev/null; then
-    show_log "✅ TouchID sudo is already properly configured"
-  else
-    log "TouchID sudo configuration exists but content may be incorrect"
-    log "Current content:"
-    head -10 <"/etc/pam.d/sudo_local" | while read -r line; do log "  ${line}"; done
-  fi
+# TouchID sudo setup - delegated to module
+if [[ "${FORCE}" = true ]]; then
+  "${SETUP_DIR}/scripts/server/setup-touchid-sudo.sh" --force
 else
-  # TouchID sudo not configured - prompt user
-  touchid_enabled=false
-
-  if [[ "${FORCE}" = true ]]; then
-    # Force mode - enable TouchID by default
-    touchid_enabled=true
-    log "Force mode enabled - configuring TouchID sudo authentication"
-  else
-    # Interactive mode - prompt user
-    show_log "TouchID sudo allows you to use fingerprint authentication for administrative commands."
-    show_log "This is more convenient than typing your password repeatedly."
-
-    read -p "Enable TouchID for sudo authentication? (Y/n): " -n 1 -r touchid_choice
-    echo
-
-    if [[ -z "${touchid_choice}" ]] || [[ ${touchid_choice} =~ ^[Yy]$ ]]; then
-      touchid_enabled=true
-    else
-      log "TouchID sudo setup skipped - standard password authentication will be used"
-    fi
-  fi
-
-  if [[ "${touchid_enabled}" = true ]]; then
-    # Check if TouchID is available before warning about password
-    if bioutil -rs 2>/dev/null | grep -q "Touch ID"; then
-      show_log "TouchID sudo needs to be configured. We will ask for your user password."
-    else
-      show_log "TouchID sudo needs to be configured (TouchID not available - will use password)."
-    fi
-
-    # Create the PAM configuration file
-    log "Creating TouchID sudo configuration..."
-    sudo -p "[TouchID setup] Enter password to configure TouchID for sudo: " tee "/etc/pam.d/sudo_local" >/dev/null <<'EOF'
-# sudo_local: PAM configuration for enabling TouchID for sudo
-#
-# This file enables the use of TouchID as an authentication method for sudo
-# commands on macOS. It is used in addition to the standard sudo configuration.
-#
-# Format: auth sufficient pam_tid.so
-
-# Allow TouchID authentication for sudo
-auth       sufficient     pam_tid.so
-EOF
-    check_success "TouchID sudo configuration"
-
-    # Test TouchID configuration
-    log "Testing TouchID sudo configuration..."
-    sudo -p "[TouchID test] Enter password to test TouchID sudo configuration: " -v
-    check_success "TouchID sudo test"
-  fi
+  "${SETUP_DIR}/scripts/server/setup-touchid-sudo.sh"
 fi
 
 # Configure sudo timeout to reduce password prompts during setup
@@ -598,143 +537,18 @@ EOF
 sudo chmod 0440 /etc/sudoers.d/10_setup_timeout
 check_success "Sudo timeout configuration"
 
-# WiFi Network Assessment and Configuration
-section "WiFi Network Assessment and Configuration"
-show_log "WiFi Network Assessment and Configuration; this may take a moment..."
-
-# Detect active WiFi interface
-WIFI_INTERFACE=$(networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}' || echo "en0")
-log "Using WiFi interface: ${WIFI_INTERFACE}"
-
-# Check current network connectivity status
-WIFI_CONFIGURED=false
-CURRENT_NETWORK=$(system_profiler SPAirPortDataType -detailLevel basic | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}')
-
-if [[ -n "${CURRENT_NETWORK}" ]]; then
-  log "Connected to WiFi network: ${CURRENT_NETWORK}"
-
-  # Test actual internet connectivity
-  log "Testing internet connectivity..."
-  if ping -c 1 -W 3000 8.8.8.8 >/dev/null 2>&1 || ping -c 1 -W 3000 1.1.1.1 >/dev/null 2>&1; then
-    show_log "✅ WiFi already configured and working: ${CURRENT_NETWORK}"
-    WIFI_CONFIGURED=true
-  else
-    log "⚠️ Connected to WiFi but no internet access detected"
-  fi
+# WiFi Network Assessment and Configuration - delegated to module
+if [[ "${FORCE}" = true ]]; then
+  "${SETUP_DIR}/scripts/server/setup-network.sh" --force
 else
-  log "No WiFi network currently connected"
+  "${SETUP_DIR}/scripts/server/setup-network.sh"
 fi
 
-# Only attempt WiFi configuration if not already working
-if [[ "${WIFI_CONFIGURED}" != true ]] && [[ -f "${WIFI_CONFIG_FILE}" ]]; then
-  log "Found WiFi configuration file - attempting setup"
-
-  # Source the WiFi configuration file to get SSID
-  # shellcheck source=/dev/null
-  source "${WIFI_CONFIG_FILE}"
-
-  # Retrieve WiFi password from Keychain (if available)
-  wifi_password=""
-  if [[ -n "${KEYCHAIN_WIFI_SERVICE:-}" ]] && [[ -n "${KEYCHAIN_ACCOUNT:-}" ]]; then
-    log "Attempting to retrieve WiFi password from Keychain..."
-    if wifi_password=$(get_keychain_credential "${KEYCHAIN_WIFI_SERVICE}" "${KEYCHAIN_ACCOUNT}" 2>/dev/null); then
-      # Extract password from combined credential (format: "ssid:password")
-      wifi_password="${wifi_password#*:}"
-      log "✅ WiFi password retrieved from Keychain"
-    else
-      log "⚠️ WiFi password not found in Keychain - manual configuration will be needed"
-    fi
-  fi
-
-  if [[ -n "${WIFI_SSID}" ]] && [[ -n "${wifi_password}" ]]; then
-    log "Configuring WiFi network: ${WIFI_SSID}"
-
-    # Check if SSID is already in preferred networks list
-    if networksetup -listpreferredwirelessnetworks "${WIFI_INTERFACE}" 2>/dev/null | grep -q "${WIFI_SSID}"; then
-      log "WiFi network ${WIFI_SSID} is already in preferred networks list"
-    else
-      # Add WiFi network to preferred networks
-      networksetup -addpreferredwirelessnetworkatindex "${WIFI_INTERFACE}" "${WIFI_SSID}" 0 WPA2
-      check_success "Add preferred WiFi network"
-      security add-generic-password -D "AirPort network password" -a "${WIFI_SSID}" -s "AirPort" -w "${wifi_password}" || true
-      check_success "Store password in keychain"
-    fi
-
-    # Try to join the network
-    log "Attempting to join WiFi network ${WIFI_SSID}..."
-    networksetup -setairportnetwork "${WIFI_INTERFACE}" "${WIFI_SSID}" "${wifi_password}" &>/dev/null || true
-
-    # Give it a few seconds and check if we connected
-    sleep 5
-    NEW_CONNECTION=$(system_profiler SPAirPortDataType -detailLevel basic | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}')
-    if [[ "${NEW_CONNECTION}" == "${WIFI_SSID}" ]]; then
-      show_log "✅ Successfully connected to WiFi network: ${WIFI_SSID}"
-    else
-      show_log "⚠️ WiFi network will be automatically joined after reboot"
-    fi
-
-    # Clear password from memory for security
-    unset wifi_password
-    log "WiFi password cleared from memory for security"
-  else
-    log "WiFi configuration file does not contain valid SSID and password"
-  fi
-elif [[ "${WIFI_CONFIGURED}" != true ]]; then
-  log "No WiFi configuration available and no working connection detected"
-  show_log "⚠️ Manual WiFi configuration required"
-  show_log "Opening System Settings WiFi section..."
-
-  # Open WiFi settings in System Settings
-  open "x-apple.systempreferences:com.apple.wifi-settings-extension"
-
-  if [[ "${FORCE}" = false ]]; then
-    show_log "Please configure WiFi in System Settings, then press any key to continue..."
-    read -p "Press any key when WiFi is configured... " -n 1 -r
-    echo
-
-    # Close System Settings now that user is done with WiFi configuration
-    show_log "Closing System Settings..."
-    osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
-  else
-    show_log "Force mode: continuing without WiFi - may affect subsequent steps"
-  fi
+# Set hostname and HD name - delegated to module
+if [[ "${FORCE}" = true ]]; then
+  "${SETUP_DIR}/scripts/server/setup-system-identity.sh" --force
 else
-  log "✅ WiFi already working - skipping configuration"
-fi
-
-# Set hostname and HD name
-section "Setting Hostname and HD volume name"
-CURRENT_HOSTNAME=$(hostname)
-if [[ "${CURRENT_HOSTNAME}" = "${HOSTNAME}" ]]; then
-  log "Hostname is already set to ${HOSTNAME}"
-else
-  log "Setting hostname to ${HOSTNAME}"
-  sudo -p "[System setup] Enter password to set computer hostname: " scutil --set ComputerName "${HOSTNAME}"
-  sudo -p "[System setup] Enter password to set local hostname: " scutil --set LocalHostName "${HOSTNAME}"
-  sudo -p "[System setup] Enter password to set system hostname: " scutil --set HostName "${HOSTNAME}"
-  check_success "Hostname configuration"
-fi
-log "Renaming HD"
-
-# Create a temporary file for the plist output
-TEMP_PLIST=$(mktemp)
-if diskutil info -plist / >"${TEMP_PLIST}"; then
-  CURRENT_VOLUME=$(/usr/libexec/PlistBuddy -c "Print :VolumeName" "${TEMP_PLIST}" 2>/dev/null || echo "Macintosh HD")
-else
-  CURRENT_VOLUME="Macintosh HD"
-fi
-
-# Clean up temp file
-rm -f "${TEMP_PLIST}"
-
-# Only rename if the volume name is different
-if [[ "${CURRENT_VOLUME}" != "${HOSTNAME}" ]]; then
-  log "Current volume name: ${CURRENT_VOLUME}"
-  log "Renaming volume from '${CURRENT_VOLUME}' to '${HOSTNAME}'"
-  diskutil rename "/Volumes/${CURRENT_VOLUME}" "${HOSTNAME}"
-  check_success "Renamed HD from '${CURRENT_VOLUME}' to '${HOSTNAME}'"
-else
-  log "Volume is already named '${HOSTNAME}'"
+  "${SETUP_DIR}/scripts/server/setup-system-identity.sh"
 fi
 
 # Setup SSH access
@@ -1090,6 +904,7 @@ import_external_keychain_credentials() {
   fi
 
   # Import WiFi credential (optional)
+  # shellcheck disable=SC2154 # KEYCHAIN_WIFI_SERVICE loaded from sourced manifest
   if wifi_credential=$(security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
     security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
     if security add-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${wifi_credential}" -D "Mac Server Setup - WiFi Credentials" -A -U; then
