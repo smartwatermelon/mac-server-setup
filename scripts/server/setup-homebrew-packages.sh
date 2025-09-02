@@ -198,7 +198,7 @@ else
   log "Please ensure setup-command-line-tools.sh is present in the scripts directory"
   exit 1
 fi
-set -x
+
 # Install Homebrew
 if [[ "${SKIP_HOMEBREW}" == false ]]; then
   set_section "Installing Homebrew"
@@ -262,7 +262,7 @@ else
   echo "❌ Value of SKIP_HOMEBREW was ${SKIP_HOMEBREW}"
   exit 1
 fi
-set +x
+
 # Add concurrent download configuration
 section "Configuring Homebrew for Optimal Performance"
 export HOMEBREW_DOWNLOAD_CONCURRENCY=auto
