@@ -511,6 +511,8 @@ if [[ "${FORCE}" != "true" && "${RERUN_AFTER_FDA}" != "true" ]]; then
   done
 
   show_log "✅ Administrator password validated"
+  # Export for module access to keychain operations
+  export ADMINISTRATOR_PASSWORD
 else
   log "🆗 Skipping password prompt (force mode or FDA re-run)"
 fi

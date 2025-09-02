@@ -140,7 +140,7 @@ fi
 # shellcheck source=/dev/null
 if [[ -f "${SETUP_DIR}/scripts/server/first-boot.sh" ]]; then
   # Extract the get_keychain_credential function from first-boot.sh
-  # Enhanced version for module context with keychain unlocking
+  # Enhanced version for module context with automatic keychain unlocking
   get_keychain_credential() {
     local service="$1"
     local account="$2"
@@ -152,11 +152,25 @@ if [[ -f "${SETUP_DIR}/scripts/server/first-boot.sh" ]]; then
       return 0
     fi
 
-    # If that failed, check if keychain is locked
+    # If that failed, check if keychain is locked and unlock it
     if security show-keychain-info login.keychain 2>&1 | grep -q "locked"; then
-      collect_warning "Admin keychain is locked - auto-login setup requires manual intervention"
-      log "Manual keychain unlock needed: security unlock-keychain login.keychain"
-      return 1
+      if [[ -n "${ADMINISTRATOR_PASSWORD:-}" ]]; then
+        log "Admin keychain is locked - unlocking automatically with administrator password"
+        if security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}" login.keychain 2>/dev/null; then
+          log "✅ Successfully unlocked admin keychain"
+          # Retry credential retrieval after unlocking
+          if credential=$(security find-generic-password -s "${service}" -a "${account}" -w 2>/dev/null); then
+            echo "${credential}"
+            return 0
+          fi
+        else
+          collect_warning "Failed to unlock admin keychain with administrator password"
+          return 1
+        fi
+      else
+        collect_warning "Admin keychain is locked and administrator password not available in module context"
+        return 1
+      fi
     fi
 
     # Final attempt - may just not exist
