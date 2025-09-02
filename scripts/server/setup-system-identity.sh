@@ -127,7 +127,7 @@ check_success() {
   if [[ ${exit_code} -eq 0 ]]; then
     show_log "✅ ${operation_name}"
   else
-    if [[ "${FORCE}" = true ]]; then
+    if [[ "${FORCE}" == true ]]; then
       collect_warning "${operation_name} failed but continuing due to --force flag"
     else
       collect_error "${operation_name} failed"
@@ -168,7 +168,7 @@ HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 # Set hostname and HD name
 set_section "Setting Hostname and HD volume name"
 CURRENT_HOSTNAME=$(hostname)
-if [[ "${CURRENT_HOSTNAME}" = "${HOSTNAME}" ]]; then
+if [[ "${CURRENT_HOSTNAME}" == "${HOSTNAME}" ]]; then
   log "Hostname is already set to ${HOSTNAME}"
 else
   log "Setting hostname to ${HOSTNAME}"

@@ -127,7 +127,7 @@ check_success() {
   if [[ ${exit_code} -eq 0 ]]; then
     log "✅ ${operation_name}"
   else
-    if [[ "${FORCE}" = true ]]; then
+    if [[ "${FORCE}" == true ]]; then
       collect_warning "${operation_name} failed but continuing due to --force flag"
     else
       collect_error "${operation_name} failed"
@@ -445,7 +445,7 @@ fi
 log "Enabled immediate password requirement after screen saver"
 
 # Run software updates if not skipped
-if [[ "${SKIP_UPDATE}" = false ]]; then
+if [[ "${SKIP_UPDATE}" == false ]]; then
   section "Running Software Updates"
   show_log "Checking for software updates (this may take a while)"
 

@@ -331,7 +331,7 @@ interactive_clt_installation() {
 
   set_section "Interactive CLT Installation"
 
-  if [[ "${force}" = "false" ]]; then
+  if [[ "${force}" == "false" ]]; then
     show_log "This will open a dialog for Command Line Tools installation"
     read -rp "${LOG_PREFIX} Press any key to continue..." -n 1 -r
     echo
@@ -343,7 +343,7 @@ interactive_clt_installation() {
   show_log "Waiting for Command Line Tools installation to complete..."
   show_log "Please complete the installation dialog, then press any key to continue"
 
-  if [[ "${force}" = "false" ]]; then
+  if [[ "${force}" == "false" ]]; then
     read -rp "${LOG_PREFIX} Press any key when installation is complete..." -n 1 -r
     echo
   else

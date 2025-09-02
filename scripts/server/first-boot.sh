@@ -264,7 +264,7 @@ check_success() {
     show_log "✅ $1"
   else
     collect_error "$1 failed"
-    if [[ "${FORCE}" = false ]]; then
+    if [[ "${FORCE}" == false ]]; then
       read -p "Continue anyway? (y/N) " -n 1 -r
       echo
       if [[ ! ${REPLY} =~ ^[Yy]$ ]]; then
@@ -517,7 +517,7 @@ if [[ -f "/tmp/${HOSTNAME_LOWER}_fda_requested" ]]; then
 fi
 
 # Confirm operation if not forced
-if [[ "${FORCE}" = false ]] && [[ "${RERUN_AFTER_FDA}" = false ]]; then
+if [[ "${FORCE}" == false ]] && [[ "${RERUN_AFTER_FDA}" == false ]]; then
   read -p "This script will configure your Mac Mini server. Continue? (Y/n) " -n 1 -r
   echo
   # Default to Yes if Enter pressed (empty REPLY)
@@ -553,7 +553,7 @@ fi
 #
 
 # TouchID sudo setup - delegated to module
-if [[ "${FORCE}" = true ]]; then
+if [[ "${FORCE}" == true ]]; then
   "${SETUP_DIR}/scripts/setup-touchid-sudo.sh" --force
 else
   "${SETUP_DIR}/scripts/setup-touchid-sudo.sh"
@@ -571,14 +571,14 @@ sudo chmod 0440 /etc/sudoers.d/10_setup_timeout
 check_success "Sudo timeout configuration"
 
 # WiFi Network Assessment and Configuration - delegated to module
-if [[ "${FORCE}" = true ]]; then
+if [[ "${FORCE}" == true ]]; then
   "${SETUP_DIR}/scripts/setup-network.sh" --force
 else
   "${SETUP_DIR}/scripts/setup-network.sh"
 fi
 
 # Set hostname and HD name - delegated to module
-if [[ "${FORCE}" = true ]]; then
+if [[ "${FORCE}" == true ]]; then
   "${SETUP_DIR}/scripts/setup-system-identity.sh" --force
 else
   "${SETUP_DIR}/scripts/setup-system-identity.sh"
@@ -732,7 +732,7 @@ if [[ "${APPLE_ID_CONFIGURED}" != true ]]; then
     check_success "Opening Apple ID password link"
 
     # Ask user to confirm they've retrieved the password
-    if [[ "${FORCE}" = false ]]; then
+    if [[ "${FORCE}" == false ]]; then
       read -rp "Have you retrieved your Apple ID password? (Y/n) " -n 1 -r
       echo
       # Default to Yes if Enter pressed (empty REPLY)
@@ -748,7 +748,7 @@ if [[ "${APPLE_ID_CONFIGURED}" != true ]]; then
   fi
 
   # Open System Settings to the Apple ID section
-  if [[ "${FORCE}" = false ]]; then
+  if [[ "${FORCE}" == false ]]; then
     show_log "Opening System Settings to the Apple ID section"
     show_log "IMPORTANT: You will need to complete several steps:"
     show_log "1. Enter your Apple ID and password"
@@ -1056,7 +1056,7 @@ fi
 #
 
 # Homebrew and package installation - delegated to module
-if [[ "${FORCE}" = true ]]; then
+if [[ "${FORCE}" == true ]]; then
   "${SETUP_DIR}/scripts/setup-homebrew-packages.sh" --force ${SKIP_HOMEBREW:+--skip-homebrew} ${SKIP_PACKAGES:+--skip-packages}
 else
   "${SETUP_DIR}/scripts/setup-homebrew-packages.sh" ${SKIP_HOMEBREW:+--skip-homebrew} ${SKIP_PACKAGES:+--skip-packages}
@@ -1066,7 +1066,7 @@ fi
 #
 
 # System preferences configuration - delegated to module
-if [[ "${FORCE}" = true ]]; then
+if [[ "${FORCE}" == true ]]; then
   "${SETUP_DIR}/scripts/setup-system-preferences.sh" --force ${SKIP_UPDATE:+--skip-update}
 else
   "${SETUP_DIR}/scripts/setup-system-preferences.sh" ${SKIP_UPDATE:+--skip-update}
@@ -1076,7 +1076,7 @@ fi
 #
 
 # Admin environment setup - delegated to module
-if [[ "${FORCE}" = true ]]; then
+if [[ "${FORCE}" == true ]]; then
   "${SETUP_DIR}/scripts/setup-admin-environment.sh" --force
 else
   "${SETUP_DIR}/scripts/setup-admin-environment.sh"

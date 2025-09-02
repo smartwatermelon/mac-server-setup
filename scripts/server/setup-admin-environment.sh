@@ -120,7 +120,7 @@ check_success() {
   if [[ ${exit_code} -eq 0 ]]; then
     log "✅ ${operation_name}"
   else
-    if [[ "${FORCE}" = true ]]; then
+    if [[ "${FORCE}" == true ]]; then
       collect_warning "${operation_name} failed but continuing due to --force flag"
     else
       collect_error "${operation_name} failed"
@@ -166,7 +166,7 @@ HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 #
 section "Reload Profile"
 # shellcheck source=/dev/null
-source ~/.zprofile
+[[ -f ~/.zprofile ]] && source ~/.zprofile
 check_success "Reload profile"
 
 #

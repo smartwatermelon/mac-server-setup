@@ -128,7 +128,7 @@ check_success() {
   if [[ ${exit_code} -eq 0 ]]; then
     show_log "✅ ${operation_name}"
   else
-    if [[ "${FORCE}" = true ]]; then
+    if [[ "${FORCE}" == true ]]; then
       collect_warning "${operation_name} failed but continuing due to --force flag"
     else
       collect_error "${operation_name} failed"
@@ -165,7 +165,7 @@ else
   # TouchID sudo not configured - prompt user
   touchid_enabled=false
 
-  if [[ "${FORCE}" = true ]]; then
+  if [[ "${FORCE}" == true ]]; then
     # Force mode - enable TouchID by default
     touchid_enabled=true
     log "Force mode enabled - configuring TouchID sudo authentication"
@@ -184,7 +184,7 @@ else
     fi
   fi
 
-  if [[ "${touchid_enabled}" = true ]]; then
+  if [[ "${touchid_enabled}" == true ]]; then
     # Check if TouchID is available before warning about password
     if bioutil -rs 2>/dev/null | grep -q "Touch ID"; then
       show_log "TouchID sudo needs to be configured. We will ask for your user password."

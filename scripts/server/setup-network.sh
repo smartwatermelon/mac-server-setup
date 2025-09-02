@@ -131,7 +131,7 @@ check_success() {
   if [[ ${exit_code} -eq 0 ]]; then
     show_log "✅ ${operation_name}"
   else
-    if [[ "${FORCE}" = true ]]; then
+    if [[ "${FORCE}" == true ]]; then
       collect_warning "${operation_name} failed but continuing due to --force flag"
     else
       collect_error "${operation_name} failed"
@@ -181,7 +181,7 @@ if ping -c 1 8.8.8.8 >/dev/null 2>&1; then
       if [[ "${CURRENT_NETWORK}" != "${WIFI_SSID}" ]]; then
         log "Configured network (${WIFI_SSID}) differs from current network (${CURRENT_NETWORK})"
 
-        if [[ "${FORCE}" = true ]] || {
+        if [[ "${FORCE}" == true ]] || {
           echo -n "Connect to configured WiFi network '${WIFI_SSID}'? (Y/n): "
           read -r -n 1 wifi_choice
           echo

@@ -133,7 +133,7 @@ check_success() {
   if [[ ${exit_code} -eq 0 ]]; then
     log "✅ ${operation_name}"
   else
-    if [[ "${FORCE}" = true ]]; then
+    if [[ "${FORCE}" == true ]]; then
       collect_warning "${operation_name} failed but continuing due to --force flag"
     else
       collect_error "${operation_name} failed"
@@ -171,7 +171,7 @@ HOMEBREW_PREFIX="/opt/homebrew" # Apple Silicon
 #
 # HOMEBREW & PACKAGE INSTALLATION
 #
-
+set -x
 # Install Xcode Command Line Tools using dedicated script
 set_section "Installing Xcode Command Line Tools"
 
@@ -183,12 +183,12 @@ if [[ -f "${clt_script}" ]]; then
 
   # Prepare CLT installation arguments
   clt_args=()
-  if [[ "${FORCE}" = true ]]; then
+  if [[ "${FORCE}" == true ]]; then
     clt_args+=(--force)
   fi
 
   # Run the dedicated CLT installation script
-  if "${clt_script}" "${clt_args[@]}"; then
+  if "${clt_script}" ${clt_args[@]+"${clt_args[@]}"}; then
     log "✅ Command Line Tools installation completed successfully"
   else
     collect_error "Command Line Tools installation failed"
@@ -201,8 +201,8 @@ else
 fi
 
 # Install Homebrew
-if [[ "${SKIP_HOMEBREW}" = false ]]; then
-  section "Installing Homebrew"
+if [[ "${SKIP_HOMEBREW}" == false ]]; then
+  set_section "Installing Homebrew"
 
   # Check if Homebrew is already installed
   if command -v brew &>/dev/null; then
@@ -260,7 +260,7 @@ if [[ "${SKIP_HOMEBREW}" = false ]]; then
     fi
   fi
 fi
-
+set +x
 # Add concurrent download configuration
 section "Configuring Homebrew for Optimal Performance"
 export HOMEBREW_DOWNLOAD_CONCURRENCY=auto
@@ -268,7 +268,7 @@ CORES="$(sysctl -n hw.ncpu 2>/dev/null || echo "2x")"
 log "Enabled concurrent downloads (auto mode - using ${CORES} CPU cores for optimal parallelism)"
 
 # Install packages
-if [[ "${SKIP_PACKAGES}" = false ]]; then
+if [[ "${SKIP_PACKAGES}" == false ]]; then
   section "Installing Packages"
 
   # Function to install formulae if not already installed
