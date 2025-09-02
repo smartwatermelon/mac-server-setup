@@ -75,26 +75,8 @@ section() {
   show_log "=== $1 ==="
 }
 
-# Error and warning collection (simplified for module)
-declare -a collected_errors
-declare -a collected_warnings
-current_section=""
-
-set_section() {
-  current_section="$1"
-}
-
-collect_error() {
-  local error_msg="$1"
-  collected_errors+=("${current_section:+[${current_section}] }${error_msg}")
-  show_log "❌ ERROR: ${error_msg}"
-}
-
-collect_warning() {
-  local warning_msg="$1"
-  collected_warnings+=("${current_section:+[${current_section}] }${warning_msg}")
-  show_log "⚠️ WARNING: ${warning_msg}"
-}
+# Error and warning collection functions are imported from first-boot.sh via export
+# No local definitions needed - use the shared global error collection system
 
 # check_success function
 check_success() {

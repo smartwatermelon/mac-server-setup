@@ -155,6 +155,11 @@ COLLECTED_ERRORS=()
 COLLECTED_WARNINGS=()
 CURRENT_SCRIPT_SECTION=""
 
+# Export error collection arrays for module access
+export COLLECTED_ERRORS
+export COLLECTED_WARNINGS
+export CURRENT_SCRIPT_SECTION
+
 # Function to set current script section for context
 set_section() {
   CURRENT_SCRIPT_SECTION="$1"
@@ -192,6 +197,11 @@ collect_warning() {
   show_log "⚠️ ${clean_message}"
   COLLECTED_WARNINGS+=("[${script_name}:${line_number}] ${context}: ${clean_message}")
 }
+
+# Export error collection functions for module access
+export -f collect_error
+export -f collect_warning
+export -f set_section
 
 # Function to show collected errors and warnings at end
 show_collected_issues() {
