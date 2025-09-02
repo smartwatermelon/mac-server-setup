@@ -1917,6 +1917,109 @@ else
   log "No operator-first-login.sh found in ${SETUP_DIR}/scripts/"
 fi
 
+# Install Bash Configuration
+section "Installing Bash Configuration for Administrator and Operator"
+
+# Check if bash configuration is available in setup package
+BASH_CONFIG_SOURCE="${SETUP_DIR}/bash"
+if [[ -d "${BASH_CONFIG_SOURCE}" ]]; then
+  log "Installing Bash configuration from setup package"
+
+  # Function to install bash config for a user
+  install_bash_config_for_user() {
+    local username="$1"
+    local user_home="$2"
+    local user_config_dir="${user_home}/.config"
+    local user_bash_config_dir="${user_config_dir}/bash"
+
+    log "Installing Bash configuration for ${username}"
+
+    # Create .config directory if it doesn't exist
+    if [[ "${username}" == "${ADMIN_USERNAME}" ]]; then
+      # Admin user - direct operations
+      mkdir -p "${user_config_dir}"
+    else
+      # Operator user - use sudo -iu for proper environment
+      sudo -p "[Bash config] Enter password to create config directory for ${username}: " -iu "${username}" mkdir -p "${user_config_dir}"
+    fi
+
+    # Copy bash configuration directory
+    if [[ "${username}" == "${ADMIN_USERNAME}" ]]; then
+      cp -r "${BASH_CONFIG_SOURCE}" "${user_bash_config_dir}"
+      chown -R "${username}:staff" "${user_bash_config_dir}"
+    else
+      sudo -p "[Bash config] Enter password to copy bash config for ${username}: " cp -r "${BASH_CONFIG_SOURCE}" "${user_bash_config_dir}"
+      sudo -p "[Bash config] Enter password to set ownership for ${username}: " chown -R "${username}:staff" "${user_bash_config_dir}"
+    fi
+
+    # Create symlink for .bash_profile
+    local bash_profile_symlink="${user_home}/.bash_profile"
+    local bash_profile_target="${user_bash_config_dir}/.bash_profile"
+
+    if [[ "${username}" == "${ADMIN_USERNAME}" ]]; then
+      # Remove existing .bash_profile if it's not already our symlink
+      if [[ -f "${bash_profile_symlink}" && ! -L "${bash_profile_symlink}" ]]; then
+        log "Backing up existing .bash_profile for ${username}"
+        local timestamp
+        timestamp="$(date +%Y%m%d-%H%M%S)"
+        mv "${bash_profile_symlink}" "${bash_profile_symlink}.backup.${timestamp}"
+      fi
+
+      # Create the symlink
+      ln -sf "${bash_profile_target}" "${bash_profile_symlink}"
+    else
+      # Operator user - use sudo -iu for proper environment
+      if sudo -iu "${username}" test -f "${bash_profile_symlink}" && ! sudo -iu "${username}" test -L "${bash_profile_symlink}"; then
+        log "Backing up existing .bash_profile for ${username}"
+        local timestamp
+        timestamp="$(date +%Y%m%d-%H%M%S)"
+        sudo -p "[Bash config] Enter password to backup existing bash_profile for ${username}: " -iu "${username}" mv "${bash_profile_symlink}" "${bash_profile_symlink}.backup.${timestamp}"
+      fi
+
+      # Create the symlink
+      sudo -p "[Bash config] Enter password to create bash_profile symlink for ${username}: " -iu "${username}" ln -sf "${bash_profile_target}" "${bash_profile_symlink}"
+    fi
+
+    # Create .profile redirector
+    local profile_file="${user_home}/.profile"
+    local profile_content="[ -r \$HOME/.bash_profile ] && . \$HOME/.bash_profile"
+
+    if [[ "${username}" == "${ADMIN_USERNAME}" ]]; then
+      # Check if .profile already has the redirector
+      if [[ ! -f "${profile_file}" ]] || ! grep -q "\.bash_profile" "${profile_file}"; then
+        log "Creating .profile redirector for ${username}"
+        echo "${profile_content}" >>"${profile_file}"
+      else
+        log ".profile redirector already exists for ${username}"
+      fi
+    else
+      # Operator user - use sudo -iu for proper environment
+      if ! sudo -iu "${username}" test -f "${profile_file}" || ! sudo -iu "${username}" grep -q "\.bash_profile" "${profile_file}"; then
+        log "Creating .profile redirector for ${username}"
+        echo "${profile_content}" | sudo -p "[Bash config] Enter password to create profile redirector for ${username}: " -iu "${username}" tee -a "${profile_file}" >/dev/null
+      else
+        log ".profile redirector already exists for ${username}"
+      fi
+    fi
+
+    log "✅ Bash configuration installed for ${username}"
+  }
+
+  # Install for Administrator
+  install_bash_config_for_user "${ADMIN_USERNAME}" "/Users/${ADMIN_USERNAME}"
+
+  # Install for Operator (if account exists)
+  if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
+    install_bash_config_for_user "${OPERATOR_USERNAME}" "/Users/${OPERATOR_USERNAME}"
+  else
+    log "Operator account not found - skipping bash config installation for operator"
+  fi
+
+  check_success "Bash configuration installation"
+else
+  log "No bash configuration found in setup package - skipping bash config installation"
+fi
+
 # Configure Time Machine backup
 section "Configuring Time Machine"
 
@@ -2020,6 +2123,9 @@ show_log "   - Rebooting will automatically log in as '${OPERATOR_USERNAME}'"
 show_log "   - Dock cleanup and operator customization will happen automatically"
 show_log "   - Configure any additional operator-specific settings"
 show_log "   - Test that all applications are accessible as the operator"
+show_log ""
+show_log "4. The next Terminal session, window, or tab will use the installed"
+show_log "   Bash shell and custom settings for both Administrator and Operator accounts."
 
 # Clean up temporary sudo timeout configuration
 log "Removing temporary sudo timeout configuration"
