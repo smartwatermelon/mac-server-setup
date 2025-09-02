@@ -1054,7 +1054,7 @@ fi
 
 # HOMEBREW & PACKAGE INSTALLATION - delegated to module
 #
-set -x
+
 # Homebrew and package installation - delegated to module
 if [[ "${SKIP_HOMEBREW}" == true ]]; then
   set_hb_flag="--skip-homebrew"
@@ -1071,7 +1071,7 @@ if [[ "${FORCE}" == true ]]; then
 else
   "${SETUP_DIR}/scripts/setup-homebrew-packages.sh" "${set_hb_flag}" "${set_package_flag}"
 fi
-set +x
+
 # SYSTEM PREFERENCES CONFIGURATION - delegated to module
 #
 
