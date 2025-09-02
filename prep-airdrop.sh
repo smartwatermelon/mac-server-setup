@@ -617,6 +617,13 @@ if [[ -d "${BASH_CONFIG_SOURCE}" ]]; then
   chmod -R 644 "${BASH_CONFIG_DEST}/"*.sh 2>/dev/null || true
   chmod 644 "${BASH_CONFIG_DEST}/.bash_profile" 2>/dev/null || true
 
+  # Remove development-specific files that shouldn't be deployed
+  rm -rf "${BASH_CONFIG_DEST}/.claude/"
+  rm -rf "${BASH_CONFIG_DEST}/.git/"
+  rm -f "${BASH_CONFIG_DEST}/.gitignore"
+  rm -f "${BASH_CONFIG_DEST}/.shellcheckrc"
+  rm -f "${BASH_CONFIG_DEST}/.yamllint"
+
   echo "✅ Bash configuration copied to setup package"
 else
   collect_warning "Bash configuration directory not found at ${BASH_CONFIG_SOURCE}"
