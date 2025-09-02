@@ -555,16 +555,9 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   # Copy main entry point script to root
   cp "${SCRIPT_SOURCE_DIR}/scripts/server/first-boot.sh" "${OUTPUT_PATH}/" 2>/dev/null || collect_warning "first-boot.sh not found in server directory"
 
-  # Copy all system scripts from scripts/server directory
-  if [[ -d "${SCRIPT_SOURCE_DIR}/scripts/server" ]]; then
-    echo "Copying all scripts from scripts/server directory..."
-    # Copy all .sh files from scripts/server (excluding first-boot.sh which goes to root)
-    find "${SCRIPT_SOURCE_DIR}/scripts/server" -name "*.sh" -not -name "first-boot.sh" -exec cp {} "${OUTPUT_PATH}/scripts/" \;
-    # Make all copied scripts executable
-    chmod +x "${OUTPUT_PATH}/scripts"/*.sh
-  else
-    echo "Warning: scripts/server directory not found"
-  fi
+  # Copy system scripts to scripts directory
+  cp "${SCRIPT_SOURCE_DIR}/scripts/server/setup-remote-desktop.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: setup-remote-desktop.sh not found in server directory"
+  cp "${SCRIPT_SOURCE_DIR}/scripts/server/setup-command-line-tools.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: setup-command-line-tools.sh not found in server directory"
 
   # Copy template scripts to app-setup/templates
   cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/mount-nas-media.sh" "${OUTPUT_PATH}/app-setup/templates/" 2>/dev/null || echo "Warning: mount-nas-media.sh not found in app-setup-templates directory"
