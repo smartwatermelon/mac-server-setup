@@ -620,6 +620,7 @@ if [[ -d "${BASH_CONFIG_SOURCE}" ]]; then
   # Remove development-specific files that shouldn't be deployed
   rm -rf "${BASH_CONFIG_DEST}/.claude/"
   rm -rf "${BASH_CONFIG_DEST}/.git/"
+  rm -f "${BASH_CONFIG_DEST}/.DS_Store"
   rm -f "${BASH_CONFIG_DEST}/.gitignore"
   rm -f "${BASH_CONFIG_DEST}/.shellcheckrc"
   rm -f "${BASH_CONFIG_DEST}/.yamllint"
