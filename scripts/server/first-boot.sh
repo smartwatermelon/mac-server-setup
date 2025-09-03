@@ -258,6 +258,72 @@ show_collected_issues() {
   rm -f "${SETUP_ERRORS_FILE}" "${SETUP_WARNINGS_FILE}"
 }
 
+# Deploy Package Manifest Validation
+# Validates that all required files are present in the deployment package
+# before beginning system setup operations
+
+validate_deploy_package() {
+  local manifest_file="${SETUP_DIR}/DEPLOY_MANIFEST.txt"
+  local validation_errors=0
+  local validation_warnings=0
+
+  if [[ ! -f "${manifest_file}" ]]; then
+    collect_error "Deploy manifest not found: ${manifest_file}"
+    show_log "This deployment package was created with an older version of prep-airdrop.sh"
+    show_log "Consider regenerating the package for better deployment validation"
+    return 1
+  fi
+
+  log "Validating deployment package against manifest"
+
+  # Parse manifest and check each file
+  while IFS='=' read -r file_path requirement || [[ -n "${file_path}" ]]; do
+    # Skip comments and empty lines
+    [[ "${file_path}" =~ ^#.*$ ]] || [[ -z "${file_path}" ]] && continue
+    [[ "${file_path}" =~ ^(MANIFEST_VERSION|CREATED_BY|CREATED_AT|PACKAGE_ROOT)$ ]] && continue
+
+    local full_path="${SETUP_DIR}/${file_path}"
+
+    if [[ -f "${full_path}" ]]; then
+      log "✅ Found: ${file_path}"
+    else
+      case "${requirement}" in
+        "REQUIRED")
+          collect_error "Required file missing from deploy package: ${file_path}"
+          ((validation_errors++))
+          ;;
+        "OPTIONAL")
+          collect_warning "Optional file missing from deploy package: ${file_path}"
+          ((validation_warnings++))
+          ;;
+        "MISSING")
+          log "📋 Expected missing: ${file_path} (was not available during package creation)"
+          ;;
+        *)
+          collect_warning "Unknown requirement '${requirement}' for file: ${file_path}"
+          ((validation_warnings++))
+          ;;
+      esac
+    fi
+  done <"${manifest_file}"
+
+  if [[ ${validation_errors} -gt 0 ]]; then
+    collect_error "Deploy package validation failed: ${validation_errors} required files missing"
+    show_log "❌ Cannot proceed with setup - required files are missing from deployment package"
+    show_log "Please regenerate the deployment package with prep-airdrop.sh and try again"
+    return 1
+  fi
+
+  if [[ ${validation_warnings} -gt 0 ]]; then
+    show_log "Deploy package validation completed with ${validation_warnings} optional files missing"
+    show_log "Setup will continue, but some optional features may not be available"
+  else
+    show_log "✅ Deploy package validation passed - all files present"
+  fi
+
+  return 0
+}
+
 # Function to check if a command was successful
 check_success() {
   if [[ $? -eq 0 ]]; then
@@ -508,6 +574,14 @@ log "Date: ${timestamp}"
 productversion="$(sw_vers -productVersion)"
 log "macOS Version: ${productversion}"
 log "Setup directory: ${SETUP_DIR}"
+
+# Validate deployment package before beginning setup
+set_section "Validating Deployment Package"
+if ! validate_deploy_package; then
+  show_log "❌ Deployment package validation failed - cannot proceed with setup"
+  show_collected_issues
+  exit 1
+fi
 
 # Look for evidence we're being re-run after FDA grant
 if [[ -f "/tmp/${HOSTNAME_LOWER}_fda_requested" ]]; then
