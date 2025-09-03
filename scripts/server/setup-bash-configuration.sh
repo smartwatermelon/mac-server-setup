@@ -31,8 +31,7 @@ for arg in "$@"; do
 done
 
 # Load common configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SETUP_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_FILE="${SETUP_DIR}/config/config.conf"
 
 if [[ -f "${CONFIG_FILE}" ]]; then
