@@ -277,10 +277,36 @@ validate_deploy_package() {
   log "Validating deployment package against manifest"
 
   # Parse manifest and check each file
-  while IFS='=' read -r file_path requirement || [[ -n "${file_path}" ]]; do
+  while read -r line || [[ -n "${line}" ]]; do
     # Skip comments and empty lines
-    [[ "${file_path}" =~ ^#.*$ ]] || [[ -z "${file_path}" ]] && continue
-    [[ "${file_path}" =~ ^(MANIFEST_VERSION|CREATED_BY|CREATED_AT|PACKAGE_ROOT)$ ]] && continue
+    [[ "${line}" =~ ^#.*$ ]] || [[ -z "${line}" ]] && continue
+
+    # Skip metadata entries
+    [[ "${line}" =~ ^(MANIFEST_VERSION|CREATED_BY|CREATED_AT|PACKAGE_ROOT)= ]] && continue
+
+    # Check if line contains an equals sign
+    if [[ ! "${line}" =~ = ]]; then
+      collect_warning "Malformed manifest entry (no equals sign): ${line}"
+      ((validation_warnings++))
+      continue
+    fi
+
+    # Parse file path and requirement safely
+    file_path="${line%%=*}"  # Everything before first =
+    requirement="${line#*=}" # Everything after first =
+
+    # Handle edge cases
+    if [[ -z "${file_path}" ]]; then
+      collect_warning "Malformed manifest entry (empty file path): ${line}"
+      ((validation_warnings++))
+      continue
+    fi
+
+    if [[ -z "${requirement}" ]]; then
+      collect_warning "Malformed manifest entry (empty requirement): ${line}"
+      ((validation_warnings++))
+      continue
+    fi
 
     local full_path="${SETUP_DIR}/${file_path}"
 

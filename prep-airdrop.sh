@@ -166,6 +166,28 @@ add_to_manifest() {
   echo "${file_path}=${requirement}" >>"${manifest_file}"
 }
 
+# Remove file entry from manifest
+remove_from_manifest() {
+  local file_path="$1"   # Relative path from OUTPUT_PATH
+  local requirement="$2" # REQUIRED, OPTIONAL, or MISSING
+  local manifest_file="${OUTPUT_PATH}/DEPLOY_MANIFEST.txt"
+
+  if [[ ! -f "${manifest_file}" ]]; then
+    echo "Manifest file does not exist: ${manifest_file}"
+    return 1
+  fi
+
+  # Form the line to remove
+  local entry="${file_path}=${requirement}"
+
+  # Safely remove the exact matching line
+  # (using a temp file to ensure atomic operation)
+  local tmpfile
+  tmpfile="$(mktemp "${manifest_file}.XXXXXX")"
+
+  grep -vxF -- "${entry}" "${manifest_file}" >"${tmpfile}" && mv "${tmpfile}" "${manifest_file}"
+}
+
 # Copy file with manifest tracking
 copy_with_manifest() {
   local source="$1"
@@ -190,20 +212,39 @@ copy_with_manifest() {
   fi
 }
 
-# Copy directory with manifest tracking (for bash config, etc.)
 copy_dir_with_manifest() {
   local source_dir="$1"
-  local dest_dir_relative="$2" # Relative to OUTPUT_PATH
-  local requirement="$3"       # REQUIRED or OPTIONAL
+  local dest_dir_relative="$2"      # Relative to OUTPUT_PATH
+  local requirement="$3"            # REQUIRED or OPTIONAL
+  local except_dirs_string="${4:-}" # e.g. ".git|.claude|tmp" or ""
 
   local dest_dir_full="${OUTPUT_PATH}/${dest_dir_relative}"
+
+  # Prepare array of exception dirs if except_dirs_string is non-empty
+  local IFS='|'
+  read -r -a except_dirs <<<"${except_dirs_string}"
 
   if [[ -d "${source_dir}" ]]; then
     mkdir -p "${dest_dir_full}"
 
     # Copy directory contents and track individual files
     if find "${source_dir}" -type f -print0 | while IFS= read -r -d '' file; do
-      local relative_to_source="${file#"${source_dir}"/}"
+      local relative_to_source="${file#"${source_dir}/"}"
+      local skip_file=0
+
+      # For each file, check if it matches any exclude directory
+      for exclude in "${except_dirs[@]}"; do
+        # Only skip if file is inside an excluded dir (prefix match)
+        if [[ "${relative_to_source}" == "${exclude}/"* ]] || [[ "${relative_to_source}" == "${exclude}" ]]; then
+          skip_file=1
+          break
+        fi
+      done
+
+      if [[ ${skip_file} -eq 1 ]]; then
+        continue
+      fi
+
       local dest_file="${dest_dir_full}/${relative_to_source}"
 
       mkdir -p "$(dirname "${dest_file}")"
@@ -223,57 +264,6 @@ copy_dir_with_manifest() {
       collect_error "Required directory not found for deployment: ${source_dir}"
     else
       collect_warning "Optional directory not found: ${source_dir}"
-    fi
-  fi
-}
-
-# Copy scripts matching pattern with manifest tracking
-copy_scripts_with_manifest() {
-  local source_dir="$1"
-  local dest_dir_relative="$2" # Relative to OUTPUT_PATH
-  local pattern="$3"           # File pattern (e.g., "*.sh")
-  local exclude_pattern="$4"   # Optional exclude pattern
-  local requirement="$5"       # REQUIRED or OPTIONAL
-
-  local dest_dir_full="${OUTPUT_PATH}/${dest_dir_relative}"
-  mkdir -p "${dest_dir_full}"
-
-  local copied_count=0
-
-  if [[ -d "${source_dir}" ]]; then
-    # Use find to locate matching files
-    local matching_pattern
-    matching_pattern="$(find "${source_dir}" -name "${pattern}" -type f -print0)"
-    while IFS= read -r -d '' file; do
-      local filename
-      filename="$(basename "${file}")"
-
-      # Skip files matching exclude pattern
-      if [[ -n "${exclude_pattern}" ]] && [[ "${filename}" == "${exclude_pattern}" ]]; then
-        continue
-      fi
-
-      local dest_file="${dest_dir_full}/${filename}"
-      cp "${file}" "${dest_file}"
-      chmod +x "${dest_file}"
-      add_to_manifest "${dest_dir_relative}/${filename}" "${requirement}"
-      ((copied_count++))
-    done <<<"${matching_pattern}"
-
-    if [[ ${copied_count} -gt 0 ]]; then
-      echo "✅ Copied ${copied_count} scripts to manifest: ${dest_dir_relative}/"
-    else
-      if [[ "${requirement}" == "REQUIRED" ]]; then
-        collect_error "No required scripts found matching ${pattern} in ${source_dir}"
-      else
-        collect_warning "No optional scripts found matching ${pattern} in ${source_dir}"
-      fi
-    fi
-  else
-    if [[ "${requirement}" == "REQUIRED" ]]; then
-      collect_error "Required script directory not found: ${source_dir}"
-    else
-      collect_warning "Optional script directory not found: ${source_dir}"
     fi
   fi
 }
@@ -691,16 +681,22 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   # Copy main entry point script to root
   copy_with_manifest "${SCRIPT_SOURCE_DIR}/scripts/server/first-boot.sh" "first-boot.sh" "REQUIRED"
 
-  # Copy all system scripts from scripts/server directory
-  copy_scripts_with_manifest "${SCRIPT_SOURCE_DIR}/scripts/server" "scripts" "*.sh" "first-boot.sh" "REQUIRED"
+  # Copy system scripts from scripts/server directory one at a time
+  for SCRIPT_TO_COPY in setup-command-line-tools.sh setup-timemachine.sh setup-network.sh setup-touchid-sudo.sh \
+    setup-homebrew-packages.sh setup-system-identity.sh setup-bash-configuration.sh setup-remote-desktop.sh \
+    setup-admin-environment.sh setup-system-preferences.sh operator-first-login.sh; do
+    copy_with_manifest "${SCRIPT_SOURCE_DIR}/scripts/server/${SCRIPT_TO_COPY}" "scripts/${SCRIPT_TO_COPY}" "REQUIRED"
+  done
 
   # Copy template scripts to app-setup/templates
   copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/mount-nas-media.sh" "app-setup/templates/mount-nas-media.sh" "OPTIONAL"
   copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-plex-with-mount.sh" "app-setup/templates/start-plex-with-mount.sh" "OPTIONAL"
   copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-rclone.sh" "app-setup/templates/start-rclone.sh" "OPTIONAL"
 
-  # Copy app setup scripts to app-setup directory
-  copy_scripts_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup" "app-setup" "*.sh" "" "OPTIONAL"
+  # Copy app setup scripts to app-setup directory one at a time
+  for SCRIPT_TO_COPY in rclone-setup.sh plex-setup.sh; do
+    copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/${SCRIPT_TO_COPY}" "app-setup/${SCRIPT_TO_COPY}" "OPTIONAL"
+  done
 
   # Copy system configuration files
   copy_with_manifest "${SCRIPT_SOURCE_DIR}/config/formulae.txt" "config/formulae.txt" "OPTIONAL"
@@ -724,20 +720,15 @@ BASH_CONFIG_SOURCE="${HOME}/.config/bash"
 BASH_CONFIG_DEST="${OUTPUT_PATH}/bash"
 
 # Copy bash configuration directory with manifest tracking
-copy_dir_with_manifest "${BASH_CONFIG_SOURCE}" "bash" "OPTIONAL"
+copy_dir_with_manifest "${BASH_CONFIG_SOURCE}" "bash" "OPTIONAL" ".git|.claude|backups"
 
-# Clean up development-specific files from bash config if it was copied
+# Clean up development-specific files from bash config and manifest if they were copied
 if [[ -d "${BASH_CONFIG_DEST}" ]]; then
   # Remove development-specific files that shouldn't be deployed
-  rm -rf "${BASH_CONFIG_DEST}/.claude/" 2>/dev/null || true
-  rm -rf "${BASH_CONFIG_DEST}/.git/" 2>/dev/null || true
-  rm -f "${BASH_CONFIG_DEST}/.DS_Store" 2>/dev/null || true
-  rm -f "${BASH_CONFIG_DEST}/.gitignore" 2>/dev/null || true
-  rm -f "${BASH_CONFIG_DEST}/.shellcheckrc" 2>/dev/null || true
-  rm -f "${BASH_CONFIG_DEST}/.yamllint" 2>/dev/null || true
-  rm -f "${BASH_CONFIG_DEST}/secrets.sh" 2>/dev/null || true
-  rm -rf "${BASH_CONFIG_DEST}/backups" 2>/dev/null || true
-  rm -f "${BASH_CONFIG_DEST}/"*.bak.* 2>/dev/null || true
+  for ITEM in .DS_Store .gitignore .shellcheckrc .yamllint secrets.sh "*.bak"; do
+    rm -rf "${BASH_CONFIG_DEST:?}/${ITEM:?}" 2>/dev/null || true
+    remove_from_manifest "bash/${ITEM}" "OPTIONAL"
+  done
 
   # Set appropriate permissions
   chmod -R 644 "${BASH_CONFIG_DEST}/"*.sh 2>/dev/null || true
