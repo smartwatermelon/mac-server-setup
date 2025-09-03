@@ -60,7 +60,7 @@ wait_for_network() {
 
     log "   Attempt ${attempt}/${max_attempts}: No connectivity to ${NAS_HOSTNAME}, waiting 5 seconds..."
     sleep 5
-    ((attempt++))
+    ((attempt += 1))
   done
 
   log "❌ Failed to establish network connectivity to ${NAS_HOSTNAME} after ${max_attempts} attempts"

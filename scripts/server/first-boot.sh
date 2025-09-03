@@ -287,7 +287,7 @@ validate_deploy_package() {
     # Check if line contains an equals sign
     if [[ ! "${line}" =~ = ]]; then
       collect_warning "Malformed manifest entry (no equals sign): ${line}"
-      ((validation_warnings++))
+      ((validation_warnings += 1))
       continue
     fi
 
@@ -298,13 +298,13 @@ validate_deploy_package() {
     # Handle edge cases
     if [[ -z "${file_path}" ]]; then
       collect_warning "Malformed manifest entry (empty file path): ${line}"
-      ((validation_warnings++))
+      ((validation_warnings += 1))
       continue
     fi
 
     if [[ -z "${requirement}" ]]; then
       collect_warning "Malformed manifest entry (empty requirement): ${line}"
-      ((validation_warnings++))
+      ((validation_warnings += 1))
       continue
     fi
 
@@ -316,18 +316,18 @@ validate_deploy_package() {
       case "${requirement}" in
         "REQUIRED")
           collect_error "Required file missing from deploy package: ${file_path}"
-          ((validation_errors++))
+          ((validation_errors += 1))
           ;;
         "OPTIONAL")
           collect_warning "Optional file missing from deploy package: ${file_path}"
-          ((validation_warnings++))
+          ((validation_warnings += 1))
           ;;
         "MISSING")
           log "📋 Expected missing: ${file_path} (was not available during package creation)"
           ;;
         *)
           collect_warning "Unknown requirement '${requirement}' for file: ${file_path}"
-          ((validation_warnings++))
+          ((validation_warnings += 1))
           ;;
       esac
     fi
