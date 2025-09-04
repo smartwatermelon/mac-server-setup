@@ -30,7 +30,6 @@ ADMIN_USERNAME=$(whoami)                                  # Set this once and us
 ADMINISTRATOR_PASSWORD=""                                 # Get it interactively later
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" # Directory where AirDropped files are located (script now at root)
 SSH_KEY_SOURCE="${SETUP_DIR}/ssh_keys"
-WIFI_CONFIG_FILE="${SETUP_DIR}/config/wifi_network.conf"
 FORMULAE_FILE="${SETUP_DIR}/config/formulae.txt"
 CASKS_FILE="${SETUP_DIR}/config/casks.txt"
 RERUN_AFTER_FDA=false
@@ -337,6 +336,158 @@ check_success() {
   fi
 }
 
+# Keychain credential management functions
+# Secure credential retrieval function
+get_keychain_credential() {
+  local service="$1"
+  local account="$2"
+
+  local credential
+  if credential=$(security find-generic-password \
+    -s "${service}" \
+    -a "${account}" \
+    -w 2>/dev/null); then
+    echo "${credential}"
+    return 0
+  else
+    collect_error "Failed to retrieve credential from Keychain: ${service}"
+    return 1
+  fi
+}
+
+# Import credentials from external keychain and populate user keychains
+import_external_keychain_credentials() {
+
+  set_section "Importing Credentials from External Keychain"
+  # Load keychain manifest
+  local manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
+  if [[ ! -f "${manifest_file}" ]]; then
+    collect_error "Keychain manifest not found: ${manifest_file}"
+    return 1
+  fi
+
+  # shellcheck source=/dev/null
+  source "${manifest_file}"
+
+  # Validate required variables from manifest
+  if [[ -z "${KEYCHAIN_PASSWORD:-}" || -z "${EXTERNAL_KEYCHAIN:-}" ]]; then
+    collect_error "Required keychain variables not found in manifest"
+    return 1
+  fi
+
+  # Copy external keychain file to user's keychain directory (preserve original for idempotency)
+  local external_keychain_file="${SETUP_DIR}/config/${EXTERNAL_KEYCHAIN}-db"
+  local user_keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}-db"
+
+  if [[ ! -f "${external_keychain_file}" ]]; then
+    if [[ -f "${user_keychain_file}" ]]; then
+      log "External keychain file not found in setup package, but located in local keychains."
+      cp "${user_keychain_file}" "${external_keychain_file}"
+    else
+      collect_error "External keychain file not found: ${external_keychain_file}"
+      return 1
+    fi
+  fi
+
+  log "Copying external keychain to user's keychain directory..."
+  cp "${external_keychain_file}" "${user_keychain_file}"
+  chmod 600 "${user_keychain_file}"
+  check_success "External keychain file copied"
+
+  # Unlock external keychain
+  log "Unlocking external keychain with dev machine fingerprint..."
+  if security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${EXTERNAL_KEYCHAIN}"; then
+    show_log "✅ External keychain unlocked successfully"
+  else
+    collect_error "Failed to unlock external keychain"
+    return 1
+  fi
+
+  # Import administrator credentials to default keychain
+  log "Importing administrator credentials to default keychain..."
+
+  # Unlock admin keychain first
+  show_log "Unlocking administrator keychain for credential import..."
+
+  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}"; then
+    collect_error "Failed to unlock administrator keychain"
+    return 1
+  fi
+
+  # Import operator credential
+  # shellcheck disable=SC2154 # KEYCHAIN_OPERATOR_SERVICE loaded from sourced manifest
+  if operator_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    # Store in default keychain
+    security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${operator_password}" -D "Mac Server Setup - Operator Account Password" -A -U; then
+      # Verify storage
+      if compare_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w 2>/dev/null); then
+        if [[ "${operator_password}" == "${compare_password}" ]]; then
+          show_log "✅ Operator credential imported to administrator keychain"
+        else
+          collect_error "Operator credential verification failed after import"
+          return 1
+        fi
+      else
+        collect_error "Operator credential import verification failed"
+        return 1
+      fi
+    else
+      collect_error "Failed to import operator credential to administrator keychain"
+      return 1
+    fi
+    unset operator_password compare_password
+  else
+    collect_error "Failed to retrieve operator credential from external keychain"
+    return 1
+  fi
+
+  # Import Plex NAS credential
+  # shellcheck disable=SC2154 # KEYCHAIN_PLEX_NAS_SERVICE loaded from sourced manifest
+  if plex_nas_credential=$(security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_nas_credential}" -D "Mac Server Setup - Plex NAS Credentials" -A -U; then
+      show_log "✅ Plex NAS credential imported to administrator keychain"
+    else
+      collect_error "Failed to import Plex NAS credential to administrator keychain"
+      return 1
+    fi
+    unset plex_nas_credential
+  else
+    collect_warning "Plex NAS credential not found in external keychain (may be optional)"
+  fi
+
+  # Import TimeMachine credential (optional)
+  # shellcheck disable=SC2154 # KEYCHAIN_TIMEMACHINE_SERVICE loaded from sourced manifest
+  if timemachine_credential=$(security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${timemachine_credential}" -D "Mac Server Setup - TimeMachine Credentials" -A -U; then
+      show_log "✅ TimeMachine credential imported to administrator keychain"
+    else
+      collect_warning "Failed to import TimeMachine credential to administrator keychain"
+    fi
+    unset timemachine_credential
+  else
+    show_log "⚠️ TimeMachine credential not found in external keychain (optional)"
+  fi
+
+  # Import WiFi credential (optional)
+  # shellcheck disable=SC2154 # KEYCHAIN_WIFI_SERVICE loaded from sourced manifest
+  if wifi_credential=$(security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${wifi_credential}" -D "Mac Server Setup - WiFi Credentials" -A -U; then
+      show_log "✅ WiFi credential imported to administrator keychain"
+    else
+      collect_warning "Failed to import WiFi credential to administrator keychain"
+    fi
+    unset wifi_credential
+  else
+    show_log "⚠️ WiFi credential not found in external keychain (optional)"
+  fi
+
+  return 0
+}
+
 # SAFETY CHECK: Prevent execution on development machine
 set_section "Development Machine Safety Check"
 
@@ -620,300 +771,38 @@ fi
 # SYSTEM CONFIGURATION
 #
 
-# TouchID sudo setup
-section "TouchID sudo setup"
-
-# Check if TouchID sudo is already configured
-if [[ -f "/etc/pam.d/sudo_local" ]]; then
-  # Verify the content is correct
-  expected_content="auth       sufficient     pam_tid.so"
-  if grep -q "${expected_content}" "/etc/pam.d/sudo_local" 2>/dev/null; then
-    show_log "✅ TouchID sudo is already properly configured"
-  else
-    log "TouchID sudo configuration exists but content may be incorrect"
-    log "Current content:"
-    head -10 <"/etc/pam.d/sudo_local" | while read -r line; do log "  ${line}"; done
-  fi
-else
-  # TouchID sudo not configured - prompt user
-  touchid_enabled=false
-
-  if [[ "${FORCE}" = true ]]; then
-    # Force mode - enable TouchID by default
-    touchid_enabled=true
-    log "Force mode enabled - configuring TouchID sudo authentication"
-  else
-    # Interactive mode - prompt user
-    show_log "TouchID sudo allows you to use fingerprint authentication for administrative commands."
-    show_log "This is more convenient than typing your password repeatedly."
-
-    read -p "Enable TouchID for sudo authentication? (Y/n): " -n 1 -r touchid_choice
-    echo
-
-    if [[ -z "${touchid_choice}" ]] || [[ ${touchid_choice} =~ ^[Yy]$ ]]; then
-      touchid_enabled=true
-    else
-      log "TouchID sudo setup skipped - standard password authentication will be used"
-    fi
-  fi
-
-  if [[ "${touchid_enabled}" = true ]]; then
-    # Check if TouchID is available before warning about password
-    if bioutil -rs 2>/dev/null | grep -q "Touch ID"; then
-      show_log "TouchID sudo needs to be configured. We will ask for your user password."
-    else
-      show_log "TouchID sudo needs to be configured (TouchID not available - will use password)."
-    fi
-
-    # Create the PAM configuration file
-    log "Creating TouchID sudo configuration..."
-    sudo -p "[TouchID setup] Enter password to configure TouchID for sudo: " tee "/etc/pam.d/sudo_local" >/dev/null <<'EOF'
-# sudo_local: PAM configuration for enabling TouchID for sudo
-#
-# This file enables the use of TouchID as an authentication method for sudo
-# commands on macOS. It is used in addition to the standard sudo configuration.
-#
-# Format: auth sufficient pam_tid.so
-
-# Allow TouchID authentication for sudo
-auth       sufficient     pam_tid.so
-EOF
-    check_success "TouchID sudo configuration"
-
-    # Test TouchID configuration
-    log "Testing TouchID sudo configuration..."
-    sudo -p "[TouchID test] Enter password to test TouchID sudo configuration: " -v
-    check_success "TouchID sudo test"
-  fi
+# Import credentials from external keychain
+if ! import_external_keychain_credentials; then
+  collect_error "External keychain credential import failed"
+  exit 1
 fi
 
-# Configure sudo timeout to reduce password prompts during setup
-section "Configuring sudo timeout"
-show_log "Setting sudo timeout to 30 minutes for smoother setup experience"
-sudo -p "[System setup] Enter password to configure sudo timeout: " tee /etc/sudoers.d/10_setup_timeout >/dev/null <<EOF
-# Temporary sudo timeout extension for setup - 30 minutes
-Defaults timestamp_timeout=30
-EOF
-# Fix permissions for sudoers file
-sudo chmod 0440 /etc/sudoers.d/10_setup_timeout
-check_success "Sudo timeout configuration"
-
-# WiFi Network Assessment and Configuration
-section "WiFi Network Assessment and Configuration"
-show_log "WiFi Network Assessment and Configuration; this may take a moment..."
-
-# Detect active WiFi interface
-WIFI_INTERFACE=$(networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}' || echo "en0")
-log "Using WiFi interface: ${WIFI_INTERFACE}"
-
-# Check current network connectivity status
-WIFI_CONFIGURED=false
-CURRENT_NETWORK=$(system_profiler SPAirPortDataType -detailLevel basic | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}')
-
-if [[ -n "${CURRENT_NETWORK}" ]]; then
-  log "Connected to WiFi network: ${CURRENT_NETWORK}"
-
-  # Test actual internet connectivity
-  log "Testing internet connectivity..."
-  if ping -c 1 -W 3000 8.8.8.8 >/dev/null 2>&1 || ping -c 1 -W 3000 1.1.1.1 >/dev/null 2>&1; then
-    show_log "✅ WiFi already configured and working: ${CURRENT_NETWORK}"
-    WIFI_CONFIGURED=true
-  else
-    log "⚠️ Connected to WiFi but no internet access detected"
-  fi
+# TouchID and sudo configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-touchid-sudo.sh" --force
 else
-  log "No WiFi network currently connected"
+  "${SETUP_DIR}/scripts/setup-touchid-sudo.sh"
 fi
 
-# Only attempt WiFi configuration if not already working
-if [[ "${WIFI_CONFIGURED}" != true ]] && [[ -f "${WIFI_CONFIG_FILE}" ]]; then
-  log "Found WiFi configuration file - attempting setup"
-
-  # Source the WiFi configuration file to get SSID
-  # shellcheck source=/dev/null
-  source "${WIFI_CONFIG_FILE}"
-
-  # Retrieve WiFi password from Keychain (if available)
-  wifi_password=""
-  if [[ -n "${KEYCHAIN_WIFI_SERVICE:-}" ]] && [[ -n "${KEYCHAIN_ACCOUNT:-}" ]]; then
-    log "Attempting to retrieve WiFi password from Keychain..."
-    if wifi_password=$(get_keychain_credential "${KEYCHAIN_WIFI_SERVICE}" "${KEYCHAIN_ACCOUNT}" 2>/dev/null); then
-      # Extract password from combined credential (format: "ssid:password")
-      wifi_password="${wifi_password#*:}"
-      log "✅ WiFi password retrieved from Keychain"
-    else
-      log "⚠️ WiFi password not found in Keychain - manual configuration will be needed"
-    fi
-  fi
-
-  if [[ -n "${WIFI_SSID}" ]] && [[ -n "${wifi_password}" ]]; then
-    log "Configuring WiFi network: ${WIFI_SSID}"
-
-    # Check if SSID is already in preferred networks list
-    if networksetup -listpreferredwirelessnetworks "${WIFI_INTERFACE}" 2>/dev/null | grep -q "${WIFI_SSID}"; then
-      log "WiFi network ${WIFI_SSID} is already in preferred networks list"
-    else
-      # Add WiFi network to preferred networks
-      networksetup -addpreferredwirelessnetworkatindex "${WIFI_INTERFACE}" "${WIFI_SSID}" 0 WPA2
-      check_success "Add preferred WiFi network"
-      security add-generic-password -D "AirPort network password" -a "${WIFI_SSID}" -s "AirPort" -w "${wifi_password}" || true
-      check_success "Store password in keychain"
-    fi
-
-    # Try to join the network
-    log "Attempting to join WiFi network ${WIFI_SSID}..."
-    networksetup -setairportnetwork "${WIFI_INTERFACE}" "${WIFI_SSID}" "${wifi_password}" &>/dev/null || true
-
-    # Give it a few seconds and check if we connected
-    sleep 5
-    NEW_CONNECTION=$(system_profiler SPAirPortDataType -detailLevel basic | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}')
-    if [[ "${NEW_CONNECTION}" == "${WIFI_SSID}" ]]; then
-      show_log "✅ Successfully connected to WiFi network: ${WIFI_SSID}"
-    else
-      show_log "⚠️ WiFi network will be automatically joined after reboot"
-    fi
-
-    # Clear password from memory for security
-    unset wifi_password
-    log "WiFi password cleared from memory for security"
-  else
-    log "WiFi configuration file does not contain valid SSID and password"
-  fi
-elif [[ "${WIFI_CONFIGURED}" != true ]]; then
-  log "No WiFi configuration available and no working connection detected"
-  show_log "⚠️ Manual WiFi configuration required"
-  show_log "Opening System Settings WiFi section..."
-
-  # Open WiFi settings in System Settings
-  open "x-apple.systempreferences:com.apple.wifi-settings-extension"
-
-  if [[ "${FORCE}" = false ]]; then
-    show_log "Please configure WiFi in System Settings, then press any key to continue..."
-    read -p "Press any key when WiFi is configured... " -n 1 -r
-    echo
-
-    # Close System Settings now that user is done with WiFi configuration
-    show_log "Closing System Settings..."
-    osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
-  else
-    show_log "Force mode: continuing without WiFi - may affect subsequent steps"
-  fi
+# WiFi network configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-wifi-network.sh" --force
 else
-  log "✅ WiFi already working - skipping configuration"
+  "${SETUP_DIR}/scripts/setup-wifi-network.sh"
 fi
 
-# Set hostname and HD name
-section "Setting Hostname and HD volume name"
-CURRENT_HOSTNAME=$(hostname)
-if [[ "${CURRENT_HOSTNAME}" = "${HOSTNAME}" ]]; then
-  log "Hostname is already set to ${HOSTNAME}"
+# Hostname and volume configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-hostname-volume.sh" --force
 else
-  log "Setting hostname to ${HOSTNAME}"
-  sudo -p "[System setup] Enter password to set computer hostname: " scutil --set ComputerName "${HOSTNAME}"
-  sudo -p "[System setup] Enter password to set local hostname: " scutil --set LocalHostName "${HOSTNAME}"
-  sudo -p "[System setup] Enter password to set system hostname: " scutil --set HostName "${HOSTNAME}"
-  check_success "Hostname configuration"
-fi
-log "Renaming HD"
-
-# Create a temporary file for the plist output
-TEMP_PLIST=$(mktemp)
-if diskutil info -plist / >"${TEMP_PLIST}"; then
-  CURRENT_VOLUME=$(/usr/libexec/PlistBuddy -c "Print :VolumeName" "${TEMP_PLIST}" 2>/dev/null || echo "Macintosh HD")
-else
-  CURRENT_VOLUME="Macintosh HD"
+  "${SETUP_DIR}/scripts/setup-hostname-volume.sh"
 fi
 
-# Clean up temp file
-rm -f "${TEMP_PLIST}"
-
-# Only rename if the volume name is different
-if [[ "${CURRENT_VOLUME}" != "${HOSTNAME}" ]]; then
-  log "Current volume name: ${CURRENT_VOLUME}"
-  log "Renaming volume from '${CURRENT_VOLUME}' to '${HOSTNAME}'"
-  diskutil rename "/Volumes/${CURRENT_VOLUME}" "${HOSTNAME}"
-  check_success "Renamed HD from '${CURRENT_VOLUME}' to '${HOSTNAME}'"
+# SSH access - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-ssh-access.sh" --force
 else
-  log "Volume is already named '${HOSTNAME}'"
-fi
-
-# Setup SSH access
-set_section "Configuring SSH Access"
-
-# 1. Check if remote login is already enabled
-if sudo -p "[SSH check] Enter password to check SSH status: " systemsetup -getremotelogin 2>/dev/null | grep -q "On"; then
-  log "SSH is already enabled"
-else
-  # 2. Try to enable it directly first
-  log "Attempting to enable SSH..."
-  if sudo -p "[SSH setup] Enter password to enable SSH access: " systemsetup -setremotelogin on; then
-    # 3.a Success case - it worked directly
-    show_log "✅ SSH has been enabled successfully"
-  else
-    # 3.b Failure case - need FDA
-    # Create a marker file to detect re-run
-    touch "/tmp/${HOSTNAME_LOWER}_fda_requested"
-    show_log "We need to grant Full Disk Access permissions to Terminal to enable SSH."
-    show_log "1. We'll open System Settings to the Full Disk Access section"
-    show_log "2. We'll open Finder showing Terminal.app"
-    show_log "3. You'll need to drag Terminal from Finder into the FDA list"
-    show_log "4. IMPORTANT: After adding Terminal, you must CLOSE this Terminal window"
-    show_log "5. Then open a NEW Terminal window and run this script again"
-
-    # Open Finder to show Terminal app
-    log "Opening Finder window to locate Terminal.app..."
-    osascript <<EOF
-tell application "Finder"
-  activate
-  open folder "Applications:Utilities:" of startup disk
-  select file "Terminal.app" of folder "Utilities" of folder "Applications" of startup disk
-end tell
-EOF
-
-    # Open FDA preferences
-    log "Opening System Settings to the Full Disk Access section..."
-    open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
-
-    show_log "After granting Full Disk Access to Terminal, close this window and run the script again."
-    exit 0
-  fi
-fi
-
-# Copy SSH keys if available
-if [[ -d "${SSH_KEY_SOURCE}" ]]; then
-  log "Found SSH keys at ${SSH_KEY_SOURCE}"
-
-  # Set up admin SSH keys
-  ADMIN_SSH_DIR="/Users/${ADMIN_USERNAME}/.ssh"
-  if [[ ! -d "${ADMIN_SSH_DIR}" ]]; then
-    log "Creating SSH directory for admin user"
-    mkdir -p "${ADMIN_SSH_DIR}"
-    chmod 700 "${ADMIN_SSH_DIR}"
-  fi
-
-  if [[ -f "${SSH_KEY_SOURCE}/authorized_keys" ]]; then
-    log "Copying authorized_keys for admin user"
-    cp "${SSH_KEY_SOURCE}/authorized_keys" "${ADMIN_SSH_DIR}/"
-    chmod 600 "${ADMIN_SSH_DIR}/authorized_keys"
-    check_success "Admin authorized_keys setup"
-  fi
-
-  # Copy SSH key pair for outbound connections
-  if [[ -f "${SSH_KEY_SOURCE}/id_ed25519.pub" ]]; then
-    log "Copying SSH public key for admin user"
-    cp "${SSH_KEY_SOURCE}/id_ed25519.pub" "${ADMIN_SSH_DIR}/"
-    chmod 644 "${ADMIN_SSH_DIR}/id_ed25519.pub"
-    check_success "Admin SSH public key setup"
-  fi
-
-  if [[ -f "${SSH_KEY_SOURCE}/id_ed25519" ]]; then
-    log "Copying SSH private key for admin user"
-    cp "${SSH_KEY_SOURCE}/id_ed25519" "${ADMIN_SSH_DIR}/"
-    chmod 600 "${ADMIN_SSH_DIR}/id_ed25519"
-    check_success "Admin SSH private key setup"
-  fi
-else
-  log "No SSH keys found at ${SSH_KEY_SOURCE} - manual key setup will be required"
+  "${SETUP_DIR}/scripts/setup-ssh-access.sh"
 fi
 
 # Configure Remote Desktop (Screen Sharing and Remote Management)
@@ -1053,163 +942,6 @@ defaults write com.apple.ncprefs apps -array-add '{
     "flags" = 0;
 }'
 check_success "Notification settings configuration"
-
-# Keychain credential management functions
-# Secure credential retrieval function
-get_keychain_credential() {
-  local service="$1"
-  local account="$2"
-
-  local credential
-  if credential=$(security find-generic-password \
-    -s "${service}" \
-    -a "${account}" \
-    -w 2>/dev/null); then
-    echo "${credential}"
-    return 0
-  else
-    collect_error "Failed to retrieve credential from Keychain: ${service}"
-    return 1
-  fi
-}
-
-# Import credentials from external keychain and populate user keychains
-import_external_keychain_credentials() {
-
-  set_section "Importing Credentials from External Keychain"
-  # Load keychain manifest
-  local manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
-  if [[ ! -f "${manifest_file}" ]]; then
-    collect_error "Keychain manifest not found: ${manifest_file}"
-    return 1
-  fi
-
-  # shellcheck source=/dev/null
-  source "${manifest_file}"
-
-  # Validate required variables from manifest
-  if [[ -z "${KEYCHAIN_PASSWORD:-}" || -z "${EXTERNAL_KEYCHAIN:-}" ]]; then
-    collect_error "Required keychain variables not found in manifest"
-    return 1
-  fi
-
-  # Copy external keychain file to user's keychain directory (preserve original for idempotency)
-  local external_keychain_file="${SETUP_DIR}/config/${EXTERNAL_KEYCHAIN}-db"
-  local user_keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}-db"
-
-  if [[ ! -f "${external_keychain_file}" ]]; then
-    if [[ -f "${user_keychain_file}" ]]; then
-      log "External keychain file not found in setup package, but located in local keychains."
-      cp "${user_keychain_file}" "${external_keychain_file}"
-    else
-      collect_error "External keychain file not found: ${external_keychain_file}"
-      return 1
-    fi
-  fi
-
-  log "Copying external keychain to user's keychain directory..."
-  cp "${external_keychain_file}" "${user_keychain_file}"
-  chmod 600 "${user_keychain_file}"
-  check_success "External keychain file copied"
-
-  # Unlock external keychain
-  log "Unlocking external keychain with dev machine fingerprint..."
-  if security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${EXTERNAL_KEYCHAIN}"; then
-    show_log "✅ External keychain unlocked successfully"
-  else
-    collect_error "Failed to unlock external keychain"
-    return 1
-  fi
-
-  # Import administrator credentials to default keychain
-  log "Importing administrator credentials to default keychain..."
-
-  # Unlock admin keychain first
-  show_log "Unlocking administrator keychain for credential import..."
-
-  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}"; then
-    collect_error "Failed to unlock administrator keychain"
-    return 1
-  fi
-
-  # Import operator credential
-  # shellcheck disable=SC2154 # KEYCHAIN_OPERATOR_SERVICE loaded from sourced manifest
-  if operator_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    # Store in default keychain
-    security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
-    if security add-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${operator_password}" -D "Mac Server Setup - Operator Account Password" -A -U; then
-      # Verify storage
-      if compare_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w 2>/dev/null); then
-        if [[ "${operator_password}" == "${compare_password}" ]]; then
-          show_log "✅ Operator credential imported to administrator keychain"
-        else
-          collect_error "Operator credential verification failed after import"
-          return 1
-        fi
-      else
-        collect_error "Operator credential import verification failed"
-        return 1
-      fi
-    else
-      collect_error "Failed to import operator credential to administrator keychain"
-      return 1
-    fi
-    unset operator_password compare_password
-  else
-    collect_error "Failed to retrieve operator credential from external keychain"
-    return 1
-  fi
-
-  # Import Plex NAS credential
-  # shellcheck disable=SC2154 # KEYCHAIN_PLEX_NAS_SERVICE loaded from sourced manifest
-  if plex_nas_credential=$(security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
-    if security add-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_nas_credential}" -D "Mac Server Setup - Plex NAS Credentials" -A -U; then
-      show_log "✅ Plex NAS credential imported to administrator keychain"
-    else
-      collect_error "Failed to import Plex NAS credential to administrator keychain"
-      return 1
-    fi
-    unset plex_nas_credential
-  else
-    collect_warning "Plex NAS credential not found in external keychain (may be optional)"
-  fi
-
-  # Import TimeMachine credential (optional)
-  # shellcheck disable=SC2154 # KEYCHAIN_TIMEMACHINE_SERVICE loaded from sourced manifest
-  if timemachine_credential=$(security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
-    if security add-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${timemachine_credential}" -D "Mac Server Setup - TimeMachine Credentials" -A -U; then
-      show_log "✅ TimeMachine credential imported to administrator keychain"
-    else
-      collect_warning "Failed to import TimeMachine credential to administrator keychain"
-    fi
-    unset timemachine_credential
-  else
-    show_log "⚠️ TimeMachine credential not found in external keychain (optional)"
-  fi
-
-  # Import WiFi credential (optional)
-  if wifi_credential=$(security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
-    if security add-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${wifi_credential}" -D "Mac Server Setup - WiFi Credentials" -A -U; then
-      show_log "✅ WiFi credential imported to administrator keychain"
-    else
-      collect_warning "Failed to import WiFi credential to administrator keychain"
-    fi
-    unset wifi_credential
-  else
-    show_log "⚠️ WiFi credential not found in external keychain (optional)"
-  fi
-
-  return 0
-}
-
-# Import credentials from external keychain
-if ! import_external_keychain_credentials; then
-  collect_error "External keychain credential import failed"
-  exit 1
-fi
 
 # Create operator account if it doesn't exist
 set_section "Setting Up Operator Account"
@@ -1479,44 +1211,12 @@ defaults write -g com.apple.swipescrolldirection -bool false
 sudo -p "[User setup] Enter password to configure operator scroll direction: " -iu "${OPERATOR_USERNAME}" defaults write -g com.apple.swipescrolldirection -bool false
 check_success "Fix scroll setting"
 
-# Configure power management settings
-section "Configuring Power Management"
-log "Setting power management for server use"
-
-# Check current settings
-CURRENT_SLEEP=$(pmset -g 2>/dev/null | grep -E "^[ ]*sleep" | awk '{print $2}' || echo "unknown")
-CURRENT_DISPLAYSLEEP=$(pmset -g 2>/dev/null | grep -E "^[ ]*displaysleep" | awk '{print $2}' || echo "unknown")
-CURRENT_DISKSLEEP=$(pmset -g 2>/dev/null | grep -E "^[ ]*disksleep" | awk '{print $2}' || echo "unknown")
-CURRENT_WOMP=$(pmset -g 2>/dev/null | grep -E "^[ ]*womp" | awk '{print $2}' || echo "unknown")
-CURRENT_AUTORESTART=$(pmset -g 2>/dev/null | grep -E "^[ ]*autorestart" | awk '{print $2}' || echo "unknown")
-
-# Apply settings only if they differ from current
-if [[ "${CURRENT_SLEEP}" != "0" ]]; then
-  sudo -p "[Power management] Enter password to disable system sleep: " pmset -a sleep 0
-  log "Disabled system sleep"
+# Power management configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-power-management.sh" --force
+else
+  "${SETUP_DIR}/scripts/setup-power-management.sh"
 fi
-
-if [[ "${CURRENT_DISPLAYSLEEP}" != "60" ]]; then
-  sudo -p "[Power management] Enter password to configure display sleep: " pmset -a displaysleep 60 # Display sleeps after 1 hour
-  log "Set display sleep to 60 minutes"
-fi
-
-if [[ "${CURRENT_DISKSLEEP}" != "0" ]]; then
-  sudo -p "[Power management] Enter password to disable disk sleep: " pmset -a disksleep 0
-  log "Disabled disk sleep"
-fi
-
-if [[ "${CURRENT_WOMP}" != "1" ]]; then
-  sudo -p "[Power management] Enter password to enable wake on network: " pmset -a womp 1 # Enable wake on network access
-  log "Enabled Wake on Network Access"
-fi
-
-if [[ "${CURRENT_AUTORESTART}" != "1" ]]; then
-  sudo -p "[Power management] Enter password to enable auto-restart: " pmset -a autorestart 1 # Restart on power failure
-  log "Enabled automatic restart after power failure"
-fi
-
-check_success "Power management configuration"
 
 # Configure screen saver password requirement
 section "Configuring screen saver password requirement"
@@ -1544,17 +1244,12 @@ else
   log "Skipping software updates as requested"
 fi
 
-# Configure firewall
-section "Configuring Firewall"
-
-# Ensure it's on
-log "Ensuring firewall is enabled"
-sudo -p "[Firewall setup] Enter password to enable application firewall: " /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
-
-# Add SSH to firewall allowed services
-log "Ensuring SSH is allowed through firewall"
-sudo -p "[Firewall setup] Enter password to configure SSH firewall access: " /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/sbin/sshd
-sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/sbin/sshd
+# Firewall configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-firewall.sh" --force
+else
+  "${SETUP_DIR}/scripts/setup-firewall.sh"
+fi
 
 # Configure security settings
 section "Configuring Security Settings"
