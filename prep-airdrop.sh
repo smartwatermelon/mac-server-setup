@@ -493,7 +493,7 @@ finalize_external_keychain() {
 
   if [[ -f "${keychain_file}" ]]; then
     # Copy keychain file to airdrop package
-    cp "${keychain_file}" "${OUTPUT_PATH}/config/"
+    copy_with_manifest "${keychain_file}" "config/${EXTERNAL_KEYCHAIN}-db" "REQUIRED"
     chmod 600 "${OUTPUT_PATH}/config/${EXTERNAL_KEYCHAIN}-db"
 
     echo "✅ External keychain added to airdrop package"
@@ -522,6 +522,7 @@ KEYCHAIN_WIFI_SERVICE="wifi-${SERVER_NAME_LOWER}"
 KEYCHAIN_ACCOUNT="${SERVER_NAME_LOWER}"
 EOF
   chmod 600 "${OUTPUT_PATH}/config/keychain_manifest.conf"
+  add_to_manifest "config/keychain_manifest.conf" "REQUIRED"
   echo "✅ Keychain manifest created"
 }
 
@@ -594,6 +595,7 @@ else
 TM_URL="${TM_URL}"
 EOF
   chmod 644 "${OUTPUT_PATH}/config/timemachine.conf"
+  add_to_manifest "config/timemachine.conf" "REQUIRED"
 
   # Clear credentials from memory
   unset TM_USERNAME TM_PASSWORD
@@ -639,6 +641,7 @@ else
 PLEX_NAS_HOSTNAME="${PLEX_NAS_HOSTNAME}"
 EOF
   chmod 644 "${OUTPUT_PATH}/app-setup/config/plex_nas.conf"
+  add_to_manifest "app-setup/config/plex_nas.conf" "REQUIRED"
 
   # Clear credentials from memory
   unset PLEX_NAS_USERNAME PLEX_NAS_PASSWORD
@@ -669,6 +672,7 @@ if [[ -n "${ONE_TIME_URL}" ]]; then
 URL=${ONE_TIME_URL}
 EOF
   chmod 600 "${OUTPUT_PATH}/config/apple_id_password.url"
+  add_to_manifest "config/apple_id_password.url" "OPTIONAL"
   echo "✅ Apple ID one-time password link saved to config/apple_id_password.url"
 else
   echo "⚠️ No URL provided, skipping Apple ID password link creation"
@@ -700,21 +704,29 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   done
 
   # Copy template scripts to app-setup/templates
-  cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/mount-nas-media.sh" "${OUTPUT_PATH}/app-setup/templates/" 2>/dev/null || echo "Warning: mount-nas-media.sh not found in app-setup-templates directory"
-  cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-plex-with-mount.sh" "${OUTPUT_PATH}/app-setup/templates/" 2>/dev/null || echo "Warning: start-plex-with-mount.sh not found in app-setup-templates directory"
-  cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-rclone.sh" "${OUTPUT_PATH}/app-setup/templates/" 2>/dev/null || echo "Warning: start-rclone.sh not found in app-setup-templates directory"
+  copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/mount-nas-media.sh" "app-setup/templates/mount-nas-media.sh" "REQUIRED" || echo "Warning: mount-nas-media.sh not found in app-setup-templates directory"
+  copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-plex-with-mount.sh" "app-setup/templates/start-plex-with-mount.sh" "OPTIONAL" || echo "Warning: start-plex-with-mount.sh not found in app-setup-templates directory"
+  copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-rclone.sh" "app-setup/templates/start-rclone.sh" "REQUIRED" || echo "Warning: start-rclone.sh not found in app-setup-templates directory"
 
   # Copy app setup scripts to app-setup directory
-  cp "${SCRIPT_SOURCE_DIR}/app-setup/"*.sh "${OUTPUT_PATH}/app-setup/" 2>/dev/null || echo "Warning: No app setup scripts found in source directory"
+  echo "Copying app setup scripts..."
+  for app_script in "${SCRIPT_SOURCE_DIR}/app-setup/"*.sh; do
+    if [[ -f "${app_script}" ]]; then
+      script_name="$(basename "${app_script}")"
+      copy_with_manifest "${app_script}" "app-setup/${script_name}" "REQUIRED"
+      chmod +x "${OUTPUT_PATH}/app-setup/${script_name}"
+      echo "  ✅ ${script_name}"
+    fi
+  done
 
   # Copy system configuration files
-  cp "${SCRIPT_SOURCE_DIR}/config/formulae.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: formulae.txt not found in source directory"
-  cp "${SCRIPT_SOURCE_DIR}/config/casks.txt" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: casks.txt not found in source directory"
-  cp "${SCRIPT_SOURCE_DIR}/config/logrotate.conf" "${OUTPUT_PATH}/config/" 2>/dev/null || echo "Warning: logrotate.conf not found in source directory"
+  copy_with_manifest "${SCRIPT_SOURCE_DIR}/config/formulae.txt" "config/formulae.txt" "REQUIRED" || echo "Warning: formulae.txt not found in source directory"
+  copy_with_manifest "${SCRIPT_SOURCE_DIR}/config/casks.txt" "config/casks.txt" "REQUIRED" || echo "Warning: casks.txt not found in source directory"
+  copy_with_manifest "${SCRIPT_SOURCE_DIR}/config/logrotate.conf" "config/logrotate.conf" "OPTIONAL" || echo "Warning: logrotate.conf not found in source directory"
 
   # Copy configuration file if it exists
   if [[ -f "${CONFIG_FILE}" ]]; then
-    cp "${CONFIG_FILE}" "${OUTPUT_PATH}/config/"
+    copy_with_manifest "${CONFIG_FILE}" "config/config.conf" "REQUIRED"
     echo "Configuration file copied to setup package"
   fi
 
@@ -752,9 +764,11 @@ if [[ -f "${SCRIPT_SOURCE_DIR}/docs/setup/firstboot-README.md" ]]; then
   echo "Processing README file..."
   sed "s/\${SERVER_NAME_LOWER}/${SERVER_NAME_LOWER}/g" \
     "${SCRIPT_SOURCE_DIR}/docs/setup/firstboot-README.md" >"${OUTPUT_PATH}/README.md"
+  add_to_manifest "README.md" "REQUIRED"
   echo "✅ README creation"
 else
   echo "⚠️ firstboot-README.md not found in source directory"
+  add_to_manifest "README.md" "MISSING"
 fi
 
 echo "Setting file permissions..."
