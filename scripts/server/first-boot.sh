@@ -30,7 +30,6 @@ ADMIN_USERNAME=$(whoami)                                  # Set this once and us
 ADMINISTRATOR_PASSWORD=""                                 # Get it interactively later
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" # Directory where AirDropped files are located (script now at root)
 SSH_KEY_SOURCE="${SETUP_DIR}/ssh_keys"
-WIFI_CONFIG_FILE="${SETUP_DIR}/config/wifi_network.conf"
 FORMULAE_FILE="${SETUP_DIR}/config/formulae.txt"
 CASKS_FILE="${SETUP_DIR}/config/casks.txt"
 RERUN_AFTER_FDA=false
@@ -473,6 +472,7 @@ import_external_keychain_credentials() {
   fi
 
   # Import WiFi credential (optional)
+  # shellcheck disable=SC2154 # KEYCHAIN_WIFI_SERVICE loaded from sourced manifest
   if wifi_credential=$(security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
     security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
     if security add-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${wifi_credential}" -D "Mac Server Setup - WiFi Credentials" -A -U; then
@@ -771,6 +771,12 @@ fi
 # SYSTEM CONFIGURATION
 #
 
+# Import credentials from external keychain
+if ! import_external_keychain_credentials; then
+  collect_error "External keychain credential import failed"
+  exit 1
+fi
+
 # TouchID and sudo configuration - delegated to module
 if [[ "${FORCE}" == true ]]; then
   "${SETUP_DIR}/scripts/setup-touchid-sudo.sh" --force
@@ -783,105 +789,6 @@ if [[ "${FORCE}" == true ]]; then
   "${SETUP_DIR}/scripts/setup-wifi-network.sh" --force
 else
   "${SETUP_DIR}/scripts/setup-wifi-network.sh"
-fi
-
-WIFI_INTERFACE=$(networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}' || echo "en0")
-log "Using WiFi interface: ${WIFI_INTERFACE}"
-
-# Check current network connectivity status
-WIFI_CONFIGURED=false
-CURRENT_NETWORK=$(system_profiler SPAirPortDataType -detailLevel basic | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}')
-
-if [[ -n "${CURRENT_NETWORK}" ]]; then
-  log "Connected to WiFi network: ${CURRENT_NETWORK}"
-
-  # Test actual internet connectivity
-  log "Testing internet connectivity..."
-  if ping -c 1 -W 3000 8.8.8.8 >/dev/null 2>&1 || ping -c 1 -W 3000 1.1.1.1 >/dev/null 2>&1; then
-    show_log "✅ WiFi already configured and working: ${CURRENT_NETWORK}"
-    WIFI_CONFIGURED=true
-  else
-    log "⚠️ Connected to WiFi but no internet access detected"
-  fi
-else
-  log "No WiFi network currently connected"
-fi
-
-# Only attempt WiFi configuration if not already working
-if [[ "${WIFI_CONFIGURED}" != true ]] && [[ -f "${WIFI_CONFIG_FILE}" ]]; then
-  log "Found WiFi configuration file - attempting setup"
-
-  # Source the WiFi configuration file to get SSID
-  # shellcheck source=/dev/null
-  source "${WIFI_CONFIG_FILE}"
-
-  # Retrieve WiFi password from Keychain (if available)
-  wifi_password=""
-  if [[ -n "${KEYCHAIN_WIFI_SERVICE:-}" ]] && [[ -n "${KEYCHAIN_ACCOUNT:-}" ]]; then
-    log "Attempting to retrieve WiFi password from Keychain..."
-    if wifi_password=$(get_keychain_credential "${KEYCHAIN_WIFI_SERVICE}" "${KEYCHAIN_ACCOUNT}" 2>/dev/null); then
-      # Extract password from combined credential (format: "ssid:password")
-      wifi_password="${wifi_password#*:}"
-      log "✅ WiFi password retrieved from Keychain"
-    else
-      log "⚠️ WiFi password not found in Keychain - manual configuration will be needed"
-    fi
-  fi
-
-  if [[ -n "${WIFI_SSID}" ]] && [[ -n "${wifi_password}" ]]; then
-    log "Configuring WiFi network: ${WIFI_SSID}"
-
-    # Check if SSID is already in preferred networks list
-    if networksetup -listpreferredwirelessnetworks "${WIFI_INTERFACE}" 2>/dev/null | grep -q "${WIFI_SSID}"; then
-      log "WiFi network ${WIFI_SSID} is already in preferred networks list"
-    else
-      # Add WiFi network to preferred networks
-      networksetup -addpreferredwirelessnetworkatindex "${WIFI_INTERFACE}" "${WIFI_SSID}" 0 WPA2
-      check_success "Add preferred WiFi network"
-      security add-generic-password -D "AirPort network password" -a "${WIFI_SSID}" -s "AirPort" -w "${wifi_password}" || true
-      check_success "Store password in keychain"
-    fi
-
-    # Try to join the network
-    log "Attempting to join WiFi network ${WIFI_SSID}..."
-    networksetup -setairportnetwork "${WIFI_INTERFACE}" "${WIFI_SSID}" "${wifi_password}" &>/dev/null || true
-
-    # Give it a few seconds and check if we connected
-    sleep 5
-    NEW_CONNECTION=$(system_profiler SPAirPortDataType -detailLevel basic | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}')
-    if [[ "${NEW_CONNECTION}" == "${WIFI_SSID}" ]]; then
-      show_log "✅ Successfully connected to WiFi network: ${WIFI_SSID}"
-    else
-      show_log "⚠️ WiFi network will be automatically joined after reboot"
-    fi
-
-    # Clear password from memory for security
-    unset wifi_password
-    log "WiFi password cleared from memory for security"
-  else
-    log "WiFi configuration file does not contain valid SSID and password"
-  fi
-elif [[ "${WIFI_CONFIGURED}" != true ]]; then
-  log "No WiFi configuration available and no working connection detected"
-  show_log "⚠️ Manual WiFi configuration required"
-  show_log "Opening System Settings WiFi section..."
-
-  # Open WiFi settings in System Settings
-  open "x-apple.systempreferences:com.apple.wifi-settings-extension"
-
-  if [[ "${FORCE}" = false ]]; then
-    show_log "Please configure WiFi in System Settings, then press any key to continue..."
-    read -p "Press any key when WiFi is configured... " -n 1 -r
-    echo
-
-    # Close System Settings now that user is done with WiFi configuration
-    show_log "Closing System Settings..."
-    osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
-  else
-    show_log "Force mode: continuing without WiFi - may affect subsequent steps"
-  fi
-else
-  log "✅ WiFi already working - skipping configuration"
 fi
 
 # Hostname and volume configuration - delegated to module
@@ -1035,12 +942,6 @@ defaults write com.apple.ncprefs apps -array-add '{
     "flags" = 0;
 }'
 check_success "Notification settings configuration"
-
-# Import credentials from external keychain
-if ! import_external_keychain_credentials; then
-  collect_error "External keychain credential import failed"
-  exit 1
-fi
 
 # Create operator account if it doesn't exist
 set_section "Setting Up Operator Account"

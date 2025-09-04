@@ -33,6 +33,7 @@ done
 # Load common configuration
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_FILE="${SETUP_DIR}/config/config.conf"
+WIFI_CONFIG_FILE="${SETUP_DIR}/config/wifi_network.conf"
 
 if [[ -f "${CONFIG_FILE}" ]]; then
   # shellcheck source=/dev/null
