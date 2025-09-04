@@ -1479,127 +1479,39 @@ source ~/.zprofile
 check_success "Reload profile"
 
 #
-# CLEAN UP DOCK
+# DOCK CONFIGURATION - delegated to module
 #
-section "Cleaning up Administrator Dock"
-log "Cleaning up Administrator Dock"
-if command -v dockutil &>/dev/null; then
-  dockutil \
-    --remove Messages \
-    --remove Mail \
-    --remove Maps \
-    --remove Photos \
-    --remove FaceTime \
-    --remove Calendar \
-    --remove Contacts \
-    --remove Reminders \
-    --remove Freeform \
-    --remove TV \
-    --remove Music \
-    --remove News \
-    --remove 'iPhone Mirroring' \
-    --remove /System/Applications/Utilities/Terminal.app \
-    --add /Applications/iTerm.app \
-    --add /System/Applications/Passwords.app \
-    --allhomes \
-    &>/dev/null || true
-  check_success "Administrator Dock cleaned up"
+
+# Dock configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-dock-configuration.sh" --force
 else
-  log "Could not locate dockutil"
+  "${SETUP_DIR}/scripts/setup-dock-configuration.sh"
 fi
 
 # Note: Operator first-login setup is now handled automatically via LaunchAgent
 # See the "Configuring operator account files" section above
 
 #
-# CHANGE DEFAULT SHELL TO HOMEBREW BASH
+# SHELL CONFIGURATION - delegated to module
 #
-section "Changing Default Shell to Homebrew Bash"
 
-# Get the Homebrew bash path
-HOMEBREW_BASH="$(brew --prefix)/bin/bash"
-
-if [[ -f "${HOMEBREW_BASH}" ]]; then
-  log "Found Homebrew bash at: ${HOMEBREW_BASH}"
-
-  # Add to /etc/shells if not already present
-  if ! grep -q "${HOMEBREW_BASH}" /etc/shells; then
-    log "Adding Homebrew bash to /etc/shells"
-    echo "${HOMEBREW_BASH}" | sudo -p "[Shell setup] Enter password to add Homebrew bash to allowed shells: " tee -a /etc/shells
-    check_success "Add Homebrew bash to /etc/shells"
-  else
-    log "Homebrew bash already in /etc/shells"
-  fi
-
-  # Change shell for admin user to Homebrew bash
-  log "Setting shell to Homebrew bash for admin user"
-  sudo -p "[Shell setup] Enter password to change admin shell: " chsh -s "${HOMEBREW_BASH}" "${ADMIN_USERNAME}"
-  check_success "Admin user shell change"
-
-  # Change shell for operator user if it exists
-  if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
-    log "Setting shell to Homebrew bash for operator user"
-    sudo -p "[Shell setup] Enter password to change operator shell: " chsh -s "${HOMEBREW_BASH}" "${OPERATOR_USERNAME}"
-    check_success "Operator user shell change"
-  fi
-
-  # Copy .zprofile to .profile for bash compatibility
-  log "Setting up bash profile compatibility"
-  if [[ -f "/Users/${ADMIN_USERNAME}/.zprofile" ]]; then
-    log "Copying admin .zprofile to .profile for bash compatibility"
-    cp "/Users/${ADMIN_USERNAME}/.zprofile" "/Users/${ADMIN_USERNAME}/.profile"
-  fi
-
-  if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
-    log "Copying operator .zprofile to .profile for bash compatibility"
-    sudo -p "[Shell setup] Enter password to copy operator profile: " cp "/Users/${OPERATOR_USERNAME}/.zprofile" "/Users/${OPERATOR_USERNAME}/.profile" 2>/dev/null || true
-    sudo chown "${OPERATOR_USERNAME}:staff" "/Users/${OPERATOR_USERNAME}/.profile" 2>/dev/null || true
-  fi
-
-  check_success "Bash profile compatibility setup"
+# Shell configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-shell-configuration.sh" --force
 else
-  log "Homebrew bash not found - skipping shell change"
+  "${SETUP_DIR}/scripts/setup-shell-configuration.sh"
 fi
 
 #
-# LOG ROTATION SETUP
+# LOG ROTATION SETUP - delegated to module
 #
-section "Configuring Log Rotation"
 
-# Copy logrotate configuration if available
-if [[ -f "${CONFIG_FILE%/*}/logrotate.conf" ]]; then
-  log "Installing logrotate configuration"
-
-  # Ensure logrotate config directory exists
-  LOGROTATE_CONFIG_DIR="${HOMEBREW_PREFIX}/etc"
-  if [[ ! -d "${LOGROTATE_CONFIG_DIR}" ]]; then
-    sudo -p "[Logrotate setup] Enter password to create logrotate config directory: " mkdir -p "${LOGROTATE_CONFIG_DIR}"
-  fi
-
-  # Create logrotate.d include directory
-  if [[ ! -d "${LOGROTATE_CONFIG_DIR}/logrotate.d" ]]; then
-    sudo -p "[Logrotate setup] Enter password to create logrotate.d directory: " mkdir -p "${LOGROTATE_CONFIG_DIR}/logrotate.d"
-  fi
-
-  # Copy our logrotate configuration
-  sudo -p "[Logrotate setup] Enter password to install logrotate config: " cp "${CONFIG_FILE%/*}/logrotate.conf" "${LOGROTATE_CONFIG_DIR}/"
-
-  # Make config user-writable so both admin and operator can modify it (664)
-  sudo -p "[Logrotate setup] Enter password to set config permissions: " chmod 664 "${LOGROTATE_CONFIG_DIR}/logrotate.conf"
-  sudo -p "[Logrotate setup] Enter password to set config ownership: " chown "${ADMIN_USERNAME}:admin" "${LOGROTATE_CONFIG_DIR}/logrotate.conf"
-  check_success "Logrotate configuration install"
-
-  # Start logrotate service as admin user
-  log "Starting logrotate service for admin user"
-  brew services stop logrotate &>/dev/null || true
-  if brew services start logrotate; then
-    check_success "Admin logrotate service start"
-    log "✅ Admin logrotate service started - admin logs will be rotated automatically"
-  else
-    log "⚠️  Failed to start admin logrotate service - admin logs will not be rotated"
-  fi
+# Log rotation configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-log-rotation.sh" --force
 else
-  log "No logrotate configuration found - skipping log rotation setup"
+  "${SETUP_DIR}/scripts/setup-log-rotation.sh"
 fi
 
 #
