@@ -44,11 +44,6 @@ else
   DROPBOX_LOCAL_PATH=""
 fi
 
-# TEMP DEBUGGING
-DROPBOX_SYNC_FOLDER=""
-DROPBOX_LOCAL_PATH=""
-# TEMP DEBUGGING
-
 # Handle command line arguments
 if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
   echo "Usage: $(basename "$0") [output_path] [script_path]"
