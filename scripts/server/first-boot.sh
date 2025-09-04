@@ -164,7 +164,7 @@ set_section() {
 # Function to collect an error (with immediate display)
 collect_error() {
   local message="$1"
-  local line_number="${2:-${LINENO}}"
+  local line_number="${2:-}"
   local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
   local script_name
   script_name="$(basename "${BASH_SOURCE[1]:-${0}}")"
