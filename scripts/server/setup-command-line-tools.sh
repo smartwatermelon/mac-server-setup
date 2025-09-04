@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Command Line Tools installation for macOS with enhanced monitoring
-# This script provides comprehensive CLT installation with progress tracking and verification
+# This script provides comprehensive CLT installation with progress tracking
 
 set -euo pipefail
 
@@ -36,16 +36,13 @@ OPTIONS:
 
 DESCRIPTION:
     This script provides comprehensive Command Line Tools installation:
-    1. Checks for existing CLT installation with enhanced verification
+    1. Checks for existing CLT installation
     2. Installs CLT using softwareupdate with real-time monitoring
     3. Falls back to interactive xcode-select installation if needed
-    4. Provides comprehensive post-installation verification
 
 FEATURES:
     - Real-time system log monitoring during installation
     - Network failure retry logic (up to ${MAX_RETRIES} attempts)
-    - Enhanced verification including compiler functionality tests
-    - System headers accessibility verification
     - Dynamic timeout adjustment based on network conditions
     - Comprehensive error reporting and recovery
 
@@ -370,8 +367,7 @@ main() {
     echo "${LOG_PREFIX} This script will:"
     echo "${LOG_PREFIX} 1. Install Xcode Command Line Tools using enhanced monitoring"
     echo "${LOG_PREFIX} 2. Provide real-time progress feedback during installation"
-    echo "${LOG_PREFIX} 3. Perform comprehensive verification after installation"
-    echo "${LOG_PREFIX} 4. Fall back to interactive installation if needed"
+    echo "${LOG_PREFIX} 3. Fall back to interactive installation if needed"
     echo ""
     echo "${LOG_PREFIX} Installation timeout: ${install_timeout} seconds ($((install_timeout / 60)) minutes)"
     read -p "${LOG_PREFIX} Continue? (Y/n): " -n 1 -r response
@@ -438,7 +434,7 @@ main() {
   log "       CLT INSTALLATION COMPLETE"
   log "========================================="
   log ""
-  log "✅ Command Line Tools installation and verification completed successfully"
+  log "✅ Command Line Tools installation completed successfully"
   log ""
 }
 
