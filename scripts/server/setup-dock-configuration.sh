@@ -137,9 +137,9 @@ check_success() {
 # Main dock configuration function
 configure_dock() {
   set_section "Cleaning up Administrator Dock"
-  
+
   log "Cleaning up Administrator Dock"
-  
+
   if command -v dockutil &>/dev/null; then
     dockutil \
       --remove Messages \
@@ -169,12 +169,12 @@ configure_dock() {
 # Main execution
 main() {
   log "Starting dock configuration module"
-  
+
   configure_dock
-  
+
   # Simple completion message
   local error_count=${#COLLECTED_ERRORS[@]}
-  
+
   if [[ ${error_count} -eq 0 ]]; then
     show_log "✅ Dock configuration completed successfully"
     return 0
