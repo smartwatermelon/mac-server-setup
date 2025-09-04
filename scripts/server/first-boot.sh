@@ -1479,33 +1479,14 @@ source ~/.zprofile
 check_success "Reload profile"
 
 #
-# CLEAN UP DOCK
+# DOCK CONFIGURATION - delegated to module
 #
-section "Cleaning up Administrator Dock"
-log "Cleaning up Administrator Dock"
-if command -v dockutil &>/dev/null; then
-  dockutil \
-    --remove Messages \
-    --remove Mail \
-    --remove Maps \
-    --remove Photos \
-    --remove FaceTime \
-    --remove Calendar \
-    --remove Contacts \
-    --remove Reminders \
-    --remove Freeform \
-    --remove TV \
-    --remove Music \
-    --remove News \
-    --remove 'iPhone Mirroring' \
-    --remove /System/Applications/Utilities/Terminal.app \
-    --add /Applications/iTerm.app \
-    --add /System/Applications/Passwords.app \
-    --allhomes \
-    &>/dev/null || true
-  check_success "Administrator Dock cleaned up"
+
+# Dock configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/server/setup-dock-configuration.sh" --force
 else
-  log "Could not locate dockutil"
+  "${SETUP_DIR}/scripts/server/setup-dock-configuration.sh"
 fi
 
 # Note: Operator first-login setup is now handled automatically via LaunchAgent
