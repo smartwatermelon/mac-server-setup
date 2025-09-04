@@ -337,6 +337,157 @@ check_success() {
   fi
 }
 
+# Keychain credential management functions
+# Secure credential retrieval function
+get_keychain_credential() {
+  local service="$1"
+  local account="$2"
+
+  local credential
+  if credential=$(security find-generic-password \
+    -s "${service}" \
+    -a "${account}" \
+    -w 2>/dev/null); then
+    echo "${credential}"
+    return 0
+  else
+    collect_error "Failed to retrieve credential from Keychain: ${service}"
+    return 1
+  fi
+}
+
+# Import credentials from external keychain and populate user keychains
+import_external_keychain_credentials() {
+
+  set_section "Importing Credentials from External Keychain"
+  # Load keychain manifest
+  local manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
+  if [[ ! -f "${manifest_file}" ]]; then
+    collect_error "Keychain manifest not found: ${manifest_file}"
+    return 1
+  fi
+
+  # shellcheck source=/dev/null
+  source "${manifest_file}"
+
+  # Validate required variables from manifest
+  if [[ -z "${KEYCHAIN_PASSWORD:-}" || -z "${EXTERNAL_KEYCHAIN:-}" ]]; then
+    collect_error "Required keychain variables not found in manifest"
+    return 1
+  fi
+
+  # Copy external keychain file to user's keychain directory (preserve original for idempotency)
+  local external_keychain_file="${SETUP_DIR}/config/${EXTERNAL_KEYCHAIN}-db"
+  local user_keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}-db"
+
+  if [[ ! -f "${external_keychain_file}" ]]; then
+    if [[ -f "${user_keychain_file}" ]]; then
+      log "External keychain file not found in setup package, but located in local keychains."
+      cp "${user_keychain_file}" "${external_keychain_file}"
+    else
+      collect_error "External keychain file not found: ${external_keychain_file}"
+      return 1
+    fi
+  fi
+
+  log "Copying external keychain to user's keychain directory..."
+  cp "${external_keychain_file}" "${user_keychain_file}"
+  chmod 600 "${user_keychain_file}"
+  check_success "External keychain file copied"
+
+  # Unlock external keychain
+  log "Unlocking external keychain with dev machine fingerprint..."
+  if security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${EXTERNAL_KEYCHAIN}"; then
+    show_log "✅ External keychain unlocked successfully"
+  else
+    collect_error "Failed to unlock external keychain"
+    return 1
+  fi
+
+  # Import administrator credentials to default keychain
+  log "Importing administrator credentials to default keychain..."
+
+  # Unlock admin keychain first
+  show_log "Unlocking administrator keychain for credential import..."
+
+  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}"; then
+    collect_error "Failed to unlock administrator keychain"
+    return 1
+  fi
+
+  # Import operator credential
+  # shellcheck disable=SC2154 # KEYCHAIN_OPERATOR_SERVICE loaded from sourced manifest
+  if operator_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    # Store in default keychain
+    security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${operator_password}" -D "Mac Server Setup - Operator Account Password" -A -U; then
+      # Verify storage
+      if compare_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w 2>/dev/null); then
+        if [[ "${operator_password}" == "${compare_password}" ]]; then
+          show_log "✅ Operator credential imported to administrator keychain"
+        else
+          collect_error "Operator credential verification failed after import"
+          return 1
+        fi
+      else
+        collect_error "Operator credential import verification failed"
+        return 1
+      fi
+    else
+      collect_error "Failed to import operator credential to administrator keychain"
+      return 1
+    fi
+    unset operator_password compare_password
+  else
+    collect_error "Failed to retrieve operator credential from external keychain"
+    return 1
+  fi
+
+  # Import Plex NAS credential
+  # shellcheck disable=SC2154 # KEYCHAIN_PLEX_NAS_SERVICE loaded from sourced manifest
+  if plex_nas_credential=$(security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_nas_credential}" -D "Mac Server Setup - Plex NAS Credentials" -A -U; then
+      show_log "✅ Plex NAS credential imported to administrator keychain"
+    else
+      collect_error "Failed to import Plex NAS credential to administrator keychain"
+      return 1
+    fi
+    unset plex_nas_credential
+  else
+    collect_warning "Plex NAS credential not found in external keychain (may be optional)"
+  fi
+
+  # Import TimeMachine credential (optional)
+  # shellcheck disable=SC2154 # KEYCHAIN_TIMEMACHINE_SERVICE loaded from sourced manifest
+  if timemachine_credential=$(security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${timemachine_credential}" -D "Mac Server Setup - TimeMachine Credentials" -A -U; then
+      show_log "✅ TimeMachine credential imported to administrator keychain"
+    else
+      collect_warning "Failed to import TimeMachine credential to administrator keychain"
+    fi
+    unset timemachine_credential
+  else
+    show_log "⚠️ TimeMachine credential not found in external keychain (optional)"
+  fi
+
+  # Import WiFi credential (optional)
+  if wifi_credential=$(security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${wifi_credential}" -D "Mac Server Setup - WiFi Credentials" -A -U; then
+      show_log "✅ WiFi credential imported to administrator keychain"
+    else
+      collect_warning "Failed to import WiFi credential to administrator keychain"
+    fi
+    unset wifi_credential
+  else
+    show_log "⚠️ WiFi credential not found in external keychain (optional)"
+  fi
+
+  return 0
+}
+
 # SAFETY CHECK: Prevent execution on development machine
 set_section "Development Machine Safety Check"
 
@@ -633,7 +784,7 @@ if [[ "${FORCE}" == true ]]; then
 else
   "${SETUP_DIR}/scripts/setup-wifi-network.sh"
 fi
-# Setup SSH access
+
 WIFI_INTERFACE=$(networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}' || echo "en0")
 log "Using WiFi interface: ${WIFI_INTERFACE}"
 
@@ -740,83 +891,11 @@ else
   "${SETUP_DIR}/scripts/setup-hostname-volume.sh"
 fi
 
-# Setup SSH access
-set_section "Configuring SSH Access"
-
-# 1. Check if remote login is already enabled
-if sudo -p "[SSH check] Enter password to check SSH status: " systemsetup -getremotelogin 2>/dev/null | grep -q "On"; then
-  log "SSH is already enabled"
+# SSH access - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-ssh-access.sh" --force
 else
-  # 2. Try to enable it directly first
-  log "Attempting to enable SSH..."
-  if sudo -p "[SSH setup] Enter password to enable SSH access: " systemsetup -setremotelogin on; then
-    # 3.a Success case - it worked directly
-    show_log "✅ SSH has been enabled successfully"
-  else
-    # 3.b Failure case - need FDA
-    # Create a marker file to detect re-run
-    touch "/tmp/${HOSTNAME_LOWER}_fda_requested"
-    show_log "We need to grant Full Disk Access permissions to Terminal to enable SSH."
-    show_log "1. We'll open System Settings to the Full Disk Access section"
-    show_log "2. We'll open Finder showing Terminal.app"
-    show_log "3. You'll need to drag Terminal from Finder into the FDA list"
-    show_log "4. IMPORTANT: After adding Terminal, you must CLOSE this Terminal window"
-    show_log "5. Then open a NEW Terminal window and run this script again"
-
-    # Open Finder to show Terminal app
-    log "Opening Finder window to locate Terminal.app..."
-    osascript <<EOF
-tell application "Finder"
-  activate
-  open folder "Applications:Utilities:" of startup disk
-  select file "Terminal.app" of folder "Utilities" of folder "Applications" of startup disk
-end tell
-EOF
-
-    # Open FDA preferences
-    log "Opening System Settings to the Full Disk Access section..."
-    open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
-
-    show_log "After granting Full Disk Access to Terminal, close this window and run the script again."
-    exit 0
-  fi
-fi
-
-# Copy SSH keys if available
-if [[ -d "${SSH_KEY_SOURCE}" ]]; then
-  log "Found SSH keys at ${SSH_KEY_SOURCE}"
-
-  # Set up admin SSH keys
-  ADMIN_SSH_DIR="/Users/${ADMIN_USERNAME}/.ssh"
-  if [[ ! -d "${ADMIN_SSH_DIR}" ]]; then
-    log "Creating SSH directory for admin user"
-    mkdir -p "${ADMIN_SSH_DIR}"
-    chmod 700 "${ADMIN_SSH_DIR}"
-  fi
-
-  if [[ -f "${SSH_KEY_SOURCE}/authorized_keys" ]]; then
-    log "Copying authorized_keys for admin user"
-    cp "${SSH_KEY_SOURCE}/authorized_keys" "${ADMIN_SSH_DIR}/"
-    chmod 600 "${ADMIN_SSH_DIR}/authorized_keys"
-    check_success "Admin authorized_keys setup"
-  fi
-
-  # Copy SSH key pair for outbound connections
-  if [[ -f "${SSH_KEY_SOURCE}/id_ed25519.pub" ]]; then
-    log "Copying SSH public key for admin user"
-    cp "${SSH_KEY_SOURCE}/id_ed25519.pub" "${ADMIN_SSH_DIR}/"
-    chmod 644 "${ADMIN_SSH_DIR}/id_ed25519.pub"
-    check_success "Admin SSH public key setup"
-  fi
-
-  if [[ -f "${SSH_KEY_SOURCE}/id_ed25519" ]]; then
-    log "Copying SSH private key for admin user"
-    cp "${SSH_KEY_SOURCE}/id_ed25519" "${ADMIN_SSH_DIR}/"
-    chmod 600 "${ADMIN_SSH_DIR}/id_ed25519"
-    check_success "Admin SSH private key setup"
-  fi
-else
-  log "No SSH keys found at ${SSH_KEY_SOURCE} - manual key setup will be required"
+  "${SETUP_DIR}/scripts/setup-ssh-access.sh"
 fi
 
 # Configure Remote Desktop (Screen Sharing and Remote Management)
@@ -956,157 +1035,6 @@ defaults write com.apple.ncprefs apps -array-add '{
     "flags" = 0;
 }'
 check_success "Notification settings configuration"
-
-# Keychain credential management functions
-# Secure credential retrieval function
-get_keychain_credential() {
-  local service="$1"
-  local account="$2"
-
-  local credential
-  if credential=$(security find-generic-password \
-    -s "${service}" \
-    -a "${account}" \
-    -w 2>/dev/null); then
-    echo "${credential}"
-    return 0
-  else
-    collect_error "Failed to retrieve credential from Keychain: ${service}"
-    return 1
-  fi
-}
-
-# Import credentials from external keychain and populate user keychains
-import_external_keychain_credentials() {
-
-  set_section "Importing Credentials from External Keychain"
-  # Load keychain manifest
-  local manifest_file="${SETUP_DIR}/config/keychain_manifest.conf"
-  if [[ ! -f "${manifest_file}" ]]; then
-    collect_error "Keychain manifest not found: ${manifest_file}"
-    return 1
-  fi
-
-  # shellcheck source=/dev/null
-  source "${manifest_file}"
-
-  # Validate required variables from manifest
-  if [[ -z "${KEYCHAIN_PASSWORD:-}" || -z "${EXTERNAL_KEYCHAIN:-}" ]]; then
-    collect_error "Required keychain variables not found in manifest"
-    return 1
-  fi
-
-  # Copy external keychain file to user's keychain directory (preserve original for idempotency)
-  local external_keychain_file="${SETUP_DIR}/config/${EXTERNAL_KEYCHAIN}-db"
-  local user_keychain_file="${HOME}/Library/Keychains/${EXTERNAL_KEYCHAIN}-db"
-
-  if [[ ! -f "${external_keychain_file}" ]]; then
-    if [[ -f "${user_keychain_file}" ]]; then
-      log "External keychain file not found in setup package, but located in local keychains."
-      cp "${user_keychain_file}" "${external_keychain_file}"
-    else
-      collect_error "External keychain file not found: ${external_keychain_file}"
-      return 1
-    fi
-  fi
-
-  log "Copying external keychain to user's keychain directory..."
-  cp "${external_keychain_file}" "${user_keychain_file}"
-  chmod 600 "${user_keychain_file}"
-  check_success "External keychain file copied"
-
-  # Unlock external keychain
-  log "Unlocking external keychain with dev machine fingerprint..."
-  if security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${EXTERNAL_KEYCHAIN}"; then
-    show_log "✅ External keychain unlocked successfully"
-  else
-    collect_error "Failed to unlock external keychain"
-    return 1
-  fi
-
-  # Import administrator credentials to default keychain
-  log "Importing administrator credentials to default keychain..."
-
-  # Unlock admin keychain first
-  show_log "Unlocking administrator keychain for credential import..."
-
-  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}"; then
-    collect_error "Failed to unlock administrator keychain"
-    return 1
-  fi
-
-  # Import operator credential
-  # shellcheck disable=SC2154 # KEYCHAIN_OPERATOR_SERVICE loaded from sourced manifest
-  if operator_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    # Store in default keychain
-    security delete-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
-    if security add-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${operator_password}" -D "Mac Server Setup - Operator Account Password" -A -U; then
-      # Verify storage
-      if compare_password=$(security find-generic-password -s "${KEYCHAIN_OPERATOR_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w 2>/dev/null); then
-        if [[ "${operator_password}" == "${compare_password}" ]]; then
-          show_log "✅ Operator credential imported to administrator keychain"
-        else
-          collect_error "Operator credential verification failed after import"
-          return 1
-        fi
-      else
-        collect_error "Operator credential import verification failed"
-        return 1
-      fi
-    else
-      collect_error "Failed to import operator credential to administrator keychain"
-      return 1
-    fi
-    unset operator_password compare_password
-  else
-    collect_error "Failed to retrieve operator credential from external keychain"
-    return 1
-  fi
-
-  # Import Plex NAS credential
-  # shellcheck disable=SC2154 # KEYCHAIN_PLEX_NAS_SERVICE loaded from sourced manifest
-  if plex_nas_credential=$(security find-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    security delete-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
-    if security add-generic-password -s "${KEYCHAIN_PLEX_NAS_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_nas_credential}" -D "Mac Server Setup - Plex NAS Credentials" -A -U; then
-      show_log "✅ Plex NAS credential imported to administrator keychain"
-    else
-      collect_error "Failed to import Plex NAS credential to administrator keychain"
-      return 1
-    fi
-    unset plex_nas_credential
-  else
-    collect_warning "Plex NAS credential not found in external keychain (may be optional)"
-  fi
-
-  # Import TimeMachine credential (optional)
-  # shellcheck disable=SC2154 # KEYCHAIN_TIMEMACHINE_SERVICE loaded from sourced manifest
-  if timemachine_credential=$(security find-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    security delete-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
-    if security add-generic-password -s "${KEYCHAIN_TIMEMACHINE_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${timemachine_credential}" -D "Mac Server Setup - TimeMachine Credentials" -A -U; then
-      show_log "✅ TimeMachine credential imported to administrator keychain"
-    else
-      collect_warning "Failed to import TimeMachine credential to administrator keychain"
-    fi
-    unset timemachine_credential
-  else
-    show_log "⚠️ TimeMachine credential not found in external keychain (optional)"
-  fi
-
-  # Import WiFi credential (optional)
-  if wifi_credential=$(security find-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    security delete-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
-    if security add-generic-password -s "${KEYCHAIN_WIFI_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${wifi_credential}" -D "Mac Server Setup - WiFi Credentials" -A -U; then
-      show_log "✅ WiFi credential imported to administrator keychain"
-    else
-      collect_warning "Failed to import WiFi credential to administrator keychain"
-    fi
-    unset wifi_credential
-  else
-    show_log "⚠️ WiFi credential not found in external keychain (optional)"
-  fi
-
-  return 0
-}
 
 # Import credentials from external keychain
 if ! import_external_keychain_credentials; then
