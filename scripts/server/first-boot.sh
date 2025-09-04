@@ -1415,17 +1415,12 @@ else
   log "Skipping software updates as requested"
 fi
 
-# Configure firewall
-section "Configuring Firewall"
-
-# Ensure it's on
-log "Ensuring firewall is enabled"
-sudo -p "[Firewall setup] Enter password to enable application firewall: " /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
-
-# Add SSH to firewall allowed services
-log "Ensuring SSH is allowed through firewall"
-sudo -p "[Firewall setup] Enter password to configure SSH firewall access: " /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/sbin/sshd
-sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /usr/sbin/sshd
+# Firewall configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-firewall.sh" --force
+else
+  "${SETUP_DIR}/scripts/setup-firewall.sh"
+fi
 
 # Configure security settings
 section "Configuring Security Settings"
