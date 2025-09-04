@@ -44,6 +44,11 @@ else
   DROPBOX_LOCAL_PATH=""
 fi
 
+# TEMP DEBUGGING
+DROPBOX_SYNC_FOLDER=""
+DROPBOX_LOCAL_PATH=""
+# TEMP DEBUGGING
+
 # Handle command line arguments
 if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
   echo "Usage: $(basename "$0") [output_path] [script_path]"
@@ -669,23 +674,30 @@ else
   echo "⚠️ No URL provided, skipping Apple ID password link creation"
 fi
 
-# Copy operator first-login script
-if [[ -f "${SCRIPT_SOURCE_DIR}/scripts/server/operator-first-login.sh" ]]; then
-  echo "Copying operator first-login script"
-  cp "${SCRIPT_SOURCE_DIR}/scripts/server/operator-first-login.sh" "${OUTPUT_PATH}/scripts/"
-  chmod +x "${OUTPUT_PATH}/scripts/operator-first-login.sh"
-fi
+# Operator first-login script will be copied with all other server scripts below
 
 # Copy from local script source directory
 if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   set_section "Copying scripts from local source directory"
 
   # Copy main entry point script to root
-  cp "${SCRIPT_SOURCE_DIR}/scripts/server/first-boot.sh" "${OUTPUT_PATH}/" 2>/dev/null || collect_warning "first-boot.sh not found in server directory"
+  copy_with_manifest "${SCRIPT_SOURCE_DIR}/scripts/server/first-boot.sh" "first-boot.sh" "REQUIRED" || collect_warning "first-boot.sh not found in server directory"
+  chmod +x "${OUTPUT_PATH}/first-boot.sh" 2>/dev/null
 
-  # Copy system scripts to scripts directory
-  cp "${SCRIPT_SOURCE_DIR}/scripts/server/setup-remote-desktop.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: setup-remote-desktop.sh not found in server directory"
-  cp "${SCRIPT_SOURCE_DIR}/scripts/server/setup-command-line-tools.sh" "${OUTPUT_PATH}/scripts/" 2>/dev/null || echo "Warning: setup-command-line-tools.sh not found in server directory"
+  # Copy all server scripts to scripts directory (excluding first-boot.sh which goes to root)
+  echo "Copying all server scripts to deployment package..."
+  for script in "${SCRIPT_SOURCE_DIR}/scripts/server/"*.sh; do
+    script_name="$(basename "${script}")"
+    # Skip first-boot.sh as it's handled separately
+    if [[ "${script_name}" != "first-boot.sh" ]]; then
+      if copy_with_manifest "${script}" "scripts/${script_name}" "REQUIRED"; then
+        chmod +x "${OUTPUT_PATH}/scripts/${script_name}"
+        echo "  ✅ ${script_name}"
+      else
+        echo "  ❌ Failed to copy ${script_name}"
+      fi
+    fi
+  done
 
   # Copy template scripts to app-setup/templates
   cp "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/mount-nas-media.sh" "${OUTPUT_PATH}/app-setup/templates/" 2>/dev/null || echo "Warning: mount-nas-media.sh not found in app-setup-templates directory"
