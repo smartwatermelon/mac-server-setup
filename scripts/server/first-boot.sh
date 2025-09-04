@@ -1543,44 +1543,14 @@ else
 fi
 
 #
-# LOG ROTATION SETUP
+# LOG ROTATION SETUP - delegated to module
 #
-section "Configuring Log Rotation"
 
-# Copy logrotate configuration if available
-if [[ -f "${CONFIG_FILE%/*}/logrotate.conf" ]]; then
-  log "Installing logrotate configuration"
-
-  # Ensure logrotate config directory exists
-  LOGROTATE_CONFIG_DIR="${HOMEBREW_PREFIX}/etc"
-  if [[ ! -d "${LOGROTATE_CONFIG_DIR}" ]]; then
-    sudo -p "[Logrotate setup] Enter password to create logrotate config directory: " mkdir -p "${LOGROTATE_CONFIG_DIR}"
-  fi
-
-  # Create logrotate.d include directory
-  if [[ ! -d "${LOGROTATE_CONFIG_DIR}/logrotate.d" ]]; then
-    sudo -p "[Logrotate setup] Enter password to create logrotate.d directory: " mkdir -p "${LOGROTATE_CONFIG_DIR}/logrotate.d"
-  fi
-
-  # Copy our logrotate configuration
-  sudo -p "[Logrotate setup] Enter password to install logrotate config: " cp "${CONFIG_FILE%/*}/logrotate.conf" "${LOGROTATE_CONFIG_DIR}/"
-
-  # Make config user-writable so both admin and operator can modify it (664)
-  sudo -p "[Logrotate setup] Enter password to set config permissions: " chmod 664 "${LOGROTATE_CONFIG_DIR}/logrotate.conf"
-  sudo -p "[Logrotate setup] Enter password to set config ownership: " chown "${ADMIN_USERNAME}:admin" "${LOGROTATE_CONFIG_DIR}/logrotate.conf"
-  check_success "Logrotate configuration install"
-
-  # Start logrotate service as admin user
-  log "Starting logrotate service for admin user"
-  brew services stop logrotate &>/dev/null || true
-  if brew services start logrotate; then
-    check_success "Admin logrotate service start"
-    log "✅ Admin logrotate service started - admin logs will be rotated automatically"
-  else
-    log "⚠️  Failed to start admin logrotate service - admin logs will not be rotated"
-  fi
+# Log rotation configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-log-rotation.sh" --force
 else
-  log "No logrotate configuration found - skipping log rotation setup"
+  "${SETUP_DIR}/scripts/setup-log-rotation.sh"
 fi
 
 #
