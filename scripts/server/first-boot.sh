@@ -1493,53 +1493,14 @@ fi
 # See the "Configuring operator account files" section above
 
 #
-# CHANGE DEFAULT SHELL TO HOMEBREW BASH
+# SHELL CONFIGURATION - delegated to module
 #
-section "Changing Default Shell to Homebrew Bash"
 
-# Get the Homebrew bash path
-HOMEBREW_BASH="$(brew --prefix)/bin/bash"
-
-if [[ -f "${HOMEBREW_BASH}" ]]; then
-  log "Found Homebrew bash at: ${HOMEBREW_BASH}"
-
-  # Add to /etc/shells if not already present
-  if ! grep -q "${HOMEBREW_BASH}" /etc/shells; then
-    log "Adding Homebrew bash to /etc/shells"
-    echo "${HOMEBREW_BASH}" | sudo -p "[Shell setup] Enter password to add Homebrew bash to allowed shells: " tee -a /etc/shells
-    check_success "Add Homebrew bash to /etc/shells"
-  else
-    log "Homebrew bash already in /etc/shells"
-  fi
-
-  # Change shell for admin user to Homebrew bash
-  log "Setting shell to Homebrew bash for admin user"
-  sudo -p "[Shell setup] Enter password to change admin shell: " chsh -s "${HOMEBREW_BASH}" "${ADMIN_USERNAME}"
-  check_success "Admin user shell change"
-
-  # Change shell for operator user if it exists
-  if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
-    log "Setting shell to Homebrew bash for operator user"
-    sudo -p "[Shell setup] Enter password to change operator shell: " chsh -s "${HOMEBREW_BASH}" "${OPERATOR_USERNAME}"
-    check_success "Operator user shell change"
-  fi
-
-  # Copy .zprofile to .profile for bash compatibility
-  log "Setting up bash profile compatibility"
-  if [[ -f "/Users/${ADMIN_USERNAME}/.zprofile" ]]; then
-    log "Copying admin .zprofile to .profile for bash compatibility"
-    cp "/Users/${ADMIN_USERNAME}/.zprofile" "/Users/${ADMIN_USERNAME}/.profile"
-  fi
-
-  if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
-    log "Copying operator .zprofile to .profile for bash compatibility"
-    sudo -p "[Shell setup] Enter password to copy operator profile: " cp "/Users/${OPERATOR_USERNAME}/.zprofile" "/Users/${OPERATOR_USERNAME}/.profile" 2>/dev/null || true
-    sudo chown "${OPERATOR_USERNAME}:staff" "/Users/${OPERATOR_USERNAME}/.profile" 2>/dev/null || true
-  fi
-
-  check_success "Bash profile compatibility setup"
+# Shell configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-shell-configuration.sh" --force
 else
-  log "Homebrew bash not found - skipping shell change"
+  "${SETUP_DIR}/scripts/setup-shell-configuration.sh"
 fi
 
 #
