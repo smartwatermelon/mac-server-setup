@@ -2017,185 +2017,26 @@ else
   log "No operator-first-login.sh found in ${SETUP_DIR}/scripts/"
 fi
 
-# Install Bash Configuration
-section "Installing Bash Configuration for Administrator and Operator"
+#
+# BASH CONFIGURATION SETUP - delegated to module
+#
 
-# Check if bash configuration is available in setup package
-BASH_CONFIG_SOURCE="${SETUP_DIR}/bash"
-if [[ -d "${BASH_CONFIG_SOURCE}" ]]; then
-  log "Installing Bash configuration from setup package"
-
-  # Function to install bash config for a user
-  install_bash_config_for_user() {
-    local username="$1"
-    local user_home="$2"
-    local user_config_dir="${user_home}/.config"
-    local user_bash_config_dir="${user_config_dir}/bash"
-
-    log "Installing Bash configuration for ${username}"
-
-    # Create .config directory if it doesn't exist
-    if [[ "${username}" == "${ADMIN_USERNAME}" ]]; then
-      # Admin user - direct operations
-      mkdir -p "${user_config_dir}"
-    else
-      # Operator user - use sudo -iu for proper environment
-      sudo -p "[Bash config] Enter password to create config directory for ${username}: " -iu "${username}" mkdir -p "${user_config_dir}"
-    fi
-
-    # Copy bash configuration directory (ensure idempotency by copying contents, including dotfiles)
-    if [[ "${username}" == "${ADMIN_USERNAME}" ]]; then
-      mkdir -p "${user_bash_config_dir}"
-      cp -r "${BASH_CONFIG_SOURCE}/"* "${user_bash_config_dir}/" 2>/dev/null || true
-      cp -r "${BASH_CONFIG_SOURCE}/".[!.]* "${user_bash_config_dir}/" 2>/dev/null || true
-      chown -R "${username}:staff" "${user_bash_config_dir}"
-    else
-      sudo -p "[Bash config] Enter password to create bash config directory for ${username}: " mkdir -p "${user_bash_config_dir}"
-      sudo -p "[Bash config] Enter password to copy bash config for ${username}: " cp -r "${BASH_CONFIG_SOURCE}/"* "${user_bash_config_dir}/" 2>/dev/null || true
-      sudo -p "[Bash config] Enter password to copy bash config for ${username}: " cp -r "${BASH_CONFIG_SOURCE}/".[!.]* "${user_bash_config_dir}/" 2>/dev/null || true
-      sudo -p "[Bash config] Enter password to set ownership for ${username}: " chown -R "${username}:staff" "${user_bash_config_dir}"
-    fi
-
-    # Create symlink for .bash_profile
-    local bash_profile_symlink="${user_home}/.bash_profile"
-    local bash_profile_target="${user_bash_config_dir}/.bash_profile"
-
-    if [[ "${username}" == "${ADMIN_USERNAME}" ]]; then
-      # Remove existing .bash_profile if it's not already our symlink
-      if [[ -f "${bash_profile_symlink}" && ! -L "${bash_profile_symlink}" ]]; then
-        log "Backing up existing .bash_profile for ${username}"
-        local timestamp
-        timestamp="$(date +%Y%m%d-%H%M%S)"
-        mv "${bash_profile_symlink}" "${bash_profile_symlink}.backup.${timestamp}"
-      fi
-
-      # Create the symlink
-      ln -sf "${bash_profile_target}" "${bash_profile_symlink}"
-    else
-      # Operator user - use sudo -iu for proper environment
-      if sudo -iu "${username}" test -f "${bash_profile_symlink}" && ! sudo -iu "${username}" test -L "${bash_profile_symlink}"; then
-        log "Backing up existing .bash_profile for ${username}"
-        local timestamp
-        timestamp="$(date +%Y%m%d-%H%M%S)"
-        sudo -p "[Bash config] Enter password to backup existing bash_profile for ${username}: " -iu "${username}" mv "${bash_profile_symlink}" "${bash_profile_symlink}.backup.${timestamp}"
-      fi
-
-      # Create the symlink
-      sudo -p "[Bash config] Enter password to create bash_profile symlink for ${username}: " -iu "${username}" ln -sf "${bash_profile_target}" "${bash_profile_symlink}"
-    fi
-
-    # Create .profile redirector
-    local profile_file="${user_home}/.profile"
-    local profile_content="[ -r \$HOME/.bash_profile ] && . \$HOME/.bash_profile"
-
-    if [[ "${username}" == "${ADMIN_USERNAME}" ]]; then
-      # Check if .profile already has the redirector
-      if [[ ! -f "${profile_file}" ]] || ! grep -q "\.bash_profile" "${profile_file}"; then
-        log "Creating .profile redirector for ${username}"
-        echo "${profile_content}" >>"${profile_file}"
-      else
-        log ".profile redirector already exists for ${username}"
-      fi
-    else
-      # Operator user - use sudo -iu for proper environment
-      if ! sudo -iu "${username}" test -f "${profile_file}" || ! sudo -iu "${username}" grep -q "\.bash_profile" "${profile_file}"; then
-        log "Creating .profile redirector for ${username}"
-        echo "${profile_content}" | sudo -p "[Bash config] Enter password to create profile redirector for ${username}: " -iu "${username}" tee -a "${profile_file}" >/dev/null
-      else
-        log ".profile redirector already exists for ${username}"
-      fi
-    fi
-
-    log "✅ Bash configuration installed for ${username}"
-  }
-
-  # Install for Administrator
-  install_bash_config_for_user "${ADMIN_USERNAME}" "/Users/${ADMIN_USERNAME}"
-
-  # Install for Operator (if account exists)
-  if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
-    install_bash_config_for_user "${OPERATOR_USERNAME}" "/Users/${OPERATOR_USERNAME}"
-  else
-    log "Operator account not found - skipping bash config installation for operator"
-  fi
-
-  check_success "Bash configuration installation"
+# Bash configuration setup - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-bash-configuration.sh" --force
 else
-  log "No bash configuration found in setup package - skipping bash config installation"
+  "${SETUP_DIR}/scripts/setup-bash-configuration.sh"
 fi
 
-# Configure Time Machine backup
-section "Configuring Time Machine"
+#
+# TIME MACHINE CONFIGURATION
+#
 
-# Check if Time Machine configuration is available
-TIMEMACHINE_CONFIG_FILE="${SETUP_DIR}/config/timemachine.conf"
-if [[ -f "${TIMEMACHINE_CONFIG_FILE}" ]]; then
-  # Source the Time Machine configuration
-  # shellcheck source=/dev/null
-  source "${TIMEMACHINE_CONFIG_FILE}"
-
-  # Validate required variables were sourced
-  if [[ -z "${TM_USERNAME:-}" || -z "${TM_PASSWORD:-}" || -z "${TM_URL:-}" ]]; then
-    log "Error: Time Machine configuration incomplete - missing required variables"
-    log "Skipping Time Machine setup"
-  else
-    log "Checking existing Time Machine configuration"
-
-    # Check if Time Machine is already configured with our destination
-    EXPECTED_URL="smb://${TM_USERNAME}@${TM_URL}"
-
-    # Handle case where no destinations exist yet (tmutil destinationinfo fails)
-    if EXISTING_DESTINATIONS=$(tmutil destinationinfo 2>/dev/null | grep "^URL" | awk '{print $3}'); then
-      log "Found existing Time Machine destinations"
-    else
-      log "No existing Time Machine destinations found"
-      EXISTING_DESTINATIONS=""
-    fi
-
-    # Escape special regex characters using bash parameter expansion
-    ESCAPED_URL="${EXPECTED_URL//\./\\.}"
-    ESCAPED_URL="${ESCAPED_URL//\//\\/}"
-
-    if [[ -n "${EXISTING_DESTINATIONS}" ]] && echo "${EXISTING_DESTINATIONS}" | grep -q "${ESCAPED_URL}"; then
-      show_log "✅ Time Machine already configured with destination: ${TM_URL}"
-
-      # Add to menu bar
-      log "Adding Time Machine to menu bar"
-      defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
-      NEED_SYSTEMUI_RESTART=true
-      check_success "Time Machine menu bar addition"
-      sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
-      check_success "Time Machine menu bar addition for operator"
-    else
-      log "Configuring Time Machine destination: ${TM_URL}"
-      # Construct the full SMB URL with credentials
-      TIMEMACHINE_URL="smb://${TM_USERNAME}:${TM_PASSWORD}@${TM_URL#*://}"
-
-      if sudo -p "[Time Machine] Enter password to set backup destination: " tmutil setdestination -a "${TIMEMACHINE_URL}"; then
-        check_success "Time Machine destination configuration"
-
-        log "Enabling Time Machine"
-        if sudo -p "[Time Machine] Enter password to enable backups: " tmutil enable; then
-          show_log "✅ Time Machine backup configured and enabled"
-          check_success "Time Machine enable"
-
-          # Add Time Machine to menu bar for admin user
-          log "Adding Time Machine to menu bar"
-          defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
-          NEED_SYSTEMUI_RESTART=true
-          check_success "Time Machine menu bar addition"
-          sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.systemuiserver menuExtras -array-add "/System/Library/CoreServices/Menu Extras/TimeMachine.menu"
-          check_success "Time Machine menu bar addition for operator"
-        else
-          log "❌ Failed to enable Time Machine"
-        fi
-      else
-        log "❌ Failed to set Time Machine destination"
-      fi
-    fi
-  fi
+# Time Machine configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-timemachine.sh" --force
 else
-  log "Time Machine configuration file not found - skipping Time Machine setup"
+  "${SETUP_DIR}/scripts/setup-timemachine.sh"
 fi
 
 # Apply menu bar changes
