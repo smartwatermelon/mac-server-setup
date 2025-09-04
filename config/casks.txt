@@ -6,7 +6,6 @@ bbedit
 blockblock
 catch
 coconutid
-dropbox
 filebot
 font-inconsolata
 hiddenbar

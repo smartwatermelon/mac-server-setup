@@ -164,7 +164,7 @@ set_section() {
 # Function to collect an error (with immediate display)
 collect_error() {
   local message="$1"
-  local line_number="${2:-${LINENO}}"
+  local line_number="${2:-}"
   local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
   local script_name
   script_name="$(basename "${BASH_SOURCE[1]:-${0}}")"
@@ -749,7 +749,7 @@ if [[ "${FORCE}" = false ]] && [[ "${RERUN_AFTER_FDA}" = false ]]; then
 fi
 
 # Collect administrator password for keychain operations
-if [[ "${FORCE}" != "true" && "${RERUN_AFTER_FDA}" != "true" ]]; then
+if [[ "${FORCE}" != "true" ]]; then
   echo
   echo "This script will need your Mac account password for keychain operations."
   read -r -e -p "Enter your Mac ${ADMIN_USERNAME} account password: " -s ADMINISTRATOR_PASSWORD
@@ -763,6 +763,7 @@ if [[ "${FORCE}" != "true" && "${RERUN_AFTER_FDA}" != "true" ]]; then
   done
 
   show_log "✅ Administrator password validated"
+  export ADMINISTRATOR_PASSWORD
 else
   log "🆗 Skipping password prompt (force mode or FDA re-run)"
 fi
@@ -803,6 +804,10 @@ if [[ "${FORCE}" == true ]]; then
   "${SETUP_DIR}/scripts/setup-ssh-access.sh" --force
 else
   "${SETUP_DIR}/scripts/setup-ssh-access.sh"
+fi
+if [[ -f "/tmp/${HOSTNAME_LOWER}_fda_requested" ]]; then
+  # We need to exit here and have the user start the script again in a new window
+  exit 0
 fi
 
 # Configure Remote Desktop (Screen Sharing and Remote Management)
@@ -1278,7 +1283,7 @@ if [[ -f "${clt_script}" ]]; then
   fi
 
   # Run the dedicated CLT installation script
-  if "${clt_script}" "${clt_args[@]}"; then
+  if "${clt_script}" ${clt_args[@]+"${clt_args[@]}"}; then
     log "✅ Command Line Tools installation completed successfully"
   else
     collect_error "Command Line Tools installation failed"
@@ -1291,6 +1296,7 @@ else
 fi
 
 # Install Homebrew
+set_section "Installing Homebrew"
 if [[ "${SKIP_HOMEBREW}" = false ]]; then
   section "Installing Homebrew"
 
@@ -1358,6 +1364,7 @@ CORES="$(sysctl -n hw.ncpu 2>/dev/null || echo "2x")"
 log "Enabled concurrent downloads (auto mode - using ${CORES} CPU cores for optimal parallelism)"
 
 # Install packages
+set_section "Installing Homebrew formulae and casks"
 if [[ "${SKIP_PACKAGES}" = false ]]; then
   section "Installing Packages"
 

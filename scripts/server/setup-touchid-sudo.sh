@@ -33,6 +33,7 @@ done
 # Load common configuration
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_FILE="${SETUP_DIR}/config/config.conf"
+ADMINISTRATOR_PASSWORD="${ADMINISTRATOR_PASSWORD:-}"
 
 if [[ -f "${CONFIG_FILE}" ]]; then
   # shellcheck source=/dev/null
@@ -192,7 +193,8 @@ else
 
     # Create the PAM configuration file
     log "Creating TouchID sudo configuration..."
-    sudo -p "[TouchID setup] Enter password to configure TouchID for sudo: " tee "/etc/pam.d/sudo_local" >/dev/null <<'EOF'
+    sudo -p "[TouchID setup] Enter password to configure TouchID for sudo: " -S -v <<<"${ADMINISTRATOR_PASSWORD}"
+    sudo tee "/etc/pam.d/sudo_local" >/dev/null <<'EOF'
 # sudo_local: PAM configuration for enabling TouchID for sudo
 #
 # This file enables the use of TouchID as an authentication method for sudo
@@ -208,6 +210,7 @@ EOF
     # Test TouchID configuration
     log "Testing TouchID sudo configuration..."
     sudo -p "[TouchID test] Enter password to test TouchID sudo configuration: " -v
+    echo ""
     check_success "TouchID sudo test"
   fi
 fi
