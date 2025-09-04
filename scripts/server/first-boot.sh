@@ -1484,9 +1484,9 @@ check_success "Reload profile"
 
 # Dock configuration - delegated to module
 if [[ "${FORCE}" == true ]]; then
-  "${SETUP_DIR}/scripts/server/setup-dock-configuration.sh" --force
+  "${SETUP_DIR}/scripts/setup-dock-configuration.sh" --force
 else
-  "${SETUP_DIR}/scripts/server/setup-dock-configuration.sh"
+  "${SETUP_DIR}/scripts/setup-dock-configuration.sh"
 fi
 
 # Note: Operator first-login setup is now handled automatically via LaunchAgent
