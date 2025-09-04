@@ -627,11 +627,13 @@ else
   "${SETUP_DIR}/scripts/setup-touchid-sudo.sh"
 fi
 
-# WiFi Network Assessment and Configuration
-section "WiFi Network Assessment and Configuration"
-show_log "WiFi Network Assessment and Configuration; this may take a moment..."
-
-# Detect active WiFi interface
+# WiFi network configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-wifi-network.sh" --force
+else
+  "${SETUP_DIR}/scripts/setup-wifi-network.sh"
+fi
+# Setup SSH access
 WIFI_INTERFACE=$(networksetup -listallhardwareports | awk '/Wi-Fi/{getline; print $2}' || echo "en0")
 log "Using WiFi interface: ${WIFI_INTERFACE}"
 
