@@ -888,7 +888,7 @@ main() {
           clean_server=$(echo "${server}" | tr -d '[:space:]')
           log "  ${index}. ${clean_server}"
           server_array+=("${clean_server}")
-          ((index++))
+          ((index += 1))
         done <<<"${discovered_servers}"
 
         log "  ${index}. Other (enter manually)"

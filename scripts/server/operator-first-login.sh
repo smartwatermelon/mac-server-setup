@@ -76,7 +76,7 @@ wait_for_network_mount() {
     fi
 
     sleep 1
-    ((elapsed++))
+    ((elapsed += 1))
   done
 
   log "Warning: Network mount not available after ${timeout} seconds"
@@ -126,7 +126,7 @@ setup_dock() {
       log "Removing ${app} from dock..."
       dockutil --remove "${app}" 2>/dev/null || true
       sleep 1
-      ((elapsed++))
+      ((elapsed += 1))
     done
 
     if [[ ${elapsed} -ge ${timeout} ]]; then
@@ -158,7 +158,7 @@ setup_dock() {
       log "Adding ${app} to dock..."
       dockutil --add "${app}" 2>/dev/null || true
       sleep 1
-      ((elapsed++))
+      ((elapsed += 1))
     done
 
     if [[ ${elapsed} -ge ${timeout} ]]; then

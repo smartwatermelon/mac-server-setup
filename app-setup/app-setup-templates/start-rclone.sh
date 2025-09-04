@@ -62,7 +62,7 @@ wait_for_network() {
 
     log "Network attempt ${attempt}/${max_attempts} - waiting 10s..."
     sleep 10
-    ((attempt++))
+    ((attempt += 1))
   done
 
   log "❌ Network connectivity timeout after ${max_attempts} attempts"
