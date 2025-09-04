@@ -749,7 +749,7 @@ if [[ "${FORCE}" = false ]] && [[ "${RERUN_AFTER_FDA}" = false ]]; then
 fi
 
 # Collect administrator password for keychain operations
-if [[ "${FORCE}" != "true" && "${RERUN_AFTER_FDA}" != "true" ]]; then
+if [[ "${FORCE}" != "true" ]]; then
   echo
   echo "This script will need your Mac account password for keychain operations."
   read -r -e -p "Enter your Mac ${ADMIN_USERNAME} account password: " -s ADMINISTRATOR_PASSWORD
@@ -763,6 +763,7 @@ if [[ "${FORCE}" != "true" && "${RERUN_AFTER_FDA}" != "true" ]]; then
   done
 
   show_log "✅ Administrator password validated"
+  export ADMINISTRATOR_PASSWORD
 else
   log "🆗 Skipping password prompt (force mode or FDA re-run)"
 fi
@@ -803,6 +804,10 @@ if [[ "${FORCE}" == true ]]; then
   "${SETUP_DIR}/scripts/setup-ssh-access.sh" --force
 else
   "${SETUP_DIR}/scripts/setup-ssh-access.sh"
+fi
+if [[ -f "/tmp/${HOSTNAME_LOWER}_fda_requested" ]]; then
+  # We need to exit here and have the user start the script again in a new window
+  exit 0
 fi
 
 # Configure Remote Desktop (Screen Sharing and Remote Management)
@@ -1278,7 +1283,7 @@ if [[ -f "${clt_script}" ]]; then
   fi
 
   # Run the dedicated CLT installation script
-  if "${clt_script}" "${clt_args[@]}"; then
+  if "${clt_script}" ${clt_args[@]+"${clt_args[@]}"}; then
     log "✅ Command Line Tools installation completed successfully"
   else
     collect_error "Command Line Tools installation failed"
