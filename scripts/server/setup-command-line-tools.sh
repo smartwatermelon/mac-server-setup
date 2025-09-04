@@ -440,12 +440,6 @@ main() {
   log ""
   log "✅ Command Line Tools installation and verification completed successfully"
   log ""
-  log "Installed tools verified:"
-  log "• Development tools: clang, git, make, cc, c++"
-  log "• Compiler functionality tested and working"
-  log "• System headers accessible"
-  log ""
-  log "Command Line Tools are ready for use!"
 }
 
 # Execute main function with all arguments

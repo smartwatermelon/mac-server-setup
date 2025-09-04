@@ -77,7 +77,7 @@ if [[ -n "${DROPBOX_SYNC_FOLDER:-}" ]]; then
         break
       fi
       sleep 1
-      ((config_wait_elapsed++))
+      ((config_wait_elapsed += 1))
     done
 
     if [[ -f "${RCLONE_CONFIG_PATH}" ]]; then
