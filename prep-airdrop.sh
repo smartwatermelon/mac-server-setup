@@ -676,7 +676,7 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   set_section "Copying scripts from local source directory"
 
   # Copy main entry point script to root
-  copy_with_manifest "${SCRIPT_SOURCE_DIR}/scripts/server/first-boot.sh" "${OUTPUT_PATH}/first-boot.sh" || collect_warning "first-boot.sh not found in server directory"
+  copy_with_manifest "${SCRIPT_SOURCE_DIR}/scripts/server/first-boot.sh" "${OUTPUT_PATH}/first-boot.sh" "REQUIRED" || collect_warning "first-boot.sh not found in server directory"
   chmod +x "${OUTPUT_PATH}/first-boot.sh" 2>/dev/null
 
   # Copy all server scripts to scripts directory (excluding first-boot.sh which goes to root)
@@ -685,7 +685,7 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
     script_name="$(basename "${script}")"
     # Skip first-boot.sh as it's handled separately
     if [[ "${script_name}" != "first-boot.sh" ]]; then
-      if copy_with_manifest "${script}" "${OUTPUT_PATH}/scripts/${script_name}"; then
+      if copy_with_manifest "${script}" "${OUTPUT_PATH}/scripts/${script_name}" "REQUIRED"; then
         chmod +x "${OUTPUT_PATH}/scripts/${script_name}"
         echo "  ✅ ${script_name}"
       else
