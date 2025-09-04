@@ -1296,6 +1296,7 @@ else
 fi
 
 # Install Homebrew
+set_section "Installing Homebrew"
 if [[ "${SKIP_HOMEBREW}" = false ]]; then
   section "Installing Homebrew"
 
@@ -1363,6 +1364,7 @@ CORES="$(sysctl -n hw.ncpu 2>/dev/null || echo "2x")"
 log "Enabled concurrent downloads (auto mode - using ${CORES} CPU cores for optimal parallelism)"
 
 # Install packages
+set_section "Installing Homebrew formulae and casks"
 if [[ "${SKIP_PACKAGES}" = false ]]; then
   section "Installing Packages"
 
