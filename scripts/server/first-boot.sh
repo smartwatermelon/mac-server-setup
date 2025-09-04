@@ -620,83 +620,12 @@ fi
 # SYSTEM CONFIGURATION
 #
 
-# TouchID sudo setup
-section "TouchID sudo setup"
-
-# Check if TouchID sudo is already configured
-if [[ -f "/etc/pam.d/sudo_local" ]]; then
-  # Verify the content is correct
-  expected_content="auth       sufficient     pam_tid.so"
-  if grep -q "${expected_content}" "/etc/pam.d/sudo_local" 2>/dev/null; then
-    show_log "✅ TouchID sudo is already properly configured"
-  else
-    log "TouchID sudo configuration exists but content may be incorrect"
-    log "Current content:"
-    head -10 <"/etc/pam.d/sudo_local" | while read -r line; do log "  ${line}"; done
-  fi
+# TouchID and sudo configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-touchid-sudo.sh" --force
 else
-  # TouchID sudo not configured - prompt user
-  touchid_enabled=false
-
-  if [[ "${FORCE}" = true ]]; then
-    # Force mode - enable TouchID by default
-    touchid_enabled=true
-    log "Force mode enabled - configuring TouchID sudo authentication"
-  else
-    # Interactive mode - prompt user
-    show_log "TouchID sudo allows you to use fingerprint authentication for administrative commands."
-    show_log "This is more convenient than typing your password repeatedly."
-
-    read -p "Enable TouchID for sudo authentication? (Y/n): " -n 1 -r touchid_choice
-    echo
-
-    if [[ -z "${touchid_choice}" ]] || [[ ${touchid_choice} =~ ^[Yy]$ ]]; then
-      touchid_enabled=true
-    else
-      log "TouchID sudo setup skipped - standard password authentication will be used"
-    fi
-  fi
-
-  if [[ "${touchid_enabled}" = true ]]; then
-    # Check if TouchID is available before warning about password
-    if bioutil -rs 2>/dev/null | grep -q "Touch ID"; then
-      show_log "TouchID sudo needs to be configured. We will ask for your user password."
-    else
-      show_log "TouchID sudo needs to be configured (TouchID not available - will use password)."
-    fi
-
-    # Create the PAM configuration file
-    log "Creating TouchID sudo configuration..."
-    sudo -p "[TouchID setup] Enter password to configure TouchID for sudo: " tee "/etc/pam.d/sudo_local" >/dev/null <<'EOF'
-# sudo_local: PAM configuration for enabling TouchID for sudo
-#
-# This file enables the use of TouchID as an authentication method for sudo
-# commands on macOS. It is used in addition to the standard sudo configuration.
-#
-# Format: auth sufficient pam_tid.so
-
-# Allow TouchID authentication for sudo
-auth       sufficient     pam_tid.so
-EOF
-    check_success "TouchID sudo configuration"
-
-    # Test TouchID configuration
-    log "Testing TouchID sudo configuration..."
-    sudo -p "[TouchID test] Enter password to test TouchID sudo configuration: " -v
-    check_success "TouchID sudo test"
-  fi
+  "${SETUP_DIR}/scripts/setup-touchid-sudo.sh"
 fi
-
-# Configure sudo timeout to reduce password prompts during setup
-section "Configuring sudo timeout"
-show_log "Setting sudo timeout to 30 minutes for smoother setup experience"
-sudo -p "[System setup] Enter password to configure sudo timeout: " tee /etc/sudoers.d/10_setup_timeout >/dev/null <<EOF
-# Temporary sudo timeout extension for setup - 30 minutes
-Defaults timestamp_timeout=30
-EOF
-# Fix permissions for sudoers file
-sudo chmod 0440 /etc/sudoers.d/10_setup_timeout
-check_success "Sudo timeout configuration"
 
 # WiFi Network Assessment and Configuration
 section "WiFi Network Assessment and Configuration"
@@ -802,39 +731,11 @@ else
   log "✅ WiFi already working - skipping configuration"
 fi
 
-# Set hostname and HD name
-section "Setting Hostname and HD volume name"
-CURRENT_HOSTNAME=$(hostname)
-if [[ "${CURRENT_HOSTNAME}" = "${HOSTNAME}" ]]; then
-  log "Hostname is already set to ${HOSTNAME}"
+# Hostname and volume configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-hostname-volume.sh" --force
 else
-  log "Setting hostname to ${HOSTNAME}"
-  sudo -p "[System setup] Enter password to set computer hostname: " scutil --set ComputerName "${HOSTNAME}"
-  sudo -p "[System setup] Enter password to set local hostname: " scutil --set LocalHostName "${HOSTNAME}"
-  sudo -p "[System setup] Enter password to set system hostname: " scutil --set HostName "${HOSTNAME}"
-  check_success "Hostname configuration"
-fi
-log "Renaming HD"
-
-# Create a temporary file for the plist output
-TEMP_PLIST=$(mktemp)
-if diskutil info -plist / >"${TEMP_PLIST}"; then
-  CURRENT_VOLUME=$(/usr/libexec/PlistBuddy -c "Print :VolumeName" "${TEMP_PLIST}" 2>/dev/null || echo "Macintosh HD")
-else
-  CURRENT_VOLUME="Macintosh HD"
-fi
-
-# Clean up temp file
-rm -f "${TEMP_PLIST}"
-
-# Only rename if the volume name is different
-if [[ "${CURRENT_VOLUME}" != "${HOSTNAME}" ]]; then
-  log "Current volume name: ${CURRENT_VOLUME}"
-  log "Renaming volume from '${CURRENT_VOLUME}' to '${HOSTNAME}'"
-  diskutil rename "/Volumes/${CURRENT_VOLUME}" "${HOSTNAME}"
-  check_success "Renamed HD from '${CURRENT_VOLUME}' to '${HOSTNAME}'"
-else
-  log "Volume is already named '${HOSTNAME}'"
+  "${SETUP_DIR}/scripts/setup-hostname-volume.sh"
 fi
 
 # Setup SSH access
@@ -1479,44 +1380,12 @@ defaults write -g com.apple.swipescrolldirection -bool false
 sudo -p "[User setup] Enter password to configure operator scroll direction: " -iu "${OPERATOR_USERNAME}" defaults write -g com.apple.swipescrolldirection -bool false
 check_success "Fix scroll setting"
 
-# Configure power management settings
-section "Configuring Power Management"
-log "Setting power management for server use"
-
-# Check current settings
-CURRENT_SLEEP=$(pmset -g 2>/dev/null | grep -E "^[ ]*sleep" | awk '{print $2}' || echo "unknown")
-CURRENT_DISPLAYSLEEP=$(pmset -g 2>/dev/null | grep -E "^[ ]*displaysleep" | awk '{print $2}' || echo "unknown")
-CURRENT_DISKSLEEP=$(pmset -g 2>/dev/null | grep -E "^[ ]*disksleep" | awk '{print $2}' || echo "unknown")
-CURRENT_WOMP=$(pmset -g 2>/dev/null | grep -E "^[ ]*womp" | awk '{print $2}' || echo "unknown")
-CURRENT_AUTORESTART=$(pmset -g 2>/dev/null | grep -E "^[ ]*autorestart" | awk '{print $2}' || echo "unknown")
-
-# Apply settings only if they differ from current
-if [[ "${CURRENT_SLEEP}" != "0" ]]; then
-  sudo -p "[Power management] Enter password to disable system sleep: " pmset -a sleep 0
-  log "Disabled system sleep"
+# Power management configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-power-management.sh" --force
+else
+  "${SETUP_DIR}/scripts/setup-power-management.sh"
 fi
-
-if [[ "${CURRENT_DISPLAYSLEEP}" != "60" ]]; then
-  sudo -p "[Power management] Enter password to configure display sleep: " pmset -a displaysleep 60 # Display sleeps after 1 hour
-  log "Set display sleep to 60 minutes"
-fi
-
-if [[ "${CURRENT_DISKSLEEP}" != "0" ]]; then
-  sudo -p "[Power management] Enter password to disable disk sleep: " pmset -a disksleep 0
-  log "Disabled disk sleep"
-fi
-
-if [[ "${CURRENT_WOMP}" != "1" ]]; then
-  sudo -p "[Power management] Enter password to enable wake on network: " pmset -a womp 1 # Enable wake on network access
-  log "Enabled Wake on Network Access"
-fi
-
-if [[ "${CURRENT_AUTORESTART}" != "1" ]]; then
-  sudo -p "[Power management] Enter password to enable auto-restart: " pmset -a autorestart 1 # Restart on power failure
-  log "Enabled automatic restart after power failure"
-fi
-
-check_success "Power management configuration"
 
 # Configure screen saver password requirement
 section "Configuring screen saver password requirement"
