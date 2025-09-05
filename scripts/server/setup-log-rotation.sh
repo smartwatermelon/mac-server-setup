@@ -46,7 +46,21 @@ fi
 ADMIN_USERNAME=$(whoami)
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
-HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
+
+# Set Homebrew prefix based on architecture (more predictable than brew --prefix)
+ARCH="$(arch)"
+case "${ARCH}" in
+  i386)
+    HOMEBREW_PREFIX="/usr/local"
+    ;;
+  arm64)
+    HOMEBREW_PREFIX="/opt/homebrew"
+    ;;
+  *)
+    collect_error "Unsupported architecture: ${ARCH}"
+    exit 1
+    ;;
+esac
 
 # Set up logging
 LOG_DIR="${HOME}/.local/state"
@@ -165,12 +179,12 @@ configure_log_rotation() {
 
     # Start logrotate service as admin user
     log "Starting logrotate service for admin user"
-    brew services stop logrotate &>/dev/null || true
-    if brew services start logrotate; then
+    "${HOMEBREW_PREFIX}/bin/brew" services stop logrotate &>/dev/null || true
+    if "${HOMEBREW_PREFIX}/bin/brew" services start logrotate; then
       check_success "Admin logrotate service start"
       log "✅ Admin logrotate service started - admin logs will be rotated automatically"
     else
-      log "⚠️  Failed to start admin logrotate service - admin logs will not be rotated"
+      collect_error "Failed to start admin logrotate service - admin logs will not be rotated"
     fi
   else
     log "No logrotate configuration found - skipping log rotation setup"
