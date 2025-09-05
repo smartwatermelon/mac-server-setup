@@ -42,6 +42,12 @@ else
   exit 1
 fi
 
+# HOMEBREW_PREFIX is set and exported by first-boot.sh based on architecture
+if [[ -z "${HOMEBREW_PREFIX:-}" ]]; then
+  echo "Error: HOMEBREW_PREFIX not set - this script must be run from first-boot.sh"
+  exit 1
+fi
+
 # Set derived variables
 ADMIN_USERNAME=$(whoami)
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
@@ -141,8 +147,7 @@ check_success() {
 configure_shell() {
   set_section "Changing Default Shell to Homebrew Bash"
 
-  # Get the Homebrew bash path
-  HOMEBREW_BASH="$(brew --prefix)/bin/bash"
+  HOMEBREW_BASH="${HOMEBREW_PREFIX}/bin/bash"
 
   if [[ -f "${HOMEBREW_BASH}" ]]; then
     log "Found Homebrew bash at: ${HOMEBREW_BASH}"

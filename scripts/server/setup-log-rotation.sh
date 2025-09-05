@@ -46,7 +46,12 @@ fi
 ADMIN_USERNAME=$(whoami)
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
-HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
+
+# HOMEBREW_PREFIX is set and exported by first-boot.sh based on architecture
+if [[ -z "${HOMEBREW_PREFIX:-}" ]]; then
+  echo "Error: HOMEBREW_PREFIX not set - this script must be run from first-boot.sh"
+  exit 1
+fi
 
 # Set up logging
 LOG_DIR="${HOME}/.local/state"
@@ -165,12 +170,12 @@ configure_log_rotation() {
 
     # Start logrotate service as admin user
     log "Starting logrotate service for admin user"
-    brew services stop logrotate &>/dev/null || true
-    if brew services start logrotate; then
+    "${HOMEBREW_PREFIX}/bin/brew" services stop logrotate &>/dev/null || true
+    if "${HOMEBREW_PREFIX}/bin/brew" services start logrotate; then
       check_success "Admin logrotate service start"
       log "✅ Admin logrotate service started - admin logs will be rotated automatically"
     else
-      log "⚠️  Failed to start admin logrotate service - admin logs will not be rotated"
+      collect_error "Failed to start admin logrotate service - admin logs will not be rotated"
     fi
   else
     log "No logrotate configuration found - skipping log rotation setup"
