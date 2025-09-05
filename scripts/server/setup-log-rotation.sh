@@ -47,20 +47,11 @@ ADMIN_USERNAME=$(whoami)
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 
-# Set Homebrew prefix based on architecture (more predictable than brew --prefix)
-ARCH="$(arch)"
-case "${ARCH}" in
-  i386)
-    HOMEBREW_PREFIX="/usr/local"
-    ;;
-  arm64)
-    HOMEBREW_PREFIX="/opt/homebrew"
-    ;;
-  *)
-    collect_error "Unsupported architecture: ${ARCH}"
-    exit 1
-    ;;
-esac
+# HOMEBREW_PREFIX is set and exported by first-boot.sh based on architecture
+if [[ -z "${HOMEBREW_PREFIX:-}" ]]; then
+  echo "Error: HOMEBREW_PREFIX not set - this script must be run from first-boot.sh"
+  exit 1
+fi
 
 # Set up logging
 LOG_DIR="${HOME}/.local/state"

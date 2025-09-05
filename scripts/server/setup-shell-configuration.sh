@@ -42,20 +42,11 @@ else
   exit 1
 fi
 
-# Set Homebrew prefix based on architecture (more predictable than brew --prefix)
-ARCH="$(arch)"
-case "${ARCH}" in
-  i386)
-    BREW_PREFIX="/usr/local"
-    ;;
-  arm64)
-    BREW_PREFIX="/opt/homebrew"
-    ;;
-  *)
-    collect_error "Unsupported architecture: ${ARCH}"
-    exit 1
-    ;;
-esac
+# HOMEBREW_PREFIX is set and exported by first-boot.sh based on architecture
+if [[ -z "${HOMEBREW_PREFIX:-}" ]]; then
+  echo "Error: HOMEBREW_PREFIX not set - this script must be run from first-boot.sh"
+  exit 1
+fi
 
 # Set derived variables
 ADMIN_USERNAME=$(whoami)
@@ -156,7 +147,7 @@ check_success() {
 configure_shell() {
   set_section "Changing Default Shell to Homebrew Bash"
 
-  HOMEBREW_BASH="${BREW_PREFIX}/bin/bash"
+  HOMEBREW_BASH="${HOMEBREW_PREFIX}/bin/bash"
 
   if [[ -f "${HOMEBREW_BASH}" ]]; then
     log "Found Homebrew bash at: ${HOMEBREW_BASH}"

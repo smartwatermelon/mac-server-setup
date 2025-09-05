@@ -89,6 +89,21 @@ HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 OPERATOR_FULLNAME="${SERVER_NAME} Operator"
 
+# Set Homebrew prefix based on architecture for all modules
+ARCH="$(arch)"
+case "${ARCH}" in
+  i386)
+    export HOMEBREW_PREFIX="/usr/local"
+    ;;
+  arm64)
+    export HOMEBREW_PREFIX="/opt/homebrew"
+    ;;
+  *)
+    collect_error "Unsupported architecture: ${ARCH}"
+    exit 1
+    ;;
+esac
+
 export LOG_DIR
 LOG_DIR="${HOME}/.local/state" # XDG_STATE_HOME
 LOG_FILE="${LOG_DIR}/${HOSTNAME_LOWER}-setup.log"
@@ -718,6 +733,7 @@ log "Date: ${timestamp}"
 productversion="$(sw_vers -productVersion)"
 log "macOS Version: ${productversion}"
 log "Setup directory: ${SETUP_DIR}"
+log "HOMEBREW_PREFIX: ${HOMEBREW_PREFIX} (architecture: ${ARCH})"
 
 # Validate deployment package before beginning setup
 set_section "Validating Deployment Package"

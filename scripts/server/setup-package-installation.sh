@@ -158,7 +158,11 @@ check_success() {
 
 # Set up required variables with fallbacks
 ADMIN_USERNAME="${ADMIN_USERNAME:-$(whoami)}"
-HOMEBREW_PREFIX="${HOMEBREW_PREFIX:-/opt/homebrew}"
+# HOMEBREW_PREFIX is set and exported by first-boot.sh based on architecture
+if [[ -z "${HOMEBREW_PREFIX:-}" ]]; then
+  echo "Error: HOMEBREW_PREFIX not set - this script must be run from first-boot.sh"
+  exit 1
+fi
 FORMULAE_FILE="${FORMULAE_FILE:-${SETUP_DIR}/config/formulae.txt}"
 CASKS_FILE="${CASKS_FILE:-${SETUP_DIR}/config/casks.txt}"
 
@@ -169,15 +173,15 @@ if [[ "${SKIP_HOMEBREW}" = false ]]; then
 
   # Check if Homebrew is already installed
   if command -v brew &>/dev/null; then
-    BREW_VERSION=$(brew --version 2>/dev/null | head -n 1 | awk '{print $2}' || echo "unknown")
+    BREW_VERSION=$("${HOMEBREW_PREFIX}/bin/brew" --version 2>/dev/null | head -n 1 | awk '{print $2}' || echo "unknown")
     log "Homebrew is already installed (version ${BREW_VERSION})"
 
     # Update Homebrew if already installed
     log "Updating Homebrew"
-    brew update
+    "${HOMEBREW_PREFIX}/bin/brew" update
     check_success "Homebrew update"
     log "Updating installed packages"
-    brew upgrade
+    "${HOMEBREW_PREFIX}/bin/brew" upgrade
     check_success "Homebrew package upgrade"
   else
     show_log "Installing Homebrew using official installation script"
@@ -215,7 +219,7 @@ if [[ "${SKIP_HOMEBREW}" = false ]]; then
     show_log "Homebrew installation completed"
 
     # Verify installation with brew help
-    if brew help >/dev/null 2>&1; then
+    if "${HOMEBREW_PREFIX}/bin/brew" help >/dev/null 2>&1; then
       show_log "✅ Homebrew verification successful"
     else
       collect_error "Homebrew verification failed - brew help returned an error"
@@ -237,9 +241,9 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
 
   # Function to install formulae if not already installed
   install_formula() {
-    if ! brew list "$1" &>/dev/null; then
+    if ! "${HOMEBREW_PREFIX}/bin/brew" list "$1" &>/dev/null; then
       log "Installing formula: $1"
-      if brew install "$1"; then
+      if "${HOMEBREW_PREFIX}/bin/brew" install "$1"; then
         log "✅ Formula installation: $1"
       else
         collect_error "Formula installation failed: $1"
@@ -252,14 +256,14 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
 
   # Function to install casks if not already installed
   install_cask() {
-    if ! brew list --cask "$1" &>/dev/null; then
+    if ! "${HOMEBREW_PREFIX}/bin/brew" list --cask "$1" &>/dev/null; then
       log "Installing cask: $1"
 
       # Capture /Applications before installation
       local before_apps
       before_apps=$(find /Applications -maxdepth 1 -type d -name "*.app" 2>/dev/null | sort)
 
-      if brew install --cask "$1"; then
+      if "${HOMEBREW_PREFIX}/bin/brew" install --cask "$1"; then
         log "✅ Cask installation: $1"
 
         # Capture /Applications after installation
@@ -325,13 +329,13 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
 
   # Cleanup after installation
   log "Cleaning up Homebrew files"
-  brew cleanup
+  "${HOMEBREW_PREFIX}/bin/brew" cleanup
   check_success "Homebrew cleanup"
 
   # Run brew doctor and save output
   log "Running brew doctor diagnostic"
   BREW_DOCTOR_OUTPUT="${LOG_DIR}/brew-doctor-$(date +%Y%m%d-%H%M%S).log"
-  brew doctor >"${BREW_DOCTOR_OUTPUT}" 2>&1 || true
+  "${HOMEBREW_PREFIX}/bin/brew" doctor >"${BREW_DOCTOR_OUTPUT}" 2>&1 || true
   log "Brew doctor output saved to: ${BREW_DOCTOR_OUTPUT}"
   check_success "Brew doctor diagnostic"
 
