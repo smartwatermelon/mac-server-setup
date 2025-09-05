@@ -42,6 +42,21 @@ else
   exit 1
 fi
 
+# Set Homebrew prefix based on architecture (more predictable than brew --prefix)
+ARCH="$(arch)"
+case "${ARCH}" in
+  i386)
+    BREW_PREFIX="/usr/local"
+    ;;
+  arm64)
+    BREW_PREFIX="/opt/homebrew"
+    ;;
+  *)
+    collect_error "Unsupported architecture: ${ARCH}"
+    exit 1
+    ;;
+esac
+
 # Set derived variables
 ADMIN_USERNAME=$(whoami)
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
@@ -141,8 +156,7 @@ check_success() {
 configure_shell() {
   set_section "Changing Default Shell to Homebrew Bash"
 
-  # Get the Homebrew bash path
-  HOMEBREW_BASH="$(brew --prefix)/bin/bash"
+  HOMEBREW_BASH="${BREW_PREFIX}/bin/bash"
 
   if [[ -f "${HOMEBREW_BASH}" ]]; then
     log "Found Homebrew bash at: ${HOMEBREW_BASH}"
