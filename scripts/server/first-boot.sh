@@ -1229,121 +1229,18 @@ else
 fi
 
 #
-# APPLICATION SETUP PREPARATION
+# APPLICATION SETUP PREPARATION - delegated to module
 #
 
-# Create application setup directory
-set_section "Preparing Application Setup"
+# Application setup preparation - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-application-preparation.sh" --force
+else
+  "${SETUP_DIR}/scripts/setup-application-preparation.sh"
+fi
+
+# Set APP_SETUP_DIR for completion messages (defined by application setup module)
 APP_SETUP_DIR="/Users/${ADMIN_USERNAME}/app-setup"
-
-if [[ ! -d "${APP_SETUP_DIR}" ]]; then
-  log "Creating application setup directory"
-  mkdir -p "${APP_SETUP_DIR}"
-  check_success "App setup directory creation"
-fi
-
-# Copy application setup directory preserving organized structure
-if [[ -d "${SETUP_DIR}/app-setup" ]]; then
-  log "Copying application setup directory with organized structure from ${SETUP_DIR}/app-setup"
-
-  # Copy the entire app-setup directory structure
-  cp -R "${SETUP_DIR}/app-setup/"* "${APP_SETUP_DIR}/" 2>/dev/null
-
-  # Set proper permissions
-  chmod +x "${APP_SETUP_DIR}/"*.sh 2>/dev/null
-  chmod 600 "${APP_SETUP_DIR}/config/"*.conf 2>/dev/null || true
-  chmod 755 "${APP_SETUP_DIR}/templates/"*.sh 2>/dev/null || true
-
-  check_success "Application directory copy with organized structure"
-else
-  log "No application setup directory found in ${SETUP_DIR}/app-setup"
-fi
-
-# Script templates are now copied above as part of the organized directory structure
-
-# Copy config.conf for application setup scripts
-if [[ -f "${CONFIG_FILE}" ]]; then
-  log "Copying config.conf to app-setup config directory"
-  mkdir -p "${APP_SETUP_DIR}/config"
-  cp "${CONFIG_FILE}" "${APP_SETUP_DIR}/config/config.conf"
-  check_success "Config file copy"
-else
-  log "No config.conf found - application setup scripts will use defaults"
-fi
-
-# Copy Dropbox configuration files if available (already copied above from app-setup/config)
-# These files are now handled in the "Copy application config files" section above
-log "Dropbox and rclone config files are copied from app-setup/config/ directory above"
-
-# Setup operator account files
-section "Configuring operator account files"
-OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
-OPERATOR_CONFIG_DIR="${OPERATOR_HOME}/.config/operator"
-OPERATOR_BIN_DIR="${OPERATOR_HOME}/.local/bin"
-
-if [[ -f "${CONFIG_FILE}" ]]; then
-  log "Setting up operator configuration directory"
-  sudo -p "[Operator setup] Enter password to create operator config directory: " -u "${OPERATOR_USERNAME}" mkdir -p "${OPERATOR_CONFIG_DIR}"
-  sudo -p "[Operator setup] Enter password to copy config.conf for operator: " cp "${CONFIG_FILE}" "${OPERATOR_CONFIG_DIR}/config.conf"
-  sudo -p "[Operator setup] Enter password to set config ownership: " chown "${OPERATOR_USERNAME}:staff" "${OPERATOR_CONFIG_DIR}/config.conf"
-  check_success "Operator config.conf copy"
-fi
-
-if [[ -f "${SETUP_DIR}/scripts/operator-first-login.sh" ]]; then
-  log "Setting up operator first-login script"
-  sudo -p "[Operator setup] Enter password to create operator bin directory: " -u "${OPERATOR_USERNAME}" mkdir -p "${OPERATOR_BIN_DIR}"
-  sudo -p "[Operator setup] Enter password to copy first-login script: " cp "${SETUP_DIR}/scripts/operator-first-login.sh" "${OPERATOR_BIN_DIR}/"
-  sudo -p "[Operator setup] Enter password to set script ownership and permissions: " chown "${OPERATOR_USERNAME}:staff" "${OPERATOR_BIN_DIR}/operator-first-login.sh"
-  sudo -p "[Operator setup] Enter password to make first-login script executable: " chmod 755 "${OPERATOR_BIN_DIR}/operator-first-login.sh"
-  check_success "Operator first-login script setup"
-
-  # Add ~/.local/bin to operator's PATH in bash configuration
-  OPERATOR_BASHRC="${OPERATOR_HOME}/.bashrc"
-  if ! sudo -u "${OPERATOR_USERNAME}" test -f "${OPERATOR_BASHRC}" || ! sudo -u "${OPERATOR_USERNAME}" grep -q '/.local/bin' "${OPERATOR_BASHRC}"; then
-    log "Adding ~/.local/bin to operator's PATH"
-    sudo -p "[Operator setup] Enter password to configure operator PATH: " tee -a "${OPERATOR_BASHRC}" >/dev/null <<EOF
-
-# Add user local bin to PATH
-export PATH="\$HOME/.local/bin:\$PATH"
-EOF
-    sudo -p "[Operator setup] Enter password to set bashrc ownership: " chown "${OPERATOR_USERNAME}:staff" "${OPERATOR_BASHRC}"
-    check_success "Operator PATH configuration"
-  fi
-
-  # Create LaunchAgent for one-time execution on operator login
-  log "Setting up operator first-login LaunchAgent"
-  OPERATOR_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
-  OPERATOR_PLIST_NAME="com.${HOSTNAME_LOWER}.operator-first-login"
-  OPERATOR_PLIST="${OPERATOR_AGENTS_DIR}/${OPERATOR_PLIST_NAME}.plist"
-
-  sudo -p "[Operator setup] Enter password to create operator LaunchAgent directory: " -u "${OPERATOR_USERNAME}" mkdir -p "${OPERATOR_AGENTS_DIR}"
-
-  sudo -p "[Operator setup] Enter password to create operator first-login LaunchAgent: " -u "${OPERATOR_USERNAME}" tee "${OPERATOR_PLIST}" >/dev/null <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>${OPERATOR_PLIST_NAME}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>${OPERATOR_BIN_DIR}/operator-first-login.sh</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>${OPERATOR_HOME}/.local/state/${OPERATOR_PLIST_NAME}.log</string>
-    <key>StandardErrorPath</key>
-    <string>${OPERATOR_HOME}/.local/state/${OPERATOR_PLIST_NAME}.log</string>
-</dict>
-</plist>
-EOF
-
-  sudo -p "[Operator setup] Enter password to set LaunchAgent permissions: " -u "${OPERATOR_USERNAME}" chmod 644 "${OPERATOR_PLIST}"
-  check_success "Operator first-login LaunchAgent setup"
-else
-  log "No operator-first-login.sh found in ${SETUP_DIR}/scripts/"
-fi
 
 #
 # BASH CONFIGURATION SETUP - delegated to module
