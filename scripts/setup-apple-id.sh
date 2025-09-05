@@ -51,15 +51,96 @@ else
   exit 1
 fi
 
-# Load shared functions
-FUNCTIONS_FILE="${SETUP_DIR}/scripts/functions.sh"
-if [[ -f "${FUNCTIONS_FILE}" ]]; then
-  # shellcheck source=/dev/null
-  source "${FUNCTIONS_FILE}"
-else
-  echo "❌ Functions file not found: ${FUNCTIONS_FILE}"
-  exit 1
-fi
+# Set derived variables
+HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
+HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
+
+# Set up logging
+LOG_DIR="${HOME}/.local/state"
+LOG_FILE="${LOG_DIR}/${HOSTNAME_LOWER}-setup.log"
+
+# Ensure log directory exists
+mkdir -p "${LOG_DIR}"
+
+# log function - only writes to log file
+log() {
+  local timestamp no_newline=false
+  timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+
+  # Check for -n flag
+  if [[ "$1" == "-n" ]]; then
+    no_newline=true
+    shift
+  fi
+
+  if [[ "${no_newline}" == true ]]; then
+    echo -n "[${timestamp}] $1" >>"${LOG_FILE}"
+  else
+    echo "[${timestamp}] $1" >>"${LOG_FILE}"
+  fi
+}
+
+# New wrapper function - shows in main window AND logs
+show_log() {
+  local no_newline=false
+
+  # Check for -n flag
+  if [[ "$1" == "-n" ]]; then
+    no_newline=true
+    echo -n "$2"
+    log -n "$2"
+  else
+    echo "$1"
+    log "$1"
+  fi
+}
+
+# Function to log section headers
+section() {
+  log "====== $1 ======"
+}
+
+# Error collection system (minimal for module)
+COLLECTED_ERRORS=()
+CURRENT_SCRIPT_SECTION=""
+
+# Function to set current script section for context
+set_section() {
+  CURRENT_SCRIPT_SECTION="$1"
+  section "$1"
+}
+
+# Function to collect an error (with immediate display)
+collect_error() {
+  local message="$1"
+  local line_number="${2:-}"
+  local context="${CURRENT_SCRIPT_SECTION:-Unknown section}"
+  local script_name
+  script_name="$(basename "${BASH_SOURCE[1]:-${0}}")"
+
+  # Normalize message to single line
+  local clean_message
+  clean_message="$(echo "${message}" | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')"
+
+  show_log "❌ ${clean_message}"
+  COLLECTED_ERRORS+=("[${script_name}:${line_number}] ${context}: ${clean_message}")
+}
+
+# Function to check if a command was successful
+check_success() {
+  if [[ $? -eq 0 ]]; then
+    show_log "✅ $1"
+  else
+    collect_error "$1 failed"
+    if [[ "${FORCE}" = false ]]; then
+      read -p "Continue anyway? (y/N) " -n 1 -r
+      echo
+      if [[ ! ${REPLY} =~ ^[Yy]$ ]]; then
+        exit 1
+      fi
+    fi
+  fi
+}
 
 # Configure Apple ID
 section "Apple ID Configuration"
