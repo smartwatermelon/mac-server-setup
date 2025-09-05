@@ -47,7 +47,7 @@ if [[ -n "${SETUP_DIR:-}" ]]; then
   CONFIG_FILE="${SETUP_DIR}/config/config.conf"
 else
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  SETUP_DIR="$(dirname "$(dirname "${SCRIPT_DIR}")")"
+  SETUP_DIR="$(dirname "${SCRIPT_DIR}")"
   CONFIG_FILE="${SETUP_DIR}/config/config.conf"
 fi
 
