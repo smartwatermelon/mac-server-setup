@@ -1144,7 +1144,7 @@ if [[ "${SKIP_UPDATE}" == true ]]; then
   system_prefs_args+=(--skip-update)
 fi
 
-"${SETUP_DIR}/scripts/setup-system-preferences.sh" "${system_prefs_args[@]}"
+"${SETUP_DIR}/scripts/setup-system-preferences.sh" ${system_prefs_args[@]+"${system_prefs_args[@]}"}
 
 # Install Xcode Command Line Tools using dedicated script
 set_section "Installing Xcode Command Line Tools"
@@ -1190,7 +1190,7 @@ if [[ "${SKIP_PACKAGES}" == true ]]; then
   package_args+=(--skip-packages)
 fi
 
-"${SETUP_DIR}/scripts/setup-package-installation.sh" "${package_args[@]}"
+"${SETUP_DIR}/scripts/setup-package-installation.sh" ${package_args[@]+"${package_args[@]}"}
 
 #
 # DOCK CONFIGURATION - delegated to module
