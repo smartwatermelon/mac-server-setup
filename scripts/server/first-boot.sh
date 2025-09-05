@@ -30,15 +30,12 @@ ADMIN_USERNAME=$(whoami)                                  # Set this once and us
 ADMINISTRATOR_PASSWORD=""                                 # Get it interactively later
 SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" # Directory where AirDropped files are located (script now at root)
 SSH_KEY_SOURCE="${SETUP_DIR}/ssh_keys"
-FORMULAE_FILE="${SETUP_DIR}/config/formulae.txt"
-CASKS_FILE="${SETUP_DIR}/config/casks.txt"
 RERUN_AFTER_FDA=false
 NEED_SYSTEMUI_RESTART=false
 NEED_CONTROLCENTER_RESTART=false
 # Safety: Development machine fingerprint (to prevent accidental execution)
 DEV_FINGERPRINT_FILE="${SETUP_DIR}/config/dev_fingerprint.conf"
-DEV_MACHINE_FINGERPRINT=""      # Default blank - will be populated from file
-HOMEBREW_PREFIX="/opt/homebrew" # Apple Silicon
+DEV_MACHINE_FINGERPRINT="" # Default blank - will be populated from file
 
 # Parse command line arguments
 FORCE=false
@@ -848,105 +845,16 @@ check_success "Admin Remote Management privileges (if services enabled)"
 
 log "Note: Operator user privileges will be configured after account creation"
 
-# Configure Apple ID
-section "Apple ID Configuration"
+#
+# APPLE ID & ICLOUD CONFIGURATION - delegated to module
+#
 
-# Check if Apple ID is already configured
-APPLE_ID_CONFIGURED=false
-if defaults read ~/Library/Preferences/MobileMeAccounts.plist 2>/dev/null >/dev/null; then
-  # Try to get the configured Apple ID from AccountID field
-  CONFIGURED_APPLE_ID=$(plutil -extract Accounts.0.AccountID raw ~/Library/Preferences/MobileMeAccounts.plist 2>/dev/null || echo "")
-  if [[ -n "${CONFIGURED_APPLE_ID}" ]]; then
-    show_log "✅ Apple ID already configured: ${CONFIGURED_APPLE_ID}"
-    APPLE_ID_CONFIGURED=true
-  else
-    # Fallback - just check if the plist exists and has accounts
-    ACCOUNT_COUNT=$(plutil -extract Accounts raw ~/Library/Preferences/MobileMeAccounts.plist 2>/dev/null | grep -c "AccountID" || echo "0")
-    if [[ "${ACCOUNT_COUNT}" -gt 0 ]]; then
-      show_log "✅ Apple ID already configured"
-      APPLE_ID_CONFIGURED=true
-    fi
-  fi
+# Apple ID and iCloud configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-apple-id.sh" --force
+else
+  "${SETUP_DIR}/scripts/setup-apple-id.sh"
 fi
-
-# Only prompt for Apple ID setup if not already configured
-if [[ "${APPLE_ID_CONFIGURED}" != true ]]; then
-  # Open Apple ID one-time password link if available
-  APPLE_ID_URL_FILE="${SETUP_DIR}/config/apple_id_password.url"
-  if [[ -f "${APPLE_ID_URL_FILE}" ]]; then
-    log "Opening Apple ID one-time password link"
-    open "${APPLE_ID_URL_FILE}"
-    check_success "Opening Apple ID password link"
-
-    # Ask user to confirm they've retrieved the password
-    if [[ "${FORCE}" = false ]]; then
-      read -rp "Have you retrieved your Apple ID password? (Y/n) " -n 1 -r
-      echo
-      # Default to Yes if Enter pressed (empty REPLY)
-      if [[ -n "${REPLY}" ]] && [[ ! ${REPLY} =~ ^[Yy]$ ]]; then
-        show_log "Please retrieve your Apple ID password before continuing"
-        open "${APPLE_ID_URL_FILE}"
-        read -p "Press any key to continue once you have your password... " -n 1 -r
-        echo
-      fi
-    fi
-  else
-    log "No Apple ID one-time password link found - you'll need to retrieve your password manually"
-  fi
-
-  # Open System Settings to the Apple ID section
-  if [[ "${FORCE}" = false ]]; then
-    show_log "Opening System Settings to the Apple ID section"
-    show_log "IMPORTANT: You will need to complete several steps:"
-    show_log "1. Enter your Apple ID and password"
-    show_log "2. You may be prompted to enter your Mac's user password"
-    show_log "3. Approve any verification codes that are sent to your other devices"
-    show_log "4. Select which services to enable (you can customize these)"
-    show_log "5. Return to Terminal after completing all Apple ID setup dialogs"
-
-    open "x-apple.systempreferences:com.apple.preferences.AppleIDPrefPane"
-    check_success "Opening Apple ID settings"
-
-    # Give user time to add their Apple ID
-    read -rp "Please configure your Apple ID in System Settings. Press any key when done... " -n 1 -r
-    echo
-
-    # Close System Settings now that user is done with Apple ID configuration
-    show_log "Closing System Settings..."
-    osascript -e 'tell application "System Settings" to quit' 2>/dev/null || true
-  fi
-fi
-
-# Configure iCloud and notification settings for admin user (always run)
-section "Configuring iCloud and Notification Settings"
-
-# Disable specific iCloud services for admin user (server doesn't need these)
-log "Disabling unnecessary iCloud services for admin user"
-defaults write com.apple.bird syncedDataclasses -dict \
-  "Bookmarks" 0 \
-  "Calendar" 0 \
-  "Contacts" 0 \
-  "Mail" 0 \
-  "Messages" 0 \
-  "Notes" 0 \
-  "Reminders" 0
-check_success "iCloud services configuration"
-
-# Disable notifications for messaging apps
-log "Disabling notifications for messaging apps"
-defaults write com.apple.ncprefs apps -array-add '{
-    "bundle-id" = "com.apple.FaceTime";
-    "flags" = 0;
-}'
-defaults write com.apple.ncprefs apps -array-add '{
-    "bundle-id" = "com.apple.MobileSMS";
-    "flags" = 0;
-}'
-defaults write com.apple.ncprefs apps -array-add '{
-    "bundle-id" = "com.apple.iChat";
-    "flags" = 0;
-}'
-check_success "Notification settings configuration"
 
 # Create operator account if it doesn't exist
 set_section "Setting Up Operator Account"
@@ -1092,17 +1000,7 @@ else
   show_log "✅ Remote Management configured for operator user"
 fi
 
-# Fast User Switching
-section "Enabling Fast User Switching"
-log "Configuring Fast User Switching for multi-user access"
-sudo -p "[System setup] Enter password to enable multiple user sessions: " defaults write /Library/Preferences/.GlobalPreferences MultipleSessionEnabled -bool true
-check_success "Fast User Switching configuration"
-
-# Fast User Switching menu bar style and visibility
-defaults write .GlobalPreferences userMenuExtraStyle -int 1                                                                                                     # username
-sudo -p "[User setup] Enter password to configure operator menu style: " -iu "${OPERATOR_USERNAME}" defaults write .GlobalPreferences userMenuExtraStyle -int 1 # username
-defaults -currentHost write com.apple.controlcenter UserSwitcher -int 2                                                                                         # menubar
-sudo -iu "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.controlcenter UserSwitcher -int 2                                                         # menubar
+# Fast User Switching - handled by system preferences module
 
 # Configure automatic login for operator account (whether new or existing)
 section "Automatic login for operator account"
@@ -1209,12 +1107,7 @@ else
   show_log "✅ Operator has sudo access (will require password)"
 fi
 
-# Fix scroll setting
-section "Fix scroll setting"
-log "Fixing Apple's default scroll setting"
-defaults write -g com.apple.swipescrolldirection -bool false
-sudo -p "[User setup] Enter password to configure operator scroll direction: " -iu "${OPERATOR_USERNAME}" defaults write -g com.apple.swipescrolldirection -bool false
-check_success "Fix scroll setting"
+# Fix scroll setting - handled by system preferences module
 
 # Power management configuration - delegated to module
 if [[ "${FORCE}" == true ]]; then
@@ -1223,31 +1116,7 @@ else
   "${SETUP_DIR}/scripts/setup-power-management.sh"
 fi
 
-# Configure screen saver password requirement
-section "Configuring screen saver password requirement"
-defaults -currentHost write com.apple.screensaver askForPassword -int 1
-defaults -currentHost write com.apple.screensaver askForPasswordDelay -int 0
-sudo -p "[Security setup] Enter password to configure operator screen saver security: " -u "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.screensaver askForPassword -int 1
-sudo -u "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.screensaver askForPasswordDelay -int 0
-log "Enabled immediate password requirement after screen saver"
-
-# Run software updates if not skipped
-if [[ "${SKIP_UPDATE}" = false ]]; then
-  section "Running Software Updates"
-  show_log "Checking for software updates (this may take a while)"
-
-  # Check for updates
-  UPDATE_CHECK=$(softwareupdate -l)
-  if echo "${UPDATE_CHECK}" | grep -q "No new software available"; then
-    log "System is up to date"
-  else
-    log "Installing software updates in background mode"
-    sudo -p "[System update] Enter password to install software updates: " softwareupdate -i -a --background
-    check_success "Initiating background software update"
-  fi
-else
-  log "Skipping software updates as requested"
-fi
+# Screen saver and software updates - handled by system preferences module
 
 # Firewall configuration - delegated to module
 if [[ "${FORCE}" == true ]]; then
@@ -1256,16 +1125,26 @@ else
   "${SETUP_DIR}/scripts/setup-firewall.sh"
 fi
 
-# Configure security settings
-section "Configuring Security Settings"
-
-# Disable automatic app downloads
-defaults write com.apple.SoftwareUpdate AutomaticDownload -int 0
-log "Disabled automatic app downloads"
+# Security settings - handled by system preferences module
 
 #
 # HOMEBREW & PACKAGE INSTALLATION
 #
+
+#
+# SYSTEM PREFERENCES CONFIGURATION - delegated to module
+#
+
+# System preferences configuration - delegated to module
+system_prefs_args=()
+if [[ "${FORCE}" == true ]]; then
+  system_prefs_args+=(--force)
+fi
+if [[ "${SKIP_UPDATE}" == true ]]; then
+  system_prefs_args+=(--skip-update)
+fi
+
+"${SETUP_DIR}/scripts/setup-system-preferences.sh" "${system_prefs_args[@]}"
 
 # Install Xcode Command Line Tools using dedicated script
 set_section "Installing Xcode Command Line Tools"
@@ -1295,188 +1174,23 @@ else
   exit 1
 fi
 
-# Install Homebrew
-set_section "Installing Homebrew"
-if [[ "${SKIP_HOMEBREW}" = false ]]; then
-  section "Installing Homebrew"
+#
+# HOMEBREW & PACKAGE INSTALLATION - delegated to module
+#
 
-  # Check if Homebrew is already installed
-  if command -v brew &>/dev/null; then
-    BREW_VERSION=$(brew --version 2>/dev/null | head -n 1 | awk '{print $2}' || echo "unknown")
-    log "Homebrew is already installed (version ${BREW_VERSION})"
-
-    # Update Homebrew if already installed
-    log "Updating Homebrew"
-    brew update
-    check_success "Homebrew update"
-    log "Updating installed packages"
-    brew upgrade
-    check_success "Homebrew package upgrade"
-  else
-    show_log "Installing Homebrew using official installation script"
-
-    # Use the official Homebrew installation script
-    HOMEBREW_INSTALLER=$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)
-    NONINTERACTIVE=1 /bin/bash -c "${HOMEBREW_INSTALLER}"
-    check_success "Homebrew installation"
-
-    # Follow Homebrew's suggested post-installation steps
-    log "Running Homebrew's suggested post-installation steps"
-
-    # Add to .zprofile (Homebrew's recommended approach)
-    echo >>"/Users/${ADMIN_USERNAME}/.zprofile"
-    echo "eval \"\$(${HOMEBREW_PREFIX}/bin/brew shellenv)\"" >>"/Users/${ADMIN_USERNAME}/.zprofile"
-    log "Added Homebrew to .zprofile"
-
-    # Apply to current session
-    BREW_SHELLENV=$("${HOMEBREW_PREFIX}/bin/brew" shellenv)
-    eval "${BREW_SHELLENV}"
-    log "Applied Homebrew environment to current session"
-
-    # Add to other shell configuration files for compatibility
-    for SHELL_PROFILE in ~/.bash_profile ~/.profile; do
-      if [[ -f "${SHELL_PROFILE}" ]]; then
-        # Only add if not already present
-        if ! grep -q "HOMEBREW_PREFIX\|brew shellenv" "${SHELL_PROFILE}"; then
-          log "Adding Homebrew to ${SHELL_PROFILE}"
-          echo -e '\n# Homebrew' >>"${SHELL_PROFILE}"
-          echo "eval \"\$(${HOMEBREW_PREFIX}/bin/brew shellenv)\"" >>"${SHELL_PROFILE}"
-        fi
-      fi
-    done
-
-    show_log "Homebrew installation completed"
-
-    # Verify installation with brew help
-    if brew help >/dev/null 2>&1; then
-      show_log "✅ Homebrew verification successful"
-    else
-      collect_error "Homebrew verification failed - brew help returned an error"
-      exit 1
-    fi
-  fi
+# Package installation - delegated to module
+package_args=()
+if [[ "${FORCE}" == true ]]; then
+  package_args+=(--force)
+fi
+if [[ "${SKIP_HOMEBREW}" == true ]]; then
+  package_args+=(--skip-homebrew)
+fi
+if [[ "${SKIP_PACKAGES}" == true ]]; then
+  package_args+=(--skip-packages)
 fi
 
-# Add concurrent download configuration
-section "Configuring Homebrew for Optimal Performance"
-export HOMEBREW_DOWNLOAD_CONCURRENCY=auto
-CORES="$(sysctl -n hw.ncpu 2>/dev/null || echo "2x")"
-log "Enabled concurrent downloads (auto mode - using ${CORES} CPU cores for optimal parallelism)"
-
-# Install packages
-set_section "Installing Homebrew formulae and casks"
-if [[ "${SKIP_PACKAGES}" = false ]]; then
-  section "Installing Packages"
-
-  # Function to install formulae if not already installed
-  install_formula() {
-    if ! brew list "$1" &>/dev/null; then
-      log "Installing formula: $1"
-      if brew install "$1"; then
-        log "✅ Formula installation: $1"
-      else
-        collect_error "Formula installation failed: $1"
-        # Continue instead of exiting
-      fi
-    else
-      log "Formula already installed: $1"
-    fi
-  }
-
-  # Function to install casks if not already installed
-  install_cask() {
-    if ! brew list --cask "$1" &>/dev/null; then
-      log "Installing cask: $1"
-
-      # Capture /Applications before installation
-      local before_apps
-      before_apps=$(find /Applications -maxdepth 1 -type d -name "*.app" 2>/dev/null | sort)
-
-      if brew install --cask "$1"; then
-        log "✅ Cask installation: $1"
-
-        # Capture /Applications after installation
-        local after_apps
-        after_apps=$(find /Applications -maxdepth 1 -type d -name "*.app" 2>/dev/null | sort)
-
-        # Find newly installed apps and remove quarantine attributes
-        local new_apps
-        new_apps=$(comm -13 <(echo "${before_apps}") <(echo "${after_apps}"))
-
-        if [[ -n "${new_apps}" ]]; then
-          while IFS= read -r app_path; do
-            if [[ -n "${app_path}" ]]; then
-              log "Removing quarantine attribute from: $(basename "${app_path}")"
-              xattr -d com.apple.quarantine "${app_path}" 2>/dev/null || true
-            fi
-          done <<<"${new_apps}"
-        fi
-      else
-        collect_error "Cask installation failed: $1"
-        # Continue instead of exiting
-      fi
-    else
-      log "Cask already installed: $1"
-    fi
-  }
-
-  # Install formulae from list
-  if [[ -f "${FORMULAE_FILE}" ]]; then
-    show_log "Installing formulae from ${FORMULAE_FILE}"
-    formulae=()
-    if [[ -f "${FORMULAE_FILE}" ]]; then
-      while IFS= read -r line; do
-        if [[ -n "${line}" && ! "${line}" =~ ^# ]]; then
-          formulae+=("${line}")
-        fi
-      done <"${FORMULAE_FILE}"
-    fi
-    for formula in "${formulae[@]}"; do
-      install_formula "${formula}"
-    done
-  else
-    log "Formulae list not found, skipping formula installations"
-  fi
-
-  # Install casks from list
-  if [[ -f "${CASKS_FILE}" ]]; then
-    show_log "Installing casks from ${CASKS_FILE}"
-    casks=()
-    if [[ -f "${CASKS_FILE}" ]]; then
-      while IFS= read -r line; do
-        if [[ -n "${line}" && ! "${line}" =~ ^# ]]; then
-          casks+=("${line}")
-        fi
-      done <"${CASKS_FILE}"
-    fi
-    for cask in "${casks[@]}"; do
-      install_cask "${cask}"
-    done
-  else
-    log "Casks list not found, skipping cask installations"
-  fi
-
-  # Cleanup after installation
-  log "Cleaning up Homebrew files"
-  brew cleanup
-  check_success "Homebrew cleanup"
-
-  # Run brew doctor and save output
-  log "Running brew doctor diagnostic"
-  BREW_DOCTOR_OUTPUT="${LOG_DIR}/brew-doctor-$(date +%Y%m%d-%H%M%S).log"
-  brew doctor >"${BREW_DOCTOR_OUTPUT}" 2>&1 || true
-  log "Brew doctor output saved to: ${BREW_DOCTOR_OUTPUT}"
-  check_success "Brew doctor diagnostic"
-
-fi
-
-#
-# RELOAD PROFILE FOR CURRENT SESSION
-#
-section "Reload Profile"
-# shellcheck source=/dev/null
-source ~/.zprofile
-check_success "Reload profile"
+"${SETUP_DIR}/scripts/setup-package-installation.sh" "${package_args[@]}"
 
 #
 # DOCK CONFIGURATION - delegated to module
