@@ -134,21 +134,23 @@ function _timeout() {
 }
 
 # Ensure we have administrator password for keychain operations
-if [[ -z "${ADMINISTRATOR_PASSWORD}" ]]; then
-  echo
-  echo "This script needs your Mac account password for keychain operations."
-  read -r -e -p "Enter your Mac account password: " -s ADMINISTRATOR_PASSWORD
-  echo # Add newline after hidden input
-
-  # Validate password by testing with dscl
-  until _timeout 1 dscl /Local/Default -authonly "${USER}" "${ADMINISTRATOR_PASSWORD}" &>/dev/null; do
-    echo "Invalid ${USER} account password. Try again or ctrl-C to exit."
-    read -r -e -p "Enter your Mac ${USER} account password: " -s ADMINISTRATOR_PASSWORD
+function get_administrator_password() {
+  if [[ -z "${ADMINISTRATOR_PASSWORD}" ]]; then
+    echo
+    echo "This script needs your Mac account password for keychain operations."
+    read -r -e -p "Enter your Mac account password: " -s ADMINISTRATOR_PASSWORD
     echo # Add newline after hidden input
-  done
 
-  echo "✅ Administrator password validated for keychain operations"
-fi
+    # Validate password by testing with dscl
+    until _timeout 1 dscl /Local/Default -authonly "${USER}" "${ADMINISTRATOR_PASSWORD}" &>/dev/null; do
+      echo "Invalid ${USER} account password. Try again or ctrl-C to exit."
+      read -r -e -p "Enter your Mac ${USER} account password: " -s ADMINISTRATOR_PASSWORD
+      echo # Add newline after hidden input
+    done
+
+    echo "✅ Administrator password validated for keychain operations"
+  fi
+}
 
 # Set up logging
 LOG_DIR="${HOME}/.local/state"
@@ -281,12 +283,17 @@ get_keychain_credential() {
 }
 
 confirm() {
-  if [[ "${FORCE}" == "true" ]]; then
-    return 0
-  fi
-
   local prompt="$1"
   local default="${2:-y}"
+
+  # In force mode, respect the default behavior instead of always returning YES
+  if [[ "${FORCE}" == "true" ]]; then
+    if [[ "${default}" == "y" ]]; then
+      return 0 # Default YES - auto-confirm
+    else
+      return 1 # Default NO - auto-decline
+    fi
+  fi
 
   if [[ "${default}" == "y" ]]; then
     read -rp "${prompt} (Y/n): " -n 1 response
@@ -713,7 +720,7 @@ migrate_plex_config() {
     return 0
   fi
 
-  if confirm "Apply migrated Plex configuration?" "y"; then
+  if confirm "Apply migrated Plex configuration?" "n"; then
     log "Stopping Plex Media Server if running..."
     pkill -f "Plex Media Server" 2>/dev/null || true
     sleep 3
@@ -865,9 +872,12 @@ main() {
     exit 0
   fi
 
+  # get administrator password for keychain access
+  get_administrator_password
+
   # Handle migration setup if not already specified
   if [[ "${SKIP_MIGRATION}" != "true" && -z "${MIGRATE_FROM}" ]]; then
-    if confirm "Do you want to migrate from an existing Plex server?" "y"; then
+    if confirm "Do you want to migrate from an existing Plex server?" "n"; then
       # Try to discover Plex servers
       log "Scanning for Plex servers on the network..."
       discovered_servers=$(discover_plex_servers)
