@@ -134,21 +134,23 @@ function _timeout() {
 }
 
 # Ensure we have administrator password for keychain operations
-if [[ -z "${ADMINISTRATOR_PASSWORD}" ]]; then
-  echo
-  echo "This script needs your Mac account password for keychain operations."
-  read -r -e -p "Enter your Mac account password: " -s ADMINISTRATOR_PASSWORD
-  echo # Add newline after hidden input
-
-  # Validate password by testing with dscl
-  until _timeout 1 dscl /Local/Default -authonly "${USER}" "${ADMINISTRATOR_PASSWORD}" &>/dev/null; do
-    echo "Invalid ${USER} account password. Try again or ctrl-C to exit."
-    read -r -e -p "Enter your Mac ${USER} account password: " -s ADMINISTRATOR_PASSWORD
+function get_administrator_password() {
+  if [[ -z "${ADMINISTRATOR_PASSWORD}" ]]; then
+    echo
+    echo "This script needs your Mac account password for keychain operations."
+    read -r -e -p "Enter your Mac account password: " -s ADMINISTRATOR_PASSWORD
     echo # Add newline after hidden input
-  done
 
-  echo "✅ Administrator password validated for keychain operations"
-fi
+    # Validate password by testing with dscl
+    until _timeout 1 dscl /Local/Default -authonly "${USER}" "${ADMINISTRATOR_PASSWORD}" &>/dev/null; do
+      echo "Invalid ${USER} account password. Try again or ctrl-C to exit."
+      read -r -e -p "Enter your Mac ${USER} account password: " -s ADMINISTRATOR_PASSWORD
+      echo # Add newline after hidden input
+    done
+
+    echo "✅ Administrator password validated for keychain operations"
+  fi
+}
 
 # Set up logging
 LOG_DIR="${HOME}/.local/state"
@@ -869,6 +871,9 @@ main() {
     log "Setup cancelled by user"
     exit 0
   fi
+
+  # get administrator password for keychain access
+  get_administrator_password
 
   # Handle migration setup if not already specified
   if [[ "${SKIP_MIGRATION}" != "true" && -z "${MIGRATE_FROM}" ]]; then
