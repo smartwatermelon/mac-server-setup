@@ -281,12 +281,17 @@ get_keychain_credential() {
 }
 
 confirm() {
-  if [[ "${FORCE}" == "true" ]]; then
-    return 0
-  fi
-
   local prompt="$1"
   local default="${2:-y}"
+
+  # In force mode, respect the default behavior instead of always returning YES
+  if [[ "${FORCE}" == "true" ]]; then
+    if [[ "${default}" == "y" ]]; then
+      return 0 # Default YES - auto-confirm
+    else
+      return 1 # Default NO - auto-decline
+    fi
+  fi
 
   if [[ "${default}" == "y" ]]; then
     read -rp "${prompt} (Y/n): " -n 1 response
@@ -713,7 +718,7 @@ migrate_plex_config() {
     return 0
   fi
 
-  if confirm "Apply migrated Plex configuration?" "y"; then
+  if confirm "Apply migrated Plex configuration?" "n"; then
     log "Stopping Plex Media Server if running..."
     pkill -f "Plex Media Server" 2>/dev/null || true
     sleep 3
@@ -867,7 +872,7 @@ main() {
 
   # Handle migration setup if not already specified
   if [[ "${SKIP_MIGRATION}" != "true" && -z "${MIGRATE_FROM}" ]]; then
-    if confirm "Do you want to migrate from an existing Plex server?" "y"; then
+    if confirm "Do you want to migrate from an existing Plex server?" "n"; then
       # Try to discover Plex servers
       log "Scanning for Plex servers on the network..."
       discovered_servers=$(discover_plex_servers)
