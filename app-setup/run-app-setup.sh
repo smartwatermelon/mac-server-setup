@@ -186,16 +186,13 @@ show_collected_issues() {
     echo ""
   fi
 }
-
 # Define optimal execution order with descriptions
-declare -A SCRIPT_ORDER=(
-  ["rclone-setup.sh"]="1:Cloud storage synchronization"
-  ["transmission-setup.sh"]="2:Torrent client"
-  ["filebot-setup.sh"]="3:Media file organization"
-  ["catch-setup.sh"]="4:RSS feed automation"
-  ["plex-setup.sh"]="5:Media server"
-)
-
+declare -A SCRIPT_ORDER=()
+SCRIPT_ORDER["rclone-setup.sh"]="1:Cloud storage synchronization"
+SCRIPT_ORDER["transmission-setup.sh"]="2:Torrent client"
+SCRIPT_ORDER["filebot-setup.sh"]="3:Media file organization"
+SCRIPT_ORDER["catch-setup.sh"]="4:RSS feed automation"
+SCRIPT_ORDER["plex-setup.sh"]="5:Media server"
 # Function to get all setup scripts
 get_setup_scripts() {
   local scripts=()
@@ -278,9 +275,12 @@ run_setup_script() {
   fi
 
   # Build command with appropriate flags
-  local cmd=("${script_path}")
-  if [[ "${FORCE}" == true ]]; then
-    cmd+=("--force")
+  # Always pass --force to individual scripts to avoid multiple confirmation prompts
+  local cmd=("${script_path}" "--force")
+
+  # Add script-specific flags for safer automation
+  if [[ "${script_name}" == "plex-setup.sh" ]]; then
+    cmd+=("--skip-migration")
   fi
 
   log "Executing: ${cmd[*]}"
@@ -340,9 +340,10 @@ main() {
 
   # Confirm execution unless --force specified
   if [[ "${FORCE}" != true ]]; then
-    read -r -p "Proceed with app setup? (Y/n): " response
+    read -r -n 1 -p "Proceed with app setup? (Y/n): " response
+    echo # Add newline after single-key input
     case "${response}" in
-      [nN][oO] | [nN])
+      [nN])
         echo "App setup cancelled by user"
         exit 0
         ;;
