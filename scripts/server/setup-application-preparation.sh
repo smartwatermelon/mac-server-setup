@@ -271,6 +271,15 @@ EOF
 EOF
 
   sudo -p "[Operator setup] Enter password to set LaunchAgent permissions: " -u "${OPERATOR_USERNAME}" chmod 644 "${OPERATOR_PLIST}"
+
+  # Validate plist syntax
+  if sudo -u "${OPERATOR_USERNAME}" plutil -lint "${OPERATOR_PLIST}" >/dev/null 2>&1; then
+    log "LaunchAgent plist syntax validated successfully"
+  else
+    collect_error "Invalid plist syntax in ${OPERATOR_PLIST}"
+    return 1
+  fi
+
   check_success "Operator first-login LaunchAgent setup"
 else
   collect_warning "No operator-first-login.sh found in ${SETUP_DIR}/scripts/"

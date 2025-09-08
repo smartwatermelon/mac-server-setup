@@ -124,7 +124,7 @@ setup_dock() {
 
     while dockutil --find "${app}" >/dev/null 2>&1 && [[ ${elapsed} -lt ${timeout} ]]; do
       log "Removing ${app} from dock..."
-      dockutil --remove "${app}" 2>/dev/null || true
+      dockutil --remove "${app}" --no-restart 2>/dev/null || true
       sleep 1
       ((elapsed += 1))
     done
@@ -156,7 +156,7 @@ setup_dock() {
 
     while ! dockutil --find "${app}" >/dev/null 2>&1 && [[ ${elapsed} -lt ${timeout} ]]; do
       log "Adding ${app} to dock..."
-      dockutil --add "${app}" 2>/dev/null || true
+      dockutil --add "${app}" --no-restart 2>/dev/null || true
       sleep 1
       ((elapsed += 1))
     done
@@ -165,6 +165,10 @@ setup_dock() {
       log "Warning: Timeout adding ${app} to dock"
     fi
   done
+
+  # Restart Dock to apply changes
+  killall Dock 2>/dev/null || true
+  sleep 1
 
   log "Dock setup completed"
 }
@@ -177,6 +181,16 @@ setup_logrotate() {
     log "Logrotate service started successfully"
   else
     log "Warning: Failed to start logrotate service - logs will not be rotated"
+  fi
+}
+
+# Task: unload LaunchAgent
+unload_launchagent() {
+  log "Unloading LaunchAgent..."
+  if launchctl bootout gui/"${CURRENT_USER}" ~/Library/LaunchAgents/com."${HOSTNAME_LOWER}".operator-first-login.plist; then
+    log "Unloaded LaunchAgent"
+  else
+    log "Warning: Failed to unload LaunchAgent"
   fi
 }
 
@@ -208,6 +222,7 @@ main() {
   # Run setup tasks
   setup_dock
   setup_logrotate
+  unload_launchagent
 
   # Show setup notification to user
   osascript -e 'display dialog "✅ Done setting up operator account!" buttons {"OK"} default button "OK" giving up after 8 with title "Mac Mini Setup"'

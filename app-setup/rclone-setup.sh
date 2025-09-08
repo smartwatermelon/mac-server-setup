@@ -401,6 +401,14 @@ configure_rclone_autostart() {
 </plist>
 EOF
 
+  # Validate plist syntax
+  if sudo -iu "${OPERATOR_USERNAME}" plutil -lint "${plist_file}" >/dev/null 2>&1; then
+    log "rclone LaunchAgent plist syntax validated successfully"
+  else
+    collect_error "Invalid plist syntax in ${plist_file}"
+    return 1
+  fi
+
   check_success "rclone LaunchAgent creation"
 
   log "✅ rclone configured to start automatically for ${OPERATOR_USERNAME}"
