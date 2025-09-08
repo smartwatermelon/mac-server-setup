@@ -132,10 +132,12 @@ main() {
 
   # Step 5: Test access for current user
   log "Step 5: Testing access..."
-
   if ! test_mount; then
     exit 1
   fi
+
+  # Step 6: Create or replace $HOME symlink to mount dir
+  ln -fs "${PLEX_MEDIA_MOUNT}/Media/" "${HOME}"
 
   # Clear sensitive credentials from memory
   unset PLEX_NAS_USERNAME PLEX_NAS_PASSWORD
