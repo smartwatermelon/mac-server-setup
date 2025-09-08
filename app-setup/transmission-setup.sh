@@ -75,7 +75,6 @@ OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
 
 # Transmission configuration paths (matching original configuration)
 TRANSMISSION_DOWNLOADS_DIR="${OPERATOR_HOME}/.local/mnt/${NAS_SHARE_NAME}/Media/Torrents/pending-move"
-TRANSMISSION_INCOMPLETE_DIR="${OPERATOR_HOME}/Downloads"
 TRANSMISSION_DONE_SCRIPT="${OPERATOR_HOME}/.local/bin/transmission-done.sh"
 
 # Parse command line arguments
@@ -210,24 +209,11 @@ if pgrep -x "Transmission" >/dev/null 2>&1; then
   fi
 fi
 
-# Ensure incomplete downloads directory exists
+# Ensure directories exist
 section "Verifying Download Directories"
 
 # The downloads directory is on the media mount, managed by mount-nas-media.sh
 log "Downloads directory (on media mount): ${TRANSMISSION_DOWNLOADS_DIR}"
-
-# Ensure the incomplete directory exists in operator's home
-if [[ ! -d "${TRANSMISSION_INCOMPLETE_DIR}" ]]; then
-  log "Creating incomplete downloads directory: ${TRANSMISSION_INCOMPLETE_DIR}"
-  if sudo -iu "${OPERATOR_USERNAME}" mkdir -p "${TRANSMISSION_INCOMPLETE_DIR}"; then
-    log "✅ Incomplete directory creation completed successfully: ${TRANSMISSION_INCOMPLETE_DIR}"
-  else
-    log "❌ ERROR: Failed to create incomplete directory: ${TRANSMISSION_INCOMPLETE_DIR}"
-    exit 1
-  fi
-else
-  log "✅ Incomplete directory exists: ${TRANSMISSION_INCOMPLETE_DIR}"
-fi
 
 # Note: AutoImport directory is managed by rclone-setup.sh at ${OPERATOR_HOME}/.local/sync/dropbox
 log "Auto-import directory (rclone sync): ${OPERATOR_HOME}/.local/sync/dropbox"
@@ -249,7 +235,7 @@ sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission MagnetOpenAs
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission AutoStartDownload -bool true
 
 # Warning/prompt settings (issues #1, #2)
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission WarningRemove -bool false
+sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission CheckRemove -bool false
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission CheckQuit -bool false
 
 # RPC (Remote Procedure Call) settings for web interface (issue #6)
@@ -395,7 +381,6 @@ log ""
 log "Configuration Summary:"
 log "  • App: /Applications/Transmission.app"
 log "  • Downloads: ${TRANSMISSION_DOWNLOADS_DIR}"
-log "  • Incomplete: ${TRANSMISSION_INCOMPLETE_DIR}"
 log "  • Web Interface: http://${HOSTNAME_LOWER}.local:19091"
 log "  • Username: ${HOSTNAME_LOWER}"
 log "  • Password: ${RPC_PASSWORD}"
