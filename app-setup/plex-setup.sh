@@ -76,7 +76,7 @@ FORCE=false
 SKIP_MIGRATION=false
 SKIP_MOUNT=false
 MIGRATE_FROM=""
-ADMINISTRATOR_PASSWORD=""
+ADMINISTRATOR_PASSWORD="${ADMINISTRATOR_PASSWORD:-}"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -135,7 +135,7 @@ function _timeout() {
 
 # Ensure we have administrator password for keychain operations
 function get_administrator_password() {
-  if [[ -z "${ADMINISTRATOR_PASSWORD}" ]]; then
+  if [[ -z "${ADMINISTRATOR_PASSWORD:-}" ]]; then
     echo
     echo "This script needs your Mac account password for keychain operations."
     read -r -e -p "Enter your Mac account password: " -s ADMINISTRATOR_PASSWORD

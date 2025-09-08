@@ -13,6 +13,7 @@ ONEPASSWORD_OPERATOR_ITEM="Mac Mini operator"
 ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine NAS"
 ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"
 ONEPASSWORD_APPLEID_ITEM="Apple"
+ONEPASSWORD_OPENSUBTITLES_ITEM="Opensubtitles"
 
 # Monitoring
 MONITORING_EMAIL="your-email@example.com"
@@ -32,6 +33,11 @@ PLEX_MIGRATE_FROM=""  # e.g., "old-server.local"
 DROPBOX_SYNC_FOLDER=""               # Dropbox folder to sync (e.g., "Private/ServerSync")
 DROPBOX_LOCAL_PATH=""                # Local path where to sync (default: ~/.local/sync/dropbox)
 DROPBOX_SYNC_INTERVAL="30"           # Sync interval in minutes (default: 30)
+
+# FileBot license file (optional)
+FILEBOT_LICENSE_FILE=""
+  # Absolute path on the source machine (where you are running prep-airdrop)
+  # to your FileBot license file
 
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME

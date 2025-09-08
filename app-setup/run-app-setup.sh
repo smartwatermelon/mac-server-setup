@@ -75,6 +75,9 @@ FORCE=false
 CONTINUE_ON_ERROR=false
 ONLY_SCRIPT=""
 
+# Administrator password for later exporting
+ADMINISTRATOR_PASSWORD=""
+
 while [[ $# -gt 0 ]]; do
   case $1 in
     --force)
@@ -293,6 +296,102 @@ run_setup_script() {
   return "${exit_code}"
 }
 
+# Function to set up keychain access password caching
+setup_keychain_access() {
+  # Check if any scripts need keychain access
+  local scripts_need_keychain=false
+  local -a keychain_scripts=()
+
+  # Check which scripts in our execution plan need keychain access
+  for script in "${sorted_scripts[@]}"; do
+    if grep -q "security unlock-keychain" "${script}"; then
+      scripts_need_keychain=true
+      keychain_scripts+=("${script}")
+    fi
+  done
+
+  # Only set up password caching if needed
+  if [[ "${scripts_need_keychain}" == true ]]; then
+    section "Keychain Access Setup"
+    echo "🔐 The following scripts need access to stored credentials:"
+    for script in "${keychain_scripts[@]}"; do
+      case "${script}" in
+        "plex-setup.sh")
+          echo "  • ${script} - Plex NAS credentials for media mounting"
+          ;;
+        "filebot-setup.sh")
+          echo "  • ${script} - OpenSubtitles credentials for subtitle downloads"
+          ;;
+        *)
+          echo "  • ${script} - Requires keychain access"
+          ;;
+      esac
+    done
+    echo ""
+
+    # Get administrator password for keychain access
+    get_administrator_password
+
+    echo "🔍 Testing login keychain access..."
+
+    # Test keychain unlock with administrator password
+    if security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}" 2>/dev/null; then
+      echo "✅ Login keychain unlocked - credentials available to setup scripts"
+      log "Login keychain access configured for ${keychain_scripts[*]}"
+
+      # Set up cleanup trap
+      trap 'cleanup_keychain_access' EXIT
+    else
+      collect_warning "Failed to unlock login keychain - scripts will prompt individually"
+      log "Login keychain access failed - falling back to individual prompts"
+    fi
+
+    echo ""
+  else
+    log "No scripts require keychain access - skipping keychain setup"
+  fi
+}
+
+# _timeout function - uses timeout utility if installed, otherwise Perl
+# https://gist.github.com/jaytaylor/6527607
+function _timeout() {
+  if command -v timeout; then
+    timeout "$@"
+  else
+    if ! command -v perl; then
+      echo "perl not found 😿"
+      exit 1
+    else
+      perl -e 'alarm shift; exec @ARGV' "$@"
+    fi
+  fi
+}
+
+# Ensure we have administrator password for keychain operations
+function get_administrator_password() {
+  if [[ -z "${ADMINISTRATOR_PASSWORD:-}" ]]; then
+    echo
+    echo "This script needs your Mac account password for keychain operations."
+    read -r -e -p "Enter your Mac account password: " -s ADMINISTRATOR_PASSWORD
+    echo # Add newline after hidden input
+
+    # Validate password by testing with dscl
+    until _timeout 1 dscl /Local/Default -authonly "${USER}" "${ADMINISTRATOR_PASSWORD}" &>/dev/null; do
+      echo "Invalid ${USER} account password. Try again or ctrl-C to exit."
+      read -r -e -p "Enter your Mac ${USER} account password: " -s ADMINISTRATOR_PASSWORD
+      echo # Add newline after hidden input
+    done
+
+    echo "✅ Administrator password validated for keychain operations"
+  fi
+}
+
+# Function to clean up keychain access artifacts
+cleanup_keychain_access() {
+  # Clean up environment variables containing sensitive keychain information
+  unset ADMINISTRATOR_PASSWORD
+}
+
 # Main execution
 main() {
   section "App Setup Orchestrator Starting"
@@ -352,6 +451,12 @@ main() {
         ;;
     esac
   fi
+
+  # Set up password caching for keychain access
+  setup_keychain_access
+
+  # Export administrator password for child scripts
+  export ADMINISTRATOR_PASSWORD
 
   # Execute scripts in order
   local failed_scripts=0
