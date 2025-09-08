@@ -239,8 +239,8 @@ log "Applying Transmission configuration via defaults commands..."
 
 # Download and storage settings
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission DownloadFolder -string "${TRANSMISSION_DOWNLOADS_DIR}"
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission UseIncompleteDownloadFolder -bool true
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission IncompleteDownloadFolder -string "${TRANSMISSION_INCOMPLETE_DIR}"
+sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission DownloadLocationConstant -bool true
+sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission UseIncompleteDownloadFolder -bool false
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission DeleteOriginalTorrent -bool true
 
 # UI and confirmation settings
@@ -248,14 +248,18 @@ sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission DownloadAsk 
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission MagnetOpenAsk -bool false
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission AutoStartDownload -bool true
 
-# RPC (Remote Procedure Call) settings for web interface
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RPCEnabled -bool true
+# Warning/prompt settings (issues #1, #2)
+sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission WarningRemove -bool false
+sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission CheckQuit -bool false
+
+# RPC (Remote Procedure Call) settings for web interface (issue #6)
+sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RPC -bool true
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RPCAuthenticationRequired -bool true
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RPCUsername -string "${HOSTNAME_LOWER}"
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RPCPassword -string "${RPC_PASSWORD}"
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RPCPort -int 19091
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RPCHostWhitelistEnabled -bool true
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RPCHostWhitelist -string "${HOSTNAME_LOWER}.local"
+sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RPCUseWhitelist -bool true
+sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RPCWhitelist -array "0.0.0.0" "127.0.0.1"
 
 # Network settings (verified keys from actual plist)
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission BindPort -int 40944
@@ -338,9 +342,9 @@ sudo chmod +x "${TRANSMISSION_DONE_SCRIPT}"
 sudo chown -v "${OPERATOR_USERNAME}" "${TRANSMISSION_DONE_SCRIPT}"
 log "✅ Completion script creation completed successfully"
 
-# Configure completion script in Transmission
+# Configure completion script in Transmission (issue #5)
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission DoneScriptEnabled -bool true
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission DoneScript -string "${TRANSMISSION_DONE_SCRIPT}"
+sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission DoneScriptPath -string "${TRANSMISSION_DONE_SCRIPT}"
 
 # Create LaunchAgent for auto-start
 section "Creating LaunchAgent for Auto-Start"
