@@ -225,19 +225,8 @@ else
   log "✅ Incomplete directory exists: ${TRANSMISSION_INCOMPLETE_DIR}"
 fi
 
-# Ensure the torrent watch directory exists
-TORRENT_WATCH_DIR="${OPERATOR_HOME}/Downloads/Torrents"
-if [[ ! -d "${TORRENT_WATCH_DIR}" ]]; then
-  log "Creating torrent watch directory: ${TORRENT_WATCH_DIR}"
-  if sudo -iu "${OPERATOR_USERNAME}" mkdir -p "${TORRENT_WATCH_DIR}"; then
-    log "✅ Torrent watch directory creation completed successfully: ${TORRENT_WATCH_DIR}"
-  else
-    log "❌ ERROR: Failed to create torrent watch directory: ${TORRENT_WATCH_DIR}"
-    exit 1
-  fi
-else
-  log "✅ Torrent watch directory exists: ${TORRENT_WATCH_DIR}"
-fi
+# Note: AutoImport directory is managed by rclone-setup.sh at ${OPERATOR_HOME}/.local/sync/dropbox
+log "Auto-import directory (rclone sync): ${OPERATOR_HOME}/.local/sync/dropbox"
 
 # Configure Transmission preferences via defaults
 section "Configuring Transmission Preferences"
@@ -264,14 +253,12 @@ sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RPCPort -int
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RPCHostWhitelistEnabled -bool true
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RPCHostWhitelist -string "${HOSTNAME_LOWER}.local"
 
-# Network settings (matching GUI: Network tab)
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RandomPort -bool false
+# Network settings (verified keys from actual plist)
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission BindPort -int 40944
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission NatTraversal -bool true
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission UTPGlobal -bool true
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission NoSleepWhenActiveTransfers -bool true
 
-# Peer settings (matching GUI: Peers tab)
+# Peer settings (verified keys from actual plist)
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission PeersTotal -int 2048
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission PeersTorrent -int 256
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission PEXGlobal -bool true
@@ -280,41 +267,39 @@ sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission LocalPeerDis
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission EncryptionPrefer -bool true
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission EncryptionRequire -bool true
 
-# Blocklist settings (matching GUI: Peers tab)
+# Blocklist settings (verified keys from actual plist)
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission BlocklistNew -bool true
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission BlocklistURL -string "https://github.com/Naunter/BT_BlockLists/raw/master/bt_blocklists.gz"
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission BlocklistAutoUpdate -bool true
 
-# Speed and queue settings (matching GUI: Transfers/Management tab)
+# Speed and queue settings (verified keys from actual plist)
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission SpeedLimit -bool false
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission SpeedLimitDownloadLimit -int 10000
+sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission SpeedLimitDownloadLimit -int 100000
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission SpeedLimitUploadLimit -int 1000
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission QueueDownloadEnabled -bool true
+sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission Queue -bool false
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission QueueDownloadNumber -int 3
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission QueueSeedEnabled -bool true
+sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission QueueSeed -bool false
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission QueueSeedNumber -int 3
 
-# Seeding limits (matching GUI: Transfers/Management tab)
+# Seeding limits (verified keys from actual plist)
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RatioCheck -bool true
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RatioLimit -float 2.0
+sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RatioLimit -int 2
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission IdleLimitCheck -bool true
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission IdleLimitMinutes -int 30
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission RemoveWhenFinishSeeding -bool true
 
-# Stalled transfer settings (matching GUI: Transfers/Management tab)
+# Stalled transfer settings (verified keys from actual plist)
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission CheckStalled -bool true
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission StalledMinutes -int 30
 
 # UI and notification settings (matching GUI: General tab)
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission AutoSize -bool true
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission BadgeDockTotalDownload -bool true
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission BadgeDockTotalUpload -bool true
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission SUHasLaunchedBefore -bool true
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission SUUpdateRelaunchingMarker -bool false
 
-# Watch folder settings (matching GUI: Adding tab)
+# Watch folder settings (verified keys from actual plist, using rclone sync directory)
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission AutoImport -bool true
-sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission AutoImportDirectory -string "${OPERATOR_HOME}/Downloads/Torrents"
+sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission AutoImportDirectory -string "${OPERATOR_HOME}/.local/sync/dropbox"
 
 log "✅ Transmission preferences configuration completed successfully"
 
