@@ -75,6 +75,9 @@ FORCE=false
 CONTINUE_ON_ERROR=false
 ONLY_SCRIPT=""
 
+# Administrator password for later exporting
+ADMINISTRATOR_PASSWORD=""
+
 while [[ $# -gt 0 ]]; do
   case $1 in
     --force)
@@ -331,38 +334,21 @@ setup_keychain_access() {
     done
     echo ""
 
-    # Load keychain credentials from manifest
-    local keychain_manifest="${SCRIPT_DIR}/config/keychain_manifest.conf"
-    if [[ -f "${keychain_manifest}" ]]; then
-      # Set defaults before sourcing
-      KEYCHAIN_PASSWORD=""
-      EXTERNAL_KEYCHAIN="mac-server-setup"
+    # Get administrator password for keychain access
+    get_administrator_password
 
-      # shellcheck source=/dev/null
-      source "${keychain_manifest}"
+    echo "🔍 Testing login keychain access..."
 
-      echo "🔍 Testing external keychain access..."
+    # Test keychain unlock with administrator password
+    if security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}" 2>/dev/null; then
+      echo "✅ Login keychain unlocked - credentials available to setup scripts"
+      log "Login keychain access configured for ${keychain_scripts[*]}"
 
-      # Test keychain unlock
-      if security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${EXTERNAL_KEYCHAIN}" 2>/dev/null; then
-        echo "✅ External keychain unlocked - credentials available to setup scripts"
-        log "External keychain access configured for ${keychain_scripts[*]}"
-
-        # Export keychain info for child scripts
-        export APP_SETUP_KEYCHAIN_PASSWORD="${KEYCHAIN_PASSWORD}"
-        export APP_SETUP_EXTERNAL_KEYCHAIN="${EXTERNAL_KEYCHAIN}"
-
-        # Set up cleanup trap
-        trap 'cleanup_keychain_access' EXIT
-      else
-        collect_warning "Failed to unlock external keychain - scripts will prompt individually"
-        log "External keychain access failed - falling back to individual prompts"
-      fi
+      # Set up cleanup trap
+      trap 'cleanup_keychain_access' EXIT
     else
-      collect_warning "Keychain manifest not found - scripts will prompt individually"
-      echo "⚠️ External keychain manifest not found at: ${keychain_manifest}"
-      echo "   Scripts will handle credential access individually"
-      log "Keychain manifest missing - falling back to individual prompts"
+      collect_warning "Failed to unlock login keychain - scripts will prompt individually"
+      log "Login keychain access failed - falling back to individual prompts"
     fi
 
     echo ""
@@ -371,10 +357,44 @@ setup_keychain_access() {
   fi
 }
 
+# _timeout function - uses timeout utility if installed, otherwise Perl
+# https://gist.github.com/jaytaylor/6527607
+function _timeout() {
+  if command -v timeout; then
+    timeout "$@"
+  else
+    if ! command -v perl; then
+      echo "perl not found 😿"
+      exit 1
+    else
+      perl -e 'alarm shift; exec @ARGV' "$@"
+    fi
+  fi
+}
+
+# Ensure we have administrator password for keychain operations
+function get_administrator_password() {
+  if [[ -z "${ADMINISTRATOR_PASSWORD:-}" ]]; then
+    echo
+    echo "This script needs your Mac account password for keychain operations."
+    read -r -e -p "Enter your Mac account password: " -s ADMINISTRATOR_PASSWORD
+    echo # Add newline after hidden input
+
+    # Validate password by testing with dscl
+    until _timeout 1 dscl /Local/Default -authonly "${USER}" "${ADMINISTRATOR_PASSWORD}" &>/dev/null; do
+      echo "Invalid ${USER} account password. Try again or ctrl-C to exit."
+      read -r -e -p "Enter your Mac ${USER} account password: " -s ADMINISTRATOR_PASSWORD
+      echo # Add newline after hidden input
+    done
+
+    echo "✅ Administrator password validated for keychain operations"
+  fi
+}
+
 # Function to clean up keychain access artifacts
 cleanup_keychain_access() {
   # Clean up environment variables containing sensitive keychain information
-  unset APP_SETUP_KEYCHAIN_PASSWORD APP_SETUP_EXTERNAL_KEYCHAIN
+  unset ADMINISTRATOR_PASSWORD
 }
 
 # Main execution
@@ -439,6 +459,9 @@ main() {
 
   # Set up password caching for keychain access
   setup_keychain_access
+
+  # Export administrator password for child scripts
+  export ADMINISTRATOR_PASSWORD
 
   # Execute scripts in order
   local failed_scripts=0

@@ -497,6 +497,20 @@ import_external_keychain_credentials() {
     show_log "⚠️ WiFi credential not found in external keychain (optional)"
   fi
 
+  # Import OpenSubtitles credential (optional)
+  # shellcheck disable=SC2154 # KEYCHAIN_OPENSUBTITLES_SERVICE loaded from sourced manifest
+  if opensubtitles_credential=$(security find-generic-password -s "${KEYCHAIN_OPENSUBTITLES_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    security delete-generic-password -s "${KEYCHAIN_OPENSUBTITLES_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_OPENSUBTITLES_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${opensubtitles_credential}" -D "Mac Server Setup - OpenSubtitles Credentials" -A -U; then
+      show_log "✅ OpenSubtitles credential imported to administrator keychain"
+    else
+      collect_warning "Failed to import OpenSubtitles credential to administrator keychain"
+    fi
+    unset opensubtitles_credential
+  else
+    show_log "⚠️ OpenSubtitles credential not found in external keychain (optional)"
+  fi
+
   return 0
 }
 

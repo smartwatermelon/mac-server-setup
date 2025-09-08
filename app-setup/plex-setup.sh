@@ -76,7 +76,7 @@ FORCE=false
 SKIP_MIGRATION=false
 SKIP_MOUNT=false
 MIGRATE_FROM=""
-ADMINISTRATOR_PASSWORD=""
+ADMINISTRATOR_PASSWORD="${ADMINISTRATOR_PASSWORD:-}"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -135,7 +135,7 @@ function _timeout() {
 
 # Ensure we have administrator password for keychain operations
 function get_administrator_password() {
-  if [[ -z "${ADMINISTRATOR_PASSWORD}" ]]; then
+  if [[ -z "${ADMINISTRATOR_PASSWORD:-}" ]]; then
     echo
     echo "This script needs your Mac account password for keychain operations."
     read -r -e -p "Enter your Mac account password: " -s ADMINISTRATOR_PASSWORD
@@ -269,12 +269,8 @@ get_keychain_credential() {
   local credential
 
   # Ensure keychain is unlocked before accessing
-  # Try cached keychain password first, fall back to administrator password
-  local keychain_password="${APP_SETUP_KEYCHAIN_PASSWORD:-${ADMINISTRATOR_PASSWORD}}"
-  local keychain_name="${APP_SETUP_EXTERNAL_KEYCHAIN:-mac-server-setup}"
-
-  if ! security unlock-keychain -p "${keychain_password}" "${keychain_name}" 2>/dev/null; then
-    collect_error "Failed to unlock keychain '${keychain_name}' for credential retrieval"
+  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}" 2>/dev/null; then
+    collect_error "Failed to unlock keychain for credential retrieval"
     return 1
   fi
 
