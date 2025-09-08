@@ -304,15 +304,10 @@ setup_keychain_access() {
 
   # Check which scripts in our execution plan need keychain access
   for script in "${sorted_scripts[@]}"; do
-    case "${script}" in
-      "plex-setup.sh" | "filebot-setup.sh")
-        scripts_need_keychain=true
-        keychain_scripts+=("${script}")
-        ;;
-      *)
-        # Script doesn't need keychain access
-        ;;
-    esac
+    if grep -q "security unlock-keychain" "${script}"; then
+      scripts_need_keychain=true
+      keychain_scripts+=("${script}")
+    fi
   done
 
   # Only set up password caching if needed

@@ -80,6 +80,7 @@ FILEBOT_MEDIA_PATH="${OPERATOR_HOME}/.local/mnt/${NAS_SHARE_NAME}/Media"
 # Parse command line arguments
 FORCE=false
 OVERRIDE_LICENSE_FILE=""
+ADMINISTRATOR_PASSWORD="${ADMINISTRATOR_PASSWORD:-}"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -89,6 +90,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --license-file)
       OVERRIDE_LICENSE_FILE="$2"
+      shift 2
+      ;;
+    --password)
+      ADMINISTRATOR_PASSWORD="$2"
       shift 2
       ;;
     *)
@@ -199,6 +204,25 @@ show_collected_issues() {
 
 # Trap to show collected issues on exit
 trap 'show_collected_issues' EXIT
+
+# Ensure we have administrator password for keychain operations
+function get_administrator_password() {
+  if [[ -z "${ADMINISTRATOR_PASSWORD:-}" ]]; then
+    echo
+    echo "This script needs your Mac account password for keychain operations."
+    read -r -e -p "Enter your Mac account password: " -s ADMINISTRATOR_PASSWORD
+    echo # Add newline after hidden input
+
+    # Validate password by testing with dscl
+    until _timeout 1 dscl /Local/Default -authonly "${USER}" "${ADMINISTRATOR_PASSWORD}" &>/dev/null; do
+      echo "Invalid ${USER} account password. Try again or ctrl-C to exit."
+      read -r -e -p "Enter your Mac ${USER} account password: " -s ADMINISTRATOR_PASSWORD
+      echo # Add newline after hidden input
+    done
+
+    echo "✅ Administrator password validated for keychain operations"
+  fi
+}
 
 # Logging functions
 log() {
@@ -507,6 +531,12 @@ configure_opensubtitles_login() {
 
   # Try to retrieve OpenSubtitles credentials from login keychain
   echo "🔐 Configuring OpenSubtitles login..."
+
+  # Ensure keychain is unlocked before accessing
+  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}" 2>/dev/null; then
+    collect_error "Failed to unlock keychain for credential retrieval"
+    return 1
+  fi
 
   local opensubtitles_credentials
   if opensubtitles_credentials=$(security find-generic-password -s "opensubtitles-${HOSTNAME_LOWER}" -a "${HOSTNAME_LOWER}" -w 2>/dev/null); then
