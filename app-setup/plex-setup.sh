@@ -463,7 +463,7 @@ setup_persistent_smb_mount() {
 EOF
 
     # Validate plist syntax
-    if sudo -u "${target_user}" plutil -lint "${user_plist}" >/dev/null 2>&1; then
+    if sudo -iu "${target_user}" plutil -lint "${user_plist}" >/dev/null 2>&1; then
       log "Mount LaunchAgent plist syntax validated successfully"
     else
       collect_error "Invalid plist syntax in ${user_plist}"

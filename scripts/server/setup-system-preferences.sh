@@ -178,7 +178,7 @@ section "Configuring screen saver password requirement"
 defaults -currentHost write com.apple.screensaver askForPassword -int 1
 defaults -currentHost write com.apple.screensaver askForPasswordDelay -int 0
 sudo -p "[Security setup] Enter password to configure operator screen saver security: " -u "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.screensaver askForPassword -int 1
-sudo -u "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.screensaver askForPasswordDelay -int 0
+sudo -iu "${OPERATOR_USERNAME}" defaults -currentHost write com.apple.screensaver askForPasswordDelay -int 0
 log "Enabled immediate password requirement after screen saver"
 
 # Run software updates if not skipped

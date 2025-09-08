@@ -966,24 +966,23 @@ else
 
   # Skip setup screens for operator account (more aggressive approach)
   log "Configuring operator account to skip setup screens"
-  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeeCloudSetup -bool true
-  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant SkipCloudSetup -bool true
-  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeePrivacy -bool true
-  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant GestureMovieSeen none
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeeCloudSetup -bool true
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant SkipCloudSetup -bool true
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeePrivacy -bool true
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant GestureMovieSeen none
   PRODUCT_VERSION=$(sw_vers -productVersion)
-  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant LastSeenCloudProductVersion "${PRODUCT_VERSION}"
-  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.screensaver showClock -bool false
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant LastSeenCloudProductVersion "${PRODUCT_VERSION}"
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.screensaver showClock -bool false
 
   # Screen Time and Apple Intelligence
-  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.ScreenTimeAgent DidCompleteSetup -bool true
-  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.intelligenceplatform.ui SetupHasBeenDisplayed -bool true
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.ScreenTimeAgent DidCompleteSetup -bool true
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.intelligenceplatform.ui SetupHasBeenDisplayed -bool true
 
   # Accessibility and Data & Privacy
-  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.UniversalAccess didSeeAccessibilitySetup -bool true
-  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeeDataAndPrivacy -bool true
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeeDataAndPrivacy -bool true
 
   # TouchID setup bypass (this might help with the password confusion)
-  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeeTouchID -bool true
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeeTouchID -bool true
   check_success "Operator setup screen suppression"
 
   # Set up operator SSH keys if available
