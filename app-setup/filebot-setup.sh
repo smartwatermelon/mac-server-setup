@@ -271,7 +271,7 @@ main() {
     log "FileBot already installed via Homebrew"
 
     # Get version information
-    filebot_version=$(filebot --version 2>/dev/null | head -1 | cut -d' ' -f2 || echo "unknown")
+    filebot_version=$(defaults read /Applications/FileBot.app/Contents/Info.plist CFBundleShortVersionString 2>/dev/null || echo "unknown")
     echo "   Version: ${filebot_version}"
     log "FileBot version: ${filebot_version}"
   else
@@ -324,13 +324,17 @@ main() {
     # Look for any .psm files in config directory
     config_dir="${SCRIPT_DIR}/config"
     if [[ -d "${config_dir}" ]]; then
-      while IFS= read -r -d '' psm_file; do
-        if [[ -f "${psm_file}" ]]; then
-          license_file="${psm_file}"
-          echo "Found license file in config directory: ${license_file}"
-          break
-        fi
-      done < <(find "${config_dir}" -name "*.psm" -print0 2>/dev/null || true)
+      # Use a temporary variable to avoid masking find's return value
+      find_output=""
+      if find_output=$(find "${config_dir}" -name "*.psm" -print0 2>/dev/null); then
+        while IFS= read -r -d '' psm_file; do
+          if [[ -f "${psm_file}" ]]; then
+            license_file="${psm_file}"
+            echo "Found license file in config directory: ${license_file}"
+            break
+          fi
+        done <<<"${find_output}"
+      fi
     fi
   fi
 
@@ -350,8 +354,10 @@ main() {
 
     echo "Copying license file to ${target_license}..."
     sudo -p "[FileBot setup] Enter password to copy license file: " \
-      -iu "${OPERATOR_USERNAME}" cp "${license_file}" "${target_license}"
-    check_success "License file copy"
+      cp "${license_file}" "${target_license}"
+    sudo -p "[FileBot setup] Enter password to set license file ownership: " \
+      chown "${OPERATOR_USERNAME}:staff" "${target_license}"
+    check_success "License file copy and ownership"
 
     # Apply the license
     echo "Applying FileBot license for ${OPERATOR_USERNAME}..."
