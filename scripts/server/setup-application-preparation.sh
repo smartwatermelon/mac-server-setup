@@ -183,6 +183,7 @@ if [[ -d "${SETUP_DIR}/app-setup" ]]; then
   # Set proper permissions
   chmod +x "${APP_SETUP_DIR}/"*.sh 2>/dev/null
   chmod 600 "${APP_SETUP_DIR}/config/"*.conf 2>/dev/null || true
+  chmod 600 "${APP_SETUP_DIR}/config/"*.psm 2>/dev/null || true # FileBot license files
   chmod 755 "${APP_SETUP_DIR}/templates/"*.sh 2>/dev/null || true
 
   check_success "Application directory copy with organized structure"

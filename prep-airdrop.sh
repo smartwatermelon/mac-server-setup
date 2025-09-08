@@ -657,6 +657,22 @@ else
   echo "No Dropbox sync folder configured - skipping Dropbox setup"
 fi
 
+# Copy FileBot license file if configured
+if [[ -n "${FILEBOT_LICENSE_FILE:-}" ]]; then
+  if [[ -f "${FILEBOT_LICENSE_FILE}" ]]; then
+    echo "Copying FileBot license file..."
+    license_filename="$(basename "${FILEBOT_LICENSE_FILE}")"
+    copy_with_manifest "${FILEBOT_LICENSE_FILE}" "app-setup/config/${license_filename}" "OPTIONAL"
+    chmod 600 "${OUTPUT_PATH}/app-setup/config/${license_filename}"
+    add_to_manifest "app-setup/config/${license_filename}" "OPTIONAL"
+    echo "✅ FileBot license file copied to app-setup/config/${license_filename}"
+  else
+    collect_warning "FileBot license file not found at: ${FILEBOT_LICENSE_FILE}"
+  fi
+else
+  echo "No FileBot license file configured - skipping FileBot license copy"
+fi
+
 # Create and save one-time link for Apple ID password
 APPLE_ID_ITEM="$(op item list --categories Login --vault "${ONEPASSWORD_VAULT}" --favorite --format=json 2>/dev/null | jq -r '.[] | select(.title == "'"${ONEPASSWORD_APPLEID_ITEM}"'") | .id' 2>/dev/null || echo "")"
 ONE_TIME_URL="$(op item share "${APPLE_ID_ITEM}" --view-once)"
