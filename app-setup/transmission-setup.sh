@@ -297,6 +297,22 @@ sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission AutoImportDi
 
 log "✅ Transmission preferences configuration completed successfully"
 
+# Configure magnet link handler in Launch Services
+section "Configuring Magnet Link Handler"
+
+log "Setting Transmission as default application for magnet links..."
+
+# Add magnet link handler to Launch Services
+sudo -iu "${OPERATOR_USERNAME}" defaults write com.apple.LaunchServices/com.apple.launchservices.secure LSHandlers -array-add '{
+    LSHandlerURLScheme = "magnet";
+    LSHandlerRoleAll = "org.m0k.transmission";
+    LSHandlerPreferredVersions = {
+        LSHandlerRoleAll = "-";
+    };
+}'
+
+log "✅ Magnet link handler configuration completed successfully"
+
 # Create completion script (for FileBot integration later)
 section "Creating Completion Script"
 
