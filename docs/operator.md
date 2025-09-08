@@ -174,6 +174,11 @@ Native applications store their configurations in shared directories accessible 
 - **Access**: Read/write access via staff group membership
 - **Ownership**: `admin:staff` with `775` permissions
 
+**Transmission Configuration**:
+
+- **Auto-configured**: Download paths, seeding limits, peer settings, blocklist, RPC access
+- **Manual setup required**: See "Transmission Settings" section below
+
 **Accessing Shared Configurations**:
 
 ```bash
@@ -195,18 +200,36 @@ ls -la /Users/Shared/PlexMediaServer/Plex\ Media\ Server/
 # View configured launch agents
 ls -la ~/Library/LaunchAgents/
 
-# Check Plex launch agent status
+# Check launch agent status
 launchctl list | grep com.plexapp.plexmediaserver
+launchctl list | grep transmission
 
 # Manually start/stop applications
 launchctl stop com.plexapp.plexmediaserver
 launchctl start com.plexapp.plexmediaserver
+# Note: Transmission starts via 'open -a Transmission' LaunchAgent
 ```
 
 **Accessing Applications**:
 
 - **Plex Web Interface**: `http://macmini.local:32400/web`
+- **Transmission Web Interface**: `http://macmini.local:19091`
 - **Direct access**: Applications run under operator account with shared config access
+
+### Transmission Settings
+
+**Settings that can't be configured automatically** (must be set manually on first login):
+
+**General Tab**:
+
+- **Accept magnet links**: Click "Set Default Application" button
+- **Notifications**: Click "Configure in System Preferences" for system notifications
+
+**Network Tab**:  
+
+- **System sleep**: "Prevent computer from sleeping with active transfers" (if desired)
+
+**Note**: All core BitTorrent functionality (downloads, seeding, peer settings, blocklist) is pre-configured automatically.
 
 ## Monitoring and Maintenance
 
