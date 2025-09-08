@@ -462,6 +462,14 @@ setup_persistent_smb_mount() {
 </plist>
 EOF
 
+    # Validate plist syntax
+    if sudo -iu "${target_user}" plutil -lint "${user_plist}" >/dev/null 2>&1; then
+      log "Mount LaunchAgent plist syntax validated successfully"
+    else
+      collect_error "Invalid plist syntax in ${user_plist}"
+      return 1
+    fi
+
     sudo -p "[Mount setup] Enter password to set permissions for ${target_user}'s copy of mount LaunchAgent': " -u "${target_user}" chmod 644 "${user_plist}"
     log "✅ LaunchAgent created for ${target_user}: ${user_plist}"
   }
@@ -813,6 +821,14 @@ configure_plex_autostart() {
 </dict>
 </plist>
 EOF
+
+  # Validate plist syntax
+  if sudo -iu "${OPERATOR_USERNAME}" plutil -lint "${PLIST_FILE}" >/dev/null 2>&1; then
+    log "Plex LaunchAgent plist syntax validated successfully"
+  else
+    collect_error "Invalid plist syntax in ${PLIST_FILE}"
+    return 1
+  fi
 
   check_success "Plex LaunchAgent creation"
 
