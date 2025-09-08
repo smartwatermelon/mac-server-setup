@@ -979,7 +979,7 @@ else
   sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.intelligenceplatform.ui SetupHasBeenDisplayed -bool true
 
   # Accessibility and Data & Privacy
-  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.universalaccess didSeeAccessibilitySetup -bool true
+  sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.UniversalAccess didSeeAccessibilitySetup -bool true
   sudo -u "${OPERATOR_USERNAME}" defaults write com.apple.SetupAssistant DidSeeDataAndPrivacy -bool true
 
   # TouchID setup bypass (this might help with the password confusion)

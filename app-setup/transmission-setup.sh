@@ -384,11 +384,11 @@ sudo -iu "${OPERATOR_USERNAME}" tee "${LAUNCHAGENT_PLIST}" >/dev/null <<EOF
 EOF
 
 # Validate plist syntax
-if plutil -lint "${LAUNCHAGENT_PLIST}" >/dev/null 2>&1; then
+if sudo plutil -lint "${LAUNCHAGENT_PLIST}" >/dev/null 2>&1; then
   log "Transmission LaunchAgent plist syntax validated successfully"
 else
-  collect_error "Invalid plist syntax in ${LAUNCHAGENT_PLIST}"
-  exit 1
+  log "Invalid plist syntax in ${LAUNCHAGENT_PLIST}"
+  return 1
 fi
 
 log "✅ LaunchAgent creation completed successfully"
