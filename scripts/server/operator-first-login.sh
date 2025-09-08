@@ -187,10 +187,8 @@ setup_logrotate() {
 # Task: unload LaunchAgent
 unload_launchagent() {
   log "Unloading LaunchAgent..."
-  local service_id="com.${HOSTNAME_LOWER}.operator-first-login"
-  local user_id
-  user_id=$(id -u)
-  if launchctl bootout "gui/${user_id}" "${service_id}"; then
+  local LaunchAgent="com.${HOSTNAME_LOWER}.operator-first-login.plist"
+  if launchctl unload "${HOME}/Library/LaunchAgents/${LaunchAgent}"; then
     log "Unloaded LaunchAgent"
   else
     log "Warning: Failed to unload LaunchAgent"
