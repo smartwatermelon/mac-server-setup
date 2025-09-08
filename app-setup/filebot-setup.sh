@@ -416,53 +416,84 @@ configure_filebot_preferences() {
   echo "Setting up media format templates..."
 
   # Set the main rename format for episodes (TV shows)
-  sudo -p "[FileBot setup] Enter password to configure episode format: " \
+  if sudo -p "[FileBot setup] Enter password to configure episode format: " \
     -iu "${OPERATOR_USERNAME}" \
     defaults write net.filebot.ui "/net/filebot/ui/rename/format.recent.episode/0" \
-    "${FILEBOT_MEDIA_PATH}/{plex}"
+    -string "${FILEBOT_MEDIA_PATH}/{plex}"; then
+    check_success "Episode format configuration"
+  else
+    collect_error "Failed to configure episode format"
+  fi
 
   # Set the main rename format for movies
-  sudo -p "[FileBot setup] Enter password to configure movie format: " \
+  if sudo -p "[FileBot setup] Enter password to configure movie format: " \
     -iu "${OPERATOR_USERNAME}" \
     defaults write net.filebot.ui "/net/filebot/ui/rename/format.recent.movie/0" \
-    "${FILEBOT_MEDIA_PATH}/{plex}"
+    -string "${FILEBOT_MEDIA_PATH}/{plex}"; then
+    check_success "Movie format configuration"
+  else
+    collect_error "Failed to configure movie format"
+  fi
 
   # Set the current rename formats
-  sudo -p "[FileBot setup] Enter password to set current episode format: " \
+  if sudo -p "[FileBot setup] Enter password to set current episode format: " \
     -iu "${OPERATOR_USERNAME}" \
     defaults write net.filebot.ui "/net/filebot/ui/rename/rename.format.episode" \
-    "${FILEBOT_MEDIA_PATH}/{plex}"
+    -string "${FILEBOT_MEDIA_PATH}/{plex}"; then
+    check_success "Current episode format configuration"
+  else
+    collect_error "Failed to configure current episode format"
+  fi
 
-  sudo -p "[FileBot setup] Enter password to set current movie format: " \
+  if sudo -p "[FileBot setup] Enter password to set current movie format: " \
     -iu "${OPERATOR_USERNAME}" \
     defaults write net.filebot.ui "/net/filebot/ui/rename/rename.format.movie" \
-    "${FILEBOT_MEDIA_PATH}/{plex}"
+    -string "${FILEBOT_MEDIA_PATH}/{plex}"; then
+    check_success "Current movie format configuration"
+  else
+    collect_error "Failed to configure current movie format"
+  fi
 
   # Set the dialog open folder to the pending-move directory
-  sudo -p "[FileBot setup] Enter password to set default open folder: " \
+  if sudo -p "[FileBot setup] Enter password to set default open folder: " \
     -iu "${OPERATOR_USERNAME}" \
     defaults write net.filebot.ui "/net/filebot/ui/dialog.open.folder" \
-    "${FILEBOT_MEDIA_PATH}/Torrents/pending-move"
+    -string "${FILEBOT_MEDIA_PATH}/Torrents/pending-move"; then
+    check_success "Default open folder configuration"
+  else
+    collect_error "Failed to configure default open folder"
+  fi
 
   # Configure rename actions (artwork, subtitles, etc.)
-  sudo -p "[FileBot setup] Enter password to configure rename actions: " \
+  if sudo -p "[FileBot setup] Enter password to configure rename actions: " \
     -iu "${OPERATOR_USERNAME}" \
     defaults write net.filebot.ui "/net/filebot/ui/rename/rename.action.apply" \
-    "ARTWORK SRT SUBTITLES"
+    -string "ARTWORK SRT SUBTITLES"; then
+    check_success "Rename actions configuration"
+  else
+    collect_error "Failed to configure rename actions"
+  fi
 
   # Set subtitle language to English
-  sudo -p "[FileBot setup] Enter password to configure subtitle language: " \
+  if sudo -p "[FileBot setup] Enter password to configure subtitle language: " \
     -iu "${OPERATOR_USERNAME}" \
     defaults write net.filebot.ui "/net/filebot/ui/subtitle/language.selected" \
-    "en"
+    -string "en"; then
+    check_success "Subtitle language configuration"
+  else
+    collect_error "Failed to configure subtitle language"
+  fi
 
   # Mark getting started as completed to skip intro
-  sudo -p "[FileBot setup] Enter password to skip getting started dialog: " \
+  if sudo -p "[FileBot setup] Enter password to skip getting started dialog: " \
     -iu "${OPERATOR_USERNAME}" \
     defaults write net.filebot.ui "/net/filebot/ui/getting.started" \
-    -int 1
+    -int 1; then
+    check_success "Getting started dialog skip configuration"
+  else
+    collect_error "Failed to configure getting started dialog skip"
+  fi
 
-  check_success "FileBot preferences configuration"
   echo "✅ FileBot preferences configured"
   log "FileBot preferences configured successfully"
 
