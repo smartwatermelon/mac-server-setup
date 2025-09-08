@@ -76,7 +76,7 @@ OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
 # Transmission configuration paths (matching original configuration)
 TRANSMISSION_DOWNLOADS_DIR="${OPERATOR_HOME}/.local/mnt/${NAS_SHARE_NAME}/Media/Torrents/pending-move"
 TRANSMISSION_INCOMPLETE_DIR="${OPERATOR_HOME}/Downloads"
-TRANSMISSION_DONE_SCRIPT="/usr/local/bin/transmission-done.sh"
+TRANSMISSION_DONE_SCRIPT="${OPERATOR_HOME}/.local/bin/transmission-done.sh"
 
 # Parse command line arguments
 FORCE=false
@@ -131,27 +131,31 @@ section() {
 # Confirmation function
 confirm() {
   local prompt="$1"
-  local default="${2:-Y}"
+  local default="${2:-y}"
 
-  if [[ "${FORCE}" == true ]]; then
-    log "Auto-confirmed (--force): ${prompt}"
-    return 0
+  # In force mode, respect the default behavior instead of always returning YES
+  if [[ "${FORCE}" == "true" ]]; then
+    if [[ "${default}" == "y" ]]; then
+      return 0 # Default YES - auto-confirm
+    else
+      return 1 # Default NO - auto-decline
+    fi
   fi
 
-  local response
-  if [[ "${default}" == "Y" ]]; then
-    read -p "${prompt} (Y/n): " -r response
-    case "${response}" in
-      [nN] | [nN][oO]) return 1 ;;
-      *) return 0 ;;
-    esac
+  if [[ "${default}" == "y" ]]; then
+    read -rp "${prompt} (Y/n): " -n 1 response
+    echo
+    response=${response:-y}
   else
-    read -p "${prompt} (y/N): " -r response
-    case "${response}" in
-      [yY] | [yY][eE][sS]) return 0 ;;
-      *) return 1 ;;
-    esac
+    read -rp "${prompt} (y/N): " -n 1 response
+    echo
+    response=${response:-n}
   fi
+
+  case "${response}" in
+    [yY] | [yY][eE][sS]) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # Start setup
@@ -182,7 +186,7 @@ if command -v /Applications/Transmission.app/Contents/MacOS/Transmission >/dev/n
 fi
 
 # Confirm setup
-if ! confirm "Set up Transmission with downloads to operator's media mount and RPC access on port 19091?"; then
+if ! confirm "Set up Transmission with downloads to operator's media mount and RPC access on port 19091?" "y"; then
   log "Setup cancelled by user"
   exit 0
 fi
@@ -307,7 +311,9 @@ log "✅ Transmission preferences configuration completed successfully"
 section "Creating Completion Script"
 
 log "Creating transmission-done.sh completion script..."
-sudo tee "${TRANSMISSION_DONE_SCRIPT}" >/dev/null <<'EOF'
+OPERATOR_LOCAL_BIN="$(dirname "${TRANSMISSION_DONE_SCRIPT}")"
+mkdir -p "${OPERATOR_LOCAL_BIN}"
+sudo -iu "${OPERATOR_USERNAME}" tee "${TRANSMISSION_DONE_SCRIPT}" >/dev/null <<'EOF'
 #!/usr/bin/env bash
 #
 # transmission-done.sh - Transmission completion script
@@ -329,6 +335,7 @@ exit 0
 EOF
 
 sudo chmod +x "${TRANSMISSION_DONE_SCRIPT}"
+sudo chown -v "${OPERATOR_USERNAME}" "${TRANSMISSION_DONE_SCRIPT}"
 log "✅ Completion script creation completed successfully"
 
 # Configure completion script in Transmission
