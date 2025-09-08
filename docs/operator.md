@@ -108,6 +108,9 @@ ls -la *.sh
 Common application setup scripts:
 
 - `plex-setup.sh` - Native Plex Media Server installation and configuration
+- `rclone-setup.sh` - Dropbox synchronization for media file management
+- `transmission-setup.sh` - BitTorrent client with automated GUI configuration and magnet link handling
+- `run-app-setup.sh` - Orchestrator script to install all applications in dependency order
 - `caddy-setup.sh` - Web server/reverse proxy (planned)
 
 ### Running Application Installers
@@ -118,10 +121,22 @@ Common application setup scripts:
 chmod +x ~/app-setup/*.sh
 ```
 
+**Run all applications (recommended)**:
+
+```bash
+# Automated deployment of all applications in dependency order
+./run-app-setup.sh
+
+# Skip confirmations for unattended operation
+./run-app-setup.sh --force
+```
+
 **Run individual setup scripts**:
 
 ```bash
 ./plex-setup.sh
+./rclone-setup.sh
+./transmission-setup.sh
 ```
 
 **Follow prompts** for application-specific configuration:
@@ -174,6 +189,13 @@ Native applications store their configurations in shared directories accessible 
 - **Access**: Read/write access via staff group membership
 - **Ownership**: `admin:staff` with `775` permissions
 
+**Transmission Configuration**:
+
+- **Auto-configured**: Download paths, seeding limits, peer settings, blocklist, RPC access, magnet link handling
+- **Web Interface**: `http://macmini.local:19091` (username: macmini, password: macmini)
+- **LaunchAgent**: Starts automatically on operator login
+- **Manual setup required**: See "Transmission Settings" section below
+
 **Accessing Shared Configurations**:
 
 ```bash
@@ -195,18 +217,35 @@ ls -la /Users/Shared/PlexMediaServer/Plex\ Media\ Server/
 # View configured launch agents
 ls -la ~/Library/LaunchAgents/
 
-# Check Plex launch agent status
+# Check launch agent status
 launchctl list | grep com.plexapp.plexmediaserver
+launchctl list | grep transmission
 
 # Manually start/stop applications
 launchctl stop com.plexapp.plexmediaserver
 launchctl start com.plexapp.plexmediaserver
+# Note: Transmission starts via 'open -a Transmission' LaunchAgent
 ```
 
 **Accessing Applications**:
 
 - **Plex Web Interface**: `http://macmini.local:32400/web`
+- **Transmission Web Interface**: `http://macmini.local:19091`
 - **Direct access**: Applications run under operator account with shared config access
+
+### Transmission Settings
+
+**Settings that can't be configured automatically** (must be set manually on first login):
+
+**General Tab**:
+
+- **Notifications**: Click "Configure in System Preferences" for system notifications
+
+**Network Tab**:  
+
+- **System sleep**: "Prevent computer from sleeping with active transfers" (if desired)
+
+**Note**: All core BitTorrent functionality (downloads, seeding, peer settings, blocklist, magnet link handling) is pre-configured automatically.
 
 ## Monitoring and Maintenance
 
