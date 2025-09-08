@@ -5,13 +5,12 @@
 # This script sets up Transmission on macOS with:
 # - Native Transmission installation via Homebrew cask
 # - Complete preferences configuration via defaults commands
-# - SMB mount integration for media pipeline
+# - Download paths matching original user configuration
 # - Remote access (RPC) configuration
 # - Auto-start configuration via LaunchAgent for operator
 #
-# Usage: ./transmission-setup.sh [--force] [--skip-mount] [--rpc-password PASSWORD]
+# Usage: ./transmission-setup.sh [--force] [--rpc-password PASSWORD]
 #   --force: Skip all confirmation prompts
-#   --skip-mount: Skip SMB mount setup verification
 #   --rpc-password: Override RPC password (default: from config or hostname)
 #
 # Author: Claude
@@ -61,9 +60,6 @@ if [[ -f "${CONFIG_FILE}" ]]; then
   # shellcheck source=/dev/null
   source "${CONFIG_FILE}"
   OPERATOR_USERNAME="${OPERATOR_USERNAME:-operator}"
-  NAS_USERNAME="${NAS_USERNAME:-transmission}"
-  NAS_HOSTNAME="${NAS_HOSTNAME:-nas.local}"
-  NAS_SHARE_NAME="${NAS_SHARE_NAME:-Media}"
 else
   echo "❌ Error: Configuration file not found at ${CONFIG_FILE}"
   exit 1
@@ -73,18 +69,16 @@ fi
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 
-# Transmission configuration paths
-TRANSMISSION_APP_SUPPORT_DIR="/Users/Shared/Transmission"
-TRANSMISSION_DOWNLOADS_DIR="${TRANSMISSION_APP_SUPPORT_DIR}/Downloads"
-TRANSMISSION_INCOMPLETE_DIR="${TRANSMISSION_APP_SUPPORT_DIR}/Incomplete"
-TRANSMISSION_DONE_SCRIPT="/usr/local/bin/transmission-done.sh"
+# Operator home directory (for path construction)
+OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
 
-# Media mount path (matches plex-setup.sh pattern)
-MEDIA_MOUNT="${HOME}/.local/mnt/${NAS_SHARE_NAME}"
+# Transmission configuration paths (matching original configuration)
+TRANSMISSION_DOWNLOADS_DIR="${OPERATOR_HOME}/.local/mnt/DSMedia/Media/Torrents/pending-move"
+TRANSMISSION_INCOMPLETE_DIR="${OPERATOR_HOME}/Downloads"
+TRANSMISSION_DONE_SCRIPT="/usr/local/bin/transmission-done.sh"
 
 # Parse command line arguments
 FORCE=false
-SKIP_MOUNT=false
 RPC_PASSWORD=""
 
 while [[ $# -gt 0 ]]; do
@@ -93,17 +87,13 @@ while [[ $# -gt 0 ]]; do
       FORCE=true
       shift
       ;;
-    --skip-mount)
-      SKIP_MOUNT=true
-      shift
-      ;;
     --rpc-password)
       RPC_PASSWORD="$2"
       shift 2
       ;;
     *)
       echo "❌ Unknown option: $1"
-      echo "Usage: $0 [--force] [--skip-mount] [--rpc-password PASSWORD]"
+      echo "Usage: $0 [--force] [--rpc-password PASSWORD]"
       exit 1
       ;;
   esac
@@ -123,11 +113,6 @@ if [[ ! -d "${APP_LOG_DIR}" ]]; then
   mkdir -p "${APP_LOG_DIR}"
 fi
 
-# Error and warning collection arrays
-declare -a COLLECTED_ERRORS
-declare -a COLLECTED_WARNINGS
-CURRENT_SECTION="Initialization"
-
 # Logging functions (matching established pattern)
 log() {
   local message="$1"
@@ -138,62 +123,8 @@ log() {
 
 section() {
   local section_name="$1"
-  CURRENT_SECTION="${section_name}"
   log ""
   log "=== ${section_name} ==="
-}
-
-set_section() {
-  CURRENT_SECTION="$1"
-}
-
-collect_error() {
-  local error_msg="$1"
-  COLLECTED_ERRORS+=("${CURRENT_SECTION}: ${error_msg}")
-  log "❌ ERROR: ${error_msg}"
-}
-
-collect_warning() {
-  local warning_msg="$1"
-  COLLECTED_WARNINGS+=("${CURRENT_SECTION}: ${warning_msg}")
-  log "⚠️  WARNING: ${warning_msg}"
-}
-
-show_collected_issues() {
-  if [[ ${#COLLECTED_ERRORS[@]} -gt 0 ]] || [[ ${#COLLECTED_WARNINGS[@]} -gt 0 ]]; then
-    log ""
-    log "=== Issue Summary ==="
-
-    if [[ ${#COLLECTED_ERRORS[@]} -gt 0 ]]; then
-      log ""
-      log "❌ ERRORS (${#COLLECTED_ERRORS[@]}):"
-      for error in "${COLLECTED_ERRORS[@]}"; do
-        log "  • ${error}"
-      done
-    fi
-
-    if [[ ${#COLLECTED_WARNINGS[@]} -gt 0 ]]; then
-      log ""
-      log "⚠️  WARNINGS (${#COLLECTED_WARNINGS[@]}):"
-      for warning in "${COLLECTED_WARNINGS[@]}"; do
-        log "  • ${warning}"
-      done
-    fi
-    log ""
-  fi
-}
-
-check_success() {
-  local operation="$1"
-  local exit_code="${2:-$?}"
-
-  if [[ ${exit_code} -ne 0 ]]; then
-    collect_error "${operation} failed (exit code: ${exit_code})"
-    return 1
-  else
-    log "✅ ${operation} completed successfully"
-    return 0
-  fi
 }
 
 # Confirmation function
@@ -228,37 +159,17 @@ log "Starting Transmission setup for ${HOSTNAME}"
 log "Operator: ${OPERATOR_USERNAME}"
 log "RPC Access: ${HOSTNAME_LOWER}.local:19091"
 
-# Verify SMB mount unless skipped
-if [[ "${SKIP_MOUNT}" != true ]]; then
-  section "Verifying Media Mount"
-  set_section "Media Mount Verification"
-
-  if [[ -d "${MEDIA_MOUNT}" ]]; then
-    mount_contents=$(ls -A "${MEDIA_MOUNT}" 2>/dev/null)
-    if [[ -n "${mount_contents}" ]]; then
-      log "✅ Media mount verified at ${MEDIA_MOUNT}"
-    else
-      collect_warning "Media mount directory exists but appears empty at ${MEDIA_MOUNT}"
-      log "Run mount-nas-media.sh first or use --skip-mount to proceed without mount verification"
-    fi
-  else
-    collect_warning "Media mount not found at ${MEDIA_MOUNT}"
-    log "Run mount-nas-media.sh first or use --skip-mount to proceed without mount verification"
-  fi
-fi
-
 # Check if Transmission is installed
 section "Transmission Installation Check"
-set_section "Installation Verification"
 
 if [[ -d "/Applications/Transmission.app" ]]; then
   log "✅ Transmission.app found in /Applications/"
 else
   log "Transmission not found. Installing via Homebrew..."
   if brew install --cask transmission; then
-    check_success "Transmission installation"
+    log "✅ Transmission installation completed successfully"
   else
-    collect_error "Failed to install Transmission via Homebrew"
+    log "❌ ERROR: Failed to install Transmission via Homebrew"
     exit 1
   fi
 fi
@@ -270,53 +181,51 @@ if command -v /Applications/Transmission.app/Contents/MacOS/Transmission >/dev/n
 fi
 
 # Confirm setup
-if ! confirm "Set up Transmission with downloads to ${TRANSMISSION_DOWNLOADS_DIR} and RPC access on port 19091?"; then
+if ! confirm "Set up Transmission with downloads to operator's media mount and RPC access on port 19091?"; then
   log "Setup cancelled by user"
   exit 0
 fi
 
 # Stop Transmission if running (required for configuration changes)
 section "Stopping Transmission for Configuration"
-set_section "Application Control"
 
 if pgrep -x "Transmission" >/dev/null 2>&1; then
   log "Stopping Transmission for configuration changes..."
   if sudo -iu "${OPERATOR_USERNAME}" osascript -e 'quit app "Transmission"' 2>/dev/null; then
     sleep 2
-    check_success "Transmission shutdown"
+    log "✅ Transmission shutdown completed successfully"
   else
     log "Attempting force quit..."
     if sudo -iu "${OPERATOR_USERNAME}" killall "Transmission" 2>/dev/null; then
       sleep 2
-      check_success "Transmission force quit"
+      log "✅ Transmission force quit completed successfully"
     else
       log "Transmission was not running or already stopped"
     fi
   fi
 fi
 
-# Create shared directories with proper permissions
-section "Creating Shared Directories"
-set_section "Directory Creation"
+# Ensure incomplete downloads directory exists
+section "Verifying Download Directories"
 
-for dir in "${TRANSMISSION_APP_SUPPORT_DIR}" "${TRANSMISSION_DOWNLOADS_DIR}" "${TRANSMISSION_INCOMPLETE_DIR}"; do
-  if [[ ! -d "${dir}" ]]; then
-    log "Creating directory: ${dir}"
-    if sudo mkdir -p "${dir}"; then
-      sudo chown admin:staff "${dir}"
-      sudo chmod 775 "${dir}"
-      check_success "Directory creation: ${dir}"
-    else
-      collect_error "Failed to create directory: ${dir}"
-    fi
+# The downloads directory is on the media mount, managed by mount-nas-media.sh
+log "Downloads directory (on media mount): ${TRANSMISSION_DOWNLOADS_DIR}"
+
+# Ensure the incomplete directory exists in operator's home
+if [[ ! -d "${TRANSMISSION_INCOMPLETE_DIR}" ]]; then
+  log "Creating incomplete downloads directory: ${TRANSMISSION_INCOMPLETE_DIR}"
+  if sudo -iu "${OPERATOR_USERNAME}" mkdir -p "${TRANSMISSION_INCOMPLETE_DIR}"; then
+    log "✅ Incomplete directory creation completed successfully: ${TRANSMISSION_INCOMPLETE_DIR}"
   else
-    log "✅ Directory exists: ${dir}"
+    log "❌ ERROR: Failed to create incomplete directory: ${TRANSMISSION_INCOMPLETE_DIR}"
+    exit 1
   fi
-done
+else
+  log "✅ Incomplete directory exists: ${TRANSMISSION_INCOMPLETE_DIR}"
+fi
 
 # Configure Transmission preferences via defaults
 section "Configuring Transmission Preferences"
-set_section "Preferences Configuration"
 
 log "Applying Transmission configuration via defaults commands..."
 
@@ -351,11 +260,10 @@ sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission QueueDownloa
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission QueueSeedEnabled -bool true
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission QueueSeedNumber -int 10
 
-check_success "Transmission preferences configuration"
+log "✅ Transmission preferences configuration completed successfully"
 
 # Create completion script (for FileBot integration later)
 section "Creating Completion Script"
-set_section "Script Creation"
 
 log "Creating transmission-done.sh completion script..."
 sudo tee "${TRANSMISSION_DONE_SCRIPT}" >/dev/null <<'EOF'
@@ -380,7 +288,7 @@ exit 0
 EOF
 
 sudo chmod +x "${TRANSMISSION_DONE_SCRIPT}"
-check_success "Completion script creation"
+log "✅ Completion script creation completed successfully"
 
 # Configure completion script in Transmission
 sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission DoneScriptEnabled -bool true
@@ -388,7 +296,6 @@ sudo -iu "${OPERATOR_USERNAME}" defaults write org.m0k.transmission DoneScript -
 
 # Create LaunchAgent for auto-start
 section "Creating LaunchAgent for Auto-Start"
-set_section "LaunchAgent Creation"
 
 OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
 LAUNCHAGENT_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
@@ -418,13 +325,11 @@ sudo -iu "${OPERATOR_USERNAME}" tee "${LAUNCHAGENT_PLIST}" >/dev/null <<EOF
   <true/>
   <key>KeepAlive</key>
   <false/>
-  <key>LaunchOnlyOnce</key>
-  <true/>
 </dict>
 </plist>
 EOF
 
-check_success "LaunchAgent creation"
+log "✅ LaunchAgent creation completed successfully"
 
 # Set proper permissions on LaunchAgent
 sudo chown "${OPERATOR_USERNAME}:staff" "${LAUNCHAGENT_PLIST}"
@@ -433,7 +338,7 @@ sudo chmod 644 "${LAUNCHAGENT_PLIST}"
 # Load LaunchAgent for operator
 log "Loading LaunchAgent for operator..."
 if sudo -iu "${OPERATOR_USERNAME}" launchctl load "${LAUNCHAGENT_PLIST}" 2>/dev/null; then
-  check_success "LaunchAgent loaded"
+  log "✅ LaunchAgent loaded completed successfully"
 else
   log "LaunchAgent will be loaded on next operator login"
 fi
@@ -456,14 +361,5 @@ log "Access the web interface at: http://${HOSTNAME_LOWER}.local:19091"
 log "Use credentials: ${HOSTNAME_LOWER} / ${RPC_PASSWORD}"
 log ""
 
-# Show any collected issues
-show_collected_issues
-
-# Exit with error code if there were errors
-if [[ ${#COLLECTED_ERRORS[@]} -gt 0 ]]; then
-  log "Setup completed with ${#COLLECTED_ERRORS[@]} error(s)"
-  exit 1
-else
-  log "Setup completed successfully with no errors"
-  exit 0
-fi
+log "Setup completed successfully"
+exit 0
