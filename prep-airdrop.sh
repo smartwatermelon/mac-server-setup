@@ -40,6 +40,7 @@ else
   ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
   ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"
   ONEPASSWORD_APPLEID_ITEM="Apple"
+  ONEPASSWORD_OPENSUBTITLES_ITEM="Opensubtitles"
   DROPBOX_SYNC_FOLDER=""
   DROPBOX_LOCAL_PATH=""
 fi
@@ -274,6 +275,7 @@ SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 OUTPUT_PATH="${1:-${HOME}/${SERVER_NAME_LOWER}-setup}"
 OP_TIMEMACHINE_ENTRY="${ONEPASSWORD_TIMEMACHINE_ITEM}"
 OP_PLEX_NAS_ENTRY="${ONEPASSWORD_PLEX_NAS_ITEM}"
+OP_OPENSUBTITLES_ENTRY="${ONEPASSWORD_OPENSUBTITLES_ITEM}"
 
 # Check if output directory exists
 if [[ -d "${OUTPUT_PATH}" ]]; then
@@ -641,6 +643,34 @@ EOF
   # Clear credentials from memory
   unset PLEX_NAS_USERNAME PLEX_NAS_PASSWORD
   echo "✅ Plex NAS credentials stored in Keychain"
+fi
+
+# Set up OpenSubtitles credentials using 1Password
+echo "Setting up OpenSubtitles credentials..."
+
+# Check if OpenSubtitles credentials exist in 1Password
+if ! op item get "${OP_OPENSUBTITLES_ENTRY}" --vault "${ONEPASSWORD_VAULT}" >/dev/null 2>&1; then
+  echo "⚠️ OpenSubtitles credentials not found in 1Password"
+  echo "Please create '${OP_OPENSUBTITLES_ENTRY}' entry manually"
+  echo "Skipping OpenSubtitles credential setup"
+else
+  echo "✅ Found OpenSubtitles credentials in 1Password"
+
+  # Retrieve OpenSubtitles details from 1Password
+  echo "Retrieving OpenSubtitles details from 1Password..."
+  OPENSUBTITLES_USERNAME=$(op item get "${OP_OPENSUBTITLES_ENTRY}" --vault "${ONEPASSWORD_VAULT}" --fields username)
+  OPENSUBTITLES_PASSWORD=$(op read "op://${ONEPASSWORD_VAULT}/${OP_OPENSUBTITLES_ENTRY}/password")
+
+  # Store OpenSubtitles credentials in external keychain (username:password format)
+  store_external_keychain_credential \
+    "opensubtitles-${SERVER_NAME_LOWER}" \
+    "${SERVER_NAME_LOWER}" \
+    "${OPENSUBTITLES_USERNAME}:${OPENSUBTITLES_PASSWORD}" \
+    "Mac Server Setup - OpenSubtitles Credentials"
+
+  # Clear credentials from memory
+  unset OPENSUBTITLES_USERNAME OPENSUBTITLES_PASSWORD
+  echo "✅ OpenSubtitles credentials stored in Keychain"
 fi
 
 # Set up Dropbox synchronization if configured

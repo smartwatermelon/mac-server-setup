@@ -497,12 +497,50 @@ configure_filebot_preferences() {
   echo "✅ FileBot preferences configured"
   log "FileBot preferences configured successfully"
 
-  # Note: OpenSubtitles login configuration is handled separately if credentials are available
-  # This would require secure credential storage and is not implemented in this version
-  echo ""
-  echo "📝 Note: For subtitle downloads, configure OpenSubtitles credentials manually in FileBot"
-  echo "   Or add OpenSubtitles credentials to configuration system for automation"
-  log "OpenSubtitles configuration requires manual setup or credential system enhancement"
+  # Configure OpenSubtitles credentials if available
+  configure_opensubtitles_login
+}
+
+# Function to configure OpenSubtitles login
+configure_opensubtitles_login() {
+  log "Configuring OpenSubtitles login for operator"
+
+  # Try to retrieve OpenSubtitles credentials from external keychain
+  echo "🔐 Configuring OpenSubtitles login..."
+
+  local opensubtitles_credentials
+  if opensubtitles_credentials=$(security find-generic-password -s "opensubtitles-${HOSTNAME_LOWER}" -a "${HOSTNAME_LOWER}" -w 2>/dev/null); then
+    echo "✅ Found OpenSubtitles credentials in keychain"
+    log "Retrieved OpenSubtitles credentials from external keychain"
+
+    # Split username:password format
+    local opensubtitles_username opensubtitles_password
+    opensubtitles_username="${opensubtitles_credentials%%:*}"
+    opensubtitles_password="${opensubtitles_credentials#*:}"
+
+    # Configure OpenSubtitles login in FileBot
+    # Format: username<TAB>password
+    local credentials_value="${opensubtitles_username}	${opensubtitles_password}"
+
+    if sudo -p "[FileBot setup] Enter password to configure OpenSubtitles login: " \
+      -iu "${OPERATOR_USERNAME}" \
+      defaults write net.filebot.login "/net/filebot/login/OpenSubtitles" \
+      -string "${credentials_value}"; then
+      check_success "OpenSubtitles login configuration"
+      echo "✅ OpenSubtitles login configured for automatic subtitle downloads"
+      log "OpenSubtitles credentials configured successfully"
+    else
+      collect_error "Failed to configure OpenSubtitles login"
+    fi
+
+    # Clear credentials from memory
+    unset opensubtitles_credentials opensubtitles_username opensubtitles_password credentials_value
+  else
+    collect_warning "OpenSubtitles credentials not found in keychain - skipping automatic login setup"
+    echo "📝 Note: For subtitle downloads, configure OpenSubtitles credentials manually in FileBot"
+    echo "   Or add OpenSubtitles credentials to 1Password configuration system"
+    log "OpenSubtitles credentials not available - manual setup required"
+  fi
 }
 
 # Run main function
