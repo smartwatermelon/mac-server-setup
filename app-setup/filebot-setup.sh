@@ -505,13 +505,13 @@ configure_filebot_preferences() {
 configure_opensubtitles_login() {
   log "Configuring OpenSubtitles login for operator"
 
-  # Try to retrieve OpenSubtitles credentials from external keychain
+  # Try to retrieve OpenSubtitles credentials from login keychain
   echo "🔐 Configuring OpenSubtitles login..."
 
   local opensubtitles_credentials
   if opensubtitles_credentials=$(security find-generic-password -s "opensubtitles-${HOSTNAME_LOWER}" -a "${HOSTNAME_LOWER}" -w 2>/dev/null); then
     echo "✅ Found OpenSubtitles credentials in keychain"
-    log "Retrieved OpenSubtitles credentials from external keychain"
+    log "Retrieved OpenSubtitles credentials from login keychain"
 
     # Split username:password format
     local opensubtitles_username opensubtitles_password

@@ -293,6 +293,90 @@ run_setup_script() {
   return "${exit_code}"
 }
 
+# Function to set up keychain access password caching
+setup_keychain_access() {
+  # Check if any scripts need keychain access
+  local scripts_need_keychain=false
+  local -a keychain_scripts=()
+
+  # Check which scripts in our execution plan need keychain access
+  for script in "${sorted_scripts[@]}"; do
+    case "${script}" in
+      "plex-setup.sh" | "filebot-setup.sh")
+        scripts_need_keychain=true
+        keychain_scripts+=("${script}")
+        ;;
+      *)
+        # Script doesn't need keychain access
+        ;;
+    esac
+  done
+
+  # Only set up password caching if needed
+  if [[ "${scripts_need_keychain}" == true ]]; then
+    section "Keychain Access Setup"
+    echo "🔐 The following scripts need access to stored credentials:"
+    for script in "${keychain_scripts[@]}"; do
+      case "${script}" in
+        "plex-setup.sh")
+          echo "  • ${script} - Plex NAS credentials for media mounting"
+          ;;
+        "filebot-setup.sh")
+          echo "  • ${script} - OpenSubtitles credentials for subtitle downloads"
+          ;;
+        *)
+          echo "  • ${script} - Requires keychain access"
+          ;;
+      esac
+    done
+    echo ""
+
+    # Load keychain credentials from manifest
+    local keychain_manifest="${SCRIPT_DIR}/config/keychain_manifest.conf"
+    if [[ -f "${keychain_manifest}" ]]; then
+      # Set defaults before sourcing
+      KEYCHAIN_PASSWORD=""
+      EXTERNAL_KEYCHAIN="mac-server-setup"
+
+      # shellcheck source=/dev/null
+      source "${keychain_manifest}"
+
+      echo "🔍 Testing external keychain access..."
+
+      # Test keychain unlock
+      if security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${EXTERNAL_KEYCHAIN}" 2>/dev/null; then
+        echo "✅ External keychain unlocked - credentials available to setup scripts"
+        log "External keychain access configured for ${keychain_scripts[*]}"
+
+        # Export keychain info for child scripts
+        export APP_SETUP_KEYCHAIN_PASSWORD="${KEYCHAIN_PASSWORD}"
+        export APP_SETUP_EXTERNAL_KEYCHAIN="${EXTERNAL_KEYCHAIN}"
+
+        # Set up cleanup trap
+        trap 'cleanup_keychain_access' EXIT
+      else
+        collect_warning "Failed to unlock external keychain - scripts will prompt individually"
+        log "External keychain access failed - falling back to individual prompts"
+      fi
+    else
+      collect_warning "Keychain manifest not found - scripts will prompt individually"
+      echo "⚠️ External keychain manifest not found at: ${keychain_manifest}"
+      echo "   Scripts will handle credential access individually"
+      log "Keychain manifest missing - falling back to individual prompts"
+    fi
+
+    echo ""
+  else
+    log "No scripts require keychain access - skipping keychain setup"
+  fi
+}
+
+# Function to clean up keychain access artifacts
+cleanup_keychain_access() {
+  # Clean up environment variables containing sensitive keychain information
+  unset APP_SETUP_KEYCHAIN_PASSWORD APP_SETUP_EXTERNAL_KEYCHAIN
+}
+
 # Main execution
 main() {
   section "App Setup Orchestrator Starting"
@@ -352,6 +436,9 @@ main() {
         ;;
     esac
   fi
+
+  # Set up password caching for keychain access
+  setup_keychain_access
 
   # Execute scripts in order
   local failed_scripts=0

@@ -269,8 +269,12 @@ get_keychain_credential() {
   local credential
 
   # Ensure keychain is unlocked before accessing
-  if ! security unlock-keychain -p "${ADMINISTRATOR_PASSWORD}" 2>/dev/null; then
-    collect_error "Failed to unlock keychain for credential retrieval"
+  # Try cached keychain password first, fall back to administrator password
+  local keychain_password="${APP_SETUP_KEYCHAIN_PASSWORD:-${ADMINISTRATOR_PASSWORD}}"
+  local keychain_name="${APP_SETUP_EXTERNAL_KEYCHAIN:-mac-server-setup}"
+
+  if ! security unlock-keychain -p "${keychain_password}" "${keychain_name}" 2>/dev/null; then
+    collect_error "Failed to unlock keychain '${keychain_name}' for credential retrieval"
     return 1
   fi
 
