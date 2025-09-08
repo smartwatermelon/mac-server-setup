@@ -60,6 +60,7 @@ if [[ -f "${CONFIG_FILE}" ]]; then
   # shellcheck source=/dev/null
   source "${CONFIG_FILE}"
   OPERATOR_USERNAME="${OPERATOR_USERNAME:-operator}"
+  NAS_SHARE_NAME="${NAS_SHARE_NAME:-Media}"
 else
   echo "❌ Error: Configuration file not found at ${CONFIG_FILE}"
   exit 1
@@ -73,7 +74,7 @@ HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
 
 # Transmission configuration paths (matching original configuration)
-TRANSMISSION_DOWNLOADS_DIR="${OPERATOR_HOME}/.local/mnt/DSMedia/Media/Torrents/pending-move"
+TRANSMISSION_DOWNLOADS_DIR="${OPERATOR_HOME}/.local/mnt/${NAS_SHARE_NAME}/Media/Torrents/pending-move"
 TRANSMISSION_INCOMPLETE_DIR="${OPERATOR_HOME}/Downloads"
 TRANSMISSION_DONE_SCRIPT="/usr/local/bin/transmission-done.sh"
 
@@ -334,14 +335,6 @@ log "✅ LaunchAgent creation completed successfully"
 # Set proper permissions on LaunchAgent
 sudo chown "${OPERATOR_USERNAME}:staff" "${LAUNCHAGENT_PLIST}"
 sudo chmod 644 "${LAUNCHAGENT_PLIST}"
-
-# Load LaunchAgent for operator
-log "Loading LaunchAgent for operator..."
-if sudo -iu "${OPERATOR_USERNAME}" launchctl load "${LAUNCHAGENT_PLIST}" 2>/dev/null; then
-  log "✅ LaunchAgent loaded completed successfully"
-else
-  log "LaunchAgent will be loaded on next operator login"
-fi
 
 # Setup complete
 section "Setup Complete"
