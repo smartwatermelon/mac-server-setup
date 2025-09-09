@@ -187,11 +187,12 @@ setup_logrotate() {
 # Task: unload LaunchAgent
 unload_launchagent() {
   log "Unloading LaunchAgent..."
-  local LaunchAgent="com.${HOSTNAME_LOWER}.operator-first-login.plist"
-  if launchctl unload "${HOME}/Library/LaunchAgents/${LaunchAgent}"; then
-    log "Unloaded LaunchAgent"
+  local launch_agents_dir="${HOME}/Library/LaunchAgents"
+  local launch_agent="com.${HOSTNAME_LOWER}.operator-first-login.plist"
+  if mv "${launch_agents_dir}/${launch_agent}" "${launch_agents_dir}/${launch_agent}.unloaded"; then
+    log "Renamed LaunchAgent"
   else
-    log "Warning: Failed to unload LaunchAgent"
+    log "Warning: Failed to rename LaunchAgent; it will probably reload on next reboot"
   fi
 }
 
