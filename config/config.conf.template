@@ -39,5 +39,9 @@ FILEBOT_LICENSE_FILE=""
   # Absolute path on the source machine (where you are running prep-airdrop)
   # to your FileBot license file
 
+# Catch feeds URL (optional)
+CATCH_FEEDS_URL=""
+  # from ShowRSS or your preferred RSS provider
+
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME
