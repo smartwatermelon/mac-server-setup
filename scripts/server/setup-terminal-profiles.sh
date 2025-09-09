@@ -244,7 +244,7 @@ import_iterm2_preferences_for_user() {
     return 1
   fi
 
-  log "Importing iTerm2 preferences for user: ${username}"
+  log "Configuring iTerm2 preferences for user: ${username}"
 
   # Check if iTerm2 is installed
   if ! command -v it2check >/dev/null 2>&1; then
@@ -252,27 +252,41 @@ import_iterm2_preferences_for_user() {
     return 0
   fi
 
-  # Import preferences for the specified user
   if [[ "${username}" == "${ADMIN_USERNAME}" ]]; then
-    # Current user - import directly
+    # Import for current admin user - direct import
     if defaults import com.googlecode.iterm2 "${preferences_file}"; then
-      log "Successfully imported iTerm2 preferences for current user"
-    else
-      collect_error "Failed to import iTerm2 preferences for current user"
-      return 1
-    fi
-  else
-    # Different user - use sudo
-    if sudo -iu "${username}" defaults import com.googlecode.iterm2 "${preferences_file}"; then
       log "Successfully imported iTerm2 preferences for ${username}"
+      log "Restart iTerm2 to see changes"
+      return 0
     else
       collect_error "Failed to import iTerm2 preferences for ${username}"
       return 1
     fi
-  fi
+  else
+    # For operator user - copy preferences file to their config directory
+    # Import will happen during operator-first-login.sh
+    local operator_home="/Users/${username}"
+    local operator_config_dir="${operator_home}/.config/iterm2"
+    local operator_preferences_file
+    operator_preferences_file="${operator_config_dir}/$(basename "${preferences_file}")"
 
-  log "iTerm2 preferences imported - restart iTerm2 to see changes"
-  return 0
+    # Create config directory with proper ownership
+    if ! sudo -iu "${username}" mkdir -p "${operator_config_dir}"; then
+      collect_error "Failed to create iTerm2 config directory for ${username}"
+      return 1
+    fi
+
+    # Copy preferences file to operator's config directory
+    if sudo cp "${preferences_file}" "${operator_preferences_file}" \
+      && sudo chown "${username}:staff" "${operator_preferences_file}"; then
+      log "Successfully copied iTerm2 preferences to ${operator_preferences_file}"
+      log "Preferences will be imported during operator first login"
+      return 0
+    else
+      collect_error "Failed to copy iTerm2 preferences file for ${username}"
+      return 1
+    fi
+  fi
 }
 
 # Check if terminal applications are running

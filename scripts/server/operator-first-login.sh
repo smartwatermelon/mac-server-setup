@@ -215,6 +215,36 @@ setup_terminal_profile() {
   fi
 }
 
+# Task: Configure iTerm2 preferences
+setup_iterm2_preferences() {
+  log "Setting up iTerm2 preferences..."
+
+  local iterm2_config_dir="${HOME}/.config/iterm2"
+  local preferences_file="${iterm2_config_dir}/iterm2.plist"
+
+  # Check if preferences file exists
+  if [[ ! -f "${preferences_file}" ]]; then
+    log "No iTerm2 preferences found at ${preferences_file} - skipping iTerm2 setup"
+    return 0
+  fi
+
+  # Check if iTerm2 is installed
+  if ! command -v it2check >/dev/null 2>&1; then
+    log "iTerm2 not installed - skipping preferences import"
+    return 0
+  fi
+
+  log "Importing iTerm2 preferences..."
+
+  # Import preferences using defaults import
+  if defaults import com.googlecode.iterm2 "${preferences_file}"; then
+    log "Successfully imported iTerm2 preferences"
+    log "iTerm2 preferences will be active when iTerm2 is next launched"
+  else
+    log "Warning: Failed to import iTerm2 preferences"
+  fi
+}
+
 # Task: Start logrotate service
 setup_logrotate() {
   log "Starting logrotate service for operator user..."
@@ -266,6 +296,7 @@ main() {
   # Run setup tasks
   setup_dock
   setup_terminal_profile
+  setup_iterm2_preferences
   setup_logrotate
   unload_launchagent
 
