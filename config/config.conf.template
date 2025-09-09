@@ -48,5 +48,13 @@ CATCH_HISTORY_CUTOFF_DAYS="7"
   # Number of days back to prevent re-downloading old torrents
   # Set to 0 to disable history cutoff (will download all available)
 
+# Terminal configuration (optional)
+# These settings improve terminal accessibility with better colors and fonts
+TERMINAL_PROFILE_FILE=""  # Terminal.app profile file (.terminal format)
+USE_ITERM2="false"        # Set to "true" to copy complete iTerm2 preferences from development machine
+  # When USE_ITERM2 is "true", your entire iTerm2 configuration (profiles, settings, etc.)
+  # will be copied to the server during prep-airdrop and imported during first-boot
+  # Set TERMINAL_PROFILE_FILE for Terminal.app profile, or leave empty to skip
+
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME

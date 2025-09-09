@@ -1247,6 +1247,17 @@ else
 fi
 
 #
+# TERMINAL PROFILE CONFIGURATION - delegated to module
+#
+
+# Terminal profile configuration - delegated to module
+if [[ "${FORCE}" == true ]]; then
+  "${SETUP_DIR}/scripts/setup-terminal-profiles.sh" --force
+else
+  "${SETUP_DIR}/scripts/setup-terminal-profiles.sh"
+fi
+
+#
 # LOG ROTATION SETUP - delegated to module
 #
 
