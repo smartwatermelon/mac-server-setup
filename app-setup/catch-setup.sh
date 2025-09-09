@@ -162,7 +162,8 @@ if [[ -z "${CATCH_FEEDS_URL:-}" ]]; then
 fi
 
 # Configure Dropbox sync path with fallback
-DROPBOX_PATH="${DROPBOX_LOCAL_PATH:-${HOME}/.local/sync/dropbox}"
+OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
+DROPBOX_PATH="${DROPBOX_LOCAL_PATH:-${OPERATOR_HOME}/.local/sync/dropbox}"
 
 # Install Catch via Homebrew if not already installed
 install_catch() {
@@ -185,8 +186,6 @@ install_catch() {
 # Configure Catch preferences
 configure_catch_preferences() {
   section "Configuring Catch Preferences"
-
-  local operator_home="/Users/${OPERATOR_USERNAME}"
 
   log "Configuring Catch preferences for operator: ${OPERATOR_USERNAME}"
   log "Save path: ${DROPBOX_PATH}"
@@ -220,8 +219,7 @@ configure_catch_preferences() {
 create_launch_agent() {
   section "Creating LaunchAgent for Auto-Start"
 
-  local operator_home="/Users/${OPERATOR_USERNAME}"
-  local launchagent_dir="${operator_home}/Library/LaunchAgents"
+  local launchagent_dir="${OPERATOR_HOME}/Library/LaunchAgents"
   local launchagent_plist="${launchagent_dir}/com.${HOSTNAME_LOWER}.catch.plist"
 
   log "Creating LaunchAgent: ${launchagent_plist}"
