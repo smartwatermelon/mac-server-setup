@@ -39,5 +39,14 @@ FILEBOT_LICENSE_FILE=""
   # Absolute path on the source machine (where you are running prep-airdrop)
   # to your FileBot license file
 
+# Catch feeds URL (optional)
+CATCH_FEEDS_URL=""
+  # from ShowRSS or your preferred RSS provider
+
+# Catch history cutoff (optional)
+CATCH_HISTORY_CUTOFF_DAYS="7"
+  # Number of days back to prevent re-downloading old torrents
+  # Set to 0 to disable history cutoff (will download all available)
+
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME
