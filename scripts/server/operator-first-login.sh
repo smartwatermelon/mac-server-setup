@@ -173,6 +173,78 @@ setup_dock() {
   log "Dock setup completed"
 }
 
+# Task: Configure Terminal profile
+setup_terminal_profile() {
+  log "Setting up Terminal profile..."
+
+  local terminal_config_dir="${HOME}/.config/terminal"
+  local profile_file="${terminal_config_dir}/Orangebrew.terminal"
+
+  # Check if profile file exists
+  if [[ ! -f "${profile_file}" ]]; then
+    log "No Terminal profile found at ${profile_file} - skipping terminal setup"
+    return 0
+  fi
+
+  # Extract profile name
+  local profile_name
+  if ! profile_name=$(plutil -extract name raw "${profile_file}" 2>/dev/null); then
+    log "Warning: Could not extract profile name from ${profile_file}"
+    return 0
+  fi
+
+  log "Registering Terminal profile '${profile_name}'..."
+
+  # Step 1: Open the profile file to register it with Terminal.app
+  if open "${profile_file}"; then
+    log "Successfully opened Terminal profile file"
+
+    # Step 2: Set as default window settings
+    defaults write com.apple.Terminal "Default Window Settings" -string "${profile_name}"
+
+    # Step 3: Set as startup window settings
+    defaults write com.apple.Terminal "Startup Window Settings" -string "${profile_name}"
+
+    # Step 4: Close the Terminal window that was opened
+    sleep 2 # Brief pause to let Terminal register the profile
+    killall Terminal 2>/dev/null || true
+
+    log "Terminal profile '${profile_name}' configured successfully"
+  else
+    log "Warning: Failed to open Terminal profile file"
+  fi
+}
+
+# Task: Configure iTerm2 preferences
+setup_iterm2_preferences() {
+  log "Setting up iTerm2 preferences..."
+
+  local iterm2_config_dir="${HOME}/.config/iterm2"
+  local preferences_file="${iterm2_config_dir}/iterm2.plist"
+
+  # Check if preferences file exists
+  if [[ ! -f "${preferences_file}" ]]; then
+    log "No iTerm2 preferences found at ${preferences_file} - skipping iTerm2 setup"
+    return 0
+  fi
+
+  # Check if iTerm2 is installed
+  if [[ ! -f /Applications/iTerm.app/Contents/Resources/utilities/it2check ]]; then
+    log "iTerm2 not installed - skipping preferences import"
+    return 0
+  fi
+
+  log "Importing iTerm2 preferences..."
+
+  # Import preferences using defaults import
+  if defaults import com.googlecode.iterm2 "${preferences_file}"; then
+    log "Successfully imported iTerm2 preferences"
+    log "iTerm2 preferences will be active when iTerm2 is next launched"
+  else
+    log "Warning: Failed to import iTerm2 preferences"
+  fi
+}
+
 # Task: Start logrotate service
 setup_logrotate() {
   log "Starting logrotate service for operator user..."
@@ -187,11 +259,15 @@ setup_logrotate() {
 # Task: unload LaunchAgent
 unload_launchagent() {
   log "Unloading LaunchAgent..."
-  local LaunchAgent="com.${HOSTNAME_LOWER}.operator-first-login.plist"
-  if launchctl unload "${HOME}/Library/LaunchAgents/${LaunchAgent}"; then
-    log "Unloaded LaunchAgent"
+  local launch_agents_dir="${HOME}/Library/LaunchAgents"
+  local launch_agent="com.${HOSTNAME_LOWER}.operator-first-login.plist"
+  local operator_config_dir
+  operator_config_dir="$(dirname "${CONFIG_FILE}")"
+  if mv "${launch_agents_dir}/${launch_agent}" "${operator_config_dir}"; then
+    log "Moved LaunchAgent to ${operator_config_dir}"
+    log "(Move back to ${launch_agents_dir} to re-run on next login)"
   else
-    log "Warning: Failed to unload LaunchAgent"
+    log "Warning: Failed to rename LaunchAgent; it will probably reload on next login"
   fi
 }
 
@@ -222,6 +298,8 @@ main() {
 
   # Run setup tasks
   setup_dock
+  setup_terminal_profile
+  setup_iterm2_preferences
   setup_logrotate
   unload_launchagent
 

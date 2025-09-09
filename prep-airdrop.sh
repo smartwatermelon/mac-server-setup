@@ -772,6 +772,32 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
     echo "Configuration file copied to setup package"
   fi
 
+  # Copy terminal profile files if specified in configuration
+  if [[ -n "${TERMINAL_PROFILE_FILE:-}" ]]; then
+    terminal_src="${CONFIG_DIR}/${TERMINAL_PROFILE_FILE}"
+    if [[ -f "${terminal_src}" ]]; then
+      copy_with_manifest "${terminal_src}" "config/${TERMINAL_PROFILE_FILE}" "OPTIONAL"
+      echo "Terminal profile copied to deployment package: ${TERMINAL_PROFILE_FILE}"
+    else
+      echo "Warning: Terminal profile file not found: ${terminal_src}"
+    fi
+  fi
+
+  # Export iTerm2 preferences if requested
+  if [[ "${USE_ITERM2:-false}" == "true" ]]; then
+    if command -v it2check >/dev/null 2>&1; then
+      echo "Exporting iTerm2 preferences..."
+      if defaults export com.googlecode.iterm2 "${OUTPUT_PATH}/config/iterm2.plist"; then
+        add_to_manifest "config/iterm2.plist" "OPTIONAL"
+        echo "iTerm2 preferences exported to deployment package"
+      else
+        echo "Warning: Failed to export iTerm2 preferences"
+      fi
+    else
+      echo "Warning: USE_ITERM2 is enabled but iTerm2 is not installed (it2check not found)"
+    fi
+  fi
+
   echo "Scripts copied from local source directory"
 else
   collect_error "No script source found. Please provide a local script source directory."

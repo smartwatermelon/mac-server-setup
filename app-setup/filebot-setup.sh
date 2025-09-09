@@ -74,7 +74,7 @@ HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
 
 # FileBot configuration paths
-FILEBOT_CONFIG_DIR="${OPERATOR_HOME}/.local/config/filebot"
+FILEBOT_CONFIG_DIR="${OPERATOR_HOME}/.config/filebot"
 FILEBOT_MEDIA_PATH="${OPERATOR_HOME}/.local/mnt/${NAS_SHARE_NAME}/Media"
 
 # Parse command line arguments

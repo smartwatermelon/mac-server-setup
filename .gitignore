@@ -3,6 +3,8 @@
 .AppleDouble
 .LSOverride
 Icon
+config/*.terminal
+config/iterm2*
 
 # Thumbnails
 ._*
