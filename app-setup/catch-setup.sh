@@ -208,6 +208,33 @@ configure_catch_preferences() {
     # Use direct array-add with quoted dictionary syntax (the only approach that works)
     sudo -iu "${OPERATOR_USERNAME}" defaults write "${prefs_plist}" feeds -array-add \
       "{ name = ShowRSS; url = \"${CATCH_FEEDS_URL}\"; }"
+
+    # Configure history cutoff to prevent re-downloading old torrents
+    local cutoff_days="${CATCH_HISTORY_CUTOFF_DAYS:-7}"
+    if [[ "${cutoff_days}" -gt 0 ]]; then
+      log "Setting up history cutoff: ${cutoff_days} days back"
+
+      # Calculate cutoff date (N days ago at midnight UTC)
+      local cutoff_date
+      if command -v gdate >/dev/null 2>&1; then
+        # Use GNU date if available (from coreutils via Homebrew)
+        cutoff_date=$(gdate -u -d "${cutoff_days} days ago" '+%Y-%m-%d 00:00:00 +0000')
+      else
+        # Fallback to macOS date (limited functionality)
+        cutoff_date=$(date -u -v-"${cutoff_days}d" '+%Y-%m-%d 00:00:00 +0000')
+      fi
+
+      log "History cutoff date: ${cutoff_date}"
+
+      # Create a dummy history entry to establish cutoff - Catch will not re-download
+      # anything it thinks it has already processed before this date
+      sudo -iu "${OPERATOR_USERNAME}" defaults write "${prefs_plist}" history -array-add \
+        "{ date = \"${cutoff_date}\"; feed = { name = ShowRSS; url = \"${CATCH_FEEDS_URL}\"; }; showName = \"SETUP_CUTOFF\"; title = \"Setup cutoff - preventing downloads before ${cutoff_date}\"; url = \"magnet:?xt=urn:btih:0000000000000000000000000000000000000000\"; }"
+
+      log "✅ History cutoff configured - will not re-download content older than ${cutoff_days} days"
+    else
+      log "History cutoff disabled (CATCH_HISTORY_CUTOFF_DAYS=0) - may download all available content"
+    fi
   else
     log "No CATCH_FEEDS_URL configured - skipping feed setup"
   fi
@@ -274,6 +301,12 @@ main() {
     echo "  • Save path: ${DROPBOX_PATH}"
     if [[ -n "${CATCH_FEEDS_URL:-}" ]]; then
       echo "  • RSS feed: ${CATCH_FEEDS_URL}"
+      local cutoff_days="${CATCH_HISTORY_CUTOFF_DAYS:-7}"
+      if [[ "${cutoff_days}" -gt 0 ]]; then
+        echo "  • History cutoff: ${cutoff_days} days (prevents re-downloading old content)"
+      else
+        echo "  • History cutoff: Disabled (may download all available content)"
+      fi
     else
       echo "  • RSS feed: Not configured (can be added manually)"
     fi
