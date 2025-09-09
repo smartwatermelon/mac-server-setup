@@ -193,6 +193,9 @@ configure_catch_preferences() {
   # Create the preferences plist
   local prefs_plist="org.giorgiocalderolla.Catch"
 
+  # Reset any existing preferences
+  sudo -iu "${OPERATOR_USERNAME}" defaults delete "${prefs_plist}" || true
+
   # Set basic preferences
   sudo -iu "${OPERATOR_USERNAME}" defaults write "${prefs_plist}" NSNavLastRootDirectory -string "${DROPBOX_PATH}"
   sudo -iu "${OPERATOR_USERNAME}" defaults write "${prefs_plist}" savePath -string "${DROPBOX_PATH}"
