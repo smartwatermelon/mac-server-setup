@@ -214,8 +214,8 @@ import_terminal_profile_for_user() {
     fi
   else
     # Import for operator user using sudo
-    if sudo -u "${username}" defaults import com.apple.Terminal "${temp_profile}" \
-      && sudo -u "${username}" defaults write com.apple.Terminal "Default Window Settings" "${profile_name}"; then
+    if sudo -iu "${username}" defaults import com.apple.Terminal "${temp_profile}" \
+      && sudo -iu "${username}" defaults write com.apple.Terminal "Default Window Settings" "${profile_name}"; then
       log "Successfully imported Terminal profile for ${username}"
     else
       collect_error "Failed to import Terminal profile for ${username}"
@@ -258,7 +258,7 @@ import_iterm2_preferences_for_user() {
     fi
   else
     # Different user - use sudo
-    if sudo -u "${username}" defaults import com.googlecode.iterm2 "${preferences_file}"; then
+    if sudo -iu "${username}" defaults import com.googlecode.iterm2 "${preferences_file}"; then
       log "Successfully imported iTerm2 preferences for ${username}"
     else
       collect_error "Failed to import iTerm2 preferences for ${username}"
