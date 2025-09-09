@@ -42,7 +42,6 @@ FILEBOT_LICENSE_FILE=""
 # Catch feeds URL (optional)
 CATCH_FEEDS_URL=""
   # from ShowRSS or your preferred RSS provider
-
 # Catch history cutoff (optional)
 CATCH_HISTORY_CUTOFF_DAYS="7"
   # Number of days back to prevent re-downloading old torrents
