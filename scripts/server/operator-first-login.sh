@@ -173,6 +173,48 @@ setup_dock() {
   log "Dock setup completed"
 }
 
+# Task: Configure Terminal profile
+setup_terminal_profile() {
+  log "Setting up Terminal profile..."
+
+  local terminal_config_dir="${HOME}/.config/terminal"
+  local profile_file="${terminal_config_dir}/Orangebrew.terminal"
+
+  # Check if profile file exists
+  if [[ ! -f "${profile_file}" ]]; then
+    log "No Terminal profile found at ${profile_file} - skipping terminal setup"
+    return 0
+  fi
+
+  # Extract profile name
+  local profile_name
+  if ! profile_name=$(plutil -extract name raw "${profile_file}" 2>/dev/null); then
+    log "Warning: Could not extract profile name from ${profile_file}"
+    return 0
+  fi
+
+  log "Registering Terminal profile '${profile_name}'..."
+
+  # Step 1: Open the profile file to register it with Terminal.app
+  if open "${profile_file}"; then
+    log "Successfully opened Terminal profile file"
+
+    # Step 2: Set as default window settings
+    defaults write com.apple.Terminal "Default Window Settings" -string "${profile_name}"
+
+    # Step 3: Set as startup window settings
+    defaults write com.apple.Terminal "Startup Window Settings" -string "${profile_name}"
+
+    # Step 4: Close the Terminal window that was opened
+    sleep 2 # Brief pause to let Terminal register the profile
+    killall Terminal 2>/dev/null || true
+
+    log "Terminal profile '${profile_name}' configured successfully"
+  else
+    log "Warning: Failed to open Terminal profile file"
+  fi
+}
+
 # Task: Start logrotate service
 setup_logrotate() {
   log "Starting logrotate service for operator user..."
@@ -223,6 +265,7 @@ main() {
 
   # Run setup tasks
   setup_dock
+  setup_terminal_profile
   setup_logrotate
   unload_launchagent
 

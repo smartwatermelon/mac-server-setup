@@ -192,41 +192,46 @@ import_terminal_profile_for_user() {
     return 1
   fi
 
-  log "Importing Terminal profile '${profile_name}' for user: ${username}"
+  log "Configuring Terminal profile '${profile_name}' for user: ${username}"
 
-  # Create temporary profile file
-  local temp_profile="/tmp/terminal-profile-${username}-$$.plist"
-  if ! cp "${profile_file}" "${temp_profile}"; then
-    collect_error "Failed to create temporary profile file for ${username}"
-    return 1
-  fi
-
-  # Import the profile using sudo if not current user
   if [[ "${username}" == "${ADMIN_USERNAME}" ]]; then
-    # Import for current admin user
-    if defaults import com.apple.Terminal "${temp_profile}" \
-      && defaults write com.apple.Terminal "Default Window Settings" "${profile_name}"; then
+    # Import for current admin user - direct registration
+    if open "${profile_file}"; then
+      # Set as default and startup profile
+      defaults write com.apple.Terminal "Default Window Settings" -string "${profile_name}"
+      defaults write com.apple.Terminal "Startup Window Settings" -string "${profile_name}"
       log "Successfully imported Terminal profile for ${username}"
+      log "New profile will be active in next Terminal session"
+      return 0
     else
-      collect_error "Failed to import Terminal profile for ${username}"
-      rm -f "${temp_profile}"
+      collect_error "Failed to open Terminal profile file for ${username}"
       return 1
     fi
   else
-    # Import for operator user using sudo
-    if sudo -iu "${username}" defaults import com.apple.Terminal "${temp_profile}" \
-      && sudo -iu "${username}" defaults write com.apple.Terminal "Default Window Settings" "${profile_name}"; then
-      log "Successfully imported Terminal profile for ${username}"
+    # For operator user - copy profile file to their config directory
+    # Registration will happen during operator-first-login.sh
+    local operator_home="/Users/${username}"
+    local operator_config_dir="${operator_home}/.config/terminal"
+    local operator_profile_file
+    operator_profile_file="${operator_config_dir}/$(basename "${profile_file}")"
+
+    # Create config directory with proper ownership
+    if ! sudo -iu "${username}" mkdir -p "${operator_config_dir}"; then
+      collect_error "Failed to create Terminal config directory for ${username}"
+      return 1
+    fi
+
+    # Copy profile file to operator's config directory
+    if sudo cp "${profile_file}" "${operator_profile_file}" \
+      && sudo chown "${username}:staff" "${operator_profile_file}"; then
+      log "Successfully copied Terminal profile to ${operator_profile_file}"
+      log "Profile will be registered during operator first login"
+      return 0
     else
-      collect_error "Failed to import Terminal profile for ${username}"
-      rm -f "${temp_profile}"
+      collect_error "Failed to copy Terminal profile file for ${username}"
       return 1
     fi
   fi
-
-  # Clean up
-  rm -f "${temp_profile}"
-  return 0
 }
 
 # Import iTerm2 preferences for a user using defaults import
