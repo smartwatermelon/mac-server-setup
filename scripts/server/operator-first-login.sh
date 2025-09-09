@@ -229,7 +229,7 @@ setup_iterm2_preferences() {
   fi
 
   # Check if iTerm2 is installed
-  if ! command -v it2check >/dev/null 2>&1; then
+  if [[ ! -f /Applications/iTerm.app/Contents/Resources/utilities/it2check ]]; then
     log "iTerm2 not installed - skipping preferences import"
     return 0
   fi
@@ -261,10 +261,13 @@ unload_launchagent() {
   log "Unloading LaunchAgent..."
   local launch_agents_dir="${HOME}/Library/LaunchAgents"
   local launch_agent="com.${HOSTNAME_LOWER}.operator-first-login.plist"
-  if mv "${launch_agents_dir}/${launch_agent}" "${launch_agents_dir}/${launch_agent}.unloaded"; then
-    log "Renamed LaunchAgent"
+  local operator_config_dir
+  operator_config_dir="$(dirname "${CONFIG_FILE}")"
+  if mv "${launch_agents_dir}/${launch_agent}" "${operator_config_dir}"; then
+    log "Moved LaunchAgent to ${operator_config_dir}"
+    log "(Move back to ${launch_agents_dir} to re-run on next login)"
   else
-    log "Warning: Failed to rename LaunchAgent; it will probably reload on next reboot"
+    log "Warning: Failed to rename LaunchAgent; it will probably reload on next login"
   fi
 }
 
