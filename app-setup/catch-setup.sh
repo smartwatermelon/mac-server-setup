@@ -51,11 +51,8 @@ if [[ "${PWD}" != "${SCRIPT_DIR}" ]] || [[ "$(basename "${SCRIPT_DIR}")" != "app
   exit 1
 fi
 
-# Determine parent directory for config
-SETUP_DIR="$(dirname "${SCRIPT_DIR}")"
-
 # Load configuration
-CONFIG_FILE="${SETUP_DIR}/config/config.conf"
+CONFIG_FILE="${SCRIPT_DIR}/config/config.conf"
 if [[ ! -f "${CONFIG_FILE}" ]]; then
   echo "❌ Error: Configuration file not found: ${CONFIG_FILE}"
   echo ""
@@ -67,6 +64,11 @@ fi
 # Load configuration
 # shellcheck source=config/config.conf
 source "${CONFIG_FILE}"
+
+# Computed variables
+# Derive configuration variables
+HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
+HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 
 # Logging configuration
 APP_LOG_DIR="${HOME}/.local/state"
@@ -140,10 +142,6 @@ for arg in "$@"; do
   esac
 done
 
-# Computed variables
-HOSTNAME_LOWER="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
-HOSTNAME_LOWER="${HOSTNAME_LOWER,,}" # Convert to lowercase
-
 log "Starting Catch RSS reader setup for ${SERVER_NAME}"
 log "Operator account: ${OPERATOR_USERNAME}"
 log "Configuration loaded from: ${CONFIG_FILE}"
@@ -208,11 +206,9 @@ configure_catch_preferences() {
     log "Configuring RSS feed: ${CATCH_FEEDS_URL}"
 
     # Create feeds array - Catch expects an array of dictionaries
-    # First create an empty array
-    sudo -iu "${OPERATOR_USERNAME}" defaults write "${prefs_plist}" feeds -array
-    # Then add the feed as a dictionary
+    # Use direct array-add with quoted dictionary syntax (the only approach that works)
     sudo -iu "${OPERATOR_USERNAME}" defaults write "${prefs_plist}" feeds -array-add \
-      -dict name "ShowRSS" url "${CATCH_FEEDS_URL}"
+      "{ name = ShowRSS; url = \"${CATCH_FEEDS_URL}\"; }"
   else
     log "No CATCH_FEEDS_URL configured - skipping feed setup"
   fi
