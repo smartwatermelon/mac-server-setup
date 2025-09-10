@@ -1173,6 +1173,15 @@ main() {
               echo "   • Or type 'default' to use port 32400"
             fi
           done
+        else
+          # Enhanced logging for automation mode when custom port is declined
+          if [[ "${FORCE}" == "true" ]]; then
+            log "⚠️  Using default port 32400 in automation mode"
+            log "⚠️  If port conflicts occur with existing Plex servers:"
+            log "   • Rerun with: --custom-port 32401 (or other available port)"
+            log "   • Check for other Plex servers: dns-sd -B _plexmediasvr._tcp"
+            log "   • Or use run-app-setup.sh --only plex-setup.sh for interactive setup"
+          fi
         fi
       else
         # Custom port provided via command line - validate but don't retry interactively

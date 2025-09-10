@@ -24,6 +24,8 @@ The `plex-setup.sh` script automates native Plex Media Server deployment on macO
 - `--skip-mount`: Skip SMB mount setup
 - `--server-name NAME`: Set Plex server name (default: hostname)
 - `--migrate-from HOST`: Source hostname for Plex migration
+- `--custom-port PORT`: Set custom port for fresh installations (prevents conflicts)
+- `--password PASSWORD`: Provide administrator password for keychain operations
 
 **Examples**:
 
@@ -34,11 +36,17 @@ The `plex-setup.sh` script automates native Plex Media Server deployment on macO
 # Unattended fresh installation
 ./app-setup/plex-setup.sh --force --skip-migration
 
+# Automated setup via orchestrator (uses --force)
+./run-app-setup.sh
+
 # Setup with custom server name
 ./app-setup/plex-setup.sh --server-name "MyPlexServer"
 
 # Setup with automated migration
 ./app-setup/plex-setup.sh --migrate-from old-server.local
+
+# Force mode with custom port to prevent conflicts
+./app-setup/plex-setup.sh --force --custom-port 32401
 ```
 
 ## Configuration
@@ -146,8 +154,74 @@ The script supports both local migration (files in `~/plex-migration/`) and remo
 - **Router guidance**: Detailed instructions for updating port forwarding
 - **Zero conflicts**: Both servers can run simultaneously during transition
 
-**Future Enhancement:**
-A `--port` option for fresh installations is under consideration to allow manual port specification without migration.
+## Automation Mode (--force)
+
+When `plex-setup.sh` is run with the `--force` flag (including when called via `run-app-setup.sh`), it operates in automation mode with specific behavior:
+
+### Automatic Decision Making
+
+**✅ Auto-Confirmed (Default "y")**:
+
+- Initial setup confirmation: "Set up Plex Media Server?" → **YES**
+
+**❌ Auto-Declined (Default "n")**:
+
+- Migration prompt: "Do you want to migrate from an existing Plex server?" → **NO**
+- Custom port prompt: "Do you want to use a custom port instead of 32400?" → **NO**
+- Configuration migration: "Apply migrated Plex configuration?" → **NO**
+
+### Port Conflict Behavior
+
+**Important**: In `--force` mode, Plex setup **always uses port 32400** unless explicitly overridden:
+
+```bash
+# Default automation behavior - uses port 32400
+./run-app-setup.sh
+./app-setup/plex-setup.sh --force
+
+# Result: May conflict with existing Plex servers on network
+```
+
+**Enhanced Logging**: When `--force` mode skips custom port selection, the script provides detailed guidance:
+
+```text
+⚠️  Using default port 32400 in automation mode
+⚠️  If port conflicts occur with existing Plex servers:
+   • Rerun with: --custom-port 32401 (or other available port)
+   • Check for other Plex servers: dns-sd -B _plexmediasvr._tcp
+   • Or use run-app-setup.sh --only plex-setup.sh for interactive setup
+```
+
+### Resolving Port Conflicts in Automation
+
+**Option 1: Command-line override**:
+
+```bash
+./app-setup/plex-setup.sh --force --custom-port 32401
+```
+
+**Option 2: Interactive mode for single app**:
+
+```bash
+# Run only Plex setup interactively
+./run-app-setup.sh --only plex-setup.sh
+```
+
+**Option 3: Detect existing servers**:
+
+```bash
+# Check for Plex servers on network before automation
+dns-sd -B _plexmediasvr._tcp
+# If servers found, use --custom-port
+```
+
+### Still Interactive Elements
+
+Even in `--force` mode, these elements remain interactive:
+
+- **Administrator password**: Required for keychain access and sudo operations
+- **Server discovery**: When migration is manually specified via `--migrate-from`
+- **Plex application launch**: GUI application startup requires user session
 
 ## Manual Operations
 
