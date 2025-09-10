@@ -569,12 +569,53 @@ configure_plex_firewall() {
 test_ssh_connection() {
   local host="$1"
   log "Testing SSH connection to ${host}..."
+  log "SSH connection details:"
+  log "  Target host: '${host}'"
+  log "  SSH options: ConnectTimeout=5, BatchMode=yes"
+  log "  Command: ssh -o ConnectTimeout=5 -o BatchMode=yes '${host}' 'echo \"SSH_OK\"'"
 
-  if ssh -o ConnectTimeout=5 -o BatchMode=yes "${host}" 'echo "SSH_OK"' >/dev/null 2>&1; then
+  # Test basic connectivity first
+  log "Checking basic network connectivity to ${host}..."
+  if ping -c 1 -W 2000 "${host}" >/dev/null 2>&1; then
+    log "✅ Network ping to ${host} successful"
+  else
+    log "❌ Network ping to ${host} failed - host may be unreachable"
+  fi
+
+  # Test SSH with verbose output captured
+  log "Attempting SSH connection with detailed diagnostics..."
+  local ssh_output
+  ssh_output=$(ssh -o ConnectTimeout=5 -o BatchMode=yes -v "${host}" 'echo "SSH_OK"' 2>&1)
+  local ssh_result=$?
+
+  if [[ ${ssh_result} -eq 0 ]]; then
     log "✅ SSH connection to ${host} successful"
+    log "SSH command output: ${ssh_output}"
     return 0
   else
-    log "❌ SSH connection to ${host} failed"
+    log "❌ SSH connection to ${host} failed with exit code: ${ssh_result}"
+    log "SSH error details:"
+    echo "${ssh_output}" | while IFS= read -r line; do
+      log "  SSH: ${line}"
+    done
+
+    # Additional diagnostics
+    log "Additional SSH diagnostics:"
+    ssh_version=$(ssh -V 2>&1)
+    log "  SSH client version: ${ssh_version}"
+    log "  SSH config test: ssh -F /dev/null -o BatchMode=yes -o ConnectTimeout=5 '${host}' 'echo test' (would use system defaults)"
+
+    # Test different hostname formats
+    if [[ "${host}" == *".local" ]]; then
+      local base_host="${host%.local}"
+      log "  Trying without .local suffix: ${base_host}"
+      if ping -c 1 -W 2000 "${base_host}" >/dev/null 2>&1; then
+        log "  ✅ ${base_host} is reachable (try: --migrate-from ${base_host})"
+      else
+        log "  ❌ ${base_host} also unreachable"
+      fi
+    fi
+
     return 1
   fi
 }
@@ -604,17 +645,68 @@ get_migration_size_estimate() {
   fi
 }
 
+# Function to detect source Plex server port
+detect_source_plex_port() {
+  local source_host="$1"
+  local detected_port=""
+
+  log "Detecting Plex port on source server ${source_host}..."
+
+  # Try to detect port via lsof (most accurate)
+  if detected_port=$(ssh -o ConnectTimeout=10 "${source_host}" "lsof -iTCP -sTCP:LISTEN | grep 'Plex Media' | awk '{print \$9}' | cut -d: -f2 | head -1" 2>/dev/null); then
+    if [[ -n "${detected_port}" && "${detected_port}" =~ ^[0-9]+$ ]]; then
+      log "✅ Detected Plex port via lsof: ${detected_port}"
+      echo "${detected_port}"
+      return 0
+    fi
+  fi
+
+  # Fallback: Try common ports
+  for port in 32400 32401 32402 32403; do
+    log "Testing port ${port} on ${source_host}..."
+    if ssh -o ConnectTimeout=5 "${source_host}" "lsof -iTCP:${port} -sTCP:LISTEN" >/dev/null 2>&1; then
+      log "✅ Found Plex listening on port: ${port}"
+      echo "${port}"
+      return 0
+    fi
+  done
+
+  # Default fallback
+  log "⚠️  Could not detect Plex port, assuming default: 32400"
+  echo "32400"
+  return 0
+}
+
 # Function to migrate Plex configuration from remote host
 migrate_plex_from_host() {
   local source_host="$1"
 
   log "Starting Plex migration from ${source_host}"
+  log "Migration source details:"
+  log "  Original hostname: '${source_host}'"
+  log "  Will attempt SSH connection to verify accessibility"
 
   # Test SSH connectivity first
   if ! test_ssh_connection "${source_host}"; then
     log "Cannot proceed with migration - SSH connection failed"
+    log "Troubleshooting suggestions:"
+    log "  1. Verify the hostname is correct: '${source_host}'"
+    log "  2. Check SSH is enabled on the source server"
+    log "  3. Ensure SSH keys are set up: ssh-copy-id ${source_host}"
+    log "  4. Test manual SSH: ssh ${source_host}"
+    if [[ "${source_host}" != *".local" ]]; then
+      log "  5. Try with .local suffix: --migrate-from ${source_host}.local"
+    fi
     return 1
   fi
+
+  # Detect source server port and set target port
+  SOURCE_PLEX_PORT=$(detect_source_plex_port "${source_host}")
+  TARGET_PLEX_PORT=$((SOURCE_PLEX_PORT + 1))
+
+  log "Port assignment for migration:"
+  log "  Source server (${source_host}): ${SOURCE_PLEX_PORT}"
+  log "  Target server (${HOSTNAME}): ${TARGET_PLEX_PORT}"
 
   # Get size estimate
   get_migration_size_estimate "${source_host}"
@@ -750,8 +842,50 @@ migrate_plex_config() {
     check_success "Migrated configuration permissions"
 
     log "✅ Plex configuration migrated successfully"
+
+    # Configure custom port if we have port assignment from migration
+    if [[ -n "${TARGET_PLEX_PORT:-}" && "${TARGET_PLEX_PORT}" != "32400" ]]; then
+      configure_plex_port "${TARGET_PLEX_PORT}"
+    fi
   else
     log "Skipping configuration migration"
+  fi
+}
+
+# Function to configure Plex port in preferences
+configure_plex_port() {
+  local port="$1"
+  local prefs_file="${PLEX_NEW_CONFIG}/Plex Media Server/Preferences.xml"
+
+  log "Configuring Plex to use port ${port}..."
+
+  if [[ -f "${prefs_file}" ]]; then
+    # Create backup of preferences
+    backup_timestamp=$(date +%Y%m%d_%H%M%S)
+    sudo -p "Enter your '${USER}' password to backup Plex preferences: " cp "${prefs_file}" "${prefs_file}.backup.${backup_timestamp}"
+
+    # Check if ManualPortMappingPort already exists
+    if grep -q 'ManualPortMappingPort=' "${prefs_file}"; then
+      # Update existing port setting
+      sudo -p "Enter your '${USER}' password to update Plex port: " sed -i '' "s/ManualPortMappingPort=\"[0-9]*\"/ManualPortMappingPort=\"${port}\"/" "${prefs_file}"
+      log "✅ Updated existing port setting to ${port}"
+    else
+      # Add port setting to preferences
+      # Insert before the closing />
+      sudo -p "Enter your '${USER}' password to set Plex port: " sed -i '' "s|/>| ManualPortMappingPort=\"${port}\" ManualPortMappingMode=\"1\"/>|" "${prefs_file}"
+      log "✅ Added port setting ${port} to Plex preferences"
+    fi
+
+    # Also ensure manual port mapping is enabled
+    if ! grep -q 'ManualPortMappingMode=' "${prefs_file}"; then
+      sudo -p "Enter your '${USER}' password to enable manual port mapping: " sed -i '' "s|/>| ManualPortMappingMode=\"1\"/>|" "${prefs_file}"
+    else
+      sudo -p "Enter your '${USER}' password to enable manual port mapping: " sed -i '' "s/ManualPortMappingMode=\"[0-9]*\"/ManualPortMappingMode=\"1\"/" "${prefs_file}"
+    fi
+
+    log "✅ Plex configured for port ${port} with manual port mapping enabled"
+  else
+    log "⚠️  Preferences file not found, port will be configured on first Plex startup"
   fi
 }
 
@@ -976,28 +1110,73 @@ main() {
   log "Configuration directory: ${PLEX_NEW_CONFIG}"
   log "Media directory: ${PLEX_MEDIA_MOUNT}"
 
+  # Show port configuration information
+  local plex_port="32400"
+  if [[ -n "${TARGET_PLEX_PORT:-}" ]]; then
+    plex_port="${TARGET_PLEX_PORT}"
+  fi
+
+  log ""
+  log "🌐 Plex Server Access:"
+  log "  Local access: http://localhost:${plex_port}/web"
+  log "  Network access: http://${HOSTNAME}.local:${plex_port}/web"
+
+  # Show port-specific information if custom port was configured
+  if [[ -n "${TARGET_PLEX_PORT:-}" && "${TARGET_PLEX_PORT}" != "32400" ]]; then
+    log ""
+    log "🔌 Port Configuration (Migration):"
+    log "  Source server port: ${SOURCE_PLEX_PORT:-32400}"
+    log "  Target server port: ${TARGET_PLEX_PORT}"
+    log "  Reason: Prevents conflicts with source server"
+    log ""
+    log "📡 Router Port Forwarding Required:"
+    log "  ⚠️  IMPORTANT: Update your router port forwarding rules"
+    log "  Old rule: External port → ${HOSTNAME}.local:32400"
+    log "  New rule: External port → ${HOSTNAME}.local:${TARGET_PLEX_PORT}"
+    log ""
+    log "  Router configuration steps:"
+    log "  1. Access your router admin interface"
+    log "  2. Navigate to Port Forwarding / Virtual Servers"
+    log "  3. Update the rule for ${HOSTNAME}.local"
+    log "  4. Change internal port from 32400 to ${TARGET_PLEX_PORT}"
+    log "  5. Save and restart router if required"
+    log ""
+    log "  🔍 Testing: After router update, verify external access works"
+    log "  📱 Plex apps will automatically discover the new port"
+  fi
+
   if [[ "${SKIP_MOUNT}" != "true" ]]; then
-    log "Media directory mounted for administrator"
     log ""
-    log "SMB Mount troubleshooting:"
-    log "  - Manual mount: mount_smbfs -o soft,nobrowse,noowners '//<username>:<password>@${NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
-    log "  - Check mounts: mount | grep \$(whoami)"
-    log "  - Unmount: umount '${PLEX_MEDIA_MOUNT}'"
-    log "  - 'Too many users' error indicates SMB connection limit reached"
+    log "📂 SMB Mount Information:"
+    log "  Media directory mounted for administrator"
+    log "  Mount troubleshooting:"
+    log "    - Manual mount: mount_smbfs -o soft,nobrowse,noowners '//<username>:<password>@${NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
+    log "    - Check mounts: mount | grep \$(whoami)"
+    log "    - Unmount: umount '${PLEX_MEDIA_MOUNT}'"
+    log "    - 'Too many users' error indicates SMB connection limit reached"
     log ""
-    log "⚠️  Remember:"
-    log "  - Each user has their own private mount in ~/.local/mnt/"
-    log "  - Mounts activate when users log in via LaunchAgent"
-    log "  - Both admin and operator share same SMB credentials"
+    log "  ⚠️  Mount behavior:"
+    log "    - Each user has their own private mount in ~/.local/mnt/"
+    log "    - Mounts activate when users log in via LaunchAgent"
+    log "    - Both admin and operator share same SMB credentials"
   fi
 
   # Show migration-specific guidance if migration was performed
   if [[ -n "${MIGRATE_FROM}" || -d "${PLEX_OLD_CONFIG}" ]]; then
     log ""
-    log "Migration completed:"
+    log "📦 Migration Summary:"
     log "  ✅ Configuration migrated successfully"
-    log "  ⚠️  You may need to update library paths in the web interface"
-    log "  ⚠️  Point libraries to ${PLEX_MEDIA_MOUNT} paths instead of old paths"
+    log "  ✅ Libraries and metadata preserved"
+    log "  ✅ Separate server identity maintained"
+    log ""
+    log "  📝 Post-migration tasks:"
+    log "    1. Update library paths in Plex web interface (if needed)"
+    log "    2. Point libraries to ${PLEX_MEDIA_MOUNT} paths"
+    log "    3. Verify all libraries scan correctly"
+    if [[ -n "${TARGET_PLEX_PORT:-}" && "${TARGET_PLEX_PORT}" != "32400" ]]; then
+      log "    4. Update router port forwarding (see above)"
+      log "    5. Test external access to new server"
+    fi
   fi
 }
 
