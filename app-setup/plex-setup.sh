@@ -571,10 +571,10 @@ configure_plex_firewall() {
   fi
 }
 
-# Function to test SSH connectivity to a host
-test_ssh_connection() {
+# Helper function for actual SSH testing
+_try_ssh_host() {
   local host="$1"
-  log "Testing SSH connection to ${host}..."
+
   log "SSH connection details:"
   log "  Target host: '${host}'"
   log "  SSH options: ConnectTimeout=5, BatchMode=yes"
@@ -596,7 +596,6 @@ test_ssh_connection() {
 
   if [[ ${ssh_result} -eq 0 ]]; then
     log "✅ SSH connection to ${host} successful"
-    log "SSH command output: ${ssh_output}"
     return 0
   else
     log "❌ SSH connection to ${host} failed with exit code: ${ssh_result}"
@@ -611,19 +610,54 @@ test_ssh_connection() {
     log "  SSH client version: ${ssh_version}"
     log "  SSH config test: ssh -F /dev/null -o BatchMode=yes -o ConnectTimeout=5 '${host}' 'echo test' (would use system defaults)"
 
-    # Test different hostname formats
-    if [[ "${host}" == *".local" ]]; then
-      local base_host="${host%.local}"
-      log "  Trying without .local suffix: ${base_host}"
-      if ping -c 1 -W 2000 "${base_host}" >/dev/null 2>&1; then
-        log "  ✅ ${base_host} is reachable (try: --migrate-from ${base_host})"
-      else
-        log "  ❌ ${base_host} also unreachable"
-      fi
-    fi
-
     return 1
   fi
+}
+
+# Function to test SSH connectivity to a host with automatic .local suffix retry
+test_ssh_connection() {
+  local host="$1"
+  local auto_resolve="${2:-true}" # New parameter for auto-resolution
+
+  log "Testing SSH connection to ${host}..."
+
+  # Try original hostname first
+  if _try_ssh_host "${host}"; then
+    return 0
+  fi
+
+  # If auto-resolve enabled and hostname doesn't have .local, try adding it
+  if [[ "${auto_resolve}" == "true" && "${host}" != *".local" ]]; then
+    local local_hostname="${host,,}.local"
+    log "Trying with .local suffix: ${local_hostname}"
+    if _try_ssh_host "${local_hostname}"; then
+      # Update the global variable to use resolved hostname
+      if [[ -n "${MIGRATE_FROM:-}" && "${MIGRATE_FROM}" == "${host}" ]]; then
+        MIGRATE_FROM="${local_hostname}"
+        log "✅ Updated migration source to resolved hostname: ${MIGRATE_FROM}"
+      fi
+      return 0
+    fi
+  fi
+
+  # Both attempts failed - provide troubleshooting suggestions
+  log "Troubleshooting suggestions:"
+  log "  1. Verify the hostname is correct: '${host}'"
+  if [[ "${host}" != *".local" ]]; then
+    log "  2. Try with .local suffix: --migrate-from ${host,,}.local"
+  fi
+  if [[ "${host}" == *".local" ]]; then
+    local base_host="${host%.local}"
+    log "  3. Try without .local suffix: --migrate-from ${base_host}"
+    if ping -c 1 -W 2000 "${base_host}" >/dev/null 2>&1; then
+      log "  ✅ ${base_host} is reachable (try: --migrate-from ${base_host})"
+    else
+      log "  ❌ ${base_host} also unreachable"
+    fi
+  fi
+
+  log "❌ SSH connection failed for all attempted hostnames"
+  return 1
 }
 
 # Function to get migration size estimate
@@ -1045,15 +1079,33 @@ main() {
           log "  - ${server}"
         done
 
-        # Present discovered servers to user
+        # Present discovered servers to user with hostname resolution
         log "Select a Plex server to migrate from:"
         server_array=()
+        resolved_array=()
         index=1
         while IFS= read -r server; do
           # Clean up the server name (remove any extra whitespace)
           clean_server=$(echo "${server}" | tr -d '[:space:]')
-          log "  ${index}. ${clean_server}"
-          server_array+=("${clean_server}")
+
+          # Test hostname resolution for each discovered server
+          original_migrate_from="${MIGRATE_FROM}"
+          MIGRATE_FROM="${clean_server}"
+          if test_ssh_connection "${clean_server}" true >/dev/null 2>&1; then
+            resolved_hostname="${MIGRATE_FROM}" # Updated by test_ssh_connection
+            if [[ "${clean_server}" != "${resolved_hostname}" ]]; then
+              log "  ${index}. ${clean_server} → ${resolved_hostname} ✅"
+            else
+              log "  ${index}. ${clean_server} ✅"
+            fi
+            server_array+=("${clean_server}")
+            resolved_array+=("${resolved_hostname}")
+          else
+            log "  ${index}. ${clean_server} (⚠️  SSH failed)"
+            server_array+=("${clean_server}")
+            resolved_array+=("${clean_server}")
+          fi
+          MIGRATE_FROM="${original_migrate_from}" # Restore original value
           ((index += 1))
         done <<<"${discovered_servers}"
 
@@ -1062,13 +1114,30 @@ main() {
         # Get user selection
         read -rp "Enter selection (1-${index}): " selection
         if [[ "${selection}" -ge 1 && "${selection}" -lt "${index}" ]]; then
-          MIGRATE_FROM="${server_array[$((selection - 1))]}"
-          log "Selected: ${MIGRATE_FROM}"
+          selected_original="${server_array[$((selection - 1))]}"
+          MIGRATE_FROM="${resolved_array[$((selection - 1))]}"
+          if [[ "${selected_original}" != "${MIGRATE_FROM}" ]]; then
+            log "Selected: ${selected_original} (resolved to ${MIGRATE_FROM})"
+          else
+            log "Selected: ${MIGRATE_FROM}"
+          fi
         else
           read -rp "Enter hostname of source Plex server: " MIGRATE_FROM
+          # Try to resolve manually entered hostname
+          if test_ssh_connection "${MIGRATE_FROM}" true >/dev/null 2>&1; then
+            log "Manual hostname resolved successfully"
+          else
+            log "⚠️  Manual hostname resolution failed - will attempt migration anyway"
+          fi
         fi
       else
         read -rp "Enter hostname of source Plex server (e.g., old-server.local): " MIGRATE_FROM
+        # Try to resolve manually entered hostname
+        if test_ssh_connection "${MIGRATE_FROM}" true >/dev/null 2>&1; then
+          log "Manual hostname resolved successfully"
+        else
+          log "⚠️  Manual hostname resolution failed - will attempt migration anyway"
+        fi
       fi
     else
       SKIP_MIGRATION=true
