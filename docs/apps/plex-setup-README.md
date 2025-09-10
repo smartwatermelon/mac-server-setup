@@ -104,6 +104,51 @@ rsync -av --exclude='Cache' "~/Library/Application Support/Plex Media Server/" ~
 
 The script supports both local migration (files in `~/plex-migration/`) and remote migration via SSH.
 
+## Port Conflict Prevention
+
+### Critical Network Port Issue
+
+**⚠️ IMPORTANT**: If you have an existing Plex server running on your network using the default port 32400, installing a new Plex server without migration can cause serious network conflicts.
+
+**The Problem:**
+
+1. **Existing Plex server** uses port 32400 (default)
+2. **New Plex installation** also tries to use port 32400 (default)
+3. **UPnP/Auto-port mapping** conflicts occur at the router level
+4. **Result**: External access to your existing Plex server may be blocked
+
+**Scenarios:**
+
+**✅ SAFE - Migration Mode:**
+
+```bash
+# When migrating, ports are automatically managed
+./app-setup/plex-setup.sh --migrate-from old-server.local
+
+# Result: Source keeps 32400, target gets 32401 automatically
+# No conflicts, both servers accessible
+```
+
+**⚠️ RISKY - Fresh Installation:**
+
+```bash
+# Without migration, both servers try to use port 32400
+./app-setup/plex-setup.sh --skip-migration
+
+# Result: Network port conflicts likely
+# May block access to existing Plex server
+```
+
+**Migration Benefits:**
+
+- **Automatic port detection**: Script detects source server port via SSH
+- **Smart port assignment**: Target gets source port + 1 (e.g., 32400 → 32401)  
+- **Router guidance**: Detailed instructions for updating port forwarding
+- **Zero conflicts**: Both servers can run simultaneously during transition
+
+**Future Enhancement:**
+A `--port` option for fresh installations is under consideration to allow manual port specification without migration.
+
 ## Manual Operations
 
 ### Service Management
