@@ -328,9 +328,27 @@ discover_plex_servers() {
   servers=$(echo "${dns_output}" | grep "Add" | awk '{print $NF}' | sort -u)
 
   if [[ -n "${servers}" ]]; then
-    # Only echo the servers to stdout (for capture), don't mix with log messages
-    echo "${servers}"
-    return 0
+    # Filter out local hostname to prevent self-migration attempts
+    local filtered_servers
+    filtered_servers=$(echo "${servers}" | while IFS= read -r server; do
+      # Normalize discovered server name: remove .local suffix and convert to uppercase
+      local normalized_server="${server%.local}"
+      normalized_server="${normalized_server^^}"
+
+      # Compare normalized server name to local hostname
+      if [[ "${normalized_server}" != "${HOSTNAME}" ]]; then
+        echo "${server}"
+      fi
+    done)
+
+    if [[ -n "${filtered_servers}" ]]; then
+      # Only echo the filtered servers to stdout (for capture), don't mix with log messages
+      echo "${filtered_servers}"
+      return 0
+    else
+      # All discovered servers were local - return as if no servers found
+      return 1
+    fi
   else
     return 1
   fi
