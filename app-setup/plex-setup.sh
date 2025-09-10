@@ -79,11 +79,16 @@ SKIP_MOUNT=false
 MIGRATE_FROM=""
 CUSTOM_PLEX_PORT=""
 ADMINISTRATOR_PASSWORD="${ADMINISTRATOR_PASSWORD:-}"
+CLEAN=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --force)
       FORCE=true
+      shift
+      ;;
+    --clean)
+      CLEAN=true
       shift
       ;;
     --skip-migration)
@@ -531,24 +536,49 @@ EOF
 install_plex() {
   section "Installing Plex Media Server"
 
-  # Check if Plex is already installed
-  if [[ -d "/Applications/Plex Media Server.app" ]]; then
-    log "Plex Media Server is already installed at /Applications/Plex Media Server.app"
-    log "✅ Using existing Plex installation"
-    return 0
-  fi
-
-  # Check if it was installed via Homebrew cask
-  if command -v brew &>/dev/null && brew list --cask plex-media-server &>/dev/null; then
-    log "Plex Media Server is installed via Homebrew"
-    log "✅ Using existing Homebrew Plex installation"
-    return 0
-  fi
-
   # Verify Homebrew is available
   if ! command -v brew &>/dev/null; then
     log "❌ Homebrew not found - please install Homebrew first"
     exit 1
+  fi
+
+  if [[ "${CLEAN}" != "true" ]]; then
+    # Check if Plex is already installed
+    if [[ -d "/Applications/Plex Media Server.app" ]]; then
+      log "Plex Media Server is already installed at /Applications/Plex Media Server.app"
+      log "✅ Using existing Plex installation"
+      return 0
+    fi
+
+    # Check if it was installed via Homebrew cask
+    if command -v brew &>/dev/null && brew list --cask plex-media-server &>/dev/null; then
+      log "Plex Media Server is installed via Homebrew"
+      log "✅ Using existing Homebrew Plex installation"
+      return 0
+    fi
+  else # CLEAN = true
+    if pgrep -f 'Plex Media Server'; then
+      log "Force stopping all Plex Media Server processes..."
+      if sudo -p "Enter password to force-stop all Plex Media Server processes: " pkill -9 -f 'Plex Media Server'; then
+        check_success "Force stop all Plex Media Server processes"
+      else
+        log "❌ Failed to force stop all Plex Media Server processes"
+        if ! confirm "Continue install?" "y"; then
+          log "Setup cancelled by user"
+          exit 0
+        fi
+      fi
+    fi
+    log "Uninstalling Plex Media Server via Homebrew (--clean specified)"
+    if brew uninstall --cask --force --zap --ignore-dependencies plex-media-server; then
+      check_success "Plex Media Server uninstallation"
+    else
+      log "❌ Failed to uninstall Plex Media Server via Homebrew"
+      if ! confirm "Continue install?" "y"; then
+        log "Setup cancelled by user"
+        exit 0
+      fi
+    fi
   fi
 
   log "Installing Plex Media Server via Homebrew..."
@@ -978,30 +1008,22 @@ configure_plex_autostart() {
 
   # Deploy Plex startup wrapper script
   OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
-  WRAPPER_TEMPLATE="${SCRIPT_DIR}/templates/start-plex-with-mount.sh"
+  WRAPPER_SCRIPT_SOURCE="${SCRIPT_DIR}/app-setup-templates/start-plex-with-mount.sh"
   WRAPPER_SCRIPT="${OPERATOR_HOME}/.local/bin/start-plex-with-mount.sh"
   LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
   PLIST_FILE="${LAUNCH_AGENTS_DIR}/com.plexapp.plexmediaserver.plist"
 
   log "Deploying Plex startup wrapper script..."
 
-  # Verify template exists
-  if [[ ! -f "${WRAPPER_TEMPLATE}" ]]; then
-    log "❌ Plex wrapper script template not found at ${WRAPPER_TEMPLATE}"
+  # Verify source script exists
+  if [[ ! -f "${WRAPPER_SCRIPT_SOURCE}" ]]; then
+    log "❌ Plex wrapper script not found at ${WRAPPER_SCRIPT_SOURCE}"
     exit 1
   fi
 
-  # Create operator's script directory and copy template
+  # Create operator's script directory and copy script (no templating needed)
   sudo -p "[Plex setup] Enter password to create operator script directory: " -u "${OPERATOR_USERNAME}" mkdir -p "${OPERATOR_HOME}/.local/bin"
-  sudo -p "[Plex setup] Enter password to copy Plex wrapper script: " -u "${OPERATOR_USERNAME}" cp "${WRAPPER_TEMPLATE}" "${WRAPPER_SCRIPT}"
-
-  # Replace placeholders with actual values
-  sudo -p "[Plex setup] Enter password to configure Plex wrapper script: " -u "${OPERATOR_USERNAME}" sed -i '' \
-    -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
-    -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
-    "${WRAPPER_SCRIPT}"
-
-  # Set proper permissions
+  sudo -p "[Plex setup] Enter password to copy Plex wrapper script: " -u "${OPERATOR_USERNAME}" cp "${WRAPPER_SCRIPT_SOURCE}" "${WRAPPER_SCRIPT}"
   sudo -p "[Plex setup] Enter password to set Plex wrapper script permissions: " -u "${OPERATOR_USERNAME}" chmod 755 "${WRAPPER_SCRIPT}"
   check_success "Plex wrapper script deployment"
 
