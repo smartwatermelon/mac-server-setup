@@ -947,6 +947,31 @@ configure_plex_port() {
   fi
 }
 
+# Function to configure Plex port using macOS plist method (for fresh installations)
+configure_plex_port_plist() {
+  local port="$1"
+
+  log "Configuring Plex to use port ${port} via macOS plist method (operator context)..."
+
+  # Use defaults command in operator context to set the ManualPortMappingPort and enable ManualPortMappingMode
+  # This is the official macOS way to configure Plex settings before first startup
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.plexapp.plexmediaserver ManualPortMappingPort -int "${port}"
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.plexapp.plexmediaserver ManualPortMappingMode -int 1
+
+  # Verify the settings were written in operator context
+  local configured_port
+  configured_port=$(sudo -iu "${OPERATOR_USERNAME}" defaults read com.plexapp.plexmediaserver ManualPortMappingPort 2>/dev/null || echo "")
+
+  if [[ "${configured_port}" == "${port}" ]]; then
+    log "✅ Successfully configured Plex for port ${port} using macOS defaults (operator context)"
+    log "   Manual port mapping enabled with port ${port}"
+    log "   Settings will take effect when Plex starts under ${OPERATOR_USERNAME}"
+  else
+    collect_error "Failed to configure custom port ${port} in operator's macOS plist"
+    return 1
+  fi
+}
+
 # Configure Plex for auto-start
 configure_plex_autostart() {
   section "Configuring Plex Auto-Start"
@@ -1243,6 +1268,12 @@ main() {
 
   # Migrate configuration if available (local migration)
   migrate_plex_config
+
+  # Configure custom port for fresh installations (non-migration) using macOS plist method
+  if [[ -n "${TARGET_PLEX_PORT:-}" && "${TARGET_PLEX_PORT}" != "32400" && -z "${MIGRATE_FROM}" && ! -d "${PLEX_OLD_CONFIG}" ]]; then
+    log "Configuring custom port ${TARGET_PLEX_PORT} for fresh installation using macOS plist method..."
+    configure_plex_port_plist "${TARGET_PLEX_PORT}"
+  fi
 
   # Configure auto-start
   configure_plex_autostart
