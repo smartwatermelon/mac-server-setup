@@ -1151,23 +1151,38 @@ main() {
         echo "this can cause UPnP/auto-port mapping conflicts at your router."
         echo ""
         if confirm "Do you want to use a custom port instead of 32400?" "n"; then
-          read -rp "Enter port number (e.g., 32401): " CUSTOM_PLEX_PORT
-          if [[ "${CUSTOM_PLEX_PORT}" =~ ^[0-9]+$ && "${CUSTOM_PLEX_PORT}" -gt 1024 && "${CUSTOM_PLEX_PORT}" -lt 65536 ]]; then
-            TARGET_PLEX_PORT="${CUSTOM_PLEX_PORT}"
-            log "Custom port selected: ${TARGET_PLEX_PORT}"
-          else
-            log "Invalid port, using default 32400"
-            CUSTOM_PLEX_PORT=""
-          fi
+          # Interactive port selection with validation and retry
+          while true; do
+            read -rp "Enter port number (1025-65535, e.g., 32401, or 'default' for 32400): " CUSTOM_PLEX_PORT
+
+            # Allow user to type 'default' to use default port
+            if [[ "${CUSTOM_PLEX_PORT,,}" == "default" ]]; then
+              log "Using default port 32400"
+              CUSTOM_PLEX_PORT=""
+              break
+            fi
+
+            # Validate port number
+            if [[ "${CUSTOM_PLEX_PORT}" =~ ^[0-9]+$ && "${CUSTOM_PLEX_PORT}" -gt 1024 && "${CUSTOM_PLEX_PORT}" -lt 65536 ]]; then
+              TARGET_PLEX_PORT="${CUSTOM_PLEX_PORT}"
+              log "Custom port selected: ${TARGET_PLEX_PORT}"
+              break
+            else
+              echo "❌ Invalid port number. Please enter:"
+              echo "   • A port between 1025 and 65535 (e.g., 32401, 32402, 32403)"
+              echo "   • Or type 'default' to use port 32400"
+            fi
+          done
         fi
       else
-        # Custom port provided via command line
+        # Custom port provided via command line - validate but don't retry interactively
         if [[ "${CUSTOM_PLEX_PORT}" =~ ^[0-9]+$ && "${CUSTOM_PLEX_PORT}" -gt 1024 && "${CUSTOM_PLEX_PORT}" -lt 65536 ]]; then
           TARGET_PLEX_PORT="${CUSTOM_PLEX_PORT}"
           log "Using custom port from command line: ${TARGET_PLEX_PORT}"
         else
-          log "Invalid custom port '${CUSTOM_PLEX_PORT}', using default 32400"
-          CUSTOM_PLEX_PORT=""
+          collect_error "Invalid custom port '${CUSTOM_PLEX_PORT}' specified via command line"
+          collect_error "Port must be between 1025 and 65535"
+          exit 1
         fi
       fi
     fi
