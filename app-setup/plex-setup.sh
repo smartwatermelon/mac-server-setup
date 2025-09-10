@@ -8,12 +8,13 @@
 # - Configuration migration from existing Plex server
 # - Auto-start configuration
 #
-# Usage: ./plex-setup.sh [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--password PASSWORD]
+# Usage: ./plex-setup.sh [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--custom-port PORT] [--password PASSWORD]
 #   --force: Skip all confirmation prompts
 #   --skip-migration: Skip Plex config migration
 #   --skip-mount: Skip SMB mount setup
 #   --server-name: Set Plex server name (default: hostname)
 #   --migrate-from: Source hostname for Plex migration (e.g., old-server.local)
+#   --custom-port: Set custom port for fresh installations (prevents conflicts)
 #   Note: --skip-migration and --migrate-from are mutually exclusive
 #
 # Expected Plex config files location:
@@ -76,6 +77,7 @@ FORCE=false
 SKIP_MIGRATION=false
 SKIP_MOUNT=false
 MIGRATE_FROM=""
+CUSTOM_PLEX_PORT=""
 ADMINISTRATOR_PASSWORD="${ADMINISTRATOR_PASSWORD:-}"
 
 while [[ $# -gt 0 ]]; do
@@ -100,13 +102,17 @@ while [[ $# -gt 0 ]]; do
       MIGRATE_FROM="$2"
       shift 2
       ;;
+    --custom-port)
+      CUSTOM_PLEX_PORT="$2"
+      shift 2
+      ;;
     --password)
       ADMINISTRATOR_PASSWORD="$2"
       shift 2
       ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--password PASSWORD]"
+      echo "Usage: $0 [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--custom-port PORT] [--password PASSWORD]"
       exit 1
       ;;
   esac
@@ -1067,6 +1073,34 @@ main() {
     else
       SKIP_MIGRATION=true
       log "Skipping migration - will start with fresh Plex configuration"
+
+      # Custom port option for fresh installations to prevent conflicts
+      if [[ -z "${CUSTOM_PLEX_PORT:-}" ]]; then
+        echo ""
+        echo "⚠️  Port Conflict Warning:"
+        echo "If you have another Plex server on your network using port 32400,"
+        echo "this can cause UPnP/auto-port mapping conflicts at your router."
+        echo ""
+        if confirm "Do you want to use a custom port instead of 32400?" "n"; then
+          read -rp "Enter port number (e.g., 32401): " CUSTOM_PLEX_PORT
+          if [[ "${CUSTOM_PLEX_PORT}" =~ ^[0-9]+$ && "${CUSTOM_PLEX_PORT}" -gt 1024 && "${CUSTOM_PLEX_PORT}" -lt 65536 ]]; then
+            TARGET_PLEX_PORT="${CUSTOM_PLEX_PORT}"
+            log "Custom port selected: ${TARGET_PLEX_PORT}"
+          else
+            log "Invalid port, using default 32400"
+            CUSTOM_PLEX_PORT=""
+          fi
+        fi
+      else
+        # Custom port provided via command line
+        if [[ "${CUSTOM_PLEX_PORT}" =~ ^[0-9]+$ && "${CUSTOM_PLEX_PORT}" -gt 1024 && "${CUSTOM_PLEX_PORT}" -lt 65536 ]]; then
+          TARGET_PLEX_PORT="${CUSTOM_PLEX_PORT}"
+          log "Using custom port from command line: ${TARGET_PLEX_PORT}"
+        else
+          log "Invalid custom port '${CUSTOM_PLEX_PORT}', using default 32400"
+          CUSTOM_PLEX_PORT=""
+        fi
+      fi
     fi
   fi
 
