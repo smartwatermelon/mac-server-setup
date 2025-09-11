@@ -511,20 +511,6 @@ import_external_keychain_credentials() {
     show_log "⚠️ OpenSubtitles credential not found in external keychain (optional)"
   fi
 
-  # Import Plex authentication token (optional)
-  # shellcheck disable=SC2154 # KEYCHAIN_PLEX_TOKEN_SERVICE loaded from sourced manifest
-  if plex_token=$(security find-generic-password -s "${KEYCHAIN_PLEX_TOKEN_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
-    security delete-generic-password -s "${KEYCHAIN_PLEX_TOKEN_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
-    if security add-generic-password -s "${KEYCHAIN_PLEX_TOKEN_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${plex_token}" -D "Mac Server Setup - Plex Authentication Token" -A -U; then
-      show_log "✅ Plex authentication token imported to administrator keychain"
-    else
-      collect_warning "Failed to import Plex authentication token to administrator keychain"
-    fi
-    unset plex_token
-  else
-    show_log "⚠️ Plex authentication token not found in external keychain (optional)"
-  fi
-
   return 0
 }
 
