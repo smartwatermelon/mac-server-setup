@@ -538,7 +538,7 @@ install_plex() {
 
   # Verify Homebrew is available
   if ! command -v brew &>/dev/null; then
-    log "❌ Homebrew not found - please install Homebrew first"
+    collect_error "Homebrew not found - please install Homebrew first"
     exit 1
   fi
 
@@ -562,7 +562,7 @@ install_plex() {
       if sudo -p "Enter password to force-stop all Plex Media Server processes: " pkill -9 -f 'Plex Media Server'; then
         check_success "Force stop all Plex Media Server processes"
       else
-        log "❌ Failed to force stop all Plex Media Server processes"
+        collect_warning "Failed to force stop all Plex Media Server processes"
         if ! confirm "Continue install?" "y"; then
           log "Setup cancelled by user"
           exit 0
@@ -573,7 +573,7 @@ install_plex() {
     if brew uninstall --cask --force --zap --ignore-dependencies plex-media-server; then
       check_success "Plex Media Server uninstallation"
     else
-      log "❌ Failed to uninstall Plex Media Server via Homebrew"
+      collect_warning "Failed to uninstall Plex Media Server via Homebrew"
       if ! confirm "Continue install?" "y"; then
         log "Setup cancelled by user"
         exit 0
@@ -585,7 +585,7 @@ install_plex() {
   if brew install --cask plex-media-server; then
     check_success "Plex Media Server installation"
   else
-    log "❌ Failed to install Plex Media Server via Homebrew"
+    collect_error "Failed to install Plex Media Server via Homebrew"
     exit 1
   fi
 
@@ -614,7 +614,7 @@ configure_plex_firewall() {
     log "✅ Plex Media Server configured in firewall"
 
   else
-    log "❌ Plex application not found at ${plex_app}"
+    collect_error "Plex application not found at ${plex_app}"
     exit 1
   fi
 }
@@ -777,7 +777,7 @@ migrate_plex_from_host() {
 
   # Test SSH connectivity first
   if ! test_ssh_connection "${source_host}"; then
-    log "Cannot proceed with migration - SSH connection failed"
+    collect_error "Cannot proceed with migration - SSH connection failed"
     log "Troubleshooting suggestions:"
     log "  1. Verify the hostname is correct: '${source_host}'"
     log "  2. Check SSH is enabled on the source server"
@@ -815,21 +815,38 @@ migrate_plex_from_host() {
   if command -v rsync >/dev/null 2>&1; then
     # Use rsync with progress but limit output noise
     log "Starting rsync migration (excluding Cache directory)..."
-    log "This may take several minutes - progress will be shown periodically"
 
-    # Run rsync and capture output to a temp file for processing
+    # Count source files for progress tracking
+    local source_files
+    source_files=$(find "${plex_config_source}" -type f | wc -l | tr -d ' ')
+    log "Preparing to transfer ${source_files} files..."
+
+    # Use better progress approach - run rsync quietly and track destination files
     local rsync_log="/tmp/plex_rsync_$$.log"
-    if rsync -aH --progress --compress --whole-file --exclude='Cache' \
-      "${plex_config_source}" "${PLEX_OLD_CONFIG%/*}/" 2>&1 \
-      | tee "${rsync_log}" \
-      | grep --line-buffered -E "(receiving|sent|total size|\s+[0-9]+%)" \
-      | while IFS= read -r line; do
-        # Only log percentage updates and summary lines to reduce noise
-        if [[ "${line}" =~ [0-9]+% ]] || [[ "${line}" =~ (receiving|sent|total) ]]; then
-          log "  ${line// */}" # Remove extra whitespace
-        fi
-      done; then
-      log "✅ Plex configuration migrated successfully"
+
+    # Run rsync in background with minimal output
+    rsync -aH --compress --whole-file --exclude='Cache' \
+      "${plex_config_source}" "${PLEX_OLD_CONFIG%/*}/" >"${rsync_log}" 2>&1 &
+    local rsync_pid=$!
+
+    # Show progress by counting destination files periodically
+    local last_count=0
+    while kill -0 "${rsync_pid}" 2>/dev/null; do
+      sleep 2
+      local current_count
+      current_count=$(find "${PLEX_OLD_CONFIG}" -type f 2>/dev/null | wc -l | tr -d ' ')
+      if [[ "${current_count}" -gt "${last_count}" ]]; then
+        log "  Transferred ${current_count} of ${source_files} files..."
+        last_count=${current_count}
+      fi
+    done
+
+    # Wait for rsync to complete and get exit status
+    if wait "${rsync_pid}"; then
+      # Final count and success message
+      local final_count
+      final_count=$(find "${PLEX_OLD_CONFIG}" -type f | wc -l | tr -d ' ')
+      log "✅ Plex configuration migrated successfully (${final_count} files transferred)"
       rm -f "${rsync_log}"
     else
       collect_error "Plex configuration migration failed"
@@ -1018,7 +1035,7 @@ configure_plex_autostart() {
 
   # Verify source script exists
   if [[ ! -f "${WRAPPER_SCRIPT_SOURCE}" ]]; then
-    log "❌ Plex wrapper script not found at ${WRAPPER_SCRIPT_SOURCE}"
+    collect_error "Plex wrapper script not found at ${WRAPPER_SCRIPT_SOURCE}"
     exit 1
   fi
 
@@ -1110,7 +1127,7 @@ start_plex() {
     log "  Local: http://localhost:32400/web"
     log "  Network: http://${HOSTNAME}.local:32400/web"
   else
-    log "❌ Plex Media Server failed to start"
+    collect_warning "Plex Media Server failed to start automatically"
     log "Try starting manually with: PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR='${PLEX_NEW_CONFIG}' open '/Applications/Plex Media Server.app'"
   fi
 }
