@@ -738,12 +738,13 @@ detect_source_plex_port() {
   local source_host="$1"
   local detected_port=""
 
-  log "Detecting Plex port on source server ${source_host}..."
+  # Send log messages to stderr to avoid interfering with function return value
+  log "Detecting Plex port on source server ${source_host}..." >&2
 
   # Try to detect port via lsof (most accurate)
   if detected_port=$(ssh -o ConnectTimeout=10 "${source_host}" "lsof -iTCP -sTCP:LISTEN | grep 'Plex Media' | awk '{print \$9}' | cut -d: -f2 | head -1" 2>/dev/null); then
     if [[ -n "${detected_port}" && "${detected_port}" =~ ^[0-9]+$ ]]; then
-      log "✅ Detected Plex port via lsof: ${detected_port}"
+      log "✅ Detected Plex port via lsof: ${detected_port}" >&2
       echo "${detected_port}"
       return 0
     fi
@@ -751,16 +752,16 @@ detect_source_plex_port() {
 
   # Fallback: Try common ports
   for port in 32400 32401 32402 32403; do
-    log "Testing port ${port} on ${source_host}..."
+    log "Testing port ${port} on ${source_host}..." >&2
     if ssh -o ConnectTimeout=5 "${source_host}" "lsof -iTCP:${port} -sTCP:LISTEN" >/dev/null 2>&1; then
-      log "✅ Found Plex listening on port: ${port}"
+      log "✅ Found Plex listening on port: ${port}" >&2
       echo "${port}"
       return 0
     fi
   done
 
   # Default fallback
-  log "⚠️  Could not detect Plex port, assuming default: 32400"
+  log "⚠️  Could not detect Plex port, assuming default: 32400" >&2
   echo "32400"
   return 0
 }
