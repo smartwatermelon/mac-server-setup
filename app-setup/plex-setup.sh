@@ -929,6 +929,9 @@ migrate_plex_config() {
 
     log "✅ Plex configuration migrated successfully"
 
+    # Create marker file for library path updates on first Plex startup
+    create_library_update_marker
+
     # Configure custom port if we have port assignment from migration
     if [[ -n "${TARGET_PLEX_PORT:-}" && "${TARGET_PLEX_PORT}" != "32400" ]]; then
       configure_plex_port "${TARGET_PLEX_PORT}"
@@ -937,6 +940,89 @@ migrate_plex_config() {
     log "Configuration migration declined by user"
     return 1
   fi
+}
+
+# Function to get admin Plex token for library management
+get_admin_plex_token() {
+  log "Acquiring admin Plex token for library path updates..."
+
+  # First, try to get token from keychain (preferred method)
+  local server_name_lower
+  server_name_lower="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
+  local keychain_service="plex-token-${server_name_lower}"
+  local keychain_account="${server_name_lower}"
+
+  if auth_token=$(security find-generic-password -s "${keychain_service}" -a "${keychain_account}" -w 2>/dev/null); then
+    if [[ -n "${auth_token}" && "${auth_token}" != "null" ]]; then
+      log "✅ Retrieved Plex token from keychain"
+      echo "${auth_token}"
+      return 0
+    fi
+  fi
+
+  log "⚠️  Plex token not found in keychain - requesting credentials for manual authentication"
+
+  # Fallback: Get credentials from user
+  read -erp "Plex username: " username
+  read -ersp "Plex password: " password
+  echo # New line after password
+
+  if [[ -z "${username}" || -z "${password}" ]]; then
+    log "⚠️  No credentials provided - library paths will need manual update"
+    return 1
+  fi
+
+  # Get authentication token from plex.tv
+  local auth_response
+  auth_response=$(curl -s -X POST 'https://plex.tv/users/sign_in.json' \
+    -H 'X-Plex-Client-Identifier: plex-setup' \
+    -H 'X-Plex-Product: plex-setup' \
+    -H 'X-Plex-Version: 1.0' \
+    --data-urlencode "user[login]=${username}" \
+    --data-urlencode "user[password]=${password}") || {
+    log "⚠️  Failed to authenticate with Plex - library paths will need manual update"
+    return 1
+  }
+
+  # Extract the authentication token using jq
+  auth_token=$(echo "${auth_response}" | jq -r '.user.authToken' 2>/dev/null) || {
+    log "⚠️  Failed to parse Plex authentication - library paths will need manual update"
+    return 1
+  }
+
+  if [[ "${auth_token}" == "null" || -z "${auth_token}" ]]; then
+    log "⚠️  Invalid Plex credentials - library paths will need manual update"
+    return 1
+  fi
+
+  echo "${auth_token}"
+}
+
+# Function to create marker file for library path updates
+create_library_update_marker() {
+  log "Setting up library path updates for first Plex startup..."
+
+  # Only create marker if this was a migration
+  if [[ -z "${MIGRATE_FROM:-}" ]]; then
+    log "   No migration performed - library updates not needed"
+    return 0
+  fi
+
+  # Get admin token for library updates
+  local admin_token
+  admin_token=$(get_admin_plex_token) || {
+    log "⚠️  Could not acquire admin token - library paths may need manual update"
+    return 0
+  }
+
+  # Create secure marker file with token
+  local marker_file="/Users/Shared/PlexMediaServer/.plex-library-update-needed"
+  echo "${admin_token}" >"${marker_file}"
+  chmod 600 "${marker_file}"
+  chown "${OPERATOR_USERNAME}:staff" "${marker_file}"
+
+  log "✅ Library path update scheduled for first Plex startup"
+  log "   Marker file: ${marker_file}"
 }
 
 # Function to configure Plex port in preferences

@@ -39,6 +39,7 @@ else
   ONEPASSWORD_OPERATOR_ITEM="operator"
   ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
   ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"
+  ONEPASSWORD_PLEX_ITEM="Plex"
   ONEPASSWORD_APPLEID_ITEM="Apple"
   ONEPASSWORD_OPENSUBTITLES_ITEM="Opensubtitles"
   DROPBOX_SYNC_FOLDER=""
@@ -514,6 +515,7 @@ create_keychain_manifest() {
 # External keychain service identifiers for credential retrieval
 KEYCHAIN_OPERATOR_SERVICE="operator-${SERVER_NAME_LOWER}"
 KEYCHAIN_PLEX_NAS_SERVICE="plex-nas-${SERVER_NAME_LOWER}"
+KEYCHAIN_PLEX_TOKEN_SERVICE="plex-token-${SERVER_NAME_LOWER}"
 KEYCHAIN_TIMEMACHINE_SERVICE="timemachine-${SERVER_NAME_LOWER}"
 KEYCHAIN_WIFI_SERVICE="wifi-${SERVER_NAME_LOWER}"
 KEYCHAIN_OPENSUBTITLES_SERVICE="opensubtitles-${SERVER_NAME_LOWER}"
@@ -672,6 +674,60 @@ else
   # Clear credentials from memory
   unset OPENSUBTITLES_USERNAME OPENSUBTITLES_PASSWORD
   echo "✅ OpenSubtitles credentials stored in Keychain"
+fi
+
+# Retrieve and cache Plex authentication token
+if op item get "${ONEPASSWORD_PLEX_ITEM}" --vault "${ONEPASSWORD_VAULT}" >/dev/null 2>&1; then
+  echo "✅ Found Plex credentials in 1Password"
+
+  # Retrieve Plex credentials from 1Password
+  echo "Retrieving Plex authentication token..."
+  PLEX_USERNAME=$(op item get "${ONEPASSWORD_PLEX_ITEM}" --vault "${ONEPASSWORD_VAULT}" --fields username)
+  PLEX_PASSWORD=$(op read "op://${ONEPASSWORD_VAULT}/${ONEPASSWORD_PLEX_ITEM}/password")
+
+  # Check if TOTP is available and append it to password
+  PLEX_TOTP=$(op item get "${ONEPASSWORD_PLEX_ITEM}" --vault "${ONEPASSWORD_VAULT}" --otp 2>/dev/null || echo "")
+  if [[ -n "${PLEX_TOTP}" ]]; then
+    echo "   Using TOTP for 2FA authentication"
+    PLEX_AUTH_PASSWORD="${PLEX_PASSWORD}${PLEX_TOTP}"
+  else
+    PLEX_AUTH_PASSWORD="${PLEX_PASSWORD}"
+  fi
+
+  # Get authentication token from plex.tv
+  PLEX_AUTH_RESPONSE=$(curl -s -X POST 'https://plex.tv/users/sign_in.json' \
+    -H 'X-Plex-Client-Identifier: mac-server-setup' \
+    -H 'X-Plex-Product: mac-server-setup' \
+    -H 'X-Plex-Version: 1.0' \
+    --data-urlencode "user[login]=${PLEX_USERNAME}" \
+    --data-urlencode "user[password]=${PLEX_AUTH_PASSWORD}") || {
+    echo "⚠️  Failed to authenticate with Plex - token will need manual setup"
+    PLEX_TOKEN=""
+  }
+
+  # Extract the authentication token using jq
+  if [[ -n "${PLEX_AUTH_RESPONSE:-}" ]]; then
+    PLEX_TOKEN=$(echo "${PLEX_AUTH_RESPONSE}" | jq -r '.user.authToken' 2>/dev/null || echo "")
+    if [[ "${PLEX_TOKEN}" == "null" || -z "${PLEX_TOKEN}" ]]; then
+      echo "⚠️  Failed to get Plex authentication token - may need manual setup"
+      PLEX_TOKEN=""
+    fi
+  fi
+
+  # Store Plex token in external keychain if we got one
+  if [[ -n "${PLEX_TOKEN}" ]]; then
+    store_external_keychain_credential \
+      "plex-token-${SERVER_NAME_LOWER}" \
+      "${SERVER_NAME_LOWER}" \
+      "${PLEX_TOKEN}" \
+      "Mac Server Setup - Plex Authentication Token"
+    echo "✅ Plex authentication token retrieved and stored in Keychain"
+  fi
+
+  # Clear sensitive credentials from memory
+  unset PLEX_USERNAME PLEX_PASSWORD PLEX_TOTP PLEX_AUTH_PASSWORD PLEX_AUTH_RESPONSE PLEX_TOKEN
+else
+  echo "⚠️  Plex credentials not found in 1Password - token will need manual setup"
 fi
 
 # Set up Dropbox synchronization if configured
