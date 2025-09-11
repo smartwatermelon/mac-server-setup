@@ -926,7 +926,8 @@ migrate_plex_config() {
       configure_plex_port "${TARGET_PLEX_PORT}"
     fi
   else
-    log "Skipping configuration migration"
+    log "Configuration migration declined by user"
+    return 1
   fi
 }
 
@@ -1274,7 +1275,12 @@ main() {
     if migrate_plex_from_host "${MIGRATE_FROM}"; then
       log "✅ Remote migration completed successfully"
       # Apply the migrated configuration
-      migrate_plex_config
+      if migrate_plex_config; then
+        log "✅ Migrated configuration applied successfully"
+      else
+        collect_error "Failed to apply migrated configuration after successful remote migration"
+        exit 1
+      fi
     else
       collect_error "Remote migration from ${MIGRATE_FROM} failed"
       collect_error "Cannot continue with fresh installation when migration was explicitly requested"
@@ -1284,7 +1290,12 @@ main() {
   elif [[ "${SKIP_MIGRATION}" != "true" && -d "${PLEX_OLD_CONFIG}" ]]; then
     # Local migration: configuration files are already present
     log "Local migration files found at ${PLEX_OLD_CONFIG}"
-    migrate_plex_config
+    if migrate_plex_config; then
+      log "✅ Local migration applied successfully"
+    else
+      collect_error "Failed to apply local migration configuration"
+      exit 1
+    fi
   fi
 
   # Configure custom port for fresh installations (non-migration) using macOS plist method
