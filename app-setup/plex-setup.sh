@@ -718,7 +718,7 @@ get_migration_size_estimate() {
 
   # Get total size
   local total_size
-  total_size=$(ssh -o ConnectTimeout=10 "${source_host}" "du -sh '${plex_path}' 2>/dev/null | cut -f1" 2>/dev/null)
+  total_size=$(ssh -o ConnectTimeout=10 "${source_host}" "gdu -sh --exclude='localhost' --exclude='Cache' --exclude='PhotoTranscoder' --exclude='Logs' --exclude='Updates' --exclude='*.trace' '${plex_path}' 2>/dev/null | cut -f1" 2>/dev/null)
 
   # Get file count
   local file_count
@@ -823,6 +823,7 @@ migrate_plex_from_host() {
     # Use rsync with clean progress display - no complex background monitoring needed
     local rsync_log="/tmp/plex_rsync_$$.log"
     if rsync -aH --info=progress2 --info=name0 --compress --whole-file \
+      --exclude='localhost' \
       --exclude='Cache' \
       --exclude='PhotoTranscoder' \
       --exclude='Logs' \
