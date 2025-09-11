@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# start-plex-with-mount.sh - Simple Plex Media Server launcher
+# start-plex.sh - Simple Plex Media Server launcher
 #
 # This script simply launches Plex Media Server. The SMB mount is handled
 # independently by a separate LaunchAgent that runs every 2 minutes.
