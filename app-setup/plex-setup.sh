@@ -1314,13 +1314,21 @@ main() {
   # Configure auto-start
   configure_plex_autostart
 
-  # Start Plex
-  start_plex
+  # Note: Plex will start automatically when operator logs in via LaunchAgent
+  log "Plex is configured to start automatically when the operator user logs in"
 
   section "Setup Complete"
   log "✅ Plex Media Server setup completed successfully"
   log "Configuration directory: ${PLEX_NEW_CONFIG}"
   log "Media directory: ${PLEX_MEDIA_MOUNT}"
+  log ""
+  log "📋 Next Steps:"
+  log "  1. Reboot or log out of the administrator account"
+  log "  2. Log in as the '${OPERATOR_USERNAME}' user"
+  log "  3. Plex will start automatically on operator login"
+  log "  4. Access Plex at: http://${HOSTNAME}.local:32400/web"
+  log ""
+  log "⚠️  Important: Plex is configured to run under the operator account only"
 
   # Show port configuration information
   local plex_port="32400"
