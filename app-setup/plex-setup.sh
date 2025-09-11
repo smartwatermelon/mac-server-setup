@@ -806,7 +806,8 @@ migrate_plex_from_host() {
   mkdir -p "${PLEX_OLD_CONFIG%/*}"
 
   # Define source paths (properly quoted for spaces)
-  local plex_config_source="${source_host}:Library/Application Support/Plex Media Server/"
+  # Note: No trailing slash so rsync copies the directory itself, not just contents
+  local plex_config_source="${source_host}:Library/Application Support/Plex Media Server"
   local plex_plist_source="${source_host}:Library/Preferences/com.plexapp.plexmediaserver.plist"
 
   log "Migrating Plex configuration from ${source_host}..."
@@ -897,9 +898,17 @@ migrate_plex_config() {
   fi
 
   if [[ ! -d "${PLEX_OLD_CONFIG}" ]]; then
-    log "No existing Plex configuration found at ${PLEX_OLD_CONFIG}"
-    log "Plex will start with fresh configuration"
-    return 0
+    # Check if migration was explicitly requested
+    if [[ -n "${MIGRATE_FROM}" ]]; then
+      collect_error "Migration was requested from ${MIGRATE_FROM}, but no migrated configuration found at ${PLEX_OLD_CONFIG}"
+      log "This indicates the remote migration failed to properly transfer the configuration"
+      log "Please check the remote migration logs and resolve the issue before continuing"
+      exit 1
+    else
+      log "No existing Plex configuration found at ${PLEX_OLD_CONFIG}"
+      log "Plex will start with fresh configuration"
+      return 0
+    fi
   fi
 
   if confirm "Apply migrated Plex configuration?" "n"; then
