@@ -898,17 +898,15 @@ migrate_plex_config() {
   fi
 
   if [[ ! -d "${PLEX_OLD_CONFIG}" ]]; then
-    # Check if migration was explicitly requested
-    if [[ -n "${MIGRATE_FROM}" ]]; then
-      collect_error "Migration was requested from ${MIGRATE_FROM}, but no migrated configuration found at ${PLEX_OLD_CONFIG}"
-      log "This indicates the remote migration failed to properly transfer the configuration"
-      log "Please check the remote migration logs and resolve the issue before continuing"
-      exit 1
-    else
-      log "No existing Plex configuration found at ${PLEX_OLD_CONFIG}"
-      log "Plex will start with fresh configuration"
-      return 0
-    fi
+    # If this function is called and skip-migration is not set, migration was requested
+    # Either via --migrate-from (remote) or local files in ~/plex-migration/
+    collect_error "Migration was requested, but no configuration found at ${PLEX_OLD_CONFIG}"
+    log "This indicates migration failed to properly transfer the configuration"
+    log "Possible causes:"
+    log "  - Remote migration failed (check SSH connectivity and source paths)"
+    log "  - Local migration files not present (check ~/plex-migration/ directory)"
+    log "Please resolve the migration issue before continuing"
+    exit 1
   fi
 
   if confirm "Apply migrated Plex configuration?" "n"; then
