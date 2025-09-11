@@ -811,6 +811,7 @@ migrate_plex_from_host() {
   local plex_plist_source="${source_host}:Library/Preferences/com.plexapp.plexmediaserver.plist"
 
   log "Migrating Plex configuration from ${source_host}..."
+  log "Excluding large regenerable directories: Cache, PhotoTranscoder, Logs, Updates"
   log "This may take several minutes depending on the size of your Plex database"
 
   # Use rsync with progress for the main config
@@ -821,7 +822,12 @@ migrate_plex_from_host() {
 
     # Use rsync with clean progress display - no complex background monitoring needed
     local rsync_log="/tmp/plex_rsync_$$.log"
-    if rsync -aH --info=progress2 --info=name0 --compress --whole-file --exclude='Cache' \
+    if rsync -aH --info=progress2 --info=name0 --compress --whole-file \
+      --exclude='Cache' \
+      --exclude='PhotoTranscoder' \
+      --exclude='Logs' \
+      --exclude='Updates' \
+      --exclude='*.trace' \
       "${plex_config_source}" "${PLEX_OLD_CONFIG%/*}/" 2>&1 | tee "${rsync_log}"; then
       log "✅ Plex configuration migrated successfully"
       rm -f "${rsync_log}"
@@ -839,8 +845,9 @@ migrate_plex_from_host() {
   else
     # Fallback to scp if rsync not available
     log "rsync not available, using scp (no progress indication)..."
+    log "Note: scp cannot exclude directories - full transfer including Cache, PhotoTranscoder, etc."
     if scp -r "${plex_config_source}" "${PLEX_OLD_CONFIG%/*}/"; then
-      log "✅ Plex configuration migrated successfully"
+      log "✅ Plex configuration migrated successfully (includes all directories)"
     else
       collect_error "Plex configuration migration failed (scp fallback)"
       return 1
