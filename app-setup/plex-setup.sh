@@ -558,7 +558,7 @@ install_plex() {
       return 0
     fi
   else # CLEAN = true
-    if pgrep -f 'Plex Media Server'; then
+    if pgrep -f 'Plex Media Server' &>/dev/null; then
       log "Force stopping all Plex Media Server processes..."
       if sudo -p "Enter password to force-stop all Plex Media Server processes: " pkill -9 -f 'Plex Media Server'; then
         check_success "Force stop all Plex Media Server processes"
