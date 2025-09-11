@@ -815,38 +815,13 @@ migrate_plex_from_host() {
   if command -v rsync >/dev/null 2>&1; then
     # Use rsync with progress but limit output noise
     log "Starting rsync migration (excluding Cache directory)..."
+    log "Progress will be shown as a single updating line..."
 
-    # Count source files for progress tracking
-    local source_files
-    source_files=$(find "${plex_config_source}" -type f | wc -l | tr -d ' ')
-    log "Preparing to transfer ${source_files} files..."
-
-    # Use better progress approach - run rsync quietly and track destination files
+    # Use rsync with clean progress display - no complex background monitoring needed
     local rsync_log="/tmp/plex_rsync_$$.log"
-
-    # Run rsync in background with minimal output
-    rsync -aH --compress --whole-file --exclude='Cache' \
-      "${plex_config_source}" "${PLEX_OLD_CONFIG%/*}/" >"${rsync_log}" 2>&1 &
-    local rsync_pid=$!
-
-    # Show progress by counting destination files periodically
-    local last_count=0
-    while kill -0 "${rsync_pid}" 2>/dev/null; do
-      sleep 2
-      local current_count
-      current_count=$(find "${PLEX_OLD_CONFIG}" -type f 2>/dev/null | wc -l | tr -d ' ')
-      if [[ "${current_count}" -gt "${last_count}" ]]; then
-        log "  Transferred ${current_count} of ${source_files} files..."
-        last_count=${current_count}
-      fi
-    done
-
-    # Wait for rsync to complete and get exit status
-    if wait "${rsync_pid}"; then
-      # Final count and success message
-      local final_count
-      final_count=$(find "${PLEX_OLD_CONFIG}" -type f | wc -l | tr -d ' ')
-      log "✅ Plex configuration migrated successfully (${final_count} files transferred)"
+    if rsync -aH --info=progress2 --info=name0 --compress --whole-file --exclude='Cache' \
+      "${plex_config_source}" "${PLEX_OLD_CONFIG%/*}/" 2>&1 | tee "${rsync_log}"; then
+      log "✅ Plex configuration migrated successfully"
       rm -f "${rsync_log}"
     else
       collect_error "Plex configuration migration failed"
