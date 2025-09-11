@@ -892,20 +892,9 @@ setup_shared_config() {
 migrate_plex_config() {
   section "Plex Configuration Migration"
 
-  if [[ "${SKIP_MIGRATION}" == "true" ]]; then
-    log "Skipping Plex configuration migration (--skip-migration specified)"
-    return 0
-  fi
-
   if [[ ! -d "${PLEX_OLD_CONFIG}" ]]; then
-    # If this function is called and skip-migration is not set, migration was requested
-    # Either via --migrate-from (remote) or local files in ~/plex-migration/
-    collect_error "Migration was requested, but no configuration found at ${PLEX_OLD_CONFIG}"
+    collect_error "Migration configuration not found at ${PLEX_OLD_CONFIG}"
     log "This indicates migration failed to properly transfer the configuration"
-    log "Possible causes:"
-    log "  - Remote migration failed (check SSH connectivity and source paths)"
-    log "  - Local migration files not present (check ~/plex-migration/ directory)"
-    log "Please resolve the migration issue before continuing"
     exit 1
   fi
 
@@ -1284,16 +1273,19 @@ main() {
     log "Remote migration source specified: ${MIGRATE_FROM}"
     if migrate_plex_from_host "${MIGRATE_FROM}"; then
       log "✅ Remote migration completed successfully"
+      # Apply the migrated configuration
+      migrate_plex_config
     else
       collect_error "Remote migration from ${MIGRATE_FROM} failed"
       collect_error "Cannot continue with fresh installation when migration was explicitly requested"
       collect_error "Please fix migration issues or run without --migrate-from to do fresh installation"
       exit 1
     fi
+  elif [[ "${SKIP_MIGRATION}" != "true" && -d "${PLEX_OLD_CONFIG}" ]]; then
+    # Local migration: configuration files are already present
+    log "Local migration files found at ${PLEX_OLD_CONFIG}"
+    migrate_plex_config
   fi
-
-  # Migrate configuration if available (local migration)
-  migrate_plex_config
 
   # Configure custom port for fresh installations (non-migration) using macOS plist method
   if [[ -n "${TARGET_PLEX_PORT:-}" && "${TARGET_PLEX_PORT}" != "32400" && -z "${MIGRATE_FROM}" && ! -d "${PLEX_OLD_CONFIG}" ]]; then
