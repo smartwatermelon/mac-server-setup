@@ -804,8 +804,8 @@ migrate_plex_from_host() {
   log "Creating migration directory: ${PLEX_OLD_CONFIG%/*}"
   mkdir -p "${PLEX_OLD_CONFIG%/*}"
 
-  # Define source paths
-  local plex_config_source="${source_host}:Library/Application\ Support/Plex\ Media\ Server/"
+  # Define source paths (properly quoted for spaces)
+  local plex_config_source="${source_host}:Library/Application Support/Plex Media Server/"
   local plex_plist_source="${source_host}:Library/Preferences/com.plexapp.plexmediaserver.plist"
 
   log "Migrating Plex configuration from ${source_host}..."
@@ -832,7 +832,7 @@ migrate_plex_from_host() {
       log "✅ Plex configuration migrated successfully"
       rm -f "${rsync_log}"
     else
-      log "❌ Plex configuration migration failed"
+      collect_error "Plex configuration migration failed"
       if [[ -f "${rsync_log}" ]]; then
         log "Last few lines of rsync output:"
         tail -5 "${rsync_log}" | while IFS= read -r line; do
@@ -848,7 +848,7 @@ migrate_plex_from_host() {
     if scp -r "${plex_config_source}" "${PLEX_OLD_CONFIG%/*}/"; then
       log "✅ Plex configuration migrated successfully"
     else
-      log "❌ Plex configuration migration failed"
+      collect_error "Plex configuration migration failed (scp fallback)"
       return 1
     fi
   fi
@@ -1285,7 +1285,10 @@ main() {
     if migrate_plex_from_host "${MIGRATE_FROM}"; then
       log "✅ Remote migration completed successfully"
     else
-      log "❌ Remote migration failed - continuing with fresh installation"
+      collect_error "Remote migration from ${MIGRATE_FROM} failed"
+      collect_error "Cannot continue with fresh installation when migration was explicitly requested"
+      collect_error "Please fix migration issues or run without --migrate-from to do fresh installation"
+      exit 1
     fi
   fi
 
