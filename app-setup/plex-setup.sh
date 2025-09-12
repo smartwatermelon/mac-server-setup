@@ -54,7 +54,6 @@ if [[ -f "${CONFIG_FILE}" ]]; then
   # shellcheck source=/dev/null
   source "${CONFIG_FILE}"
   OPERATOR_USERNAME="${OPERATOR_USERNAME:-operator}"
-  OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
   NAS_USERNAME="${NAS_USERNAME:-plex}"
   NAS_HOSTNAME="${NAS_HOSTNAME:-nas.local}"
   NAS_SHARE_NAME="${NAS_SHARE_NAME:-Media}"
@@ -66,11 +65,15 @@ fi
 # Derive configuration variables
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
+OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
 
 # Plex configuration
 PLEX_MEDIA_MOUNT="/Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
 PLEX_SERVER_NAME="${PLEX_SERVER_NAME_OVERRIDE:-${HOSTNAME}}"
 PLEX_PREFS="com.plexapp.plexmediaserver"
+LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
+LAUNCH_AGENT="com.${HOSTNAME}.plexmediaserver"
+LAUNCH_AGENT_FILE="${LAUNCH_AGENTS_DIR}/${LAUNCH_AGENT}.plist"
 
 # Migration settings
 PLEX_OLD_CONFIG="${HOME}/plex-migration/Plex Media Server"
@@ -1249,9 +1252,6 @@ configure_plex_autostart() {
   # Deploy Plex startup wrapper script
   WRAPPER_SCRIPT_SOURCE="${SCRIPT_DIR}/templates/start-plex.sh"
   WRAPPER_SCRIPT="${OPERATOR_HOME}/.local/bin/start-plex.sh"
-  LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
-  LAUNCH_AGENT="com.${HOSTNAME}.plexmediaserver"
-  LAUNCH_AGENT_FILE="${LAUNCH_AGENTS_DIR}/${LAUNCH_AGENT}.plist"
 
   log "Deploying Plex startup wrapper script..."
 
