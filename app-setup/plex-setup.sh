@@ -1027,6 +1027,8 @@ migrate_plex_config() {
     # Configure custom port if we have port assignment from migration
     if [[ -n "${TARGET_PLEX_PORT:-}" && "${TARGET_PLEX_PORT}" != "32400" ]]; then
       configure_plex_port "${TARGET_PLEX_PORT}"
+      # Also configure via macOS plist method to ensure operator context has the setting
+      configure_plex_port_plist "${TARGET_PLEX_PORT}"
     fi
   else
     log "Configuration migration declined by user"
