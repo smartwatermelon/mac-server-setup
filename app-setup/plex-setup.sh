@@ -54,6 +54,7 @@ if [[ -f "${CONFIG_FILE}" ]]; then
   # shellcheck source=/dev/null
   source "${CONFIG_FILE}"
   OPERATOR_USERNAME="${OPERATOR_USERNAME:-operator}"
+  OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
   NAS_USERNAME="${NAS_USERNAME:-plex}"
   NAS_HOSTNAME="${NAS_HOSTNAME:-nas.local}"
   NAS_SHARE_NAME="${NAS_SHARE_NAME:-Media}"
@@ -1246,7 +1247,6 @@ configure_plex_autostart() {
   section "Configuring Plex Auto-Start"
 
   # Deploy Plex startup wrapper script
-  OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
   WRAPPER_SCRIPT_SOURCE="${SCRIPT_DIR}/templates/start-plex.sh"
   WRAPPER_SCRIPT="${OPERATOR_HOME}/.local/bin/start-plex.sh"
   LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
