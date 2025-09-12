@@ -940,7 +940,7 @@ migrate_selective_preferences() {
   apply_if_exists "${old_plist}" ButlerStartHour
 
   # CORRECTED SETTINGS - Set to new server values
-  # FriendlyName: Set to new server name (TILSIT, not BOURSIN)
+  # FriendlyName: Set to new server name
   sudo -iu "${OPERATOR_USERNAME}" defaults write "${PLEX_PREFS}" FriendlyName -string "${PLEX_SERVER_NAME}"
   log "✅ Set FriendlyName to new server: ${PLEX_SERVER_NAME}"
 
@@ -1247,7 +1247,7 @@ configure_plex_autostart() {
   WRAPPER_SCRIPT_SOURCE="${SCRIPT_DIR}/templates/start-plex.sh"
   WRAPPER_SCRIPT="${OPERATOR_HOME}/.local/bin/start-plex.sh"
   LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
-  LAUNCH_AGENT="com.tilsit.plexmediaserver"
+  LAUNCH_AGENT="com.${HOSTNAME}.plexmediaserver"
   LAUNCH_AGENT_FILE="${LAUNCH_AGENTS_DIR}/${LAUNCH_AGENT}.plist"
 
   log "Deploying Plex startup wrapper script..."
