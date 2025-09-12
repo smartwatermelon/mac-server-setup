@@ -146,7 +146,7 @@ The setup process consists of two main phases:
 │   │   └── dropbox_sync.conf  # Dropbox sync settings
 │   ├── templates/             # Runtime script templates
 │   │   ├── mount-nas-media.sh # SMB mount script template
-│   │   ├── start-plex-with-mount.sh # Plex startup wrapper template
+│   │   ├── start-plex.sh # Plex startup wrapper template
 │   │   └── start-rclone.sh    # rclone sync script template
 │   ├── plex-setup.sh          # Plex Media Server setup
 │   ├── rclone-setup.sh        # Dropbox sync setup

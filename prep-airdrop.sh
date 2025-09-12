@@ -747,7 +747,7 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
 
   # Copy template scripts to app-setup/templates
   copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/mount-nas-media.sh" "app-setup/templates/mount-nas-media.sh" "REQUIRED" || echo "Warning: mount-nas-media.sh not found in app-setup-templates directory"
-  copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-plex-with-mount.sh" "app-setup/templates/start-plex-with-mount.sh" "OPTIONAL" || echo "Warning: start-plex-with-mount.sh not found in app-setup-templates directory"
+  copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-plex.sh" "app-setup/templates/start-plex.sh" "OPTIONAL" || echo "Warning: start-plex.sh not found in app-setup-templates directory"
   copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/app-setup-templates/start-rclone.sh" "app-setup/templates/start-rclone.sh" "REQUIRED" || echo "Warning: start-rclone.sh not found in app-setup-templates directory"
 
   # Copy app setup scripts to app-setup directory

@@ -8,13 +8,16 @@
 # - Configuration migration from existing Plex server
 # - Auto-start configuration
 #
-# Usage: ./plex-setup.sh [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--password PASSWORD]
+# Usage: ./plex-setup.sh [--force] [--migrate] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--custom-port PORT] [--password PASSWORD]
 #   --force: Skip all confirmation prompts
+#   --clean: Stop and remove existing Plex Media Server if found
+#   --migrate: Skip initial migration prompt (for orchestrator use)
 #   --skip-migration: Skip Plex config migration
 #   --skip-mount: Skip SMB mount setup
 #   --server-name: Set Plex server name (default: hostname)
 #   --migrate-from: Source hostname for Plex migration (e.g., old-server.local)
-#   Note: --skip-migration and --migrate-from are mutually exclusive
+#   --custom-port: Set custom port for fresh installations (prevents conflicts)
+#   Note: --migrate, --skip-migration, and --migrate-from are mutually exclusive
 #
 # Expected Plex config files location:
 #   ~/plex-migration/
@@ -64,7 +67,7 @@ HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 
 # Plex configuration
-PLEX_MEDIA_MOUNT="${HOME}/.local/mnt/${NAS_SHARE_NAME}"
+PLEX_MEDIA_MOUNT="/Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
 PLEX_SERVER_NAME="${PLEX_SERVER_NAME_OVERRIDE:-${HOSTNAME}}"
 
 # Migration settings
@@ -73,15 +76,26 @@ PLEX_NEW_CONFIG="/Users/Shared/PlexMediaServer"
 
 # Parse command line arguments
 FORCE=false
+MIGRATE=false
 SKIP_MIGRATION=false
 SKIP_MOUNT=false
 MIGRATE_FROM=""
+CUSTOM_PLEX_PORT=""
 ADMINISTRATOR_PASSWORD="${ADMINISTRATOR_PASSWORD:-}"
+CLEAN=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --force)
       FORCE=true
+      shift
+      ;;
+    --clean)
+      CLEAN=true
+      shift
+      ;;
+    --migrate)
+      MIGRATE=true
       shift
       ;;
     --skip-migration)
@@ -100,21 +114,30 @@ while [[ $# -gt 0 ]]; do
       MIGRATE_FROM="$2"
       shift 2
       ;;
+    --custom-port)
+      CUSTOM_PLEX_PORT="$2"
+      shift 2
+      ;;
     --password)
       ADMINISTRATOR_PASSWORD="$2"
       shift 2
       ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--password PASSWORD]"
+      echo "Usage: $0 [--force] [--clean] [--migrate] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--custom-port PORT] [--password PASSWORD]"
       exit 1
       ;;
   esac
 done
 
 # Validate conflicting options
-if [[ "${SKIP_MIGRATION}" == "true" && -n "${MIGRATE_FROM}" ]]; then
-  echo "Error: --skip-migration and --migrate-from cannot be used together"
+migration_flags=0
+[[ "${MIGRATE}" == "true" ]] && ((migration_flags += 1))
+[[ "${SKIP_MIGRATION}" == "true" ]] && ((migration_flags += 1))
+[[ -n "${MIGRATE_FROM}" ]] && ((migration_flags += 1))
+
+if [[ "${migration_flags}" -gt 1 ]]; then
+  echo "Error: --migrate, --skip-migration, and --migrate-from cannot be used together"
   exit 1
 fi
 
@@ -322,9 +345,27 @@ discover_plex_servers() {
   servers=$(echo "${dns_output}" | grep "Add" | awk '{print $NF}' | sort -u)
 
   if [[ -n "${servers}" ]]; then
-    # Only echo the servers to stdout (for capture), don't mix with log messages
-    echo "${servers}"
-    return 0
+    # Filter out local hostname to prevent self-migration attempts
+    local filtered_servers
+    filtered_servers=$(echo "${servers}" | while IFS= read -r server; do
+      # Normalize discovered server name: remove .local suffix and convert to uppercase
+      local normalized_server="${server%.local}"
+      normalized_server="${normalized_server^^}"
+
+      # Compare normalized server name to local hostname
+      if [[ "${normalized_server}" != "${HOSTNAME}" ]]; then
+        echo "${server}"
+      fi
+    done)
+
+    if [[ -n "${filtered_servers}" ]]; then
+      # Only echo the filtered servers to stdout (for capture), don't mix with log messages
+      echo "${filtered_servers}"
+      return 0
+    else
+      # All discovered servers were local - return as if no servers found
+      return 1
+    fi
   else
     return 1
   fi
@@ -507,31 +548,56 @@ EOF
 install_plex() {
   section "Installing Plex Media Server"
 
-  # Check if Plex is already installed
-  if [[ -d "/Applications/Plex Media Server.app" ]]; then
-    log "Plex Media Server is already installed at /Applications/Plex Media Server.app"
-    log "✅ Using existing Plex installation"
-    return 0
-  fi
-
-  # Check if it was installed via Homebrew cask
-  if command -v brew &>/dev/null && brew list --cask plex-media-server &>/dev/null; then
-    log "Plex Media Server is installed via Homebrew"
-    log "✅ Using existing Homebrew Plex installation"
-    return 0
-  fi
-
   # Verify Homebrew is available
   if ! command -v brew &>/dev/null; then
-    log "❌ Homebrew not found - please install Homebrew first"
+    collect_error "Homebrew not found - please install Homebrew first"
     exit 1
+  fi
+
+  if [[ "${CLEAN}" != "true" ]]; then
+    # Check if Plex is already installed
+    if [[ -d "/Applications/Plex Media Server.app" ]]; then
+      log "Plex Media Server is already installed at /Applications/Plex Media Server.app"
+      log "✅ Using existing Plex installation"
+      return 0
+    fi
+
+    # Check if it was installed via Homebrew cask
+    if command -v brew &>/dev/null && brew list --cask plex-media-server &>/dev/null; then
+      log "Plex Media Server is installed via Homebrew"
+      log "✅ Using existing Homebrew Plex installation"
+      return 0
+    fi
+  else # CLEAN = true
+    if pgrep -f 'Plex Media Server' &>/dev/null; then
+      log "Force stopping all Plex Media Server processes..."
+      if sudo -p "Enter password to force-stop all Plex Media Server processes: " pkill -9 -f 'Plex Media Server'; then
+        check_success "Force stop all Plex Media Server processes"
+      else
+        collect_warning "Failed to force stop all Plex Media Server processes"
+        if ! confirm "Continue install?" "y"; then
+          log "Setup cancelled by user"
+          exit 0
+        fi
+      fi
+    fi
+    log "Uninstalling Plex Media Server via Homebrew (--clean specified)"
+    if brew uninstall --cask --force --zap --ignore-dependencies plex-media-server; then
+      check_success "Plex Media Server uninstallation"
+    else
+      collect_warning "Failed to uninstall Plex Media Server via Homebrew"
+      if ! confirm "Continue install?" "y"; then
+        log "Setup cancelled by user"
+        exit 0
+      fi
+    fi
   fi
 
   log "Installing Plex Media Server via Homebrew..."
   if brew install --cask plex-media-server; then
     check_success "Plex Media Server installation"
   else
-    log "❌ Failed to install Plex Media Server via Homebrew"
+    collect_error "Failed to install Plex Media Server via Homebrew"
     exit 1
   fi
 
@@ -560,23 +626,98 @@ configure_plex_firewall() {
     log "✅ Plex Media Server configured in firewall"
 
   else
-    log "❌ Plex application not found at ${plex_app}"
+    collect_error "Plex application not found at ${plex_app}"
     exit 1
   fi
 }
 
-# Function to test SSH connectivity to a host
-test_ssh_connection() {
+# Helper function for actual SSH testing
+_try_ssh_host() {
   local host="$1"
-  log "Testing SSH connection to ${host}..."
 
-  if ssh -o ConnectTimeout=5 -o BatchMode=yes "${host}" 'echo "SSH_OK"' >/dev/null 2>&1; then
+  log "SSH connection details:"
+  log "  Target host: '${host}'"
+  log "  SSH options: ConnectTimeout=5, BatchMode=yes"
+  log "  Command: ssh -o ConnectTimeout=5 -o BatchMode=yes '${host}' 'echo \"SSH_OK\"'"
+
+  # Test basic connectivity first
+  log "Checking basic network connectivity to ${host}..."
+  if ping -c 1 -W 2000 "${host}" >/dev/null 2>&1; then
+    log "✅ Network ping to ${host} successful"
+  else
+    log "❌ Network ping to ${host} failed - host may be unreachable"
+  fi
+
+  # Test SSH with verbose output captured
+  log "Attempting SSH connection with detailed diagnostics..."
+  local ssh_output
+  ssh_output=$(ssh -o ConnectTimeout=5 -o BatchMode=yes -v "${host}" 'echo "SSH_OK"' 2>&1)
+  local ssh_result=$?
+
+  if [[ ${ssh_result} -eq 0 ]]; then
     log "✅ SSH connection to ${host} successful"
     return 0
   else
-    log "❌ SSH connection to ${host} failed"
+    log "❌ SSH connection to ${host} failed with exit code: ${ssh_result}"
+    log "SSH error details:"
+    echo "${ssh_output}" | while IFS= read -r line; do
+      log "  SSH: ${line}"
+    done
+
+    # Additional diagnostics
+    log "Additional SSH diagnostics:"
+    ssh_version=$(ssh -V 2>&1)
+    log "  SSH client version: ${ssh_version}"
+    log "  SSH config test: ssh -F /dev/null -o BatchMode=yes -o ConnectTimeout=5 '${host}' 'echo test' (would use system defaults)"
+
     return 1
   fi
+}
+
+# Function to test SSH connectivity to a host with automatic .local suffix retry
+test_ssh_connection() {
+  local host="$1"
+  local auto_resolve="${2:-true}" # New parameter for auto-resolution
+
+  log "Testing SSH connection to ${host}..."
+
+  # Try original hostname first
+  if _try_ssh_host "${host}"; then
+    return 0
+  fi
+
+  # If auto-resolve enabled and hostname doesn't have .local, try adding it
+  if [[ "${auto_resolve}" == "true" && "${host}" != *".local" ]]; then
+    local local_hostname="${host,,}.local"
+    log "Trying with .local suffix: ${local_hostname}"
+    if _try_ssh_host "${local_hostname}"; then
+      # Update the global variable to use resolved hostname
+      if [[ -n "${MIGRATE_FROM:-}" && "${MIGRATE_FROM}" == "${host}" ]]; then
+        MIGRATE_FROM="${local_hostname}"
+        log "✅ Updated migration source to resolved hostname: ${MIGRATE_FROM}"
+      fi
+      return 0
+    fi
+  fi
+
+  # Both attempts failed - provide troubleshooting suggestions
+  log "Troubleshooting suggestions:"
+  log "  1. Verify the hostname is correct: '${host}'"
+  if [[ "${host}" != *".local" ]]; then
+    log "  2. Try with .local suffix: --migrate-from ${host,,}.local"
+  fi
+  if [[ "${host}" == *".local" ]]; then
+    local base_host="${host%.local}"
+    log "  3. Try without .local suffix: --migrate-from ${base_host}"
+    if ping -c 1 -W 2000 "${base_host}" >/dev/null 2>&1; then
+      log "  ✅ ${base_host} is reachable (try: --migrate-from ${base_host})"
+    else
+      log "  ❌ ${base_host} also unreachable"
+    fi
+  fi
+
+  log "❌ SSH connection failed for all attempted hostnames"
+  return 1
 }
 
 # Function to get migration size estimate
@@ -588,7 +729,7 @@ get_migration_size_estimate() {
 
   # Get total size
   local total_size
-  total_size=$(ssh -o ConnectTimeout=10 "${source_host}" "du -sh '${plex_path}' 2>/dev/null | cut -f1" 2>/dev/null)
+  total_size=$(ssh -o ConnectTimeout=10 "${source_host}" "gdu -sh --exclude='localhost' --exclude='Cache' --exclude='PhotoTranscoder' --exclude='Logs' --exclude='Updates' --exclude='*.trace' '${plex_path}' 2>/dev/null | cut -f1" 2>/dev/null)
 
   # Get file count
   local file_count
@@ -604,17 +745,69 @@ get_migration_size_estimate() {
   fi
 }
 
+# Function to detect source Plex server port
+detect_source_plex_port() {
+  local source_host="$1"
+  local detected_port=""
+
+  # Send log messages to stderr to avoid interfering with function return value
+  log "Detecting Plex port on source server ${source_host}..." >&2
+
+  # Try to detect port via lsof (most accurate)
+  if detected_port=$(ssh -o ConnectTimeout=10 "${source_host}" "lsof -iTCP -sTCP:LISTEN | grep 'Plex Media' | awk '{print \$9}' | cut -d: -f2 | head -1" 2>/dev/null); then
+    if [[ -n "${detected_port}" && "${detected_port}" =~ ^[0-9]+$ ]]; then
+      log "✅ Detected Plex port via lsof: ${detected_port}" >&2
+      echo "${detected_port}"
+      return 0
+    fi
+  fi
+
+  # Fallback: Try common ports
+  for port in 32400 32401 32402 32403; do
+    log "Testing port ${port} on ${source_host}..." >&2
+    if ssh -o ConnectTimeout=5 "${source_host}" "lsof -iTCP:${port} -sTCP:LISTEN" >/dev/null 2>&1; then
+      log "✅ Found Plex listening on port: ${port}" >&2
+      echo "${port}"
+      return 0
+    fi
+  done
+
+  # Default fallback
+  log "⚠️  Could not detect Plex port, assuming default: 32400" >&2
+  echo "32400"
+  return 0
+}
+
 # Function to migrate Plex configuration from remote host
 migrate_plex_from_host() {
   local source_host="$1"
 
   log "Starting Plex migration from ${source_host}"
+  log "Migration source details:"
+  log "  Original hostname: '${source_host}'"
+  log "  Will attempt SSH connection to verify accessibility"
 
   # Test SSH connectivity first
   if ! test_ssh_connection "${source_host}"; then
-    log "Cannot proceed with migration - SSH connection failed"
+    collect_error "Cannot proceed with migration - SSH connection failed"
+    log "Troubleshooting suggestions:"
+    log "  1. Verify the hostname is correct: '${source_host}'"
+    log "  2. Check SSH is enabled on the source server"
+    log "  3. Ensure SSH keys are set up: ssh-copy-id ${source_host}"
+    log "  4. Test manual SSH: ssh ${source_host}"
+    if [[ "${source_host}" != *".local" ]]; then
+      log "  5. Try with .local suffix: --migrate-from ${source_host}.local"
+    fi
     return 1
   fi
+
+  # Detect source server port and set target port
+  SOURCE_PLEX_PORT=$(detect_source_plex_port "${source_host}")
+  TARGET_PLEX_PORT=$((SOURCE_PLEX_PORT + 1))
+
+  log "Port assignment for migration:"
+  log "  Source server (${source_host}): ${SOURCE_PLEX_PORT}"
+  log "  Target server (${HOSTNAME}): ${TARGET_PLEX_PORT}"
 
   # Get size estimate
   get_migration_size_estimate "${source_host}"
@@ -623,35 +816,35 @@ migrate_plex_from_host() {
   log "Creating migration directory: ${PLEX_OLD_CONFIG%/*}"
   mkdir -p "${PLEX_OLD_CONFIG%/*}"
 
-  # Define source paths
-  local plex_config_source="${source_host}:Library/Application\ Support/Plex\ Media\ Server/"
+  # Define source paths (properly quoted for spaces)
+  # Note: No trailing slash so rsync copies the directory itself, not just contents
+  local plex_config_source="${source_host}:Library/Application Support/Plex Media Server"
   local plex_plist_source="${source_host}:Library/Preferences/com.plexapp.plexmediaserver.plist"
 
   log "Migrating Plex configuration from ${source_host}..."
+  log "Excluding large regenerable directories: Cache, PhotoTranscoder, Logs, Updates"
   log "This may take several minutes depending on the size of your Plex database"
 
   # Use rsync with progress for the main config
   if command -v rsync >/dev/null 2>&1; then
     # Use rsync with progress but limit output noise
     log "Starting rsync migration (excluding Cache directory)..."
-    log "This may take several minutes - progress will be shown periodically"
+    log "Progress will be shown as a single updating line..."
 
-    # Run rsync and capture output to a temp file for processing
+    # Use rsync with clean progress display - no complex background monitoring needed
     local rsync_log="/tmp/plex_rsync_$$.log"
-    if rsync -aH --progress --compress --whole-file --exclude='Cache' \
-      "${plex_config_source}" "${PLEX_OLD_CONFIG%/*}/" 2>&1 \
-      | tee "${rsync_log}" \
-      | grep --line-buffered -E "(receiving|sent|total size|\s+[0-9]+%)" \
-      | while IFS= read -r line; do
-        # Only log percentage updates and summary lines to reduce noise
-        if [[ "${line}" =~ [0-9]+% ]] || [[ "${line}" =~ (receiving|sent|total) ]]; then
-          log "  ${line// */}" # Remove extra whitespace
-        fi
-      done; then
+    if rsync -aH --info=progress2 --info=name0 --compress --whole-file \
+      --exclude='localhost' \
+      --exclude='Cache' \
+      --exclude='PhotoTranscoder' \
+      --exclude='Logs' \
+      --exclude='Updates' \
+      --exclude='*.trace' \
+      "${plex_config_source}" "${PLEX_OLD_CONFIG%/*}/" 2>&1 | tee "${rsync_log}"; then
       log "✅ Plex configuration migrated successfully"
       rm -f "${rsync_log}"
     else
-      log "❌ Plex configuration migration failed"
+      collect_error "Plex configuration migration failed"
       if [[ -f "${rsync_log}" ]]; then
         log "Last few lines of rsync output:"
         tail -5 "${rsync_log}" | while IFS= read -r line; do
@@ -664,10 +857,11 @@ migrate_plex_from_host() {
   else
     # Fallback to scp if rsync not available
     log "rsync not available, using scp (no progress indication)..."
+    log "Note: scp cannot exclude directories - full transfer including Cache, PhotoTranscoder, etc."
     if scp -r "${plex_config_source}" "${PLEX_OLD_CONFIG%/*}/"; then
-      log "✅ Plex configuration migrated successfully"
+      log "✅ Plex configuration migrated successfully (includes all directories)"
     else
-      log "❌ Plex configuration migration failed"
+      collect_error "Plex configuration migration failed (scp fallback)"
       return 1
     fi
   fi
@@ -717,18 +911,13 @@ setup_shared_config() {
 migrate_plex_config() {
   section "Plex Configuration Migration"
 
-  if [[ "${SKIP_MIGRATION}" == "true" ]]; then
-    log "Skipping Plex configuration migration (--skip-migration specified)"
-    return 0
-  fi
-
   if [[ ! -d "${PLEX_OLD_CONFIG}" ]]; then
-    log "No existing Plex configuration found at ${PLEX_OLD_CONFIG}"
-    log "Plex will start with fresh configuration"
-    return 0
+    collect_error "Migration configuration not found at ${PLEX_OLD_CONFIG}"
+    log "This indicates migration failed to properly transfer the configuration"
+    exit 1
   fi
 
-  if confirm "Apply migrated Plex configuration?" "n"; then
+  if confirm "Apply migrated Plex configuration?" "y"; then
     log "Stopping Plex Media Server if running..."
     pkill -f "Plex Media Server" 2>/dev/null || true
     sleep 3
@@ -750,8 +939,228 @@ migrate_plex_config() {
     check_success "Migrated configuration permissions"
 
     log "✅ Plex configuration migrated successfully"
+
+    # Update library paths immediately after migration
+    update_migrated_library_paths
+
+    # Configure custom port if we have port assignment from migration
+    if [[ -n "${TARGET_PLEX_PORT:-}" && "${TARGET_PLEX_PORT}" != "32400" ]]; then
+      configure_plex_port "${TARGET_PLEX_PORT}"
+    fi
   else
-    log "Skipping configuration migration"
+    log "Configuration migration declined by user"
+    return 1
+  fi
+}
+
+# Function to safely update library paths in migrated Plex database
+update_migrated_library_paths() {
+  log "Updating library paths after migration..."
+
+  # Only update paths if this was a migration
+  if [[ -z "${MIGRATE_FROM:-}" ]]; then
+    log "   No migration performed - library path updates not needed"
+    return 0
+  fi
+
+  # Define Plex database paths
+  local plex_app_support="${PLEX_NEW_CONFIG}"
+  local plex_db_path="${plex_app_support}/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db"
+  local backup_db_path="${plex_app_support}/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db.backup-migration"
+
+  # Verify database exists
+  if [[ ! -f "${plex_db_path}" ]]; then
+    log "⚠️  Plex database not found at: ${plex_db_path}"
+    log "   Library paths may need manual configuration"
+    return 0
+  fi
+
+  # Use Plex's custom SQLite tool for database operations
+  local plex_sqlite="/Applications/Plex Media Server.app/Contents/MacOS/Plex SQLite"
+
+  if [[ ! -f "${plex_sqlite}" ]]; then
+    log "❌ Plex SQLite tool not found at: ${plex_sqlite}"
+    log "   Library paths may need manual configuration"
+    return 1
+  fi
+
+  # Check for paths that need updating (any paths containing Media/ in any table)
+  log "🔍 Checking for library paths that need updates..."
+  local section_paths media_part_paths stream_paths total_paths
+
+  section_paths=$("${plex_sqlite}" "${plex_db_path}" "SELECT COUNT(*) FROM section_locations WHERE instr(root_path, 'Media/') > 0;" 2>/dev/null || echo "0")
+  media_part_paths=$("${plex_sqlite}" "${plex_db_path}" "SELECT COUNT(*) FROM media_parts WHERE instr(file, 'Media/') > 0;" 2>/dev/null || echo "0")
+  stream_paths=$("${plex_sqlite}" "${plex_db_path}" "SELECT COUNT(*) FROM media_streams WHERE url LIKE 'file:///Users/%' AND instr(url, 'Media/') > 0;" 2>/dev/null || echo "0")
+
+  total_paths=$((section_paths + media_part_paths + stream_paths))
+
+  if [[ "${total_paths}" -eq 0 ]]; then
+    log "✅ No library paths need updating"
+    return 0
+  fi
+
+  log "📊 Found ${total_paths} total paths that need updating:"
+  log "   section_locations: ${section_paths} paths"
+  log "   media_parts: ${media_part_paths} paths"
+  log "   media_streams: ${stream_paths} paths"
+
+  # Create database backup
+  log "💾 Creating database backup..."
+  if cp "${plex_db_path}" "${backup_db_path}"; then
+    log "✅ Database backed up to: ${backup_db_path}"
+  else
+    log "⚠️  Failed to create database backup - skipping path updates"
+    return 1
+  fi
+
+  # Show sample paths that will be updated from each table
+  log "🔍 Sample paths to be updated:"
+
+  if [[ "${section_paths}" -gt 0 ]]; then
+    log "   section_locations (${section_paths} total):"
+    "${plex_sqlite}" "${plex_db_path}" "SELECT '    ' || root_path || ' → ${PLEX_MEDIA_MOUNT}/' || substr(root_path, instr(root_path, 'Media/') + length('Media/')) FROM section_locations WHERE instr(root_path, 'Media/') > 0 LIMIT 2;" 2>/dev/null || true
+  fi
+
+  if [[ "${media_part_paths}" -gt 0 ]]; then
+    log "   media_parts.file (${media_part_paths} total):"
+    "${plex_sqlite}" "${plex_db_path}" "SELECT '    ' || substr(file, 1, 60) || '... → ${PLEX_MEDIA_MOUNT}/Media/...' FROM media_parts WHERE instr(file, 'Media/') > 0 LIMIT 2;" 2>/dev/null || true
+  fi
+
+  if [[ "${stream_paths}" -gt 0 ]]; then
+    log "   media_streams.url (${stream_paths} total):"
+    "${plex_sqlite}" "${plex_db_path}" "SELECT '    ' || substr(url, 1, 60) || '... → file://${PLEX_MEDIA_MOUNT}/Media/...' FROM media_streams WHERE url LIKE 'file:///Users/%' AND instr(url, 'Media/') > 0 LIMIT 2;" 2>/dev/null || true
+  fi
+
+  # Perform the safe database update across all tables
+  log "🔧 Updating library paths in database..."
+
+  # Update section_locations
+  local section_result
+  section_result=$("${plex_sqlite}" "${plex_db_path}" "UPDATE section_locations SET root_path = '${PLEX_MEDIA_MOUNT}/' || substr(root_path, instr(root_path, 'Media/') + length('Media/')) WHERE instr(root_path, 'Media/') > 0; SELECT changes();" 2>/dev/null || echo "ERROR")
+
+  # Update media_parts.file
+  local parts_result
+  parts_result=$("${plex_sqlite}" "${plex_db_path}" "UPDATE media_parts SET file = '${PLEX_MEDIA_MOUNT}/' || substr(file, instr(file, 'Media/') + length('Media/')) WHERE instr(file, 'Media/') > 0; SELECT changes();" 2>/dev/null || echo "ERROR")
+
+  # Update media_streams.url (handle file:// URLs)
+  local streams_result
+  streams_result=$("${plex_sqlite}" "${plex_db_path}" "UPDATE media_streams SET url = 'file://${PLEX_MEDIA_MOUNT}/' || substr(url, instr(url, 'Media/') + length('Media/')) WHERE url LIKE 'file:///Users/%' AND instr(url, 'Media/') > 0; SELECT changes();" 2>/dev/null || echo "ERROR")
+
+  # Check for any errors
+  if [[ "${section_result}" == "ERROR" || "${parts_result}" == "ERROR" || "${streams_result}" == "ERROR" ]]; then
+    log "❌ Database update failed - restoring backup"
+    cp "${backup_db_path}" "${plex_db_path}"
+    return 1
+  fi
+
+  local total_updated=$((section_result + parts_result + streams_result))
+
+  # Verify the update was successful
+  log "✅ Database updated successfully:"
+  log "   section_locations: ${section_result} paths changed"
+  log "   media_parts: ${parts_result} paths changed"
+  log "   media_streams: ${streams_result} paths changed"
+  log "   Total: ${total_updated} paths updated"
+
+  # Verify no old path references remain in any table
+  log "🔍 Verifying all old path references have been updated..."
+
+  local remaining_section remaining_parts remaining_streams total_remaining
+  remaining_section=$("${plex_sqlite}" "${plex_db_path}" "SELECT COUNT(*) FROM section_locations WHERE root_path LIKE '%/Users/%' AND root_path NOT LIKE '/Users/${OPERATOR_USERNAME}/%';" 2>/dev/null || echo "ERROR")
+  remaining_parts=$("${plex_sqlite}" "${plex_db_path}" "SELECT COUNT(*) FROM media_parts WHERE file LIKE '%/Users/%' AND file NOT LIKE '/Users/${OPERATOR_USERNAME}/%';" 2>/dev/null || echo "ERROR")
+  remaining_streams=$("${plex_sqlite}" "${plex_db_path}" "SELECT COUNT(*) FROM media_streams WHERE url LIKE '%/Users/%' AND url NOT LIKE '%/Users/${OPERATOR_USERNAME}/%';" 2>/dev/null || echo "ERROR")
+
+  total_remaining=$((remaining_section + remaining_parts + remaining_streams))
+
+  if [[ "${total_remaining}" -eq 0 ]]; then
+    log "✅ All library paths successfully updated to operator account"
+    log "   Sample updated section_locations:"
+    "${plex_sqlite}" "${plex_db_path}" "SELECT '    Section ' || library_section_id || ': ' || root_path FROM section_locations LIMIT 2;" 2>/dev/null || true
+  else
+    log "⚠️  Warning: ${total_remaining} old path references may still exist:"
+    log "   section_locations: ${remaining_section}"
+    log "   media_parts: ${remaining_parts}"
+    log "   media_streams: ${remaining_streams}"
+  fi
+
+  # Database integrity check
+  log "🔍 Performing database integrity check..."
+  local integrity_result
+  integrity_result=$("${plex_sqlite}" "${plex_db_path}" "PRAGMA integrity_check;" 2>/dev/null || echo "ERROR")
+
+  if [[ "${integrity_result}" == "ok" ]]; then
+    log "✅ Database integrity verified"
+  else
+    log "❌ Database integrity check failed - restoring backup"
+    cp "${backup_db_path}" "${plex_db_path}"
+    return 1
+  fi
+
+  log "🎉 Library path updates completed successfully"
+  log "   Database backup preserved at: ${backup_db_path}"
+
+  return 0
+}
+
+# Function to configure Plex port in preferences
+configure_plex_port() {
+  local port="$1"
+  local prefs_file="${PLEX_NEW_CONFIG}/Plex Media Server/Preferences.xml"
+
+  log "Configuring Plex to use port ${port}..."
+
+  if [[ -f "${prefs_file}" ]]; then
+    # Create backup of preferences
+    backup_timestamp=$(date +%Y%m%d_%H%M%S)
+    sudo -p "Enter your '${USER}' password to backup Plex preferences: " cp "${prefs_file}" "${prefs_file}.backup.${backup_timestamp}"
+
+    # Check if ManualPortMappingPort already exists
+    if grep -q 'ManualPortMappingPort=' "${prefs_file}"; then
+      # Update existing port setting
+      sudo -p "Enter your '${USER}' password to update Plex port: " sed -i '' "s/ManualPortMappingPort=\"[0-9]*\"/ManualPortMappingPort=\"${port}\"/" "${prefs_file}"
+      log "✅ Updated existing port setting to ${port}"
+    else
+      # Add port setting to preferences
+      # Insert before the closing />
+      sudo -p "Enter your '${USER}' password to set Plex port: " sed -i '' "s|/>| ManualPortMappingPort=\"${port}\" ManualPortMappingMode=\"1\"/>|" "${prefs_file}"
+      log "✅ Added port setting ${port} to Plex preferences"
+    fi
+
+    # Also ensure manual port mapping is enabled
+    if ! grep -q 'ManualPortMappingMode=' "${prefs_file}"; then
+      sudo -p "Enter your '${USER}' password to enable manual port mapping: " sed -i '' "s|/>| ManualPortMappingMode=\"1\"/>|" "${prefs_file}"
+    else
+      sudo -p "Enter your '${USER}' password to enable manual port mapping: " sed -i '' "s/ManualPortMappingMode=\"[0-9]*\"/ManualPortMappingMode=\"1\"/" "${prefs_file}"
+    fi
+
+    log "✅ Plex configured for port ${port} with manual port mapping enabled"
+  else
+    log "⚠️  Preferences file not found, port will be configured on first Plex startup"
+  fi
+}
+
+# Function to configure Plex port using macOS plist method (for fresh installations)
+configure_plex_port_plist() {
+  local port="$1"
+
+  log "Configuring Plex to use port ${port} via macOS plist method (operator context)..."
+
+  # Use defaults command in operator context to set the ManualPortMappingPort and enable ManualPortMappingMode
+  # This is the official macOS way to configure Plex settings before first startup
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.plexapp.plexmediaserver ManualPortMappingPort -int "${port}"
+  sudo -iu "${OPERATOR_USERNAME}" defaults write com.plexapp.plexmediaserver ManualPortMappingMode -int 1
+
+  # Verify the settings were written in operator context
+  local configured_port
+  configured_port=$(sudo -iu "${OPERATOR_USERNAME}" defaults read com.plexapp.plexmediaserver ManualPortMappingPort 2>/dev/null || echo "")
+
+  if [[ "${configured_port}" == "${port}" ]]; then
+    log "✅ Successfully configured Plex for port ${port} using macOS defaults (operator context)"
+    log "   Manual port mapping enabled with port ${port}"
+    log "   Settings will take effect when Plex starts under ${OPERATOR_USERNAME}"
+  else
+    collect_error "Failed to configure custom port ${port} in operator's macOS plist"
+    return 1
   fi
 }
 
@@ -761,30 +1170,22 @@ configure_plex_autostart() {
 
   # Deploy Plex startup wrapper script
   OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
-  WRAPPER_TEMPLATE="${SCRIPT_DIR}/templates/start-plex-with-mount.sh"
-  WRAPPER_SCRIPT="${OPERATOR_HOME}/.local/bin/start-plex-with-mount.sh"
+  WRAPPER_SCRIPT_SOURCE="${SCRIPT_DIR}/templates/start-plex.sh"
+  WRAPPER_SCRIPT="${OPERATOR_HOME}/.local/bin/start-plex.sh"
   LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
   PLIST_FILE="${LAUNCH_AGENTS_DIR}/com.plexapp.plexmediaserver.plist"
 
   log "Deploying Plex startup wrapper script..."
 
-  # Verify template exists
-  if [[ ! -f "${WRAPPER_TEMPLATE}" ]]; then
-    log "❌ Plex wrapper script template not found at ${WRAPPER_TEMPLATE}"
+  # Verify source script exists
+  if [[ ! -f "${WRAPPER_SCRIPT_SOURCE}" ]]; then
+    collect_error "Plex wrapper script not found at ${WRAPPER_SCRIPT_SOURCE}"
     exit 1
   fi
 
-  # Create operator's script directory and copy template
+  # Create operator's script directory and copy script (no templating needed)
   sudo -p "[Plex setup] Enter password to create operator script directory: " -u "${OPERATOR_USERNAME}" mkdir -p "${OPERATOR_HOME}/.local/bin"
-  sudo -p "[Plex setup] Enter password to copy Plex wrapper script: " -u "${OPERATOR_USERNAME}" cp "${WRAPPER_TEMPLATE}" "${WRAPPER_SCRIPT}"
-
-  # Replace placeholders with actual values
-  sudo -p "[Plex setup] Enter password to configure Plex wrapper script: " -u "${OPERATOR_USERNAME}" sed -i '' \
-    -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
-    -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
-    "${WRAPPER_SCRIPT}"
-
-  # Set proper permissions
+  sudo -p "[Plex setup] Enter password to copy Plex wrapper script: " -u "${OPERATOR_USERNAME}" cp "${WRAPPER_SCRIPT_SOURCE}" "${WRAPPER_SCRIPT}"
   sudo -p "[Plex setup] Enter password to set Plex wrapper script permissions: " -u "${OPERATOR_USERNAME}" chmod 755 "${WRAPPER_SCRIPT}"
   check_success "Plex wrapper script deployment"
 
@@ -870,7 +1271,7 @@ start_plex() {
     log "  Local: http://localhost:32400/web"
     log "  Network: http://${HOSTNAME}.local:32400/web"
   else
-    log "❌ Plex Media Server failed to start"
+    collect_warning "Plex Media Server failed to start automatically"
     log "Try starting manually with: PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR='${PLEX_NEW_CONFIG}' open '/Applications/Plex Media Server.app'"
   fi
 }
@@ -893,7 +1294,8 @@ main() {
 
   # Handle migration setup if not already specified
   if [[ "${SKIP_MIGRATION}" != "true" && -z "${MIGRATE_FROM}" ]]; then
-    if confirm "Do you want to migrate from an existing Plex server?" "n"; then
+    # Skip initial migration prompt if --migrate flag is specified (orchestrator already asked)
+    if [[ "${MIGRATE}" == "true" ]] || confirm "Do you want to migrate from an existing Plex server?" "n"; then
       # Try to discover Plex servers
       log "Scanning for Plex servers on the network..."
       discovered_servers=$(discover_plex_servers)
@@ -905,15 +1307,33 @@ main() {
           log "  - ${server}"
         done
 
-        # Present discovered servers to user
+        # Present discovered servers to user with hostname resolution
         log "Select a Plex server to migrate from:"
         server_array=()
+        resolved_array=()
         index=1
         while IFS= read -r server; do
           # Clean up the server name (remove any extra whitespace)
           clean_server=$(echo "${server}" | tr -d '[:space:]')
-          log "  ${index}. ${clean_server}"
-          server_array+=("${clean_server}")
+
+          # Test hostname resolution for each discovered server
+          original_migrate_from="${MIGRATE_FROM}"
+          MIGRATE_FROM="${clean_server}"
+          if test_ssh_connection "${clean_server}" true >/dev/null 2>&1; then
+            resolved_hostname="${MIGRATE_FROM}" # Updated by test_ssh_connection
+            if [[ "${clean_server}" != "${resolved_hostname}" ]]; then
+              log "  ${index}. ${clean_server} → ${resolved_hostname} ✅"
+            else
+              log "  ${index}. ${clean_server} ✅"
+            fi
+            server_array+=("${clean_server}")
+            resolved_array+=("${resolved_hostname}")
+          else
+            log "  ${index}. ${clean_server} (⚠️  SSH failed)"
+            server_array+=("${clean_server}")
+            resolved_array+=("${clean_server}")
+          fi
+          MIGRATE_FROM="${original_migrate_from}" # Restore original value
           ((index += 1))
         done <<<"${discovered_servers}"
 
@@ -922,17 +1342,86 @@ main() {
         # Get user selection
         read -rp "Enter selection (1-${index}): " selection
         if [[ "${selection}" -ge 1 && "${selection}" -lt "${index}" ]]; then
-          MIGRATE_FROM="${server_array[$((selection - 1))]}"
-          log "Selected: ${MIGRATE_FROM}"
+          selected_original="${server_array[$((selection - 1))]}"
+          MIGRATE_FROM="${resolved_array[$((selection - 1))]}"
+          if [[ "${selected_original}" != "${MIGRATE_FROM}" ]]; then
+            log "Selected: ${selected_original} (resolved to ${MIGRATE_FROM})"
+          else
+            log "Selected: ${MIGRATE_FROM}"
+          fi
         else
           read -rp "Enter hostname of source Plex server: " MIGRATE_FROM
+          # Try to resolve manually entered hostname
+          if test_ssh_connection "${MIGRATE_FROM}" true >/dev/null 2>&1; then
+            log "Manual hostname resolved successfully"
+          else
+            log "⚠️  Manual hostname resolution failed - will attempt migration anyway"
+          fi
         fi
       else
         read -rp "Enter hostname of source Plex server (e.g., old-server.local): " MIGRATE_FROM
+        # Try to resolve manually entered hostname
+        if test_ssh_connection "${MIGRATE_FROM}" true >/dev/null 2>&1; then
+          log "Manual hostname resolved successfully"
+        else
+          log "⚠️  Manual hostname resolution failed - will attempt migration anyway"
+        fi
       fi
     else
       SKIP_MIGRATION=true
       log "Skipping migration - will start with fresh Plex configuration"
+
+      # Custom port option for fresh installations to prevent conflicts
+      if [[ -z "${CUSTOM_PLEX_PORT:-}" ]]; then
+        echo ""
+        echo "⚠️  Port Conflict Warning:"
+        echo "If you have another Plex server on your network using port 32400,"
+        echo "this can cause UPnP/auto-port mapping conflicts at your router."
+        echo ""
+        if confirm "Do you want to use a custom port instead of 32400?" "n"; then
+          # Interactive port selection with validation and retry
+          while true; do
+            read -rp "Enter port number (1025-65535, e.g., 32401, or 'default' for 32400): " CUSTOM_PLEX_PORT
+
+            # Allow user to type 'default' to use default port
+            if [[ "${CUSTOM_PLEX_PORT,,}" == "default" ]]; then
+              log "Using default port 32400"
+              CUSTOM_PLEX_PORT=""
+              break
+            fi
+
+            # Validate port number
+            if [[ "${CUSTOM_PLEX_PORT}" =~ ^[0-9]+$ && "${CUSTOM_PLEX_PORT}" -gt 1024 && "${CUSTOM_PLEX_PORT}" -lt 65536 ]]; then
+              TARGET_PLEX_PORT="${CUSTOM_PLEX_PORT}"
+              log "Custom port selected: ${TARGET_PLEX_PORT}"
+              break
+            else
+              echo "❌ Invalid port number. Please enter:"
+              echo "   • A port between 1025 and 65535 (e.g., 32401, 32402, 32403)"
+              echo "   • Or type 'default' to use port 32400"
+            fi
+          done
+        else
+          # Enhanced logging for automation mode when custom port is declined
+          if [[ "${FORCE}" == "true" ]]; then
+            log "⚠️  Using default port 32400 in automation mode"
+            log "⚠️  If port conflicts occur with existing Plex servers:"
+            log "   • Rerun with: --custom-port 32401 (or other available port)"
+            log "   • Check for other Plex servers: dns-sd -B _plexmediasvr._tcp"
+            log "   • Or use run-app-setup.sh --only plex-setup.sh for interactive setup"
+          fi
+        fi
+      else
+        # Custom port provided via command line - validate but don't retry interactively
+        if [[ "${CUSTOM_PLEX_PORT}" =~ ^[0-9]+$ && "${CUSTOM_PLEX_PORT}" -gt 1024 && "${CUSTOM_PLEX_PORT}" -lt 65536 ]]; then
+          TARGET_PLEX_PORT="${CUSTOM_PLEX_PORT}"
+          log "Using custom port from command line: ${TARGET_PLEX_PORT}"
+        else
+          collect_error "Invalid custom port '${CUSTOM_PLEX_PORT}' specified via command line"
+          collect_error "Port must be between 1025 and 65535"
+          exit 1
+        fi
+      fi
     fi
   fi
 
@@ -957,47 +1446,122 @@ main() {
     log "Remote migration source specified: ${MIGRATE_FROM}"
     if migrate_plex_from_host "${MIGRATE_FROM}"; then
       log "✅ Remote migration completed successfully"
+      # Apply the migrated configuration
+      if migrate_plex_config; then
+        log "✅ Migrated configuration applied successfully"
+      else
+        collect_error "Failed to apply migrated configuration after successful remote migration"
+        exit 1
+      fi
     else
-      log "❌ Remote migration failed - continuing with fresh installation"
+      collect_error "Remote migration from ${MIGRATE_FROM} failed"
+      collect_error "Cannot continue with fresh installation when migration was explicitly requested"
+      collect_error "Please fix migration issues or run without --migrate-from to do fresh installation"
+      exit 1
+    fi
+  elif [[ "${SKIP_MIGRATION}" != "true" && -d "${PLEX_OLD_CONFIG}" ]]; then
+    # Local migration: configuration files are already present
+    log "Local migration files found at ${PLEX_OLD_CONFIG}"
+    if migrate_plex_config; then
+      log "✅ Local migration applied successfully"
+    else
+      collect_error "Failed to apply local migration configuration"
+      exit 1
     fi
   fi
 
-  # Migrate configuration if available (local migration)
-  migrate_plex_config
+  # Configure custom port for fresh installations (non-migration) using macOS plist method
+  if [[ -n "${TARGET_PLEX_PORT:-}" && "${TARGET_PLEX_PORT}" != "32400" && -z "${MIGRATE_FROM}" && ! -d "${PLEX_OLD_CONFIG}" ]]; then
+    log "Configuring custom port ${TARGET_PLEX_PORT} for fresh installation using macOS plist method..."
+    configure_plex_port_plist "${TARGET_PLEX_PORT}"
+  fi
 
   # Configure auto-start
   configure_plex_autostart
 
-  # Start Plex
-  start_plex
+  # Note: Plex will start automatically when operator logs in via LaunchAgent
+  log "Plex is configured to start automatically when the operator user logs in"
 
   section "Setup Complete"
   log "✅ Plex Media Server setup completed successfully"
   log "Configuration directory: ${PLEX_NEW_CONFIG}"
   log "Media directory: ${PLEX_MEDIA_MOUNT}"
+  log ""
+  log "📋 Next Steps:"
+  log "  1. Reboot or log out of the administrator account"
+  log "  2. Log in as the '${OPERATOR_USERNAME}' user"
+  log "  3. Plex will start automatically on operator login"
+  log "  4. Access Plex at: http://${HOSTNAME}.local:32400/web"
+  log ""
+  log "⚠️  Important: Plex is configured to run under the operator account only"
+
+  # Show port configuration information
+  local plex_port="32400"
+  if [[ -n "${TARGET_PLEX_PORT:-}" ]]; then
+    plex_port="${TARGET_PLEX_PORT}"
+  fi
+
+  log ""
+  log "🌐 Plex Server Access:"
+  log "  Local access: http://localhost:${plex_port}/web"
+  log "  Network access: http://${HOSTNAME}.local:${plex_port}/web"
+
+  # Show port-specific information if custom port was configured
+  if [[ -n "${TARGET_PLEX_PORT:-}" && "${TARGET_PLEX_PORT}" != "32400" ]]; then
+    log ""
+    log "🔌 Port Configuration (Migration):"
+    log "  Source server port: ${SOURCE_PLEX_PORT:-32400}"
+    log "  Target server port: ${TARGET_PLEX_PORT}"
+    log "  Reason: Prevents conflicts with source server"
+    log ""
+    log "📡 Router Port Forwarding Required:"
+    log "  ⚠️  IMPORTANT: Update your router port forwarding rules"
+    log "  Old rule: External port → ${HOSTNAME}.local:32400"
+    log "  New rule: External port → ${HOSTNAME}.local:${TARGET_PLEX_PORT}"
+    log ""
+    log "  Router configuration steps:"
+    log "  1. Access your router admin interface"
+    log "  2. Navigate to Port Forwarding / Virtual Servers"
+    log "  3. Update the rule for ${HOSTNAME}.local"
+    log "  4. Change internal port from 32400 to ${TARGET_PLEX_PORT}"
+    log "  5. Save and restart router if required"
+    log ""
+    log "  🔍 Testing: After router update, verify external access works"
+    log "  📱 Plex apps will automatically discover the new port"
+  fi
 
   if [[ "${SKIP_MOUNT}" != "true" ]]; then
-    log "Media directory mounted for administrator"
     log ""
-    log "SMB Mount troubleshooting:"
-    log "  - Manual mount: mount_smbfs -o soft,nobrowse,noowners '//<username>:<password>@${NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
-    log "  - Check mounts: mount | grep \$(whoami)"
-    log "  - Unmount: umount '${PLEX_MEDIA_MOUNT}'"
-    log "  - 'Too many users' error indicates SMB connection limit reached"
+    log "📂 SMB Mount Information:"
+    log "  Media directory mounted for administrator"
+    log "  Mount troubleshooting:"
+    log "    - Manual mount: mount_smbfs -o soft,nobrowse,noowners '//<username>:<password>@${NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
+    log "    - Check mounts: mount | grep \$(whoami)"
+    log "    - Unmount: umount '${PLEX_MEDIA_MOUNT}'"
+    log "    - 'Too many users' error indicates SMB connection limit reached"
     log ""
-    log "⚠️  Remember:"
-    log "  - Each user has their own private mount in ~/.local/mnt/"
-    log "  - Mounts activate when users log in via LaunchAgent"
-    log "  - Both admin and operator share same SMB credentials"
+    log "  ⚠️  Mount behavior:"
+    log "    - Each user has their own private mount in ~/.local/mnt/"
+    log "    - Mounts activate when users log in via LaunchAgent"
+    log "    - Both admin and operator share same SMB credentials"
   fi
 
   # Show migration-specific guidance if migration was performed
   if [[ -n "${MIGRATE_FROM}" || -d "${PLEX_OLD_CONFIG}" ]]; then
     log ""
-    log "Migration completed:"
+    log "📦 Migration Summary:"
     log "  ✅ Configuration migrated successfully"
-    log "  ⚠️  You may need to update library paths in the web interface"
-    log "  ⚠️  Point libraries to ${PLEX_MEDIA_MOUNT} paths instead of old paths"
+    log "  ✅ Libraries and metadata preserved"
+    log "  ✅ Separate server identity maintained"
+    log ""
+    log "  📝 Post-migration tasks:"
+    log "    1. Update library paths in Plex web interface (if needed)"
+    log "    2. Point libraries to ${PLEX_MEDIA_MOUNT} paths"
+    log "    3. Verify all libraries scan correctly"
+    if [[ -n "${TARGET_PLEX_PORT:-}" && "${TARGET_PLEX_PORT}" != "32400" ]]; then
+      log "    4. Update router port forwarding (see above)"
+      log "    5. Test external access to new server"
+    fi
   fi
 }
 
