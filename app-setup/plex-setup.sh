@@ -69,6 +69,7 @@ HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 # Plex configuration
 PLEX_MEDIA_MOUNT="/Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
 PLEX_SERVER_NAME="${PLEX_SERVER_NAME_OVERRIDE:-${HOSTNAME}}"
+PLEX_PREFS="com.plexapp.plexmediaserver"
 
 # Migration settings
 PLEX_OLD_CONFIG="${HOME}/plex-migration/Plex Media Server"
@@ -866,15 +867,88 @@ migrate_plex_from_host() {
     fi
   fi
 
-  # Migrate preferences file
+  # Migrate preferences file with selective application
   log "Migrating Plex preferences..."
   if scp "${plex_plist_source}" "${PLEX_OLD_CONFIG%/*}/"; then
     log "✅ Plex preferences migrated successfully"
+    # Apply selective preference migration
+    migrate_selective_preferences
   else
     log "⚠️  Could not migrate Plex preferences (this is optional)"
   fi
 
   return 0
+}
+
+# Helper function to apply a setting if it exists in old plist
+apply_if_exists() {
+  local old_plist="$1"
+  local setting_key="$2"
+
+  # Read value from old plist
+  local old_value
+  if old_value=$(defaults read "${old_plist}" "${setting_key}" 2>/dev/null); then
+    # Apply to new server in operator context
+    sudo -iu "${OPERATOR_USERNAME}" defaults write "${PLEX_PREFS}" "${setting_key}" "${old_value}"
+    log "  Migrated ${setting_key}: ${old_value}"
+  fi
+}
+
+# Function to selectively migrate Plex preferences from old server plist
+migrate_selective_preferences() {
+  local old_plist="${PLEX_OLD_CONFIG%/*}/com.plexapp.plexmediaserver.plist"
+
+  if [[ ! -f "${old_plist}" ]]; then
+    log "⚠️  Old server plist not found - skipping selective preference migration"
+    return 0
+  fi
+
+  log "Applying selective preference migration from old server..."
+
+  # Detect current Ethernet interface for new server
+  local ethernet_interface
+  ethernet_interface=$(networksetup -listallhardwareports | awk '/Ethernet/{getline; print $2}' | head -n 1)
+
+  if [[ -z "${ethernet_interface}" ]]; then
+    collect_warning "Could not detect Ethernet interface - using en0 as default"
+    ethernet_interface="en0"
+  fi
+
+  log "Network interface detection: ${ethernet_interface}"
+
+  # GOOD SYNC CANDIDATES (13 settings) - Apply these from old server
+  # User Experience & Preferences
+  apply_if_exists "${old_plist}" showDockIcon
+  apply_if_exists "${old_plist}" CinemaTrailersFromLibrary
+  apply_if_exists "${old_plist}" SmartShuffleMusic
+
+  # Network & Access Configuration
+  apply_if_exists "${old_plist}" LanNetworksBandwidth
+  apply_if_exists "${old_plist}" allowedNetworks
+  apply_if_exists "${old_plist}" WanTotalMaxUploadRate
+  apply_if_exists "${old_plist}" ManualPortMappingMode
+
+  # Content & Library Behavior
+  apply_if_exists "${old_plist}" LibraryVideoPlayedAtBehaviour
+  apply_if_exists "${old_plist}" LibraryVideoPlayedThreshold
+  apply_if_exists "${old_plist}" OnDeckWindow
+  apply_if_exists "${old_plist}" allowMediaDeletion
+  apply_if_exists "${old_plist}" autoEmptyTrash
+
+  # Maintenance Scheduling (if user customized from defaults)
+  apply_if_exists "${old_plist}" ButlerEndHour
+  apply_if_exists "${old_plist}" ButlerStartHour
+
+  # CORRECTED SETTINGS - Set to new server values
+  # FriendlyName: Set to new server name (TILSIT, not BOURSIN)
+  sudo -iu "${OPERATOR_USERNAME}" defaults write "${PLEX_PREFS}" FriendlyName -string "${PLEX_SERVER_NAME}"
+  log "✅ Set FriendlyName to new server: ${PLEX_SERVER_NAME}"
+
+  # PreferredNetworkInterface: Set to new server's actual interface
+  sudo -iu "${OPERATOR_USERNAME}" defaults write "${PLEX_PREFS}" PreferredNetworkInterface -string "${ethernet_interface}"
+  log "✅ Set PreferredNetworkInterface to detected interface: ${ethernet_interface}"
+
+  log "✅ Selective preference migration completed"
 }
 
 # Create shared Plex configuration directory
@@ -1175,7 +1249,6 @@ configure_plex_autostart() {
   LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
   LAUNCH_AGENT="com.tilsit.plexmediaserver"
   LAUNCH_AGENT_FILE="${LAUNCH_AGENTS_DIR}/${LAUNCH_AGENT}.plist"
-  PLEX_PREFS="com.plexapp.plexmediaserver"
 
   log "Deploying Plex startup wrapper script..."
 
