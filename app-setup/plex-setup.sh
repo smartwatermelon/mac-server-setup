@@ -1007,17 +1007,17 @@ update_migrated_library_paths() {
 
   if [[ "${section_paths}" -gt 0 ]]; then
     log "   section_locations (${section_paths} total):"
-    "${plex_sqlite}" "${plex_db_path}" "SELECT '    ' || root_path || ' → /Users/${OPERATOR_USERNAME}/.local/mnt/DSMedia/' || substr(root_path, instr(root_path, 'Media/') + length('Media/')) FROM section_locations WHERE instr(root_path, 'Media/') > 0 LIMIT 2;" 2>/dev/null || true
+    "${plex_sqlite}" "${plex_db_path}" "SELECT '    ' || root_path || ' → ${PLEX_MEDIA_MOUNT}/' || substr(root_path, instr(root_path, 'Media/') + length('Media/')) FROM section_locations WHERE instr(root_path, 'Media/') > 0 LIMIT 2;" 2>/dev/null || true
   fi
 
   if [[ "${media_part_paths}" -gt 0 ]]; then
     log "   media_parts.file (${media_part_paths} total):"
-    "${plex_sqlite}" "${plex_db_path}" "SELECT '    ' || substr(file, 1, 60) || '... → .../operator/.local/mnt/DSMedia/Media/...' FROM media_parts WHERE instr(file, 'Media/') > 0 LIMIT 2;" 2>/dev/null || true
+    "${plex_sqlite}" "${plex_db_path}" "SELECT '    ' || substr(file, 1, 60) || '... → ${PLEX_MEDIA_MOUNT}/Media/...' FROM media_parts WHERE instr(file, 'Media/') > 0 LIMIT 2;" 2>/dev/null || true
   fi
 
   if [[ "${stream_paths}" -gt 0 ]]; then
     log "   media_streams.url (${stream_paths} total):"
-    "${plex_sqlite}" "${plex_db_path}" "SELECT '    ' || substr(url, 1, 60) || '... → file:///Users/operator/.local/mnt/DSMedia/Media/...' FROM media_streams WHERE url LIKE 'file:///Users/%' AND instr(url, 'Media/') > 0 LIMIT 2;" 2>/dev/null || true
+    "${plex_sqlite}" "${plex_db_path}" "SELECT '    ' || substr(url, 1, 60) || '... → file://${PLEX_MEDIA_MOUNT}/Media/...' FROM media_streams WHERE url LIKE 'file:///Users/%' AND instr(url, 'Media/') > 0 LIMIT 2;" 2>/dev/null || true
   fi
 
   # Perform the safe database update across all tables
@@ -1025,15 +1025,15 @@ update_migrated_library_paths() {
 
   # Update section_locations
   local section_result
-  section_result=$("${plex_sqlite}" "${plex_db_path}" "UPDATE section_locations SET root_path = '/Users/${OPERATOR_USERNAME}/.local/mnt/DSMedia/' || substr(root_path, instr(root_path, 'Media/') + length('Media/')) WHERE instr(root_path, 'Media/') > 0; SELECT changes();" 2>/dev/null || echo "ERROR")
+  section_result=$("${plex_sqlite}" "${plex_db_path}" "UPDATE section_locations SET root_path = '${PLEX_MEDIA_MOUNT}/' || substr(root_path, instr(root_path, 'Media/') + length('Media/')) WHERE instr(root_path, 'Media/') > 0; SELECT changes();" 2>/dev/null || echo "ERROR")
 
   # Update media_parts.file
   local parts_result
-  parts_result=$("${plex_sqlite}" "${plex_db_path}" "UPDATE media_parts SET file = '/Users/${OPERATOR_USERNAME}/.local/mnt/DSMedia/' || substr(file, instr(file, 'Media/') + length('Media/')) WHERE instr(file, 'Media/') > 0; SELECT changes();" 2>/dev/null || echo "ERROR")
+  parts_result=$("${plex_sqlite}" "${plex_db_path}" "UPDATE media_parts SET file = '${PLEX_MEDIA_MOUNT}/' || substr(file, instr(file, 'Media/') + length('Media/')) WHERE instr(file, 'Media/') > 0; SELECT changes();" 2>/dev/null || echo "ERROR")
 
   # Update media_streams.url (handle file:// URLs)
   local streams_result
-  streams_result=$("${plex_sqlite}" "${plex_db_path}" "UPDATE media_streams SET url = 'file:///Users/${OPERATOR_USERNAME}/.local/mnt/DSMedia/' || substr(url, instr(url, 'Media/') + length('Media/')) WHERE url LIKE 'file:///Users/%' AND instr(url, 'Media/') > 0; SELECT changes();" 2>/dev/null || echo "ERROR")
+  streams_result=$("${plex_sqlite}" "${plex_db_path}" "UPDATE media_streams SET url = 'file://${PLEX_MEDIA_MOUNT}/' || substr(url, instr(url, 'Media/') + length('Media/')) WHERE url LIKE 'file:///Users/%' AND instr(url, 'Media/') > 0; SELECT changes();" 2>/dev/null || echo "ERROR")
 
   # Check for any errors
   if [[ "${section_result}" == "ERROR" || "${parts_result}" == "ERROR" || "${streams_result}" == "ERROR" ]]; then
