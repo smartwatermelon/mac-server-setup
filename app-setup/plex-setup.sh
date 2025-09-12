@@ -11,7 +11,7 @@
 # Usage: ./plex-setup.sh [--force] [--migrate] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--custom-port PORT] [--password PASSWORD]
 #   --force: Skip all confirmation prompts
 #   --clean: Stop and remove existing Plex Media Server if found
-#   --migrate: Enable migration without prompts (will discover and migrate automatically)
+#   --migrate: Skip initial migration prompt (for orchestrator use)
 #   --skip-migration: Skip Plex config migration
 #   --skip-mount: Skip SMB mount setup
 #   --server-name: Set Plex server name (default: hostname)
@@ -917,8 +917,7 @@ migrate_plex_config() {
     exit 1
   fi
 
-  # Auto-apply if --migrate flag is specified, otherwise prompt user
-  if [[ "${MIGRATE}" == "true" ]] || confirm "Apply migrated Plex configuration?" "n"; then
+  if confirm "Apply migrated Plex configuration?" "n"; then
     log "Stopping Plex Media Server if running..."
     pkill -f "Plex Media Server" 2>/dev/null || true
     sleep 3
@@ -1295,7 +1294,7 @@ main() {
 
   # Handle migration setup if not already specified
   if [[ "${SKIP_MIGRATION}" != "true" && -z "${MIGRATE_FROM}" ]]; then
-    # Auto-migrate if --migrate flag is specified, otherwise prompt user
+    # Skip initial migration prompt if --migrate flag is specified (orchestrator already asked)
     if [[ "${MIGRATE}" == "true" ]] || confirm "Do you want to migrate from an existing Plex server?" "n"; then
       # Try to discover Plex servers
       log "Scanning for Plex servers on the network..."
