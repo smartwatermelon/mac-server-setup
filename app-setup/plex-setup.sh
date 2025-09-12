@@ -929,8 +929,8 @@ migrate_plex_config() {
 
     log "✅ Plex configuration migrated successfully"
 
-    # Create marker file for library path updates on first Plex startup
-    create_library_update_marker
+    # Update library paths immediately after migration
+    update_migrated_library_paths
 
     # Configure custom port if we have port assignment from migration
     if [[ -n "${TARGET_PLEX_PORT:-}" && "${TARGET_PLEX_PORT}" != "32400" ]]; then
@@ -942,87 +942,153 @@ migrate_plex_config() {
   fi
 }
 
-# Function to get admin Plex token for library management
-get_admin_plex_token() {
-  log "Acquiring admin Plex token for library path updates..."
+# Function to safely update library paths in migrated Plex database
+update_migrated_library_paths() {
+  log "Updating library paths after migration..."
 
-  # First, try to get token from keychain (preferred method)
-  local server_name_lower
-  server_name_lower="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
-  local keychain_service="plex-token-${server_name_lower}"
-  local keychain_account="${server_name_lower}"
-
-  if auth_token=$(security find-generic-password -s "${keychain_service}" -a "${keychain_account}" -w 2>/dev/null); then
-    if [[ -n "${auth_token}" && "${auth_token}" != "null" ]]; then
-      log "✅ Retrieved Plex token from keychain"
-      echo "${auth_token}"
-      return 0
-    fi
-  fi
-
-  log "⚠️  Plex token not found in keychain - requesting credentials for manual authentication"
-
-  # Fallback: Get credentials from user
-  read -erp "Plex username: " username
-  read -ersp "Plex password: " password
-  echo # New line after password
-
-  if [[ -z "${username}" || -z "${password}" ]]; then
-    log "⚠️  No credentials provided - library paths will need manual update"
-    return 1
-  fi
-
-  # Get authentication token from plex.tv
-  local auth_response
-  auth_response=$(curl -s -X POST 'https://plex.tv/users/sign_in.json' \
-    -H 'X-Plex-Client-Identifier: plex-setup' \
-    -H 'X-Plex-Product: plex-setup' \
-    -H 'X-Plex-Version: 1.0' \
-    --data-urlencode "user[login]=${username}" \
-    --data-urlencode "user[password]=${password}") || {
-    log "⚠️  Failed to authenticate with Plex - library paths will need manual update"
-    return 1
-  }
-
-  # Extract the authentication token using jq
-  auth_token=$(echo "${auth_response}" | jq -r '.user.authToken' 2>/dev/null) || {
-    log "⚠️  Failed to parse Plex authentication - library paths will need manual update"
-    return 1
-  }
-
-  if [[ "${auth_token}" == "null" || -z "${auth_token}" ]]; then
-    log "⚠️  Invalid Plex credentials - library paths will need manual update"
-    return 1
-  fi
-
-  echo "${auth_token}"
-}
-
-# Function to create marker file for library path updates
-create_library_update_marker() {
-  log "Setting up library path updates for first Plex startup..."
-
-  # Only create marker if this was a migration
+  # Only update paths if this was a migration
   if [[ -z "${MIGRATE_FROM:-}" ]]; then
-    log "   No migration performed - library updates not needed"
+    log "   No migration performed - library path updates not needed"
     return 0
   fi
 
-  # Get admin token for library updates
-  local admin_token
-  admin_token=$(get_admin_plex_token) || {
-    log "⚠️  Could not acquire admin token - library paths may need manual update"
+  # Define Plex database paths
+  local plex_app_support="${PLEX_NEW_CONFIG}"
+  local plex_db_path="${plex_app_support}/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db"
+  local backup_db_path="${plex_app_support}/Plex Media Server/Plug-in Support/Databases/com.plexapp.plugins.library.db.backup-migration"
+
+  # Verify database exists
+  if [[ ! -f "${plex_db_path}" ]]; then
+    log "⚠️  Plex database not found at: ${plex_db_path}"
+    log "   Library paths may need manual configuration"
     return 0
-  }
+  fi
 
-  # Create secure marker file with token
-  local marker_file="/Users/Shared/PlexMediaServer/.plex-library-update-needed"
-  echo "${admin_token}" >"${marker_file}"
-  chmod 600 "${marker_file}"
-  chown "${OPERATOR_USERNAME}:staff" "${marker_file}"
+  # Use Plex's custom SQLite tool for database operations
+  local plex_sqlite="/Applications/Plex Media Server.app/Contents/MacOS/Plex SQLite"
 
-  log "✅ Library path update scheduled for first Plex startup"
-  log "   Marker file: ${marker_file}"
+  if [[ ! -f "${plex_sqlite}" ]]; then
+    log "❌ Plex SQLite tool not found at: ${plex_sqlite}"
+    log "   Library paths may need manual configuration"
+    return 1
+  fi
+
+  # Check for paths that need updating (any paths containing Media/ in any table)
+  log "🔍 Checking for library paths that need updates..."
+  local section_paths media_part_paths stream_paths total_paths
+
+  section_paths=$("${plex_sqlite}" "${plex_db_path}" "SELECT COUNT(*) FROM section_locations WHERE instr(root_path, 'Media/') > 0;" 2>/dev/null || echo "0")
+  media_part_paths=$("${plex_sqlite}" "${plex_db_path}" "SELECT COUNT(*) FROM media_parts WHERE instr(file, 'Media/') > 0;" 2>/dev/null || echo "0")
+  stream_paths=$("${plex_sqlite}" "${plex_db_path}" "SELECT COUNT(*) FROM media_streams WHERE url LIKE 'file:///Users/%' AND instr(url, 'Media/') > 0;" 2>/dev/null || echo "0")
+
+  total_paths=$((section_paths + media_part_paths + stream_paths))
+
+  if [[ "${total_paths}" -eq 0 ]]; then
+    log "✅ No library paths need updating"
+    return 0
+  fi
+
+  log "📊 Found ${total_paths} total paths that need updating:"
+  log "   section_locations: ${section_paths} paths"
+  log "   media_parts: ${media_part_paths} paths"
+  log "   media_streams: ${stream_paths} paths"
+
+  # Create database backup
+  log "💾 Creating database backup..."
+  if cp "${plex_db_path}" "${backup_db_path}"; then
+    log "✅ Database backed up to: ${backup_db_path}"
+  else
+    log "⚠️  Failed to create database backup - skipping path updates"
+    return 1
+  fi
+
+  # Show sample paths that will be updated from each table
+  log "🔍 Sample paths to be updated:"
+
+  if [[ "${section_paths}" -gt 0 ]]; then
+    log "   section_locations (${section_paths} total):"
+    "${plex_sqlite}" "${plex_db_path}" "SELECT '    ' || root_path || ' → /Users/${OPERATOR_USERNAME}/.local/mnt/DSMedia/' || substr(root_path, instr(root_path, 'Media/') + length('Media/')) FROM section_locations WHERE instr(root_path, 'Media/') > 0 LIMIT 2;" 2>/dev/null || true
+  fi
+
+  if [[ "${media_part_paths}" -gt 0 ]]; then
+    log "   media_parts.file (${media_part_paths} total):"
+    "${plex_sqlite}" "${plex_db_path}" "SELECT '    ' || substr(file, 1, 60) || '... → .../operator/.local/mnt/DSMedia/Media/...' FROM media_parts WHERE instr(file, 'Media/') > 0 LIMIT 2;" 2>/dev/null || true
+  fi
+
+  if [[ "${stream_paths}" -gt 0 ]]; then
+    log "   media_streams.url (${stream_paths} total):"
+    "${plex_sqlite}" "${plex_db_path}" "SELECT '    ' || substr(url, 1, 60) || '... → file:///Users/operator/.local/mnt/DSMedia/Media/...' FROM media_streams WHERE url LIKE 'file:///Users/%' AND instr(url, 'Media/') > 0 LIMIT 2;" 2>/dev/null || true
+  fi
+
+  # Perform the safe database update across all tables
+  log "🔧 Updating library paths in database..."
+
+  # Update section_locations
+  local section_result
+  section_result=$("${plex_sqlite}" "${plex_db_path}" "UPDATE section_locations SET root_path = '/Users/${OPERATOR_USERNAME}/.local/mnt/DSMedia/' || substr(root_path, instr(root_path, 'Media/') + length('Media/')) WHERE instr(root_path, 'Media/') > 0; SELECT changes();" 2>/dev/null || echo "ERROR")
+
+  # Update media_parts.file
+  local parts_result
+  parts_result=$("${plex_sqlite}" "${plex_db_path}" "UPDATE media_parts SET file = '/Users/${OPERATOR_USERNAME}/.local/mnt/DSMedia/' || substr(file, instr(file, 'Media/') + length('Media/')) WHERE instr(file, 'Media/') > 0; SELECT changes();" 2>/dev/null || echo "ERROR")
+
+  # Update media_streams.url (handle file:// URLs)
+  local streams_result
+  streams_result=$("${plex_sqlite}" "${plex_db_path}" "UPDATE media_streams SET url = 'file:///Users/${OPERATOR_USERNAME}/.local/mnt/DSMedia/' || substr(url, instr(url, 'Media/') + length('Media/')) WHERE url LIKE 'file:///Users/%' AND instr(url, 'Media/') > 0; SELECT changes();" 2>/dev/null || echo "ERROR")
+
+  # Check for any errors
+  if [[ "${section_result}" == "ERROR" || "${parts_result}" == "ERROR" || "${streams_result}" == "ERROR" ]]; then
+    log "❌ Database update failed - restoring backup"
+    cp "${backup_db_path}" "${plex_db_path}"
+    return 1
+  fi
+
+  local total_updated=$((section_result + parts_result + streams_result))
+
+  # Verify the update was successful
+  log "✅ Database updated successfully:"
+  log "   section_locations: ${section_result} paths changed"
+  log "   media_parts: ${parts_result} paths changed"
+  log "   media_streams: ${streams_result} paths changed"
+  log "   Total: ${total_updated} paths updated"
+
+  # Verify no old path references remain in any table
+  log "🔍 Verifying all old path references have been updated..."
+
+  local remaining_section remaining_parts remaining_streams total_remaining
+  remaining_section=$("${plex_sqlite}" "${plex_db_path}" "SELECT COUNT(*) FROM section_locations WHERE root_path LIKE '%/Users/%' AND root_path NOT LIKE '/Users/${OPERATOR_USERNAME}/%';" 2>/dev/null || echo "ERROR")
+  remaining_parts=$("${plex_sqlite}" "${plex_db_path}" "SELECT COUNT(*) FROM media_parts WHERE file LIKE '%/Users/%' AND file NOT LIKE '/Users/${OPERATOR_USERNAME}/%';" 2>/dev/null || echo "ERROR")
+  remaining_streams=$("${plex_sqlite}" "${plex_db_path}" "SELECT COUNT(*) FROM media_streams WHERE url LIKE '%/Users/%' AND url NOT LIKE '%/Users/${OPERATOR_USERNAME}/%';" 2>/dev/null || echo "ERROR")
+
+  total_remaining=$((remaining_section + remaining_parts + remaining_streams))
+
+  if [[ "${total_remaining}" -eq 0 ]]; then
+    log "✅ All library paths successfully updated to operator account"
+    log "   Sample updated section_locations:"
+    "${plex_sqlite}" "${plex_db_path}" "SELECT '    Section ' || library_section_id || ': ' || root_path FROM section_locations LIMIT 2;" 2>/dev/null || true
+  else
+    log "⚠️  Warning: ${total_remaining} old path references may still exist:"
+    log "   section_locations: ${remaining_section}"
+    log "   media_parts: ${remaining_parts}"
+    log "   media_streams: ${remaining_streams}"
+  fi
+
+  # Database integrity check
+  log "🔍 Performing database integrity check..."
+  local integrity_result
+  integrity_result=$("${plex_sqlite}" "${plex_db_path}" "PRAGMA integrity_check;" 2>/dev/null || echo "ERROR")
+
+  if [[ "${integrity_result}" == "ok" ]]; then
+    log "✅ Database integrity verified"
+  else
+    log "❌ Database integrity check failed - restoring backup"
+    cp "${backup_db_path}" "${plex_db_path}"
+    return 1
+  fi
+
+  log "🎉 Library path updates completed successfully"
+  log "   Database backup preserved at: ${backup_db_path}"
+
+  return 0
 }
 
 # Function to configure Plex port in preferences
