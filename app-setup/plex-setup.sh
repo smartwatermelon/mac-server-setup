@@ -819,7 +819,7 @@ migrate_plex_from_host() {
   # Define source paths (properly quoted for spaces)
   # Note: No trailing slash so rsync copies the directory itself, not just contents
   local plex_config_source="${source_host}:Library/Application Support/Plex Media Server"
-  local plex_plist_source="${source_host}:Library/Preferences/com.plexapp.plexmediaserver.plist"
+  local plex_plist_source="${source_host}:Library/Preferences/${PLEX_PREFS}.plist"
 
   log "Migrating Plex configuration from ${source_host}..."
   log "Excluding large regenerable directories: Cache, PhotoTranscoder, Logs, Updates"
@@ -1147,12 +1147,12 @@ configure_plex_port_plist() {
 
   # Use defaults command in operator context to set the ManualPortMappingPort and enable ManualPortMappingMode
   # This is the official macOS way to configure Plex settings before first startup
-  sudo -iu "${OPERATOR_USERNAME}" defaults write com.plexapp.plexmediaserver ManualPortMappingPort -int "${port}"
-  sudo -iu "${OPERATOR_USERNAME}" defaults write com.plexapp.plexmediaserver ManualPortMappingMode -int 1
+  sudo -iu "${OPERATOR_USERNAME}" defaults write "${PLEX_PREFS}" ManualPortMappingPort -int "${port}"
+  sudo -iu "${OPERATOR_USERNAME}" defaults write "${PLEX_PREFS}" ManualPortMappingMode -int 1
 
   # Verify the settings were written in operator context
   local configured_port
-  configured_port=$(sudo -iu "${OPERATOR_USERNAME}" defaults read com.plexapp.plexmediaserver ManualPortMappingPort 2>/dev/null || echo "")
+  configured_port=$(sudo -iu "${OPERATOR_USERNAME}" defaults read "${PLEX_PREFS}" ManualPortMappingPort 2>/dev/null || echo "")
 
   if [[ "${configured_port}" == "${port}" ]]; then
     log "✅ Successfully configured Plex for port ${port} using macOS defaults (operator context)"
@@ -1173,7 +1173,9 @@ configure_plex_autostart() {
   WRAPPER_SCRIPT_SOURCE="${SCRIPT_DIR}/templates/start-plex.sh"
   WRAPPER_SCRIPT="${OPERATOR_HOME}/.local/bin/start-plex.sh"
   LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
-  PLIST_FILE="${LAUNCH_AGENTS_DIR}/com.plexapp.plexmediaserver.plist"
+  LAUNCH_AGENT="com.tilsit.plexmediaserver"
+  LAUNCH_AGENT_FILE="${LAUNCH_AGENTS_DIR}/${LAUNCH_AGENT}.plist"
+  PLEX_PREFS="com.plexapp.plexmediaserver"
 
   log "Deploying Plex startup wrapper script..."
 
@@ -1192,13 +1194,13 @@ configure_plex_autostart() {
   log "Creating LaunchAgent for Plex auto-start..."
   sudo -iu "${OPERATOR_USERNAME}" mkdir -p "${LAUNCH_AGENTS_DIR}"
 
-  cat <<EOF | sudo -iu "${OPERATOR_USERNAME}" tee "${PLIST_FILE}" >/dev/null
+  cat <<EOF | sudo -iu "${OPERATOR_USERNAME}" tee "${LAUNCH_AGENT_FILE}" >/dev/null
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.plexapp.plexmediaserver</string>
+    <string>${LAUNCH_AGENT}</string>
     <key>ProgramArguments</key>
     <array>
         <string>${WRAPPER_SCRIPT}</string>
@@ -1224,10 +1226,10 @@ configure_plex_autostart() {
 EOF
 
   # Validate plist syntax
-  if sudo -iu "${OPERATOR_USERNAME}" plutil -lint "${PLIST_FILE}" >/dev/null 2>&1; then
+  if sudo -iu "${OPERATOR_USERNAME}" plutil -lint "${LAUNCH_AGENT_FILE}" >/dev/null 2>&1; then
     log "Plex LaunchAgent plist syntax validated successfully"
   else
-    collect_error "Invalid plist syntax in ${PLIST_FILE}"
+    collect_error "Invalid plist syntax in ${LAUNCH_AGENT_FILE}"
     return 1
   fi
 
