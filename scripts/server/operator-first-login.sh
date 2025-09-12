@@ -228,20 +228,35 @@ setup_iterm2_preferences() {
     return 0
   fi
 
-  # Check if iTerm2 is installed
-  if [[ ! -f /Applications/iTerm.app/Contents/Resources/utilities/it2check ]]; then
+  # Check if iTerm2 is installed (more reliable detection method)
+  if [[ ! -d /Applications/iTerm.app ]]; then
     log "iTerm2 not installed - skipping preferences import"
     return 0
   fi
 
   log "Importing iTerm2 preferences..."
 
+  # Ensure iTerm2 is not running during import for better reliability
+  if pgrep -f "iTerm.app" >/dev/null 2>&1; then
+    log "iTerm2 is currently running - preferences import may not take effect until restart"
+  fi
+
   # Import preferences using defaults import
   if defaults import com.googlecode.iterm2 "${preferences_file}"; then
-    log "Successfully imported iTerm2 preferences"
-    log "iTerm2 preferences will be active when iTerm2 is next launched"
+    log "iTerm2 preferences import command succeeded"
+
+    # Verify that import actually worked by checking for a key preference
+    if defaults read com.googlecode.iterm2 "Default Bookmark Guid" >/dev/null 2>&1; then
+      log "✅ Successfully imported and verified iTerm2 preferences"
+      log "Preferences will be active when iTerm2 is next launched"
+    else
+      log "⚠️ Import command succeeded but preferences verification failed"
+      log "iTerm2 preferences may not have been properly imported"
+    fi
   else
-    log "Warning: Failed to import iTerm2 preferences"
+    log "❌ Failed to import iTerm2 preferences"
+    log "Check that preferences file is valid: ${preferences_file}"
+    log "You can manually import by opening iTerm2 > Preferences > Profiles > Other Actions > Import JSON Profiles"
   fi
 }
 
