@@ -917,7 +917,7 @@ migrate_plex_config() {
     exit 1
   fi
 
-  if confirm "Apply migrated Plex configuration?" "n"; then
+  if confirm "Apply migrated Plex configuration?" "y"; then
     log "Stopping Plex Media Server if running..."
     pkill -f "Plex Media Server" 2>/dev/null || true
     sleep 3
