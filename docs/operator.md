@@ -325,6 +325,8 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --listapps
 4. **Configure additional services** as needed
 5. **Test native applications** after setup (check LaunchAgent status)
 
+**Note for Plex Migration Users**: If your server was set up via Plex migration, you may need to re-pin your media libraries to restore your customized home screen. Access `http://macmini.local:32400/web`, click "More" in the sidebar, and pin your libraries back to the home screen.
+
 ### Ongoing Maintenance
 
 - **Weekly**: Check for Homebrew updates (`brew update && brew upgrade`)

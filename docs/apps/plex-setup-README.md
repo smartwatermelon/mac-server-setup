@@ -112,6 +112,27 @@ rsync -av --exclude='Cache' "~/Library/Application Support/Plex Media Server/" ~
 
 The script supports both local migration (files in `~/plex-migration/`) and remote migration via SSH.
 
+### Post-Migration: Home Screen Setup
+
+**⚠️ Important**: After migrating from an existing Plex server, you may need to re-pin your media sources to the home screen.
+
+**What happens during migration**:
+
+- Server configuration and libraries migrate successfully
+- Server gets a new name to prevent conflicts with the source server
+- Your Plex account recognizes this as a "different" server
+- Previously pinned sources become unavailable and disappear from the home screen
+
+**To restore your home screen**:
+
+1. Access your new Plex server via web interface
+2. Click "More" in the sidebar navigation
+3. Find your migrated libraries (they're still there, just not pinned)
+4. Click the pin icon next to each library you want on your home screen
+5. Your customized home screen will be restored
+
+This is a one-time setup step that ensures proper server identity while both old and new servers may be running simultaneously during migration.
+
 ## Port Conflict Prevention
 
 ### Critical Network Port Issue

@@ -65,10 +65,15 @@ fi
 # Derive configuration variables
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
+OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
 
 # Plex configuration
 PLEX_MEDIA_MOUNT="/Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
 PLEX_SERVER_NAME="${PLEX_SERVER_NAME_OVERRIDE:-${HOSTNAME}}"
+PLEX_PREFS="com.plexapp.plexmediaserver"
+LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
+LAUNCH_AGENT="com.${HOSTNAME}.plexmediaserver"
+LAUNCH_AGENT_FILE="${LAUNCH_AGENTS_DIR}/${LAUNCH_AGENT}.plist"
 
 # Migration settings
 PLEX_OLD_CONFIG="${HOME}/plex-migration/Plex Media Server"
@@ -591,6 +596,9 @@ install_plex() {
         exit 0
       fi
     fi
+    log "Cleaning up remaining Plex files..."
+    sudo rm "${OPERATOR_HOME}/Library/Preferences/${PLEX_PREFS}.plist" 2>/dev/null || true
+    sudo rm "${LAUNCH_AGENT_FILE}" 2>/dev/null || true
   fi
 
   log "Installing Plex Media Server via Homebrew..."
@@ -819,7 +827,7 @@ migrate_plex_from_host() {
   # Define source paths (properly quoted for spaces)
   # Note: No trailing slash so rsync copies the directory itself, not just contents
   local plex_config_source="${source_host}:Library/Application Support/Plex Media Server"
-  local plex_plist_source="${source_host}:Library/Preferences/com.plexapp.plexmediaserver.plist"
+  local plex_plist_source="${source_host}:Library/Preferences/${PLEX_PREFS}.plist"
 
   log "Migrating Plex configuration from ${source_host}..."
   log "Excluding large regenerable directories: Cache, PhotoTranscoder, Logs, Updates"
@@ -866,15 +874,88 @@ migrate_plex_from_host() {
     fi
   fi
 
-  # Migrate preferences file
+  # Migrate preferences file with selective application
   log "Migrating Plex preferences..."
   if scp "${plex_plist_source}" "${PLEX_OLD_CONFIG%/*}/"; then
     log "✅ Plex preferences migrated successfully"
+    # Apply selective preference migration
+    migrate_selective_preferences
   else
     log "⚠️  Could not migrate Plex preferences (this is optional)"
   fi
 
   return 0
+}
+
+# Helper function to apply a setting if it exists in old plist
+apply_if_exists() {
+  local old_plist="$1"
+  local setting_key="$2"
+
+  # Read value from old plist
+  local old_value
+  if old_value=$(defaults read "${old_plist}" "${setting_key}" 2>/dev/null); then
+    # Apply to new server in operator context
+    sudo -iu "${OPERATOR_USERNAME}" defaults write "${PLEX_PREFS}" "${setting_key}" "${old_value}"
+    log "  Migrated ${setting_key}: ${old_value}"
+  fi
+}
+
+# Function to selectively migrate Plex preferences from old server plist
+migrate_selective_preferences() {
+  local old_plist="${PLEX_OLD_CONFIG%/*}/com.plexapp.plexmediaserver.plist"
+
+  if [[ ! -f "${old_plist}" ]]; then
+    log "⚠️  Old server plist not found - skipping selective preference migration"
+    return 0
+  fi
+
+  log "Applying selective preference migration from old server..."
+
+  # Detect current Ethernet interface for new server
+  local ethernet_interface
+  ethernet_interface=$(networksetup -listallhardwareports | awk '/Ethernet/{getline; print $2}' | head -n 1)
+
+  if [[ -z "${ethernet_interface}" ]]; then
+    collect_warning "Could not detect Ethernet interface - using en0 as default"
+    ethernet_interface="en0"
+  fi
+
+  log "Network interface detection: ${ethernet_interface}"
+
+  # GOOD SYNC CANDIDATES (13 settings) - Apply these from old server
+  # User Experience & Preferences
+  apply_if_exists "${old_plist}" showDockIcon
+  apply_if_exists "${old_plist}" CinemaTrailersFromLibrary
+  apply_if_exists "${old_plist}" SmartShuffleMusic
+
+  # Network & Access Configuration
+  apply_if_exists "${old_plist}" LanNetworksBandwidth
+  apply_if_exists "${old_plist}" allowedNetworks
+  apply_if_exists "${old_plist}" WanTotalMaxUploadRate
+  apply_if_exists "${old_plist}" ManualPortMappingMode
+
+  # Content & Library Behavior
+  apply_if_exists "${old_plist}" LibraryVideoPlayedAtBehaviour
+  apply_if_exists "${old_plist}" LibraryVideoPlayedThreshold
+  apply_if_exists "${old_plist}" OnDeckWindow
+  apply_if_exists "${old_plist}" allowMediaDeletion
+  apply_if_exists "${old_plist}" autoEmptyTrash
+
+  # Maintenance Scheduling (if user customized from defaults)
+  apply_if_exists "${old_plist}" ButlerEndHour
+  apply_if_exists "${old_plist}" ButlerStartHour
+
+  # CORRECTED SETTINGS - Set to new server values
+  # FriendlyName: Set to new server name
+  sudo -iu "${OPERATOR_USERNAME}" defaults write "${PLEX_PREFS}" FriendlyName -string "${PLEX_SERVER_NAME}"
+  log "✅ Set FriendlyName to new server: ${PLEX_SERVER_NAME}"
+
+  # PreferredNetworkInterface: Set to new server's actual interface
+  sudo -iu "${OPERATOR_USERNAME}" defaults write "${PLEX_PREFS}" PreferredNetworkInterface -string "${ethernet_interface}"
+  log "✅ Set PreferredNetworkInterface to detected interface: ${ethernet_interface}"
+
+  log "✅ Selective preference migration completed"
 }
 
 # Create shared Plex configuration directory
@@ -946,6 +1027,8 @@ migrate_plex_config() {
     # Configure custom port if we have port assignment from migration
     if [[ -n "${TARGET_PLEX_PORT:-}" && "${TARGET_PLEX_PORT}" != "32400" ]]; then
       configure_plex_port "${TARGET_PLEX_PORT}"
+      # Also configure via macOS plist method to ensure operator context has the setting
+      configure_plex_port_plist "${TARGET_PLEX_PORT}"
     fi
   else
     log "Configuration migration declined by user"
@@ -1147,12 +1230,12 @@ configure_plex_port_plist() {
 
   # Use defaults command in operator context to set the ManualPortMappingPort and enable ManualPortMappingMode
   # This is the official macOS way to configure Plex settings before first startup
-  sudo -iu "${OPERATOR_USERNAME}" defaults write com.plexapp.plexmediaserver ManualPortMappingPort -int "${port}"
-  sudo -iu "${OPERATOR_USERNAME}" defaults write com.plexapp.plexmediaserver ManualPortMappingMode -int 1
+  sudo -iu "${OPERATOR_USERNAME}" defaults write "${PLEX_PREFS}" ManualPortMappingPort -int "${port}"
+  sudo -iu "${OPERATOR_USERNAME}" defaults write "${PLEX_PREFS}" ManualPortMappingMode -int 1
 
   # Verify the settings were written in operator context
   local configured_port
-  configured_port=$(sudo -iu "${OPERATOR_USERNAME}" defaults read com.plexapp.plexmediaserver ManualPortMappingPort 2>/dev/null || echo "")
+  configured_port=$(sudo -iu "${OPERATOR_USERNAME}" defaults read "${PLEX_PREFS}" ManualPortMappingPort 2>/dev/null || echo "")
 
   if [[ "${configured_port}" == "${port}" ]]; then
     log "✅ Successfully configured Plex for port ${port} using macOS defaults (operator context)"
@@ -1169,11 +1252,8 @@ configure_plex_autostart() {
   section "Configuring Plex Auto-Start"
 
   # Deploy Plex startup wrapper script
-  OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
   WRAPPER_SCRIPT_SOURCE="${SCRIPT_DIR}/templates/start-plex.sh"
   WRAPPER_SCRIPT="${OPERATOR_HOME}/.local/bin/start-plex.sh"
-  LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
-  PLIST_FILE="${LAUNCH_AGENTS_DIR}/com.plexapp.plexmediaserver.plist"
 
   log "Deploying Plex startup wrapper script..."
 
@@ -1192,13 +1272,13 @@ configure_plex_autostart() {
   log "Creating LaunchAgent for Plex auto-start..."
   sudo -iu "${OPERATOR_USERNAME}" mkdir -p "${LAUNCH_AGENTS_DIR}"
 
-  cat <<EOF | sudo -iu "${OPERATOR_USERNAME}" tee "${PLIST_FILE}" >/dev/null
+  cat <<EOF | sudo -iu "${OPERATOR_USERNAME}" tee "${LAUNCH_AGENT_FILE}" >/dev/null
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.plexapp.plexmediaserver</string>
+    <string>${LAUNCH_AGENT}</string>
     <key>ProgramArguments</key>
     <array>
         <string>${WRAPPER_SCRIPT}</string>
@@ -1224,10 +1304,10 @@ configure_plex_autostart() {
 EOF
 
   # Validate plist syntax
-  if sudo -iu "${OPERATOR_USERNAME}" plutil -lint "${PLIST_FILE}" >/dev/null 2>&1; then
+  if sudo -iu "${OPERATOR_USERNAME}" plutil -lint "${LAUNCH_AGENT_FILE}" >/dev/null 2>&1; then
     log "Plex LaunchAgent plist syntax validated successfully"
   else
-    collect_error "Invalid plist syntax in ${PLIST_FILE}"
+    collect_error "Invalid plist syntax in ${LAUNCH_AGENT_FILE}"
     return 1
   fi
 
