@@ -592,6 +592,9 @@ install_plex() {
         exit 0
       fi
     fi
+    log "Cleaning up remaining Plex files..."
+    sudo rm "${OPERATOR_HOME}/Library/Preferences/${PLEX_PREFS}.plist" 2>/dev/null || true
+    sudo rm "${LAUNCH_AGENT_FILE}" 2>/dev/null || true
   fi
 
   log "Installing Plex Media Server via Homebrew..."
