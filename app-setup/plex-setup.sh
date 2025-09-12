@@ -72,7 +72,7 @@ PLEX_MEDIA_MOUNT="/Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
 PLEX_SERVER_NAME="${PLEX_SERVER_NAME_OVERRIDE:-${HOSTNAME}}"
 PLEX_PREFS="com.plexapp.plexmediaserver"
 LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
-LAUNCH_AGENT="com.${HOSTNAME}.plexmediaserver"
+LAUNCH_AGENT="com.${HOSTNAME_LOWER}.plexmediaserver"
 LAUNCH_AGENT_FILE="${LAUNCH_AGENTS_DIR}/${LAUNCH_AGENT}.plist"
 
 # Migration settings
