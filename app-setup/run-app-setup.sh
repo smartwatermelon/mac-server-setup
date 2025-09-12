@@ -74,6 +74,7 @@ CURRENT_SECTION="App Setup Orchestrator"
 FORCE=false
 CONTINUE_ON_ERROR=false
 ONLY_SCRIPT=""
+MIGRATE_PLEX=false
 
 # Administrator password for later exporting
 ADMINISTRATOR_PASSWORD=""
@@ -283,7 +284,11 @@ run_setup_script() {
 
   # Add script-specific flags for safer automation
   if [[ "${script_name}" == "plex-setup.sh" ]]; then
-    cmd+=("--skip-migration")
+    if [[ "${MIGRATE_PLEX}" == true ]]; then
+      cmd+=("--migrate")
+    else
+      cmd+=("--skip-migration")
+    fi
   fi
 
   log "Executing: ${cmd[*]}"
@@ -436,6 +441,39 @@ main() {
     ((script_num += 1))
   done
   echo ""
+
+  # Check if plex-setup.sh is in the execution plan and ask about migration
+  local plex_in_plan=false
+  for script in "${sorted_scripts[@]}"; do
+    if [[ "${script}" == "plex-setup.sh" ]]; then
+      plex_in_plan=true
+      break
+    fi
+  done
+
+  # Ask about Plex migration if plex-setup.sh is in the plan and not --force
+  if [[ "${plex_in_plan}" == true ]] && [[ "${FORCE}" != true ]]; then
+    echo "🔄 Plex Setup Migration Choice"
+    echo ""
+    echo "The setup will install Plex Media Server. You can:"
+    echo "• Install fresh (default) - New Plex instance with no existing libraries"
+    echo "• Migrate existing - Transfer libraries and settings from another Plex server"
+    echo ""
+    read -r -n 1 -p "Do you want to migrate from an existing Plex server? (y/N): " migrate_response
+    echo # Add newline after single-key input
+
+    case "${migrate_response}" in
+      [yY])
+        MIGRATE_PLEX=true
+        echo "✅ Migration selected - will prompt for source server details"
+        ;;
+      *)
+        MIGRATE_PLEX=false
+        echo "✅ Fresh install selected - will install new Plex instance"
+        ;;
+    esac
+    echo ""
+  fi
 
   # Confirm execution unless --force specified
   if [[ "${FORCE}" != true ]]; then

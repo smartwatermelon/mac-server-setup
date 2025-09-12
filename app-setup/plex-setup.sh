@@ -8,15 +8,16 @@
 # - Configuration migration from existing Plex server
 # - Auto-start configuration
 #
-# Usage: ./plex-setup.sh [--force] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--custom-port PORT] [--password PASSWORD]
+# Usage: ./plex-setup.sh [--force] [--migrate] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--custom-port PORT] [--password PASSWORD]
 #   --force: Skip all confirmation prompts
 #   --clean: Stop and remove existing Plex Media Server if found
+#   --migrate: Enable migration without prompts (will discover and migrate automatically)
 #   --skip-migration: Skip Plex config migration
 #   --skip-mount: Skip SMB mount setup
 #   --server-name: Set Plex server name (default: hostname)
 #   --migrate-from: Source hostname for Plex migration (e.g., old-server.local)
 #   --custom-port: Set custom port for fresh installations (prevents conflicts)
-#   Note: --skip-migration and --migrate-from are mutually exclusive
+#   Note: --migrate, --skip-migration, and --migrate-from are mutually exclusive
 #
 # Expected Plex config files location:
 #   ~/plex-migration/
@@ -75,6 +76,7 @@ PLEX_NEW_CONFIG="/Users/Shared/PlexMediaServer"
 
 # Parse command line arguments
 FORCE=false
+MIGRATE=false
 SKIP_MIGRATION=false
 SKIP_MOUNT=false
 MIGRATE_FROM=""
@@ -90,6 +92,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --clean)
       CLEAN=true
+      shift
+      ;;
+    --migrate)
+      MIGRATE=true
       shift
       ;;
     --skip-migration)
@@ -118,15 +124,20 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--force] [--clean] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--custom-port PORT] [--password PASSWORD]"
+      echo "Usage: $0 [--force] [--clean] [--migrate] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--custom-port PORT] [--password PASSWORD]"
       exit 1
       ;;
   esac
 done
 
 # Validate conflicting options
-if [[ "${SKIP_MIGRATION}" == "true" && -n "${MIGRATE_FROM}" ]]; then
-  echo "Error: --skip-migration and --migrate-from cannot be used together"
+migration_flags=0
+[[ "${MIGRATE}" == "true" ]] && ((migration_flags += 1))
+[[ "${SKIP_MIGRATION}" == "true" ]] && ((migration_flags += 1))
+[[ -n "${MIGRATE_FROM}" ]] && ((migration_flags += 1))
+
+if [[ "${migration_flags}" -gt 1 ]]; then
+  echo "Error: --migrate, --skip-migration, and --migrate-from cannot be used together"
   exit 1
 fi
 
@@ -906,7 +917,8 @@ migrate_plex_config() {
     exit 1
   fi
 
-  if confirm "Apply migrated Plex configuration?" "n"; then
+  # Auto-apply if --migrate flag is specified, otherwise prompt user
+  if [[ "${MIGRATE}" == "true" ]] || confirm "Apply migrated Plex configuration?" "n"; then
     log "Stopping Plex Media Server if running..."
     pkill -f "Plex Media Server" 2>/dev/null || true
     sleep 3
@@ -1283,7 +1295,8 @@ main() {
 
   # Handle migration setup if not already specified
   if [[ "${SKIP_MIGRATION}" != "true" && -z "${MIGRATE_FROM}" ]]; then
-    if confirm "Do you want to migrate from an existing Plex server?" "n"; then
+    # Auto-migrate if --migrate flag is specified, otherwise prompt user
+    if [[ "${MIGRATE}" == "true" ]] || confirm "Do you want to migrate from an existing Plex server?" "n"; then
       # Try to discover Plex servers
       log "Scanning for Plex servers on the network..."
       discovered_servers=$(discover_plex_servers)
