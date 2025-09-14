@@ -316,30 +316,12 @@ log "✅ Magnet link handler configuration completed successfully"
 # Create completion script (for FileBot integration later)
 section "Creating Completion Script"
 
-log "Creating transmission-done.sh completion script..."
+log "Copying transmission-done.sh completion script from template..."
 OPERATOR_LOCAL_BIN="$(dirname "${TRANSMISSION_DONE_SCRIPT}")"
-mkdir -p "${OPERATOR_LOCAL_BIN}"
-sudo -iu "${OPERATOR_USERNAME}" tee "${TRANSMISSION_DONE_SCRIPT}" >/dev/null <<'EOF'
-#!/usr/bin/env bash
-#
-# transmission-done.sh - Transmission completion script
-# Called when a torrent finishes downloading
-#
-# Environment variables provided by Transmission:
-# TR_APP_VERSION, TR_TIME_LOCALTIME, TR_TORRENT_DIR, TR_TORRENT_HASH,
-# TR_TORRENT_ID, TR_TORRENT_NAME
+sudo mkdir -p "${OPERATOR_LOCAL_BIN}"
 
-# Log completion
-LOG_FILE="${HOME}/.local/state/transmission-completion.log"
-mkdir -p "$(dirname "${LOG_FILE}")"
-echo "$(date '+%Y-%m-%d %H:%M:%S') - Torrent completed: ${TR_TORRENT_NAME:-unknown}" >> "${LOG_FILE}"
-
-# Future: FileBot integration will be added here
-# filebot -rename "${TR_TORRENT_DIR}/${TR_TORRENT_NAME}" --output /path/to/media/library
-
-exit 0
-EOF
-
+# Copy template script to destination
+sudo cp "${SCRIPT_DIR}/templates/transmission-done.sh" "${TRANSMISSION_DONE_SCRIPT}"
 sudo chmod +x "${TRANSMISSION_DONE_SCRIPT}"
 sudo chown -v "${OPERATOR_USERNAME}" "${TRANSMISSION_DONE_SCRIPT}"
 log "✅ Completion script creation completed successfully"
