@@ -42,35 +42,61 @@ CURRENT_USER=$(whoami)
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 LOG_FILE="${HOME}/.local/state/${HOSTNAME_LOWER}-operator-login.log"
 PROGRESS_LOG_FILE="${HOME}/.local/state/${HOSTNAME_LOWER}-operator-login-progress.log"
+PROGRESS_INDICATOR_PID=""
 
-# Ensure log directory exists
+# Ensure log directories exist
 mkdir -p "$(dirname "${LOG_FILE}")"
-
-# Progress Indicator function
-# wraps log()
-progress() {
-  if command -v ProgressIndicator; then
-    # tool is installed; else just skip to log()
-    local timestamp
-    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[${timestamp}] $*" | tee -a "${PROGRESS_LOG_FILE}"
-    if ! pgrep -f ProgressIndicator; then
-      # tool is not already running; launch watching PROGRESS_LOG_FILE
-      ProgressIndicator --watchfile="${PROGRESS_LOG_FILE}"
-    fi
-  fi
-  log "$*"
-}
-
-stop_progress() {
-  pkill -f ProgressIndicator 2>/dev/null || true
-}
+mkdir -p "$(dirname "${PROGRESS_LOG_FILE}")"
 
 # Logging function
 log() {
   local timestamp
   timestamp=$(date '+%Y-%m-%d %H:%M:%S')
   echo "[${timestamp}] $*" | tee -a "${LOG_FILE}"
+}
+
+# Check ProgressIndicator availability
+if command -v ProgressIndicator >/dev/null 2>&1; then
+  log "ProgressIndicator available - GUI progress will be shown"
+else
+  log "ProgressIndicator not available - using log-only progress tracking"
+fi
+
+# Start ProgressIndicator if available and not already running
+start_progress() {
+  if command -v ProgressIndicator >/dev/null 2>&1; then
+    if [[ -z "${PROGRESS_INDICATOR_PID}" ]] || ! kill -0 "${PROGRESS_INDICATOR_PID}" 2>/dev/null; then
+      ProgressIndicator --watchfile="${PROGRESS_LOG_FILE}" &
+      PROGRESS_INDICATOR_PID=$!
+      if kill -0 "${PROGRESS_INDICATOR_PID}" 2>/dev/null; then
+        log "Started ProgressIndicator (PID: ${PROGRESS_INDICATOR_PID})"
+      else
+        log "Warning: Failed to start ProgressIndicator GUI"
+        PROGRESS_INDICATOR_PID=""
+      fi
+    fi
+  fi
+}
+
+# Progress Indicator function
+# wraps log()
+progress() {
+  start_progress
+  local timestamp
+  timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+  echo "[${timestamp}] $*" | tee -a "${PROGRESS_LOG_FILE}"
+  log "$*"
+}
+
+stop_progress() {
+  if [[ -n "${PROGRESS_INDICATOR_PID}" ]] && kill -0 "${PROGRESS_INDICATOR_PID}" 2>/dev/null; then
+    kill "${PROGRESS_INDICATOR_PID}" 2>/dev/null || true
+    wait "${PROGRESS_INDICATOR_PID}" 2>/dev/null || true
+    PROGRESS_INDICATOR_PID=""
+    log "Stopped ProgressIndicator"
+  fi
+  # Fallback cleanup
+  pkill -f "ProgressIndicator.*${PROGRESS_LOG_FILE}" 2>/dev/null || true
 }
 
 # Wait for network mount
@@ -264,15 +290,15 @@ setup_iterm2_preferences() {
     # Verify that import actually worked by checking for a key preference
     if defaults read com.googlecode.iterm2 "Default Bookmark Guid" >/dev/null 2>&1; then
       progress "✅ Successfully imported and verified iTerm2 preferences"
-      log "Preferences will be active when iTerm2 is next launched"
+      progress "Preferences will be active when iTerm2 is next launched"
     else
       progress "⚠️ Import command succeeded but preferences verification failed"
-      log "iTerm2 preferences may not have been properly imported"
+      progress "iTerm2 preferences may not have been properly imported"
     fi
   else
     progress "❌ Failed to import iTerm2 preferences"
-    log "Check that preferences file is valid: ${preferences_file}"
-    log "You can manually import by opening iTerm2 > Preferences > Profiles > Other Actions > Import JSON Profiles"
+    progress "Check that preferences file is valid: ${preferences_file}"
+    progress "You can manually import by opening iTerm2 > Preferences > Profiles > Other Actions > Import JSON Profiles"
   fi
 }
 
@@ -296,7 +322,7 @@ unload_launchagent() {
   operator_config_dir="$(dirname "${CONFIG_FILE}")"
   if mv "${launch_agents_dir}/${launch_agent}" "${operator_config_dir}"; then
     progress "Moved LaunchAgent to ${operator_config_dir}"
-    log "(Move back to ${launch_agents_dir} to re-run on next login)"
+    progress "(Move back to ${launch_agents_dir} to re-run on next login)"
   else
     progress "Warning: Failed to rename LaunchAgent; it will probably reload on next login"
   fi
