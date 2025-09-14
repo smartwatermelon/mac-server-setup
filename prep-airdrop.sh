@@ -1,14 +1,54 @@
 #!/usr/bin/env bash
 
 #
-# airdrop-prep.sh - Script to prepare a directory with necessary files for Mac Mini server setup
+# prep-airdrop.sh - Mac Mini Server Deployment Package Preparation
 #
-# This script prepares a directory with all the necessary scripts and files
-# for setting up the Mac Mini server. After running, AirDrop the entire directory
-# to your new Mac Mini.
+# This script creates a comprehensive deployment package for Mac Mini server setup by:
+# - Managing 1Password credential retrieval and secure transfer via external keychain
+# - Creating hardware fingerprint validation to prevent accidental execution
+# - Configuring WiFi credentials (manual or Migration Assistant strategies)
+# - Generating deployment manifest for package validation
+# - Copying all setup scripts, configurations, and templates
+# - Processing environment-specific configurations and templates
 #
-# Usage: ./airdrop-prep.sh [output_path] [script_path]
-#	output_path: Path where the files will be created (default: ~/macmini-setup)
+# REQUIREMENTS:
+# - 1Password CLI (op) installed and authenticated: `op signin`
+# - Required 1Password vault items: operator, TimeMachine, Plex NAS, Apple ID, OpenSubtitles
+# - SSH keys present at ~/.ssh/id_ed25519 and ~/.ssh/id_ed25519.pub
+# - jq, openssl, system_profiler, security commands available
+# - Administrator privileges for WiFi keychain access
+# - Valid config/config.conf file (copy from config.conf.template)
+#
+# Usage: ./prep-airdrop.sh [output_path] [script_path]
+#   output_path    Directory where deployment package will be created
+#                  (default: ~/${SERVER_NAME_LOWER}-setup)
+#   script_path    Source directory containing scripts (default: current directory)
+#   --help, -h     Show detailed usage information
+#
+# INTERACTIVE PROMPTS:
+# - WiFi setup strategy selection (Migration Assistant vs script-based)
+# - Existing directory overwrite confirmation
+# - 1Password credential retrieval (if missing)
+#
+# ENVIRONMENT VARIABLES (Optional):
+# - FILEBOT_LICENSE_FILE: Path to FileBot license file for inclusion
+# - USE_ITERM2: Set to "true" to export iTerm2 preferences
+# - TERMINAL_PROFILE_FILE: Terminal profile filename to include
+# - DROPBOX_SYNC_FOLDER: Dropbox folder for rclone configuration
+# - DROPBOX_LOCAL_PATH: Local sync path for Dropbox
+#
+# SECURITY FEATURES:
+# - Hardware UUID fingerprint prevents wrong-machine execution
+# - One-time Apple ID password links with expiration
+# - Secure memory clearing for sensitive variables
+# - External keychain with hardware-based password protection
+# - Proper file permissions (600) for sensitive configuration files
+#
+# OUTPUT:
+# - Complete deployment package ready for AirDrop transfer
+# - Deploy manifest for target server validation
+# - Encrypted credential keychain for secure transfer
+# - Configuration files with environment-specific substitutions
 #
 # Author: Claude
 # Version: 1.3

@@ -8,7 +8,7 @@
 # - Configuration migration from existing Plex server
 # - Auto-start configuration
 #
-# Usage: ./plex-setup.sh [--force] [--migrate] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--custom-port PORT] [--password PASSWORD]
+# Usage: ./plex-setup.sh [--force] [--clean] [--migrate] [--skip-migration] [--skip-mount] [--server-name NAME] [--migrate-from HOST] [--custom-port PORT] [--password PASSWORD]
 #   --force: Skip all confirmation prompts
 #   --clean: Stop and remove existing Plex Media Server if found
 #   --migrate: Skip initial migration prompt (for orchestrator use)

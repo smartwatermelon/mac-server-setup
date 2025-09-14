@@ -77,7 +77,7 @@ This project provides a complete automation framework for setting up an Apple Si
 
 The setup process consists of two main phases:
 
-1. **Base System Setup** (`airdrop-prep.sh` + `first-boot.sh`)
+1. **Base System Setup** (`prep-airdrop.sh` + `first-boot.sh`)
 
    - System configuration and hardening
    - User account management
@@ -96,38 +96,58 @@ The setup process consists of two main phases:
 
 - Apple Silicon Mac Mini with fresh macOS installation
 - Development Mac with:
-  - 1Password CLI installed and authenticated
-  - SSH keys generated (`~/.ssh/id_ed25519.pub`)
-  - Required 1Password vault items (see [AirDrop Prep Instructions](docs/setup/prep-airdrop.md))
+  - **1Password CLI installed and authenticated** (`brew install 1password-cli && op signin`)
+  - **SSH keys generated** (`~/.ssh/id_ed25519` and `~/.ssh/id_ed25519.pub`)
+  - **Required 1Password vault items**: operator, TimeMachine, Plex NAS, Apple ID, OpenSubtitles
+  - **Core tools**: `jq`, `openssl` (pre-installed on macOS)
+  - **Valid configuration**: Copy `config/config.conf.template` to `config/config.conf` and customize
+
+**📖 See [Prerequisites Guide](docs/prerequisites.md) for complete setup requirements and validation commands**
 
 > **Compatibility Note**: This automation is designed and tested for **macOS 15.x on Apple Silicon**. It may work on earlier macOS versions or Intel-based Macs, but compatibility is not guaranteed and has not been tested.
 
 ### Setup Process
 
-1. **Prepare setup package** on your development Mac:
+1. **Prepare deployment package** on your development Mac:
 
    ```bash
    ./prep-airdrop.sh
    ```
+
+   This comprehensive script:
+   - Retrieves credentials from 1Password and transfers them securely via external keychain
+   - Creates hardware fingerprint validation to prevent wrong-machine execution
+   - Configures WiFi credentials (offers Migration Assistant or script-based options)
+   - Generates deployment manifest for package validation
+   - Processes all configuration files with environment-specific substitutions
 
 2. **Transfer to Mac Mini** via AirDrop (entire setup folder)
 
    > You can use [airdrop-cli](https://github.com/vldmrkl/airdrop-cli) (requires Xcode) to AirDrop files from the command line!
    > Install: (`brew install --HEAD vldmrkl/formulae/airdrop-cli`)
 
-3. **Run initial setup** on Mac Mini (**requires local desktop session**):
+3. **Run system provisioning** on Mac Mini (**requires local desktop session**):
 
    ```bash
    cd ~/Downloads/MACMINI-setup # default name
    ./first-boot.sh
    ```
 
-   > **Important**: Must be run from the Mac Mini's local desktop session (not via SSH). The script requires GUI access for System Settings automation, AppleScript dialogs, and user account configuration.
+   > **Critical**: Must be run from the Mac Mini's local desktop session (Terminal.app) - CANNOT run via SSH. The script performs comprehensive system provisioning including user account creation, credential import, FileVault management, and configuration of 15+ system modules.
+
+   This script performs:
+   - Hardware fingerprint validation and FileVault compatibility checks
+   - Operator user account creation with automatic login configuration
+   - SSH key deployment and credential import from external keychain
+   - Multi-phase system configuration via specialized modules
+   - Comprehensive error collection and end-of-run validation
 
 4. **Complete operator setup** after reboot (see [Operator Setup](docs/operator.md))
 
 ## Documentation
 
+- **[Prerequisites Guide](docs/prerequisites.md)** - Complete setup requirements and validation
+- **[Environment Variables](docs/environment-variables.md)** - Comprehensive customization reference
 - [AirDrop Prep Instructions](docs/setup/prep-airdrop.md) - Preparing the setup package
 - [First Boot Instructions](docs/setup/first-boot.md) - Running the initial setup
 - [Operator Setup](docs/operator.md) - Post-reboot configuration
@@ -140,14 +160,12 @@ The setup process consists of two main phases:
 ├── README.md                   # This file
 ├── prep-airdrop.sh             # Setup package preparation (primary entry point)
 ├── app-setup/                  # Application setup scripts
-│   ├── config/                # Application-specific configuration
-│   │   ├── plex_nas.conf      # Plex NAS configuration
-│   │   ├── rclone.conf        # rclone OAuth configuration
-│   │   └── dropbox_sync.conf  # Dropbox sync settings
 │   ├── templates/             # Runtime script templates
 │   │   ├── mount-nas-media.sh # SMB mount script template
-│   │   ├── start-plex.sh # Plex startup wrapper template
-│   │   └── start-rclone.sh    # rclone sync script template
+│   │   ├── start-plex.sh      # Plex startup wrapper template
+│   │   ├── start-rclone.sh    # rclone sync script template
+│   │   ├── transmission-done.sh # Transmission completion script
+│   │   └── transmission-done-template.sh # Transmission completion template
 │   ├── plex-setup.sh          # Plex Media Server setup
 │   ├── rclone-setup.sh        # Dropbox sync setup
 │   ├── transmission-setup.sh   # BitTorrent client with GUI automation
@@ -161,8 +179,12 @@ The setup process consists of two main phases:
 │       └── operator-first-login.sh # Operator account customization (automatic via LaunchAgent)
 ├── config/                     # Configuration files
 │   ├── config.conf.template   # Configuration template
+│   ├── config.conf            # Active configuration file
 │   ├── formulae.txt           # Homebrew formulae list
-│   └── casks.txt              # Homebrew casks list
+│   ├── casks.txt              # Homebrew casks list
+│   ├── logrotate.conf         # Log rotation configuration
+│   ├── iterm2.plist           # iTerm2 profile settings
+│   └── Orangebrew.terminal    # Terminal.app profile
 └── docs/                       # Documentation
     ├── setup/                 # Setup documentation
     │   ├── prep-airdrop.md

@@ -9,9 +9,10 @@
 # - OpenSubtitles configuration for subtitle downloading
 # - Integration with transmission and media pipeline
 #
-# Usage: ./filebot-setup.sh [--force] [--license-file PATH]
+# Usage: ./filebot-setup.sh [--force] [--license-file PATH] [--password PASSWORD]
 #   --force: Skip all confirmation prompts
 #   --license-file: Override license file path (default: from config)
+#   --password: Administrator password for system configuration
 #
 # Author: Claude
 # Version: 1.0
@@ -98,7 +99,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "❌ Unknown option: $1"
-      echo "Usage: $0 [--force] [--license-file PATH]"
+      echo "Usage: $0 [--force] [--license-file PATH] [--password PASSWORD]"
       exit 1
       ;;
   esac
