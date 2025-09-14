@@ -1342,15 +1342,8 @@ show_log "   Bash shell and custom settings for both Administrator and Operator 
 log "Removing temporary sudo timeout configuration"
 sudo rm -f /etc/sudoers.d/10_setup_timeout
 
-# Clean up external keychain from setup directory (only after successful completion)
-if [[ -n "${EXTERNAL_KEYCHAIN:-}" ]]; then
-  setup_keychain_file="${SETUP_DIR}/config/${EXTERNAL_KEYCHAIN}-db"
-  if [[ -f "${setup_keychain_file}" ]]; then
-    log "Cleaning up external keychain from setup directory"
-    rm -f "${setup_keychain_file}"
-    log "✅ Setup keychain file cleaned up"
-  fi
-fi
+# External keychain preserved in setup directory for idempotent re-runs
+# (Previously removed keychain after completion, breaking re-run capability)
 
 # Clean up administrator password from memory
 if [[ -n "${ADMINISTRATOR_PASSWORD:-}" ]]; then

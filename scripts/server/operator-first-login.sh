@@ -41,15 +41,62 @@ fi
 CURRENT_USER=$(whoami)
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 LOG_FILE="${HOME}/.local/state/${HOSTNAME_LOWER}-operator-login.log"
+PROGRESS_LOG_FILE="${HOME}/.local/state/${HOSTNAME_LOWER}-operator-login-progress.log"
+PROGRESS_INDICATOR_PID=""
 
-# Ensure log directory exists
+# Ensure log directories exist
 mkdir -p "$(dirname "${LOG_FILE}")"
+mkdir -p "$(dirname "${PROGRESS_LOG_FILE}")"
 
 # Logging function
 log() {
   local timestamp
   timestamp=$(date '+%Y-%m-%d %H:%M:%S')
   echo "[${timestamp}] $*" | tee -a "${LOG_FILE}"
+}
+
+# Check ProgressIndicator availability
+if command -v ProgressIndicator >/dev/null 2>&1; then
+  log "ProgressIndicator available - GUI progress will be shown"
+else
+  log "ProgressIndicator not available - using log-only progress tracking"
+fi
+
+# Start ProgressIndicator if available and not already running
+start_progress() {
+  if command -v ProgressIndicator >/dev/null 2>&1; then
+    if [[ -z "${PROGRESS_INDICATOR_PID}" ]] || ! kill -0 "${PROGRESS_INDICATOR_PID}" 2>/dev/null; then
+      ProgressIndicator --watchfile="${PROGRESS_LOG_FILE}" &
+      PROGRESS_INDICATOR_PID=$!
+      if kill -0 "${PROGRESS_INDICATOR_PID}" 2>/dev/null; then
+        log "Started ProgressIndicator (PID: ${PROGRESS_INDICATOR_PID})"
+      else
+        log "Warning: Failed to start ProgressIndicator GUI"
+        PROGRESS_INDICATOR_PID=""
+      fi
+    fi
+  fi
+}
+
+# Progress Indicator function
+# wraps log()
+progress() {
+  start_progress
+  local timestamp
+  timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+  echo "[${timestamp}] $*" | tee -a "${PROGRESS_LOG_FILE}"
+  log "$*"
+}
+
+stop_progress() {
+  if [[ -n "${PROGRESS_INDICATOR_PID}" ]] && kill -0 "${PROGRESS_INDICATOR_PID}" 2>/dev/null; then
+    kill "${PROGRESS_INDICATOR_PID}" 2>/dev/null || true
+    wait "${PROGRESS_INDICATOR_PID}" 2>/dev/null || true
+    PROGRESS_INDICATOR_PID=""
+    log "Stopped ProgressIndicator"
+  fi
+  # Fallback cleanup
+  pkill -f "ProgressIndicator.*${PROGRESS_LOG_FILE}" 2>/dev/null || true
 }
 
 # Wait for network mount
@@ -59,36 +106,31 @@ wait_for_network_mount() {
   local timeout=120
   local elapsed=0
 
-  log "Waiting for network mount at ${mount_path}..."
+  progress "Waiting for network mount at ${mount_path}..."
 
   while [[ ${elapsed} -lt ${timeout} ]]; do
     # Check if there's an active SMB mount owned by current user
     if mount | grep "${CURRENT_USER}" | grep -q "${mount_path}"; then
-      log "Network mount ready (active mount found for ${CURRENT_USER})"
+      progress "Network mount ready (active mount found for ${CURRENT_USER})"
       return 0
     else
-      log "No active mount found for ${CURRENT_USER}, waiting... (${elapsed}s/${timeout}s)"
-    fi
-
-    # Show progress dialog every 10 seconds
-    if [[ $((elapsed % 10)) -eq 0 && ${elapsed} -gt 0 ]]; then
-      osascript -e "display dialog \"Waiting for network storage to be ready...\\n\\nElapsed: ${elapsed}s / ${timeout}s\" buttons {\"OK\"} default button \"OK\" giving up after 3 with title \"Mac Mini Setup\"" >/dev/null 2>&1 || true
+      progress "No active mount found for ${CURRENT_USER}, waiting... (${elapsed}s/${timeout}s)"
     fi
 
     sleep 1
     ((elapsed += 1))
   done
 
-  log "Warning: Network mount not available after ${timeout} seconds"
+  progress "Warning: Network mount not available after ${timeout} seconds"
   return 1
 }
 
 # Task: Dock cleanup
 setup_dock() {
-  log "Setting up dock for operator account..."
+  progress "Setting up dock for operator account..."
 
   if ! command -v dockutil; then
-    log "Warning: dockutil not found. Install: brew install dockutil"
+    progress "Warning: dockutil not found. Install: brew install dockutil"
     return 0
   fi
 
@@ -100,7 +142,7 @@ setup_dock() {
   done
 
   # Remove unwanted apps
-  log "Removing unwanted applications from dock..."
+  progress "Removing unwanted applications from dock..."
   local apps_to_remove=(
     "Messages"
     "Mail"
@@ -123,19 +165,19 @@ setup_dock() {
     local elapsed=0
 
     while dockutil --find "${app}" >/dev/null 2>&1 && [[ ${elapsed} -lt ${timeout} ]]; do
-      log "Removing ${app} from dock..."
+      progress "Removing ${app} from dock..."
       dockutil --remove "${app}" --no-restart 2>/dev/null || true
       sleep 1
       ((elapsed += 1))
     done
 
     if [[ ${elapsed} -ge ${timeout} ]]; then
-      log "Warning: Timeout removing ${app} from dock"
+      progress "Warning: Timeout removing ${app} from dock"
     fi
   done
 
   # Add desired items
-  log "Adding desired applications to dock..."
+  progress "Adding desired applications to dock..."
   local media_path="${HOME}/.local/mnt/${NAS_SHARE_NAME}/Media"
   local apps_to_add=()
 
@@ -155,14 +197,14 @@ setup_dock() {
     local elapsed=0
 
     while ! dockutil --find "${app}" >/dev/null 2>&1 && [[ ${elapsed} -lt ${timeout} ]]; do
-      log "Adding ${app} to dock..."
+      progress "Adding ${app} to dock..."
       dockutil --add "${app}" --no-restart 2>/dev/null || true
       sleep 1
       ((elapsed += 1))
     done
 
     if [[ ${elapsed} -ge ${timeout} ]]; then
-      log "Warning: Timeout adding ${app} to dock"
+      progress "Warning: Timeout adding ${app} to dock"
     fi
   done
 
@@ -170,34 +212,34 @@ setup_dock() {
   killall Dock 2>/dev/null || true
   sleep 1
 
-  log "Dock setup completed"
+  progress "Dock setup completed"
 }
 
 # Task: Configure Terminal profile
 setup_terminal_profile() {
-  log "Setting up Terminal profile..."
+  progress "Setting up Terminal profile..."
 
   local terminal_config_dir="${HOME}/.config/terminal"
   local profile_file="${terminal_config_dir}/Orangebrew.terminal"
 
   # Check if profile file exists
   if [[ ! -f "${profile_file}" ]]; then
-    log "No Terminal profile found at ${profile_file} - skipping terminal setup"
+    progress "No Terminal profile found at ${profile_file} - skipping terminal setup"
     return 0
   fi
 
   # Extract profile name
   local profile_name
   if ! profile_name=$(plutil -extract name raw "${profile_file}" 2>/dev/null); then
-    log "Warning: Could not extract profile name from ${profile_file}"
+    progress "Warning: Could not extract profile name from ${profile_file}"
     return 0
   fi
 
-  log "Registering Terminal profile '${profile_name}'..."
+  progress "Registering Terminal profile '${profile_name}'..."
 
   # Step 1: Open the profile file to register it with Terminal.app
   if open "${profile_file}"; then
-    log "Successfully opened Terminal profile file"
+    progress "Successfully opened Terminal profile file"
 
     # Step 2: Set as default window settings
     defaults write com.apple.Terminal "Default Window Settings" -string "${profile_name}"
@@ -209,65 +251,80 @@ setup_terminal_profile() {
     sleep 2 # Brief pause to let Terminal register the profile
     killall Terminal 2>/dev/null || true
 
-    log "Terminal profile '${profile_name}' configured successfully"
+    progress "Terminal profile '${profile_name}' configured successfully"
   else
-    log "Warning: Failed to open Terminal profile file"
+    progress "Warning: Failed to open Terminal profile file"
   fi
 }
 
 # Task: Configure iTerm2 preferences
 setup_iterm2_preferences() {
-  log "Setting up iTerm2 preferences..."
+  progress "Setting up iTerm2 preferences..."
 
   local iterm2_config_dir="${HOME}/.config/iterm2"
   local preferences_file="${iterm2_config_dir}/iterm2.plist"
 
   # Check if preferences file exists
   if [[ ! -f "${preferences_file}" ]]; then
-    log "No iTerm2 preferences found at ${preferences_file} - skipping iTerm2 setup"
+    progress "No iTerm2 preferences found at ${preferences_file} - skipping iTerm2 setup"
     return 0
   fi
 
-  # Check if iTerm2 is installed
-  if [[ ! -f /Applications/iTerm.app/Contents/Resources/utilities/it2check ]]; then
-    log "iTerm2 not installed - skipping preferences import"
+  # Check if iTerm2 is installed (more reliable detection method)
+  if [[ ! -d /Applications/iTerm.app ]]; then
+    progress "iTerm2 not installed - skipping preferences import"
     return 0
   fi
 
-  log "Importing iTerm2 preferences..."
+  progress "Importing iTerm2 preferences..."
+
+  # Ensure iTerm2 is not running during import for better reliability
+  if pgrep -f "iTerm.app" >/dev/null 2>&1; then
+    progress "iTerm2 is currently running - preferences import may not take effect until restart"
+  fi
 
   # Import preferences using defaults import
   if defaults import com.googlecode.iterm2 "${preferences_file}"; then
-    log "Successfully imported iTerm2 preferences"
-    log "iTerm2 preferences will be active when iTerm2 is next launched"
+    progress "iTerm2 preferences import command succeeded"
+
+    # Verify that import actually worked by checking for a key preference
+    if defaults read com.googlecode.iterm2 "Default Bookmark Guid" >/dev/null 2>&1; then
+      progress "✅ Successfully imported and verified iTerm2 preferences"
+      progress "Preferences will be active when iTerm2 is next launched"
+    else
+      progress "⚠️ Import command succeeded but preferences verification failed"
+      progress "iTerm2 preferences may not have been properly imported"
+    fi
   else
-    log "Warning: Failed to import iTerm2 preferences"
+    progress "❌ Failed to import iTerm2 preferences"
+    progress "Check that preferences file is valid: ${preferences_file}"
+    progress "You can manually import by opening iTerm2 > Preferences > Profiles > Other Actions > Import JSON Profiles"
   fi
 }
 
 # Task: Start logrotate service
 setup_logrotate() {
-  log "Starting logrotate service for operator user..."
+  progress "Starting logrotate service for operator user..."
   brew services stop logrotate &>/dev/null || true
   if brew services start logrotate; then
-    log "Logrotate service started successfully"
+    progress "Logrotate service started successfully"
   else
-    log "Warning: Failed to start logrotate service - logs will not be rotated"
+    progress "Warning: Failed to start logrotate service - logs will not be rotated"
   fi
 }
 
 # Task: unload LaunchAgent
 unload_launchagent() {
-  log "Unloading LaunchAgent..."
+  progress "Unloading LaunchAgent..."
   local launch_agents_dir="${HOME}/Library/LaunchAgents"
   local launch_agent="com.${HOSTNAME_LOWER}.operator-first-login.plist"
   local operator_config_dir
   operator_config_dir="$(dirname "${CONFIG_FILE}")"
   if mv "${launch_agents_dir}/${launch_agent}" "${operator_config_dir}"; then
-    log "Moved LaunchAgent to ${operator_config_dir}"
-    log "(Move back to ${launch_agents_dir} to re-run on next login)"
+    progress "Moved LaunchAgent to ${operator_config_dir}"
+    progress "(Move back to ${launch_agents_dir} to re-run on next login)"
   else
-    log "Warning: Failed to rename LaunchAgent; it will probably reload on next login"
+    progress "Warning: Failed to rename LaunchAgent; it will probably reload on next login"
   fi
 }
 
@@ -283,7 +340,7 @@ lock_screen_now() {
 
 # Main execution
 main() {
-  log "=== Operator First-Login Setup Started ==="
+  progress "=== Operator First-Login Setup Started ==="
   log "User: ${CURRENT_USER}"
   log "Server: ${SERVER_NAME}"
 
@@ -293,9 +350,6 @@ main() {
     exit 1
   fi
 
-  # Show setup notification to user
-  osascript -e 'display dialog "🔧 Setting up operator account...\n\nCustomizing dock and applications.\nThis will complete automatically in a few moments." buttons {"OK"} default button "OK" giving up after 8 with title "Mac Mini Setup"'
-
   # Run setup tasks
   setup_dock
   setup_terminal_profile
@@ -303,10 +357,9 @@ main() {
   setup_logrotate
   unload_launchagent
 
-  # Show setup notification to user
-  osascript -e 'display dialog "✅ Done setting up operator account!" buttons {"OK"} default button "OK" giving up after 8 with title "Mac Mini Setup"'
-
-  log "=== Operator First-Login Setup Completed ==="
+  progress "=== Operator First-Login Setup Completed ==="
+  sleep 2
+  stop_progress
 }
 
 main "$@"
