@@ -1,10 +1,11 @@
 # Prerequisites - Mac Mini Server Setup
 
-**Critical requirements for successful Mac Mini server setup**
+Critical requirements for successful Mac Mini server setup
 
 ## Development Machine Requirements
 
 ### Essential Software
+
 - **1Password CLI**: Install via `brew install 1password-cli`
   - Must be authenticated: `op signin`
   - Requires access to configured vault with server credentials
@@ -13,6 +14,7 @@
   - Generate if missing: `ssh-keygen -t ed25519 -C "your_email@example.com"`
 
 ### 1Password Vault Configuration
+
 Required 1Password login items in your configured vault:
 
 1. **Operator Account** (item name configurable via `ONEPASSWORD_OPERATOR_ITEM`)
@@ -38,11 +40,13 @@ Required 1Password login items in your configured vault:
    - Password: OpenSubtitles password
 
 ### Configuration File
+
 - Copy `config/config.conf.template` to `config/config.conf`
 - Customize `SERVER_NAME`, `ONEPASSWORD_VAULT`, and other settings
 - All 1Password item names are configurable via this file
 
 ### Permissions
+
 - Administrator privileges required for:
   - WiFi keychain access during prep-airdrop.sh
   - External keychain creation and management
@@ -50,16 +54,19 @@ Required 1Password login items in your configured vault:
 ## Target Mac Mini Requirements
 
 ### macOS Setup
+
 - **Fresh macOS installation** (macOS 15.x recommended)
 - **Complete Setup Assistant** with administrator account created
 - **FileVault disabled** (will be disabled during setup if enabled)
 
 ### Critical Session Requirements
+
 - **MUST run from local GUI session** (Terminal.app on the Mac Mini)
 - **CANNOT run via SSH** - many operations require GUI access
 - Session type must be `Aqua` (verified automatically)
 
 ### Hardware/Network
+
 - **Apple Silicon Mac Mini** (Intel may work but untested)
 - **Network connectivity** for package downloads
 - **Sufficient disk space** for applications and packages
@@ -67,6 +74,7 @@ Required 1Password login items in your configured vault:
 ## Pre-Setup Checklist
 
 ### On Development Machine
+
 - [ ] 1Password CLI installed and authenticated (`op whoami` succeeds)
 - [ ] All required 1Password vault items exist and accessible
 - [ ] SSH keys exist at `~/.ssh/id_ed25519*`
@@ -74,6 +82,7 @@ Required 1Password login items in your configured vault:
 - [ ] Sufficient disk space for deployment package creation
 
 ### On Target Mac Mini
+
 - [ ] Fresh macOS installation completed
 - [ ] Setup Assistant completed with admin account
 - [ ] Connected to network with internet access
@@ -104,21 +113,25 @@ test -f config/config.conf && echo "✅ Config file exists" || echo "❌ Create 
 ## Troubleshooting Common Issues
 
 ### 1Password Authentication
+
 - Ensure you're signed in: `op signin`
 - Check vault name in config.conf matches actual vault
 - Verify you have access to all required items
 
 ### SSH Key Issues
+
 - Generate keys if missing: `ssh-keygen -t ed25519`
 - Ensure both public and private keys exist
 - Keys will be deployed to both admin and operator accounts
 
 ### FileVault Problems
+
 - first-boot.sh will detect FileVault and offer to disable it
 - Can be disabled manually: `sudo fdesetup disable`
 - Required for automatic login functionality
 
 ### GUI Session Requirements
+
 - first-boot.sh checks session type automatically
 - Must be run from Terminal.app on the Mac Mini desktop
 - SSH sessions will be rejected with clear error message
@@ -126,18 +139,21 @@ test -f config/config.conf && echo "✅ Config file exists" || echo "❌ Create 
 ## Security Considerations
 
 ### Credential Management
+
 - Credentials transferred via encrypted external keychain
 - Hardware UUID used as keychain password
 - Temporary credential files automatically cleaned up
 - All sensitive variables cleared from memory
 
 ### Network Security
+
 - SSH keys deployed for secure remote access
 - Firewall configured with SSH allowlist
 - Password authentication disabled for SSH
 - TouchID sudo configured for local administration
 
 ### Access Control
+
 - Operator account has limited sudo privileges
 - Administrator account retains full system access
 - Automatic login configured only for operator account

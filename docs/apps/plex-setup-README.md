@@ -373,27 +373,32 @@ rm -f ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist
 Access your Plex server at `http://your-server.local:32400` and review these settings:
 
 #### **Server Settings** → **General**
+
 - **Server name**: Verify the automatically configured name
 - **Language and region**: Set your preferred language and country
 - **Remote access**: Configure if you need external access to your server
 
 #### **Server Settings** → **Library**
+
 - **Add media libraries**: Point to your mounted media directories (`~/.local/mnt/Media/...`)
 - **Library naming**: Customize library names (Movies, TV Shows, Music, etc.)
 - **Scanner settings**: Configure metadata agents and scanner options
 - **Artwork and metadata**: Set preferred metadata and artwork sources
 
 #### **Server Settings** → **Network**
+
 - **Remote access**: Enable/disable and configure port forwarding if needed
 - **LAN networks**: Add your local network ranges for better security
 - **Advanced networking**: Configure if you have complex network requirements
 
 #### **Server Settings** → **Transcoder**
+
 - **Transcoder quality**: Set hardware acceleration preferences (Apple Silicon supports hardware transcoding)
 - **Background transcoding**: Configure optimization schedules
 - **Bandwidth limits**: Set streaming quality limits if needed
 
 #### **Server Settings** → **Scheduled Tasks**
+
 - **Library maintenance**: Configure automatic library updates
 - **Media optimization**: Set up background video optimization
 - **Backup schedules**: Configure automatic database backups
@@ -401,11 +406,13 @@ Access your Plex server at `http://your-server.local:32400` and review these set
 ### User-Specific Preferences
 
 #### **Account Settings**
+
 - **Privacy settings**: Configure data sharing and analytics preferences
 - **Sharing settings**: Set up user access and sharing permissions
 - **Online media sources**: Configure or disable online content integration
 
 #### **Playback Settings**
+
 - **Quality settings**: Default streaming quality for different connection types
 - **Subtitle settings**: Default subtitle preferences and fonts
 - **Audio settings**: Default audio track preferences
@@ -413,14 +420,17 @@ Access your Plex server at `http://your-server.local:32400` and review these set
 ### Optional Advanced Configuration
 
 #### **Webhooks and Notifications**
+
 - **Plex webhook**: Configure external service integrations
 - **Mobile notifications**: Set up push notifications for mobile apps
 
 #### **DLNA and External Players**
+
 - **DLNA server**: Enable if you have DLNA devices on your network
 - **External player support**: Configure for specialized media players
 
 #### **Media Scanner Settings**
+
 - **File detection**: Configure how often libraries are scanned for new content
 - **Metadata refresh**: Set automatic metadata update intervals
 
@@ -435,6 +445,7 @@ If you're using the complete media pipeline (Transmission → FileBot → Plex),
 ### Testing Your Configuration
 
 After configuration:
+
 1. **Add test content** to verify library scanning works
 2. **Test playback** on different devices to verify transcoding
 3. **Check mobile access** if remote access is enabled

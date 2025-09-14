@@ -1,6 +1,6 @@
 # Environment Variables Reference
 
-**Complete guide to customizing Mac Mini server setup via environment variables**
+Complete guide to customizing Mac Mini server setup via environment variables
 
 ## Overview
 
@@ -9,6 +9,7 @@ The Mac Mini server setup system supports extensive customization through enviro
 ## Primary Configuration Variables
 
 ### Server Identity
+
 **Location**: `config/config.conf` (required)
 
 ```bash
@@ -26,6 +27,7 @@ OPERATOR_FULLNAME="${SERVER_NAME} Operator"
 ```
 
 ### 1Password Integration
+
 **Location**: `config/config.conf` (required)
 
 ```bash
@@ -41,6 +43,7 @@ ONEPASSWORD_OPENSUBTITLES_ITEM="Opensubtitles"
 ```
 
 ### NAS Configuration
+
 **Location**: `config/config.conf` or app-setup scripts
 
 ```bash
@@ -53,6 +56,7 @@ NAS_USERNAME="plex"
 ## Advanced Configuration Variables
 
 ### Dropbox Synchronization
+
 **Location**: Shell environment or `config/config.conf`
 
 ```bash
@@ -64,6 +68,7 @@ DROPBOX_LOCAL_PATH="/Users/operator/Dropbox"
 **Usage**: When set, prep-airdrop.sh automatically configures Dropbox sync during package preparation.
 
 ### FileBot Licensing
+
 **Location**: Shell environment
 
 ```bash
@@ -74,6 +79,7 @@ FILEBOT_LICENSE_FILE="/path/to/FileBot_License_XXXXXXXXX.psm"
 **Usage**: If set, prep-airdrop.sh copies the license file to the deployment package for automatic installation.
 
 ### Terminal Configuration
+
 **Location**: `config/config.conf`
 
 ```bash
@@ -89,6 +95,7 @@ TERMINAL_PROFILE_FILE="Orangebrew.terminal"
 ## Runtime Control Variables
 
 ### Script Behavior Control
+
 **Location**: Set by scripts during execution
 
 ```bash
@@ -109,6 +116,7 @@ NEED_CONTROLCENTER_RESTART="false"
 ```
 
 ### Administrator Password
+
 **Location**: Runtime collection
 
 ```bash
@@ -121,7 +129,8 @@ ADMINISTRATOR_PASSWORD=""  # Collected interactively, cleared after use
 ## Derived Variables
 
 ### Computed Names
-**Auto-generated based on primary configuration**
+
+Auto-generated based on primary configuration
 
 ```bash
 # Final hostname (with override support)
@@ -138,7 +147,8 @@ SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 ```
 
 ### File Paths
-**Auto-generated directory and file locations**
+
+Auto-generated directory and file locations
 
 ```bash
 # Deployment package output
@@ -160,6 +170,7 @@ LAUNCH_AGENTS_DIR="${OPERATOR_HOME}/Library/LaunchAgents"
 ## Security Variables
 
 ### Hardware Fingerprinting
+
 **Location**: Auto-generated during prep-airdrop.sh
 
 ```bash
@@ -172,6 +183,7 @@ EXTERNAL_KEYCHAIN="mac-server-setup"
 ```
 
 ### Keychain Service Identifiers
+
 **Location**: Auto-generated in keychain manifest
 
 ```bash
@@ -186,6 +198,7 @@ KEYCHAIN_OPENSUBTITLES_SERVICE="opensubtitles-${SERVER_NAME_LOWER}"
 ## Application-Specific Variables
 
 ### Plex Configuration
+
 **Location**: plex-setup.sh runtime
 
 ```bash
@@ -200,6 +213,7 @@ PLEX_NEW_CONFIG="/Users/Shared/PlexMediaServer"
 ```
 
 ### Transmission Configuration
+
 **Location**: transmission-setup.sh
 
 ```bash
@@ -210,6 +224,7 @@ RPC_PASSWORD="${RPC_PASSWORD:-auto-generated}"
 ## Error Collection Variables
 
 ### Error Tracking System
+
 **Location**: All setup scripts
 
 ```bash
@@ -224,6 +239,7 @@ CURRENT_SCRIPT_SECTION=""
 ## Setting Environment Variables
 
 ### In config.conf
+
 ```bash
 # Edit config/config.conf
 SERVER_NAME="MYSERVER"
@@ -232,6 +248,7 @@ USE_ITERM2="true"
 ```
 
 ### In Shell Environment
+
 ```bash
 # Set before running scripts
 export FILEBOT_LICENSE_FILE="/path/to/license.psm"
@@ -240,6 +257,7 @@ export DROPBOX_SYNC_FOLDER="Documents/MyProject"
 ```
 
 ### Command Line Override
+
 ```bash
 # Some variables can be overridden via flags
 ./plex-setup.sh --server-name "CustomName"
@@ -249,20 +267,26 @@ export DROPBOX_SYNC_FOLDER="Documents/MyProject"
 ## Variable Validation
 
 ### Required Variables
+
 These must be set in `config/config.conf`:
+
 - `SERVER_NAME`
 - `OPERATOR_USERNAME`
 - `ONEPASSWORD_VAULT`
 - All `ONEPASSWORD_*_ITEM` variables
 
 ### Optional Variables
+
 These have sensible defaults if not set:
+
 - `HOSTNAME_OVERRIDE` (defaults to `SERVER_NAME`)
 - Terminal and application-specific variables
 - Dropbox and FileBot configuration
 
 ### Auto-Generated Variables
+
 These are computed automatically:
+
 - All `*_LOWER` variables
 - All path variables (`*_DIR`, `*_PATH`)
 - Hardware fingerprint variables
@@ -273,21 +297,25 @@ These are computed automatically:
 ### Common Issues
 
 **Variable Not Taking Effect**:
+
 - Check `config/config.conf` syntax (no spaces around `=`)
 - Verify variable is exported in shell environment
 - Some variables only work in specific scripts
 
 **Path Variables Incorrect**:
+
 - Ensure `SERVER_NAME` is set correctly
 - Check that derived variables are computed properly
 - Verify deployment package structure
 
 **1Password Variables**:
+
 - Confirm vault name matches exactly (case-sensitive)
 - Verify all required 1Password items exist
 - Check `op whoami` authentication status
 
 ### Debug Variable Values
+
 ```bash
 # Check current variable values
 echo "SERVER_NAME: ${SERVER_NAME}"
@@ -302,12 +330,14 @@ op item list --vault "${ONEPASSWORD_VAULT}"
 ## Security Considerations
 
 ### Sensitive Variables
+
 - `ADMINISTRATOR_PASSWORD`: Never logged, cleared after use
 - `*_PASSWORD`: Masked in all log output
 - Hardware fingerprints: Used for security validation
 - Keychain passwords: Generated from hardware UUID
 
 ### Variable Scope
+
 - Configuration variables: Global across all scripts
 - Runtime variables: Local to specific script execution
 - Derived variables: Computed fresh each time
