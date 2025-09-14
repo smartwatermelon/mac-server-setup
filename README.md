@@ -2,6 +2,28 @@
 
 Automated setup scripts for configuring an Apple Silicon Mac Mini as a home server with native macOS applications.
 
+## TL;DR - Quick Start
+
+**What this does**: Turns a fresh Mac Mini into a configured home server with Plex, BitTorrent, Dropbox sync, and remote access.
+
+**Prerequisites** (5 minutes):
+
+1. Install 1Password CLI: `brew install 1password-cli && op signin`
+2. Generate SSH keys: `ssh-keygen -t ed25519`
+3. Copy `config/config.conf.template` to `config/config.conf` and set your `SERVER_NAME`
+4. Create these 1Password items: "operator", "TimeMachine", "Plex NAS", "Apple", "OpenSubtitles"
+
+**Setup** (15 minutes):
+
+1. **On dev Mac**: `./prep-airdrop.sh` (creates deployment package)
+2. **AirDrop** the generated folder to your Mac Mini
+3. **On Mac Mini desktop** (not SSH): `cd ~/Downloads/MACMINI-setup && ./first-boot.sh`
+4. **Reboot** and login as operator for automatic final setup
+
+**Result**: Fully configured server accessible at `your-server-name.local` with web interfaces for all services.
+
+📖 **Need details?** See [Prerequisites](docs/prerequisites.md) and [Environment Variables](docs/environment-variables.md) for complete guidance.
+
 ## Project Overview
 
 This project provides a complete automation framework for setting up an Apple Silicon Mac Mini server that functions as:
