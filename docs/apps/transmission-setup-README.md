@@ -169,6 +169,41 @@ defaults read com.apple.LaunchServices/com.apple.launchservices.secure LSHandler
 - **FileBot**: Completion script prepared for media processing integration
 - **Plex**: Downloads organized for media library integration
 
+### User Customization
+
+#### **Custom Completion Scripts**
+
+The setup creates a default `transmission-done.sh` completion script that logs torrent completion. Users can customize this behavior:
+
+1. **Before Setup**: Create your own `app-setup/templates/transmission-done.sh` script
+   - The setup will use your custom script instead of the default template
+   - Your script will be preserved across repository updates (gitignored)
+
+2. **After Setup**: Modify the deployed script directly
+   - Location: `~/.local/bin/transmission-done.sh` (on the server)
+   - Changes take effect for new torrent completions
+   - Script runs with full user environment and Transmission variables
+
+**Available Environment Variables**:
+
+```bash
+TR_APP_VERSION      # Transmission version
+TR_TIME_LOCALTIME   # Completion timestamp
+TR_TORRENT_DIR      # Download directory path
+TR_TORRENT_HASH     # Torrent hash identifier
+TR_TORRENT_ID       # Transmission internal ID
+TR_TORRENT_NAME     # Torrent display name
+```
+
+**Common Customizations**:
+
+- FileBot automatic processing
+- Email/notification integration  
+- Cloud sync triggers
+- Custom file organization
+- Statistics logging
+- Integration with external APIs
+
 ## Research and Development
 
 ### Preference Key Research
