@@ -1,22 +1,62 @@
 #!/usr/bin/env bash
 #
-# first-boot.sh - Complete setup script for Mac Mini server
+# first-boot.sh - Mac Mini Server System Provisioning & Configuration
 #
-# This script performs the complete setup for the Mac Mini server after
-# the macOS setup wizard has been completed. It configures:
-# - Remote management (SSH and Remote Desktop)
-# - User accounts
-# - System settings
-# - Power management
-# - Security configurations
-# - Homebrew and packages installation
-# - Application preparation
+# This script performs comprehensive macOS server provisioning including:
+# - Hardware fingerprint validation and security checks
+# - FileVault compatibility verification with auto-disable option
+# - Administrator password collection and validation
+# - Operator user account creation with automatic login configuration
+# - SSH key deployment for both admin and operator accounts
+# - External keychain import and credential extraction
+# - Multi-phase system configuration via 15+ specialized modules
+# - Comprehensive logging and error collection with end-of-run validation
+#
+# CRITICAL REQUIREMENTS:
+# - MUST be run from local GUI session (Terminal.app) - CANNOT run via SSH
+# - Requires administrator account password for system modifications
+# - Must be run from deployment package directory (contains config/, scripts/, etc.)
+# - Deployment package must contain valid hardware fingerprint and credentials
+# - FileVault must be disabled or will be disabled during setup (with user consent)
 #
 # Usage: ./first-boot.sh [--force] [--skip-update] [--skip-homebrew] [--skip-packages]
-#   --force: Skip all confirmation prompts
-#   --skip-update: Skip software updates (which can be time-consuming)
-#   --skip-homebrew: Skip Homebrew installation/update
-#   --skip-packages: Skip package installation
+#   --force           Skip all confirmation prompts (dangerous - use carefully)
+#   --skip-update     Skip macOS software updates (recommended - updates are unreliable during setup)
+#   --skip-homebrew   Skip Homebrew installation and configuration
+#   --skip-packages   Skip package installation from formulae.txt and casks.txt
+#
+# SYSTEM MODIFICATIONS PERFORMED:
+# - Creates operator user account with full name and password hint
+# - Configures automatic login for operator account (/etc/kcpassword)
+# - Deploys SSH keys for both administrator and operator accounts
+# - Imports credentials from external keychain to system keychain
+# - Calls 15+ setup modules: TouchID, WiFi, SSH, Remote Desktop, Apple ID, etc.
+# - Configures system preferences, power management, firewall, logging
+# - Sets up application preparation and terminal profiles
+#
+# INTERACTIVE BEHAVIORS:
+# - Requests administrator password (validated against directory services)
+# - FileVault disable confirmation if FileVault is enabled
+# - Setup continuation confirmation after error summary
+# - Multiple validation checks with error recovery options
+#
+# ENVIRONMENT VARIABLES (Advanced):
+# - HOSTNAME_OVERRIDE: Custom hostname different from SERVER_NAME
+# - RERUN_AFTER_FDA: Set to true when rerunning after Full Disk Access grant
+# - All config.conf variables: SERVER_NAME, OPERATOR_USERNAME, 1Password items
+#
+# ERROR HANDLING:
+# - Comprehensive error and warning collection across all phases
+# - Context-aware error reporting with section and line number information
+# - Multi-level verification system for all critical configurations
+# - End-of-run validation with detailed success/failure reporting
+# - Hardware fingerprint validation prevents execution on wrong machine
+#
+# LOGGING:
+# - Detailed setup log: ~/.local/state/${hostname}-setup.log
+# - Automatic log rotation with timestamp preservation
+# - Section-based logging for easy troubleshooting
+# - Password masking in all log output for security
 #
 # Author: Claude
 # Version: 2.2
