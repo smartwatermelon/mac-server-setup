@@ -318,10 +318,10 @@ section "Creating Completion Script"
 
 log "Copying transmission-done.sh completion script from template..."
 OPERATOR_LOCAL_BIN="$(dirname "${TRANSMISSION_DONE_SCRIPT}")"
-mkdir -p "${OPERATOR_LOCAL_BIN}"
+sudo mkdir -p "${OPERATOR_LOCAL_BIN}"
 
 # Copy template script to destination
-cp "${SCRIPT_DIR}/templates/transmission-done.sh" "${TRANSMISSION_DONE_SCRIPT}"
+sudo cp "${SCRIPT_DIR}/templates/transmission-done.sh" "${TRANSMISSION_DONE_SCRIPT}"
 sudo chmod +x "${TRANSMISSION_DONE_SCRIPT}"
 sudo chown -v "${OPERATOR_USERNAME}" "${TRANSMISSION_DONE_SCRIPT}"
 log "✅ Completion script creation completed successfully"
