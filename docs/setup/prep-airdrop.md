@@ -106,7 +106,7 @@ macmini-setup/
 │   ├── config.conf              # Server settings
 │   ├── dev_fingerprint.conf     # Safety check data
 │   ├── formulae.txt             # Homebrew packages
-│   ├── iterm2.plist             # iTerm2 profile/settings (optional)
+│   ├── com.googlecode.iterm2.plist             # iTerm2 profile/settings (optional)
 │   ├── keychain_manifest.conf   # Keychain service identifiers
 │   ├── logrotate.conf
 │   ├── mac-server-setup-db      # External keychain file

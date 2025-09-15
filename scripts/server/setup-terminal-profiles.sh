@@ -147,7 +147,7 @@ else
 fi
 
 # iTerm2 preferences path (exported plist file)
-ITERM2_PREFERENCES_PATH="${SETUP_DIR}/config/iterm2.plist"
+ITERM2_PREFERENCES_PATH="${SETUP_DIR}/config/com.googlecode.iterm2.plist"
 
 # Backup preferences for a user
 backup_user_preferences() {
@@ -185,6 +185,8 @@ import_terminal_profile_for_user() {
     return 1
   fi
 
+  xattr -d com.apple.quarantine "${profile_file}" 2>/dev/null || true
+
   # Extract profile name from the plist
   local profile_name
   if ! profile_name=$(plutil -extract name raw "${profile_file}" 2>/dev/null); then
@@ -196,15 +198,55 @@ import_terminal_profile_for_user() {
 
   if [[ "${username}" == "${ADMIN_USERNAME}" ]]; then
     # Import for current admin user - direct registration
-    if open "${profile_file}"; then
-      # Set as default and startup profile
-      defaults write com.apple.Terminal "Default Window Settings" -string "${profile_name}"
-      defaults write com.apple.Terminal "Startup Window Settings" -string "${profile_name}"
-      log "Successfully imported Terminal profile for ${username}"
-      log "New profile will be active in next Terminal session"
-      return 0
+    local terminal_window_count
+    if terminal_window_count=$(osascript -e 'tell application "Terminal" to count windows'); then
+      if open "${profile_file}"; then
+        sleep 1
+        local new_terminal_window_count
+        new_terminal_window_count=0
+        local terminal_window_count_loop
+        new_terminal_window_count=$(osascript -e 'tell application "Terminal" to count windows')
+        until [[ ${new_terminal_window_count} -gt ${terminal_window_count} ]]; do
+          sleep 1
+          ((terminal_window_count_loop += 1))
+          if [[ ${terminal_window_count_loop} -gt 4 ]]; then
+            break
+          fi
+          new_terminal_window_count=$(osascript -e 'tell application "Terminal" to count windows')
+        done
+        osascript -e 'tell application "Terminal" to if (count of windows) > 0 then close (last window)'
+        new_terminal_window_count=$(osascript -e 'tell application "Terminal" to count windows')
+        terminal_window_count_loop=0
+        until [[ ${new_terminal_window_count} -eq ${terminal_window_count} ]]; do
+          sleep 1
+          ((terminal_window_count_loop += 1))
+          if [[ ${terminal_window_count_loop} -gt 4 ]]; then
+            break
+          fi
+          new_terminal_window_count=$(osascript -e 'tell application "Terminal" to count windows')
+        done
+        # Set as default and startup profile
+        defaults write com.apple.Terminal "Default Window Settings" -string "${profile_name}"
+        defaults write com.apple.Terminal "Startup Window Settings" -string "${profile_name}"
+        local new_default
+        new_default=$(defaults read com.apple.Terminal "Default Window Settings")
+        if [[ ${new_default} != "${profile_name}" ]]; then
+          collect_error "Failed to set ${profile_name} as Default profile for ${username}"
+        fi
+        local new_startup
+        new_startup=$(defaults read com.apple.Terminal "Startup Window Settings")
+        if [[ ${new_startup} != "${profile_name}" ]]; then
+          collect_error "Failed to set ${profile_name} as Startup profile for ${username}"
+        fi
+        log "Successfully imported Terminal profile for ${username}"
+        log "New profile will be active in next Terminal session"
+        return 0
+      else
+        collect_error "Failed to open Terminal profile file for ${username}"
+        return 1
+      fi
     else
-      collect_error "Failed to open Terminal profile file for ${username}"
+      collect_error "Failed to count Terminal.app windows"
       return 1
     fi
   else
@@ -253,8 +295,13 @@ import_iterm2_preferences_for_user() {
   fi
 
   if [[ "${username}" == "${ADMIN_USERNAME}" ]]; then
-    # Import for current admin user - direct import
-    if defaults import com.googlecode.iterm2 "${preferences_file}"; then
+    # Import for current admin user - file copy
+    if cp -f "${preferences_file}" "${HOME}/Library/Preferences"; then
+      killall iTerm2 &>/dev/null || true
+      sleep 1
+      open -a iTerm2 &>/dev/null || true
+      sleep 1
+      killall iTerm2 &>/dev/null || true
       log "Successfully imported iTerm2 preferences for ${username}"
       log "Restart iTerm2 to see changes"
       return 0
@@ -266,20 +313,23 @@ import_iterm2_preferences_for_user() {
     # For operator user - copy preferences file to their config directory
     # Import will happen during operator-first-login.sh
     local operator_home="/Users/${username}"
-    local operator_config_dir="${operator_home}/.config/iterm2"
-    local operator_preferences_file
-    operator_preferences_file="${operator_config_dir}/$(basename "${preferences_file}")"
+    local operator_library_prefs_dir="${operator_home}/Library/Preferences"
 
     # Create config directory with proper ownership
-    if ! sudo -iu "${username}" mkdir -p "${operator_config_dir}"; then
+    if ! sudo -iu "${username}" mkdir -p "${operator_library_prefs_dir}"; then
       collect_error "Failed to create iTerm2 config directory for ${username}"
       return 1
     fi
 
     # Copy preferences file to operator's config directory
-    if sudo cp "${preferences_file}" "${operator_preferences_file}" \
-      && sudo chown "${username}:staff" "${operator_preferences_file}"; then
-      log "Successfully copied iTerm2 preferences to ${operator_preferences_file}"
+    if sudo cp "${preferences_file}" "${operator_library_prefs_dir}" \
+      && sudo chown "${username}:staff" "${operator_library_prefs_dir}/${preferences_file}"; then
+      sudo -iu "{username}" killall iTerm2 &>/dev/null || true
+      sleep 1
+      sudo -iu "{username}" open -a iTerm2 &>/dev/null || true
+      sleep 1
+      sudo -iu "{username}" killall iTerm2 &>/dev/null || true
+      log "Successfully copied iTerm2 preferences to ${operator_library_prefs_dir}"
       log "Preferences will be imported during operator first login"
       return 0
     else
@@ -308,6 +358,20 @@ check_running_terminal_apps() {
   fi
 }
 
+# Function to handle optional operations gracefully
+check_optional_success() {
+  local exit_code="$1"
+  local operation_name="$2"
+  if [[ ${exit_code} -eq 0 ]]; then
+    show_log "✅ ${operation_name}"
+    log "✅ ${operation_name}"
+  else
+    show_log "⚠️  ${operation_name} failed (optional feature - continuing)"
+    log "⚠️  ${operation_name} failed (optional feature - continuing)"
+    # Don't use collect_error since this is optional and shouldn't block setup
+  fi
+}
+
 # Main terminal profile configuration function
 configure_terminal_profiles() {
   set_section "Configuring Terminal Profiles"
@@ -329,14 +393,14 @@ configure_terminal_profiles() {
   if [[ -n "${TERMINAL_PROFILE_PATH}" ]] && [[ -f "${TERMINAL_PROFILE_PATH}" ]]; then
     log "Importing Terminal profiles..."
     import_terminal_profile_for_user "${ADMIN_USERNAME}" "${TERMINAL_PROFILE_PATH}"
-    check_success "Terminal profile import for admin user"
+    check_optional_success $? "Terminal profile import for admin user"
 
     if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
       import_terminal_profile_for_user "${OPERATOR_USERNAME}" "${TERMINAL_PROFILE_PATH}"
-      check_success "Terminal profile import for operator user"
+      check_optional_success $? "Terminal profile import for operator user"
     fi
   elif [[ -n "${TERMINAL_PROFILE_PATH}" ]]; then
-    log "Terminal profile file not found: ${TERMINAL_PROFILE_PATH}"
+    log "⚠️  Terminal profile file not found: ${TERMINAL_PROFILE_PATH} (optional feature - continuing)"
   else
     log "No Terminal profile configured - skipping Terminal profile setup"
   fi
@@ -345,14 +409,14 @@ configure_terminal_profiles() {
   if [[ "${USE_ITERM2:-false}" == "true" ]] && [[ -f "${ITERM2_PREFERENCES_PATH}" ]]; then
     log "Importing iTerm2 preferences..."
     import_iterm2_preferences_for_user "${ADMIN_USERNAME}" "${ITERM2_PREFERENCES_PATH}"
-    check_success "iTerm2 preferences import for admin user"
+    check_optional_success $? "iTerm2 preferences import for admin user"
 
     if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
       import_iterm2_preferences_for_user "${OPERATOR_USERNAME}" "${ITERM2_PREFERENCES_PATH}"
-      check_success "iTerm2 preferences import for operator user"
+      check_optional_success $? "iTerm2 preferences import for operator user"
     fi
   elif [[ "${USE_ITERM2:-false}" == "true" ]] && [[ ! -f "${ITERM2_PREFERENCES_PATH}" ]]; then
-    log "iTerm2 preferences file not found: ${ITERM2_PREFERENCES_PATH}"
+    log "⚠️  iTerm2 preferences file not found: ${ITERM2_PREFERENCES_PATH} (optional feature - continuing)"
   else
     log "iTerm2 not configured - skipping iTerm2 preferences setup"
   fi
@@ -366,17 +430,20 @@ main() {
 
   configure_terminal_profiles
 
-  # Simple completion message
+  # Since terminal profiles are optional, always report success
+  # Any failures in optional operations are handled as warnings, not errors
   local error_count=${#COLLECTED_ERRORS[@]}
 
   if [[ ${error_count} -eq 0 ]]; then
     show_log "✅ Terminal profile configuration completed successfully"
     show_log "ℹ️  Restart Terminal and iTerm2 to see new profiles"
-    return 0
   else
-    show_log "❌ Terminal profile configuration completed with ${error_count} errors"
-    return 1
+    show_log "✅ Terminal profile configuration completed (${error_count} non-critical issues)"
+    show_log "ℹ️  Check logs for details on optional profile import issues"
+    show_log "ℹ️  Restart Terminal and iTerm2 to see any successfully imported profiles"
   fi
+
+  return 0 # Always return success since this is an optional module
 }
 
 # Execute main function

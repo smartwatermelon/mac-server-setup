@@ -645,8 +645,8 @@ _try_ssh_host() {
 
   log "SSH connection details:"
   log "  Target host: '${host}'"
-  log "  SSH options: ConnectTimeout=5, BatchMode=yes"
-  log "  Command: ssh -o ConnectTimeout=5 -o BatchMode=yes '${host}' 'echo \"SSH_OK\"'"
+  log "  SSH options: StrictHostKeyChecking=no ConnectTimeout=5, BatchMode=yes"
+  log "  Command: ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes '${host}' 'echo \"SSH_OK\"'"
 
   # Test basic connectivity first
   log "Checking basic network connectivity to ${host}..."
@@ -659,7 +659,7 @@ _try_ssh_host() {
   # Test SSH with verbose output captured
   log "Attempting SSH connection with detailed diagnostics..."
   local ssh_output
-  ssh_output=$(ssh -o ConnectTimeout=5 -o BatchMode=yes -v "${host}" 'echo "SSH_OK"' 2>&1)
+  ssh_output=$(ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes -v "${host}" 'echo "SSH_OK"' 2>&1)
   local ssh_result=$?
 
   if [[ ${ssh_result} -eq 0 ]]; then
@@ -676,7 +676,7 @@ _try_ssh_host() {
     log "Additional SSH diagnostics:"
     ssh_version=$(ssh -V 2>&1)
     log "  SSH client version: ${ssh_version}"
-    log "  SSH config test: ssh -F /dev/null -o BatchMode=yes -o ConnectTimeout=5 '${host}' 'echo test' (would use system defaults)"
+    log "  SSH config test: ssh -F /dev/null -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 '${host}' 'echo test' (would use system defaults)"
 
     return 1
   fi
@@ -1435,7 +1435,8 @@ main() {
           if test_ssh_connection "${MIGRATE_FROM}" true >/dev/null 2>&1; then
             log "Manual hostname resolved successfully"
           else
-            log "⚠️  Manual hostname resolution failed - will attempt migration anyway"
+            log "❌️ ${MIGRATE_FROM} hostname resolution failed"
+            return 1
           fi
         fi
       else
@@ -1444,7 +1445,8 @@ main() {
         if test_ssh_connection "${MIGRATE_FROM}" true >/dev/null 2>&1; then
           log "Manual hostname resolved successfully"
         else
-          log "⚠️  Manual hostname resolution failed - will attempt migration anyway"
+          log "❌️ ${MIGRATE_FROM} hostname resolution failed"
+          return 1
         fi
       fi
     else

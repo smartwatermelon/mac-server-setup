@@ -229,8 +229,8 @@ ENHANCED_MONITOR_EOF
     done
 
     # Stop monitoring and cleanup (suppress job termination messages)
-    (kill "${monitor_pid}" && wait "${monitor_pid}") 2>/dev/null || true
-    rm -f "${monitor_script}" 2>/dev/null || true
+    (kill "${monitor_pid}" && wait "${monitor_pid}") &>/dev/null || true
+    rm -f "${monitor_script}" &>/dev/null || true
 
     # Wait for the install process to fully complete
     if kill -0 "${install_pid}" 2>/dev/null; then

@@ -112,6 +112,22 @@ rsync -av --exclude='Cache' "~/Library/Application Support/Plex Media Server/" ~
 
 The script supports both local migration (files in `~/plex-migration/`) and remote migration via SSH.
 
+### SSH Security for Migration
+
+**SSH Host Key Verification**: For automated migration workflows, the script uses `StrictHostKeyChecking=no` to prevent blocking on unknown host keys during server-to-server transfers. This is intentional for migration scenarios where:
+
+- Target server may not have established SSH relationships with source servers
+- Migration typically occurs between trusted servers on the same network
+- Automation workflows need to proceed without manual intervention for host key acceptance
+
+**Security Context**: This setting is used specifically for:
+
+- Migration connection testing: `ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 -o BatchMode=yes`
+- Automated file transfers during configuration migration
+- One-time setup operations between known server pairs
+
+**Note**: This does not affect ongoing SSH security for regular server operations, which continue to use standard SSH host key verification.
+
 ### Post-Migration: Home Screen Setup
 
 **⚠️ Important**: After migrating from an existing Plex server, you may need to re-pin your media sources to the home screen.

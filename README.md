@@ -205,7 +205,7 @@ The setup process consists of two main phases:
 │   ├── formulae.txt           # Homebrew formulae list
 │   ├── casks.txt              # Homebrew casks list
 │   ├── logrotate.conf         # Log rotation configuration
-│   ├── iterm2.plist           # iTerm2 profile settings
+│   ├── com.googlecode.iterm2.plist           # iTerm2 profile settings
 │   └── Orangebrew.terminal    # Terminal.app profile
 └── docs/                       # Documentation
     ├── setup/                 # Setup documentation

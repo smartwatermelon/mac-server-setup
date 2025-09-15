@@ -831,12 +831,7 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
   if [[ "${USE_ITERM2:-false}" == "true" ]]; then
     if command -v it2check >/dev/null 2>&1; then
       echo "Exporting iTerm2 preferences..."
-      if defaults export com.googlecode.iterm2 "${OUTPUT_PATH}/config/iterm2.plist"; then
-        add_to_manifest "config/iterm2.plist" "OPTIONAL"
-        echo "iTerm2 preferences exported to deployment package"
-      else
-        echo "Warning: Failed to export iTerm2 preferences"
-      fi
+      copy_with_manifest "${HOME}/Library/Preferences/com.googlecode.iterm2.plist" "config/com.googlecode.iterm2.plist" "OPTIONAL"
     else
       echo "Warning: USE_ITERM2 is enabled but iTerm2 is not installed (it2check not found)"
     fi
@@ -889,6 +884,10 @@ chmod -R 755 "${OUTPUT_PATH}/scripts"
 chmod -R 755 "${OUTPUT_PATH}/app-setup"
 chmod 600 "${OUTPUT_PATH}/config/"* 2>/dev/null || true
 chmod 600 "${OUTPUT_PATH}/app-setup/config/"* 2>/dev/null || true
+
+# Ensure all shell scripts are executable
+echo "Making all shell scripts executable..."
+find "${OUTPUT_PATH}" -name '*.sh' -exec chmod -v a+x {} \;
 
 # Create Keychain manifest for server-side credential access
 create_keychain_manifest
