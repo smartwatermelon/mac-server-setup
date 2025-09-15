@@ -198,55 +198,66 @@ import_terminal_profile_for_user() {
 
   if [[ "${username}" == "${ADMIN_USERNAME}" ]]; then
     # Import for current admin user - direct registration
-    local terminal_window_count
-    if terminal_window_count=$(osascript -e 'tell application "Terminal" to count windows'); then
-      if open "${profile_file}"; then
-        sleep 1
-        local new_terminal_window_count
-        new_terminal_window_count=0
-        local terminal_window_count_loop
-        new_terminal_window_count=$(osascript -e 'tell application "Terminal" to count windows')
-        until [[ ${new_terminal_window_count} -gt ${terminal_window_count} ]]; do
-          sleep 1
-          ((terminal_window_count_loop += 1))
-          if [[ ${terminal_window_count_loop} -gt 4 ]]; then
-            break
-          fi
-          new_terminal_window_count=$(osascript -e 'tell application "Terminal" to count windows')
-        done
-        osascript -e 'tell application "Terminal" to if (count of windows) > 0 then close (last window)'
-        new_terminal_window_count=$(osascript -e 'tell application "Terminal" to count windows')
-        terminal_window_count_loop=0
-        until [[ ${new_terminal_window_count} -eq ${terminal_window_count} ]]; do
-          sleep 1
-          ((terminal_window_count_loop += 1))
-          if [[ ${terminal_window_count_loop} -gt 4 ]]; then
-            break
-          fi
-          new_terminal_window_count=$(osascript -e 'tell application "Terminal" to count windows')
-        done
-        # Set as default and startup profile
-        defaults write com.apple.Terminal "Default Window Settings" -string "${profile_name}"
-        defaults write com.apple.Terminal "Startup Window Settings" -string "${profile_name}"
-        local new_default
-        new_default=$(defaults read com.apple.Terminal "Default Window Settings")
-        if [[ ${new_default} != "${profile_name}" ]]; then
-          collect_error "Failed to set ${profile_name} as Default profile for ${username}"
-        fi
-        local new_startup
-        new_startup=$(defaults read com.apple.Terminal "Startup Window Settings")
-        if [[ ${new_startup} != "${profile_name}" ]]; then
-          collect_error "Failed to set ${profile_name} as Startup profile for ${username}"
-        fi
-        log "Successfully imported Terminal profile for ${username}"
-        log "New profile will be active in next Terminal session"
-        return 0
-      else
-        collect_error "Failed to open Terminal profile file for ${username}"
-        return 1
+    log "Opening Terminal profile to import settings..."
+
+    # Use AppleScript to track window IDs and close only the newly created window
+    local applescript_result
+    applescript_result=$(osascript -e "
+tell application \"Terminal\"
+    -- Get list of existing window IDs before opening profile
+    set existing_window_ids to {}
+    repeat with w in windows
+        set existing_window_ids to existing_window_ids & {id of w}
+    end repeat
+
+    -- Open the profile file (this will create a new window)
+    open POSIX file \"${profile_file}\" as alias
+
+    -- Wait for new window to appear (max 5 seconds)
+    set wait_count to 0
+    repeat while wait_count < 10
+        delay 0.5
+        set wait_count to wait_count + 1
+
+        -- Check if we have a new window
+        repeat with w in windows
+            if (id of w) is not in existing_window_ids then
+                -- Found the new window - close it and exit
+                close w
+                return \"success\"
+            end if
+        end repeat
+    end repeat
+
+    return \"timeout\"
+end tell
+")
+
+    if [[ "${applescript_result}" == "success" ]]; then
+      log "Successfully imported Terminal profile and closed temporary window"
+
+      # Set as default and startup profile
+      defaults write com.apple.Terminal "Default Window Settings" -string "${profile_name}"
+      defaults write com.apple.Terminal "Startup Window Settings" -string "${profile_name}"
+
+      local new_default
+      new_default=$(defaults read com.apple.Terminal "Default Window Settings")
+      if [[ ${new_default} != "${profile_name}" ]]; then
+        collect_error "Failed to set ${profile_name} as Default profile for ${username}"
       fi
+
+      local new_startup
+      new_startup=$(defaults read com.apple.Terminal "Startup Window Settings")
+      if [[ ${new_startup} != "${profile_name}" ]]; then
+        collect_error "Failed to set ${profile_name} as Startup profile for ${username}"
+      fi
+
+      log "Successfully imported Terminal profile for ${username}"
+      log "New profile will be active in next Terminal session"
+      return 0
     else
-      collect_error "Failed to count Terminal.app windows"
+      log "AppleScript window management failed: ${applescript_result}"
+      collect_error "Failed to import Terminal profile for ${username} - window management issue"
       return 1
     fi
   else
