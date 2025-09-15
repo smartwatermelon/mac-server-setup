@@ -12,6 +12,8 @@ The system is configured to automatically log in as the operator user after rebo
 - **Desktop with clean dock** (iTerm, Plex, essential apps)
 - **Fast User Switching menu** in the menu bar (showing current user)
 
+> **📋 First Login Dialogs**: On first operator login, you may encounter Apple Setup Assistant dialogs. For guidance on handling these, see [Apple First-Boot Dialog Guide](setup/apple-first-boot-dialogs.md#operator-account-first-login)
+
 ## Automatic Setup
 
 ### 1. First-Login Customization
