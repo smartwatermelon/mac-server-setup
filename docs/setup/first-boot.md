@@ -21,7 +21,7 @@ The `first-boot.sh` script performs complete automated setup of your Mac Mini se
 1. **AirDrop the complete macmini-setup folder** from your development Mac
 
    > You can use [airdrop-cli](https://github.com/vldmrkl/airdrop-cli) (requires Xcode) to AirDrop files from the command line!
-   > Install: (`brew install --HEAD vldmrkl/formulae/airdrop-cli`)
+   > Install: `brew install --HEAD vldmrkl/formulae/airdrop-cli`
 
 2. The folder appears in `~/Downloads/macmini-setup` on the Mac Mini (default name)
 

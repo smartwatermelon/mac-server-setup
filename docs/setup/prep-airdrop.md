@@ -82,28 +82,64 @@ The prep script creates a complete setup package:
 
 ```plaintext
 macmini-setup/
-├── ssh_keys/
-│   ├── authorized_keys           # Admin SSH access
-│   └── operator_authorized_keys  # Operator SSH access
-├── scripts/
-│   ├── first-boot.sh            # Main setup script
-│   ├── operator-first-login.sh  # Operator customization (runs automatically)
-│   └── app-setup/               # Application installers
+├── app-setup/
+│   ├── catch-setup.sh
+│   ├── config/
+│   │   ├── dropbox_sync.conf
+│   │   ├── FileBot_License_XXXXXXXX.psm
+│   │   ├── plex_nas.conf        # Plex NAS hostname configuration
+│   │   └── rclone.conf
+│   ├── filebot-setup.sh
+│   ├── plex-setup.sh
+│   ├── rclone-setup.sh
+│   ├── run-app-setup.sh
+│   ├── templates/
+│   │   ├── mount-nas-media.sh
+│   │   ├── start-plex.sh
+│   │   ├── start-rclone.sh
+│   │   └── transmission-done.sh
+│   └── transmission-setup.sh
+├── bash/                        # Bash config (if configured)
 ├── config/
-│   ├── config.conf              # Server settings
-│   ├── formulae.txt             # Homebrew packages
-│   ├── casks.txt                # Homebrew applications
-│   ├── dev_fingerprint.conf     # Safety check data
-│   ├── keychain_manifest.conf   # Keychain service identifiers
-│   ├── mac-server-setup-db # External keychain file
-│   ├── timemachine.conf         # Backup configuration
 │   ├── apple_id_password.url    # One-time Apple ID link
-│   └── wifi_network.conf        # WiFi credentials (only if script-based config)
-└── app-setup/
-    ├── config/
-    │   └── plex_nas.conf        # Plex NAS hostname configuration
-    └── plex-setup.sh            # Plex setup script
-└── README.md                    # Setup instructions
+│   ├── casks.txt                # Homebrew applications
+│   ├── config.conf              # Server settings
+│   ├── dev_fingerprint.conf     # Safety check data
+│   ├── formulae.txt             # Homebrew packages
+│   ├── iterm2.plist             # iTerm2 profile/settings (optional)
+│   ├── keychain_manifest.conf   # Keychain service identifiers
+│   ├── logrotate.conf
+│   ├── mac-server-setup-db      # External keychain file
+│   ├── Orangebrew.terminal      # Terminal.app profile (optional)
+│   └── timemachine.conf         # Backup configuration
+├── DEPLOY_MANIFEST.txt
+├── first-boot.sh                # Main setup script
+├── README.md                    # Setup instructions
+├── scripts/
+│   ├── operator-first-login.sh  # Operator customization (runs automatically)
+│   ├── setup-apple-id.sh
+│   ├── setup-application-preparation.sh
+│   ├── setup-bash-configuration.sh
+│   ├── setup-command-line-tools.sh
+│   ├── setup-dock-configuration.sh
+│   ├── setup-firewall.sh
+│   ├── setup-hostname-volume.sh
+│   ├── setup-log-rotation.sh
+│   ├── setup-package-installation.sh
+│   ├── setup-power-management.sh
+│   ├── setup-remote-desktop.sh
+│   ├── setup-shell-configuration.sh
+│   ├── setup-ssh-access.sh
+│   ├── setup-system-preferences.sh
+│   ├── setup-terminal-profiles.sh
+│   ├── setup-timemachine.sh
+│   ├── setup-touchid-sudo.sh
+│   └── setup-wifi-network.sh
+└── ssh_keys/
+    ├── authorized_keys           # Admin SSH access
+    ├── id_ed25519
+    ├── id_ed25519.pub
+    └── operator_authorized_keys  # Operator SSH access
 ```
 
 ## Security Features
@@ -124,7 +160,7 @@ macmini-setup/
 2. **Enable AirDrop:** Press Cmd-Shift-R to open AirDrop, and select "Allow me to be discovered by: Everyone"
 3. **AirDrop the entire macmini-setup folder** from your development Mac
    > You can use [airdrop-cli](https://github.com/vldmrkl/airdrop-cli) (requires Xcode) to AirDrop files from the command line!
-   > Install: (`brew install --HEAD vldmrkl/formulae/airdrop-cli`)
+   > Install: `brew install --HEAD vldmrkl/formulae/airdrop-cli`
 4. The folder will appear in `~/Downloads/macmini-setup` on the Mac Mini
 5. Proceed with [First Boot Instructions](first-boot.md)
 
