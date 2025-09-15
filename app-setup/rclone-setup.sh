@@ -3,7 +3,7 @@
 # rclone-setup.sh - Dropbox synchronization setup script for Mac Mini server
 #
 # This script sets up rclone-based Dropbox synchronization natively on macOS with:
-# - rclone configuration transfer from airdrop-prep.sh setup
+# - rclone configuration transfer from prep-airdrop.sh setup
 # - Periodic Dropbox sync to local filesystem
 # - Auto-start configuration via LaunchAgent
 #
@@ -12,7 +12,7 @@
 #   --skip-sync: Skip initial sync test
 #   --sync-interval: Override sync interval (default from config)
 #
-# Expected configuration files from airdrop-prep.sh:
+# Expected configuration files from prep-airdrop.sh:
 #   rclone.conf          # rclone configuration with OAuth tokens (copied to app-setup dir by first-boot.sh)
 #   dropbox_sync.conf    # Dropbox sync configuration (copied to app-setup dir by first-boot.sh)
 #
@@ -244,7 +244,7 @@ load_dropbox_config() {
     source "${dropbox_config}"
   else
     log "❌ Dropbox configuration file not found: ${dropbox_config}"
-    log "This file should have been created by airdrop-prep.sh and copied by first-boot.sh"
+    log "This file should have been created by prep-airdrop.sh and copied by first-boot.sh"
     exit 1
   fi
 
@@ -279,7 +279,7 @@ install_rclone_config() {
 
   if [[ ! -f "${source_config}" ]]; then
     log "❌ rclone configuration not found: ${source_config}"
-    log "This file should have been created by airdrop-prep.sh and copied by first-boot.sh"
+    log "This file should have been created by prep-airdrop.sh and copied by first-boot.sh"
     exit 1
   fi
 

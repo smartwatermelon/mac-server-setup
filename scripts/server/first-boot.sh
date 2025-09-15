@@ -564,7 +564,7 @@ if [[ -f "${DEV_FINGERPRINT_FILE}" ]]; then
   log "Loaded development machine fingerprint for safety check"
 else
   echo "❌ SAFETY ABORT: No development fingerprint file found"
-  echo "This indicates the setup directory was not properly prepared with airdrop-prep.sh"
+  echo "This indicates the setup directory was not properly prepared with prep-airdrop.sh"
   exit 1
 fi
 

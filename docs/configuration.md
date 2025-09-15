@@ -85,7 +85,7 @@ The system uses 1Password for initial credential retrieval during setup preparat
 
 **MONITORING_EMAIL**: Email address for system notifications
 
-- **Default**: "<andrew.rich@gmail.com>" (should be customized)
+- **Default**: "<your-email@example.com>" (should be customized)
 - **Usage**: Future monitoring system integration
 - **Example**: `MONITORING_EMAIL="admin@yourdomain.com"`
 
@@ -171,7 +171,7 @@ MONITORING_EMAIL="homelab@yourdomain.local"
 
 ### Configuration Validation
 
-Before running `airdrop-prep.sh`, verify your 1Password items exist:
+Before running `prep-airdrop.sh`, verify your 1Password items exist:
 
 ```bash
 # Test 1Password connectivity
@@ -268,7 +268,7 @@ chmod 600 ~/macmini-setup/config/wifi_network.conf
 
 ### Custom Package Lists
 
-Modify the package installation by editing these files before running `airdrop-prep.sh`:
+Modify the package installation by editing these files before running `prep-airdrop.sh`:
 
 **config/formulae.txt**: Command-line tools installed via Homebrew
 **config/casks.txt**: GUI applications installed via Homebrew
@@ -303,7 +303,7 @@ ONEPASSWORD_VAULT="Staging Infrastructure"
 MONITORING_EMAIL="staging-alerts@company.com"
 ```
 
-Use with airdrop-prep.sh by copying the appropriate config:
+Use with prep-airdrop.sh by copying the appropriate config:
 
 ```bash
 cp config-production.conf config/config.conf
@@ -330,7 +330,7 @@ The configuration system supports future extension points:
 To migrate configuration to a new Mac Mini:
 
 1. **Update SERVER_NAME** in config.conf if needed
-2. **Run airdrop-prep.sh** with updated configuration
+2. **Run prep-airdrop.sh** with updated configuration
 3. **Transfer setup package** to new Mac Mini
 4. **Run first-boot.sh** as normal
 

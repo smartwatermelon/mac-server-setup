@@ -13,7 +13,7 @@ Automated setup scripts for configuring an Apple Silicon Mac Mini as a home serv
 3. Copy `config/config.conf.template` to `config/config.conf` and set your `SERVER_NAME`
 4. Create these 1Password items: "operator", "TimeMachine", "Plex NAS", "Apple", "OpenSubtitles"
 
-**Setup** (15 minutes):
+**Setup** (15-30 minutes):
 
 1. **On dev Mac**: `./prep-airdrop.sh` (creates deployment package)
 2. **AirDrop** the generated folder to your Mac Mini

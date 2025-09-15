@@ -44,7 +44,7 @@ Test SSH connectivity from your development Mac:
 # Test operator SSH access
 ssh operator@macmini.local
 
-# Test admin SSH access  
+# Test admin SSH access
 ssh admin@macmini.local
 ```
 
@@ -70,13 +70,9 @@ The automatic setup adds iTerm to the dock. **Switch from Terminal to iTerm** fo
 
 ### Administrative Tasks
 
-The operator account can perform most server management tasks:
+The operator account can perform some server management tasks:
 
 ```bash
-# Package management
-brew install <package>
-brew update && brew upgrade
-
 # Native application management (after app setup)
 launchctl list | grep plex
 launchctl stop com.plexapp.plexmediaserver
@@ -85,6 +81,14 @@ launchctl start com.plexapp.plexmediaserver
 # System monitoring
 brew services list
 ps aux | grep "Plex Media Server"
+```
+
+The administrator account must be used for package installation:
+
+```bash
+# Package management
+brew install <package>
+brew update && brew upgrade
 ```
 
 ### Switching to Admin Account
@@ -241,7 +245,7 @@ launchctl start com.plexapp.plexmediaserver
 
 - **Notifications**: Click "Configure in System Preferences" for system notifications
 
-**Network Tab**:  
+**Network Tab**:
 
 - **System sleep**: "Prevent computer from sleeping with active transfers" (if desired)
 
@@ -276,7 +280,7 @@ ssh admin@macmini.local 'echo SSH working'
 
 - **Setup logs**: `~/.local/state/macmini-setup.log`
 - **Application setup logs**: `~/.local/state/macmini-apps.log`
-- **Plex logs**: `/tmp/plex-out.log` and `/tmp/plex-error.log`
+- **Plex logs**: `/Users/Shared/PlexMediaServer/Plex Media Server/Logs`
 - **System logs**: Use Console.app or `log show --predicate 'processImagePath contains "Plex Media Server"'`
 
 ### Time Machine Verification
@@ -302,7 +306,7 @@ cat ~/.ssh/id_ed25519_operator.pub >> ~/.ssh/authorized_keys
 
 ### Sudo Access
 
-**TouchID is not available** for sudo commands, because TouchID cannot coexist with automatic login. For remote SSH sessions, you'll need to enter the operator password.
+**TouchID is not available** for sudo commands, because TouchID cannot coexist with automatic login.
 
 **Password location**: `op://personal/operator/password` in 1Password
 
@@ -320,7 +324,7 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --listapps
 ### Immediate Tasks
 
 1. **✅ Automatic dock customization** (happens on first login)
-2. **✅ Verify SSH access**  
+2. **✅ Verify SSH access**
 3. **Run application setup scripts** as needed (as admin user)
 4. **Configure additional services** as needed
 5. **Test native applications** after setup (check LaunchAgent status)
