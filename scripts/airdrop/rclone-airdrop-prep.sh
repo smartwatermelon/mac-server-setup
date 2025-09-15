@@ -6,7 +6,7 @@
 # This script handles rclone installation, OAuth authentication, and configuration
 # transfer for Dropbox synchronization on the server.
 #
-# Called by: airdrop-prep.sh
+# Called by: prep-airdrop.sh
 # Requires: DROPBOX_SYNC_FOLDER, DROPBOX_LOCAL_PATH, OUTPUT_PATH, SERVER_NAME_LOWER
 #
 
@@ -15,12 +15,12 @@ set -euo pipefail
 
 # Check required variables are set
 if [[ -z "${OUTPUT_PATH:-}" ]]; then
-  echo "Error: OUTPUT_PATH not set - this script must be called from airdrop-prep.sh"
+  echo "Error: OUTPUT_PATH not set - this script must be called from prep-airdrop.sh"
   exit 1
 fi
 
 if [[ -z "${SERVER_NAME_LOWER:-}" ]]; then
-  echo "Error: SERVER_NAME_LOWER not set - this script must be called from airdrop-prep.sh"
+  echo "Error: SERVER_NAME_LOWER not set - this script must be called from prep-airdrop.sh"
   exit 1
 fi
 
