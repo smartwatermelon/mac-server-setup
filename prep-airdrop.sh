@@ -887,7 +887,7 @@ chmod 600 "${OUTPUT_PATH}/app-setup/config/"* 2>/dev/null || true
 
 # Ensure all shell scripts are executable
 echo "Making all shell scripts executable..."
-find "${OUTPUT_PATH}" -name '*.sh' -exec chmod -v a+x {} \;
+find "${OUTPUT_PATH}" -name '*.sh' -exec chmod -v a+rx {} \;
 
 # Create Keychain manifest for server-side credential access
 create_keychain_manifest
