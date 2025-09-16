@@ -70,7 +70,7 @@ wait_for_network() {
 test_mount() {
   # Test basic mount verification using user-based pattern
   if ! mount | grep "${WHOAMI}" | grep -q "${PLEX_MEDIA_MOUNT}"; then
-    log "❌ Mount not visible in system mount table for user ${WHOAMI}"
+    log "⚠️ Mount not visible in system mount table for user ${WHOAMI}"
     return 1
   fi
   log "✅ Mount verification successful (active mount found for ${WHOAMI})"

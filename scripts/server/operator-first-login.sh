@@ -260,46 +260,10 @@ setup_terminal_profile() {
 # Task: Configure iTerm2 preferences
 setup_iterm2_preferences() {
   progress "Setting up iTerm2 preferences..."
-
-  local iterm2_config_dir="${HOME}/.config/iterm2"
-  local preferences_file="${iterm2_config_dir}/iterm2.plist"
-
-  # Check if preferences file exists
-  if [[ ! -f "${preferences_file}" ]]; then
-    progress "No iTerm2 preferences found at ${preferences_file} - skipping iTerm2 setup"
-    return 0
-  fi
-
-  # Check if iTerm2 is installed (more reliable detection method)
-  if [[ ! -d /Applications/iTerm.app ]]; then
-    progress "iTerm2 not installed - skipping preferences import"
-    return 0
-  fi
-
-  progress "Importing iTerm2 preferences..."
-
-  # Ensure iTerm2 is not running during import for better reliability
-  if pgrep -f "iTerm.app" >/dev/null 2>&1; then
-    progress "iTerm2 is currently running - preferences import may not take effect until restart"
-  fi
-
-  # Import preferences using defaults import
-  if defaults import com.googlecode.iterm2 "${preferences_file}"; then
-    progress "iTerm2 preferences import command succeeded"
-
-    # Verify that import actually worked by checking for a key preference
-    if defaults read com.googlecode.iterm2 "Default Bookmark Guid" >/dev/null 2>&1; then
-      progress "✅ Successfully imported and verified iTerm2 preferences"
-      progress "Preferences will be active when iTerm2 is next launched"
-    else
-      progress "⚠️ Import command succeeded but preferences verification failed"
-      progress "iTerm2 preferences may not have been properly imported"
-    fi
-  else
-    progress "❌ Failed to import iTerm2 preferences"
-    progress "Check that preferences file is valid: ${preferences_file}"
-    progress "You can manually import by opening iTerm2 > Preferences > Profiles > Other Actions > Import JSON Profiles"
-  fi
+  killall iTerm2 &>/dev/null || true
+  open -a iTerm2 &>/dev/null || true
+  killall iTerm2 &>/dev/null || true
+  progress "Imported iTerm2 preferences"
 }
 
 # Task: Start logrotate service

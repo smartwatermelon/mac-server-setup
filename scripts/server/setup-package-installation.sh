@@ -241,30 +241,52 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
 
   # Function to install formulae if not already installed
   install_formula() {
-    if ! "${HOMEBREW_PREFIX}/bin/brew" list "$1" &>/dev/null; then
-      log "Installing formula: $1"
-      if "${HOMEBREW_PREFIX}/bin/brew" install "$1"; then
-        log "✅ Formula installation: $1"
+    local formula="$1"
+    local current_count="$2"
+    local total_count="$3"
+
+    if ! "${HOMEBREW_PREFIX}/bin/brew" list "${formula}" &>/dev/null; then
+      show_log -n "Installing formulae... (${current_count}/${total_count}) ${formula}... "
+      if "${HOMEBREW_PREFIX}/bin/brew" install "${formula}" &>/dev/null; then
+        show_log "✅"
+        log "✅ Formula installation: ${formula}"
       else
-        collect_error "Formula installation failed: $1"
+        show_log "❌"
+        collect_error "Formula installation failed: ${formula}"
         # Continue instead of exiting
       fi
     else
-      log "Formula already installed: $1"
+      show_log "Installing formulae... (${current_count}/${total_count}) ${formula} (already installed) ✅"
+      log "Formula already installed: ${formula}"
     fi
   }
 
   # Function to install casks if not already installed
   install_cask() {
-    if ! "${HOMEBREW_PREFIX}/bin/brew" list --cask "$1" &>/dev/null; then
-      log "Installing cask: $1"
+    local cask="$1"
+    local current_count="$2"
+    local total_count="$3"
+
+    # Get estimated size for large packages
+    local size_hint=""
+    case "${cask}" in
+      plex-media-server) size_hint=" (~250 MB)" ;;
+      filebot) size_hint=" (~50 MB)" ;;
+      vlc) size_hint=" (~75 MB)" ;;
+      bbedit) size_hint=" (~25 MB)" ;;
+      *) size_hint="" ;;
+    esac
+
+    if ! "${HOMEBREW_PREFIX}/bin/brew" list --cask "${cask}" &>/dev/null; then
+      show_log -n "Installing casks... (${current_count}/${total_count}) ${cask}${size_hint}... "
 
       # Capture /Applications before installation
       local before_apps
       before_apps=$(find /Applications -maxdepth 1 -type d -name "*.app" 2>/dev/null | sort)
 
-      if "${HOMEBREW_PREFIX}/bin/brew" install --cask "$1"; then
-        log "✅ Cask installation: $1"
+      if "${HOMEBREW_PREFIX}/bin/brew" install --cask "${cask}" &>/dev/null; then
+        show_log "✅"
+        log "✅ Cask installation: ${cask}"
 
         # Capture /Applications after installation
         local after_apps
@@ -283,17 +305,18 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
           done <<<"${new_apps}"
         fi
       else
-        collect_error "Cask installation failed: $1"
+        show_log "❌"
+        collect_error "Cask installation failed: ${cask}"
         # Continue instead of exiting
       fi
     else
-      log "Cask already installed: $1"
+      show_log "Installing casks... (${current_count}/${total_count}) ${cask} (already installed) ✅"
+      log "Cask already installed: ${cask}"
     fi
   }
 
   # Install formulae from list
   if [[ -f "${FORMULAE_FILE}" ]]; then
-    show_log "Installing formulae from ${FORMULAE_FILE}"
     formulae=()
     if [[ -f "${FORMULAE_FILE}" ]]; then
       while IFS= read -r line; do
@@ -302,8 +325,14 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
         fi
       done <"${FORMULAE_FILE}"
     fi
+
+    formulae_count=${#formulae[@]}
+    show_log "Installing ${formulae_count} formulae from ${FORMULAE_FILE}"
+
+    current=1
     for formula in "${formulae[@]}"; do
-      install_formula "${formula}"
+      install_formula "${formula}" "${current}" "${formulae_count}"
+      ((current += 1))
     done
   else
     log "Formulae list not found, skipping formula installations"
@@ -311,7 +340,6 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
 
   # Install casks from list
   if [[ -f "${CASKS_FILE}" ]]; then
-    show_log "Installing casks from ${CASKS_FILE}"
     casks=()
     if [[ -f "${CASKS_FILE}" ]]; then
       while IFS= read -r line; do
@@ -320,24 +348,39 @@ if [[ "${SKIP_PACKAGES}" = false ]]; then
         fi
       done <"${CASKS_FILE}"
     fi
+
+    casks_count=${#casks[@]}
+    show_log "Installing ${casks_count} casks from ${CASKS_FILE}"
+
+    current=1
     for cask in "${casks[@]}"; do
-      install_cask "${cask}"
+      install_cask "${cask}" "${current}" "${casks_count}"
+      ((current += 1))
     done
   else
     log "Casks list not found, skipping cask installations"
   fi
 
   # Cleanup after installation
-  log "Cleaning up Homebrew files"
-  "${HOMEBREW_PREFIX}/bin/brew" cleanup
-  check_success "Homebrew cleanup"
+  show_log -n "Cleaning up Homebrew files... "
+  if "${HOMEBREW_PREFIX}/bin/brew" cleanup &>/dev/null; then
+    show_log "✅"
+    log "✅ Homebrew cleanup completed"
+  else
+    show_log "⚠️"
+    log "⚠️ Homebrew cleanup had warnings"
+  fi
 
   # Run brew doctor and save output
-  log "Running brew doctor diagnostic"
+  show_log -n "Running Homebrew diagnostic... "
   BREW_DOCTOR_OUTPUT="${LOG_DIR}/brew-doctor-$(date +%Y%m%d-%H%M%S).log"
-  "${HOMEBREW_PREFIX}/bin/brew" doctor >"${BREW_DOCTOR_OUTPUT}" 2>&1 || true
-  log "Brew doctor output saved to: ${BREW_DOCTOR_OUTPUT}"
-  check_success "Brew doctor diagnostic"
+  if "${HOMEBREW_PREFIX}/bin/brew" doctor >"${BREW_DOCTOR_OUTPUT}" 2>&1; then
+    show_log "✅"
+    log "✅ Brew doctor diagnostic completed successfully"
+  else
+    show_log "⚠️"
+    log "⚠️ Brew doctor found issues - check ${BREW_DOCTOR_OUTPUT}"
+  fi
 
 fi
 

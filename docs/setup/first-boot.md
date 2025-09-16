@@ -16,6 +16,8 @@ The `first-boot.sh` script performs complete automated setup of your Mac Mini se
 5. **Reach the desktop** before proceeding
 6. **Enable AirDrop:** Press Cmd-Shift-R to open AirDrop, and select "Allow me to be discovered by: Everyone"
 
+> **📋 Detailed Setup Guide**: For step-by-step instructions on navigating Apple's Setup Assistant dialogs, see [Apple First-Boot Dialog Guide](apple-first-boot-dialogs.md)
+
 ### Transfer Setup Files
 
 1. **AirDrop the complete macmini-setup folder** from your development Mac
@@ -297,3 +299,43 @@ After successful first boot setup:
 4. **Run application setup scripts** in `~/app-setup/`
 
 The Mac Mini is now ready for native application deployment and service configuration.
+
+## Post-Setup Configuration
+
+### Safari Extension Syncing
+
+To sync Safari extensions across your devices (iPhone, iPad, Mac), enable extension syncing:
+
+1. **Open System Settings** → **Apple ID** → **iCloud**
+2. **Enable Safari syncing** if not already enabled
+3. **In Safari**: Go to **Safari** → **Settings** → **Extensions**
+4. **Enable "Sync Safari Extensions"** to share extensions across all your devices
+
+This ensures your Safari extensions are available on your Mac Mini server when accessing web interfaces for applications like Plex, Transmission, or other web-based management tools.
+
+**Reference**: [Safari Extension Syncing Guide](https://ios.gadgethacks.com/how-to/safari-now-lets-you-sync-and-manage-all-your-web-extensions-across-your-iphone-ipad-and-mac-0385127/)
+
+## Known Issues
+
+The following issues are known limitations of the current setup system:
+
+### Terminal Profiles
+
+**iTerm2 Profile Syncing**: iTerm2 profiles do not sync properly during automated setup. The profile files are copied correctly, but iTerm2 may not recognize or apply the imported settings immediately.
+
+**Workaround**:
+
+* Manually import profiles via iTerm2 → **Preferences** → **Profiles** → **Other Actions** → **Import JSON Profiles**
+* Or restart iTerm2 multiple times until profiles are recognized
+
+### System Notifications
+
+**Background Item Notifications**: macOS generates numerous "background item added" notifications during Homebrew package installation and application setup. These notifications cannot be automatically suppressed by the setup scripts.
+
+**Impact**:
+
+* Users will see multiple system notifications during setup
+* Notifications are informational and do not affect setup functionality
+* No user action required - notifications will clear automatically
+
+**Future Improvement**: Apple does not currently provide an API to suppress these notifications during automated setup processes.

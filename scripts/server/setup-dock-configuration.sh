@@ -42,6 +42,12 @@ else
   exit 1
 fi
 
+# HOMEBREW_PREFIX is set and exported by first-boot.sh based on architecture
+if [[ -z "${HOMEBREW_PREFIX:-}" ]]; then
+  echo "Error: HOMEBREW_PREFIX not set - this script must be run from first-boot.sh"
+  exit 1
+fi
+
 # Set derived variables
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
@@ -134,42 +140,56 @@ check_success() {
   fi
 }
 
+# Make sure dockutil is installed
+check_dockutil() {
+  if command -v dockutil; then
+    # installed and in path, all good!
+    return 0
+  elif [[ -f "${HOMEBREW_PREFIX}/bin/dockutil" ]]; then
+    # installed but not in path
+    export PATH="${PATH}:${HOMEBREW_PREFIX}/bin"
+    command -v dockutil || return 1
+  else
+    # not installed
+    "${HOMEBREW_PREFIX}/bin/brew" install dockutil
+    export PATH="${PATH}:${HOMEBREW_PREFIX}/bin"
+    command -v dockutil || return 1
+  fi
+}
+
 # Main dock configuration function
 configure_dock() {
   set_section "Cleaning up Administrator Dock"
 
   log "Cleaning up Administrator Dock"
 
-  if command -v dockutil &>/dev/null; then
-    dockutil \
-      --remove Messages \
-      --remove Mail \
-      --remove Maps \
-      --remove Photos \
-      --remove FaceTime \
-      --remove Calendar \
-      --remove Contacts \
-      --remove Reminders \
-      --remove Freeform \
-      --remove TV \
-      --remove Music \
-      --remove News \
-      --remove 'iPhone Mirroring' \
-      --remove /System/Applications/Utilities/Terminal.app \
-      --add /Applications/iTerm.app \
-      --add /System/Applications/Passwords.app \
-      --allhomes \
-      &>/dev/null || true
-    check_success "Administrator Dock cleaned up"
-  else
-    log "Could not locate dockutil"
-  fi
+  dockutil \
+    --remove Messages \
+    --remove Mail \
+    --remove Maps \
+    --remove Photos \
+    --remove FaceTime \
+    --remove Calendar \
+    --remove Contacts \
+    --remove Reminders \
+    --remove Freeform \
+    --remove TV \
+    --remove Music \
+    --remove News \
+    --remove 'iPhone Mirroring' \
+    --remove /System/Applications/Utilities/Terminal.app \
+    --add /Applications/iTerm.app \
+    --add /System/Applications/Passwords.app \
+    --allhomes \
+    &>/dev/null || true
+  check_success "Administrator Dock cleaned up"
 }
 
 # Main execution
 main() {
   log "Starting dock configuration module"
 
+  check_dockutil
   configure_dock
 
   # Simple completion message
