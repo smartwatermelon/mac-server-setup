@@ -663,7 +663,7 @@ else
         case ${response} in
           [yY])
             show_log "Disabling FileVault - this may take 30-60+ minutes..."
-            if sudo -p "[FileVault] Enter password to disable FileVault: " fdesetup disable; then
+            if sudo -p "[FileVault] Enter password to disable FileVault: " fdesetup disable -user "${USER}" -verbose; then
               # Re-check FileVault status to verify it was actually disabled
               log "Verifying FileVault disable operation..."
               new_filevault_status=$(fdesetup status 2>/dev/null || echo "unknown")
