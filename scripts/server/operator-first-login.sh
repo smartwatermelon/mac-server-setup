@@ -7,8 +7,7 @@
 #
 # Usage: ./operator-first-login.sh
 #
-# Author: Claude
-# Version: 1.0
+# Author: Andrew Rich <andrew.rich@gmail.com>
 # Created: 2025-08-20
 
 # Exit on any error

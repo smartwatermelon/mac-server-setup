@@ -14,8 +14,7 @@
 #   --license-file: Override license file path (default: from config)
 #   --password: Administrator password for system configuration
 #
-# Author: Claude
-# Version: 1.0
+# Author: Andrew Rich <andrew.rich@gmail.com>
 # Created: 2025-09-08
 
 # Exit on error

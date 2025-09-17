@@ -12,8 +12,7 @@
 # Usage: ./setup-application-preparation.sh [--force]
 #   --force: Skip all confirmation prompts
 #
-# Author: Claude
-# Version: 1.0
+# Author: Andrew Rich <andrew.rich@gmail.com>
 # Created: 2025-09-05
 
 # Exit on any error

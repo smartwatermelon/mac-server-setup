@@ -14,8 +14,7 @@
 #   --skip-homebrew: Skip Homebrew installation/update
 #   --skip-packages: Skip package installation
 #
-# Author: Claude
-# Version: 1.0
+# Author: Andrew Rich <andrew.rich@gmail.com>
 # Created: 2025-09-05
 
 # Exit on any error

@@ -5,8 +5,7 @@
 # This script simply launches Plex Media Server. Library path updates
 # are handled during the migration process in plex-setup.sh.
 #
-# Author: Claude
-# Version: 5.0 (Simplified launcher)
+# Author: Andrew Rich <andrew.rich@gmail.com>
 # Created: 2025-08-21
 
 set -euo pipefail

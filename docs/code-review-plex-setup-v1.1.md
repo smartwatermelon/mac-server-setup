@@ -1,9 +1,9 @@
-# Code Review: plex-setup.sh (v1.1 Improvement Plan)
+# Code Review: plex-setup.sh (Post-1.0 Improvement Plan)
 
 **Date:** 2025-09-12  
 **Script:** `app-setup/plex-setup.sh`  
 **Lines of Code:** 1,654  
-**Review Type:** Post-v1.0 Maintenance & Improvement Assessment  
+**Review Type:** Post-1.0 Maintenance & Improvement Assessment  
 
 ## Executive Summary
 
@@ -385,7 +385,7 @@ Given the complexity, create focused test scripts before refactoring:
 - Shellcheck Issues: 0 ✅
 - Cyclomatic Complexity: High
 
-**Target State (v1.1):**
+**Target State (Post-1.0):**
 
 - Lines of Code: <1,200 (25% reduction through deduplication)
 - Longest Function: <75 lines

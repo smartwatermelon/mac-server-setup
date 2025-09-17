@@ -16,8 +16,7 @@
 #   rclone.conf          # rclone configuration with OAuth tokens (copied to app-setup dir by first-boot.sh)
 #   dropbox_sync.conf    # Dropbox sync configuration (copied to app-setup dir by first-boot.sh)
 #
-# Author: Claude
-# Version: 1.0
+# Author: Andrew Rich <andrew.rich@gmail.com>
 # Created: 2025-08-22
 
 # Exit on error

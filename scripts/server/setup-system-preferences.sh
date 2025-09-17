@@ -14,8 +14,7 @@
 #   --force: Skip all confirmation prompts
 #   --skip-update: Skip software updates
 #
-# Author: Claude
-# Version: 1.0
+# Author: Andrew Rich <andrew.rich@gmail.com>
 # Created: 2025-09-05
 
 # Exit on any error

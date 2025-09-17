@@ -50,8 +50,7 @@
 # - Encrypted credential keychain for secure transfer
 # - Configuration files with environment-specific substitutions
 #
-# Author: Claude
-# Version: 1.3
+# Author: Andrew Rich <andrew.rich@gmail.com>
 # Created: 2025-05-13
 
 # Exit on error

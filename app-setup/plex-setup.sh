@@ -24,8 +24,7 @@
 #     ├── Plex Media Server/          # Main config directory from old server
 #     └── com.plexapp.plexmediaserver.plist   # macOS preferences file
 #
-# Author: Claude
-# Version: 3.0 (Native)
+# Author: Andrew Rich <andrew.rich@gmail.com>
 # Created: 2025-08-17
 
 # Exit on error

@@ -9,8 +9,7 @@
 # Usage: ./setup-power-management.sh [--force]
 #   --force: Skip all confirmation prompts
 #
-# Author: Claude (modularized from first-boot.sh)
-# Version: 1.0
+# Author: Andrew Rich <andrew.rich@gmail.com> (modularized from first-boot.sh)
 # Created: 2025-09-04
 
 # Exit on any error
