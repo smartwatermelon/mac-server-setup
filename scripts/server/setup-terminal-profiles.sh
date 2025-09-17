@@ -200,33 +200,35 @@ import_terminal_profile_for_user() {
     # Import for current admin user - direct registration
     log "Opening Terminal profile to import settings..."
 
-    # Use AppleScript to track window IDs and close only the newly created window
+    # Use AppleScript to safely manage windows without closing the calling script's window
     local applescript_result
     applescript_result=$(osascript -e "
 tell application \"Terminal\"
-    -- Get list of existing window IDs before opening profile
-    set existing_window_ids to {}
-    repeat with w in windows
-        set existing_window_ids to existing_window_ids & {id of w}
-    end repeat
+    -- Save reference to current window (the one running the script)
+    set current_window to front window
+    set current_window_id to id of current_window
 
-    -- Open the profile file (this will create a new window)
+    -- Open the profile file (this will create a new window and bring it to front)
     open POSIX file \"${profile_file}\" as alias
 
-    -- Wait for new window to appear (max 5 seconds)
+    -- Wait for profile import to complete (max 5 seconds)
+    delay 2.5
+
+    -- Bring the calling script's window back to front
+    set index of current_window to 1
+
+    -- Loop until the current window is at the front (max 5 seconds)
     set wait_count to 0
     repeat while wait_count < 10
         delay 0.5
         set wait_count to wait_count + 1
 
-        -- Check if we have a new window
-        repeat with w in windows
-            if (id of w) is not in existing_window_ids then
-                -- Found the new window - close it and exit
-                close w
-                return \"success\"
-            end if
-        end repeat
+        if id of front window = current_window_id then
+            return \"success\"
+        end if
+
+        -- Keep trying to bring current window to front
+        set index of current_window to 1
     end repeat
 
     return \"timeout\"
@@ -234,7 +236,7 @@ end tell
 ")
 
     if [[ "${applescript_result}" == "success" ]]; then
-      log "Successfully imported Terminal profile and closed temporary window"
+      log "Successfully imported Terminal profile and restored calling window focus"
 
       # Set as default and startup profile
       defaults write com.apple.Terminal "Default Window Settings" -string "${profile_name}"

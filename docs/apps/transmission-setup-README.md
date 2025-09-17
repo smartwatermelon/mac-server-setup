@@ -1,9 +1,17 @@
 # Transmission Setup Documentation
 
-**Script**: `app-setup/transmission-setup.sh`  
-**Purpose**: BitTorrent client installation and comprehensive GUI automation  
-**Created**: 2025-09-08  
-**Status**: Production ready  
+> **⚠️ IMPORTANT SECURITY RECOMMENDATION**
+>
+> **VPN Binding Strongly Recommended**: For privacy and security, it is highly recommended to bind Transmission to a VPN connection to prevent IP address exposure during BitTorrent operations.
+>
+> **Not Included in This Setup**: VPN configuration and binding functionality is NOT included in this automation. You will need to configure VPN binding manually after setup completion.
+>
+> **Manual Configuration Required**: Consult your VPN provider's documentation for instructions on binding applications to VPN interfaces (typically involves network interface binding or kill-switch configuration).
+
+**Script**: `app-setup/transmission-setup.sh`
+**Purpose**: BitTorrent client installation and comprehensive GUI automation
+**Created**: 2025-09-08
+**Status**: Production ready
 
 ## Overview
 

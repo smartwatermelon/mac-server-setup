@@ -656,40 +656,53 @@ else
     collect_error "FileVault is enabled - incompatible with auto-login setup"
 
     if [[ "${FORCE}" != "true" ]]; then
-      read -p "Would you like to disable FileVault now? (y/N): " -n 1 -r response
-      echo
-      case ${response} in
-        [yY])
-          show_log "Disabling FileVault - this may take 30-60+ minutes..."
-          if sudo -p "[FileVault] Enter password to disable FileVault: " fdesetup disable; then
-            show_log "✅ FileVault disabled successfully"
-            show_log "Auto-login should now work properly"
-          else
-            collect_error "Failed to disable FileVault"
-            show_log ""
-            show_log "ALTERNATIVE OPTIONS (choose ONE):"
-            show_log "1. System Settings > Privacy & Security > FileVault > Turn Off"
-            show_log "2. Run 'sudo fdesetup disable' manually later"
-            show_log "3. Perform clean system installation without FileVault"
-          fi
-          ;;
-        *)
-          show_log "FileVault remains enabled - setup will continue but auto-login may not work"
-          collect_warning "User chose to continue with FileVault enabled"
-          show_log ""
-          show_log "ALTERNATIVE OPTIONS (choose ONE):"
-          show_log "1. Disable via System Settings:"
-          show_log "   • Open System Settings > Privacy & Security > FileVault"
-          show_log "   • Click 'Turn Off...' and follow the prompts"
-          show_log ""
-          show_log "2. Disable via command line:"
-          show_log "   • Run: sudo fdesetup disable"
-          show_log ""
-          show_log "3. If FileVault cannot be disabled:"
-          show_log "   • Wipe this Mac completely and start over"
-          show_log "   • During macOS setup, DO NOT enable FileVault"
-          ;;
-      esac
+      # Loop until FileVault is disabled or user chooses to proceed with it enabled
+      while true; do
+        read -p "Would you like to disable FileVault now? (y/N): " -n 1 -r response
+        echo
+        case ${response} in
+          [yY])
+            show_log "Disabling FileVault - this may take 30-60+ minutes..."
+            if sudo -p "[FileVault] Enter password to disable FileVault: " fdesetup disable -user "${USER}" -verbose; then
+              # Re-check FileVault status to verify it was actually disabled
+              log "Verifying FileVault disable operation..."
+              new_filevault_status=$(fdesetup status 2>/dev/null || echo "unknown")
+              if [[ "${new_filevault_status}" == *"FileVault is Off"* ]]; then
+                show_log "✅ FileVault disabled successfully"
+                show_log "Auto-login should now work properly"
+                break # Success - exit the retry loop
+              else
+                collect_error "FileVault disable command succeeded but FileVault is still enabled"
+                show_log "❌ FileVault disable failed - this usually means the wrong password was entered"
+                show_log ""
+                # Continue the loop to try again
+              fi
+            else
+              collect_error "Failed to disable FileVault"
+              show_log "❌ FileVault disable command failed"
+              show_log ""
+              # Continue the loop to try again
+            fi
+            ;;
+          *)
+            show_log "FileVault remains enabled - setup will continue but auto-login may not work"
+            collect_warning "User chose to continue with FileVault enabled"
+            break # User chose to proceed - exit the retry loop
+            ;;
+        esac
+      done
+      show_log ""
+      show_log "ALTERNATIVE OPTIONS (if auto-login fails):"
+      show_log "1. Disable via System Settings:"
+      show_log "   • Open System Settings > Privacy & Security > FileVault"
+      show_log "   • Click 'Turn Off...' and follow the prompts"
+      show_log ""
+      show_log "2. Disable via command line:"
+      show_log "   • Run: sudo fdesetup disable"
+      show_log ""
+      show_log "3. If FileVault cannot be disabled:"
+      show_log "   • Wipe this Mac completely and start over"
+      show_log "   • During macOS setup, DO NOT enable FileVault"
     else
       collect_warning "Force mode - continuing despite FileVault being enabled"
       show_log "Auto-login functionality will NOT work with FileVault enabled"
@@ -1331,31 +1344,10 @@ fi
 # Setup completed successfully
 section "Setup Complete"
 show_log "Server setup has been completed successfully"
-show_log "You can now set up individual applications with scripts in: ${APP_SETUP_DIR}"
-show_log ""
-show_log "Next steps:"
-show_log "1. Set up applications: cd ${APP_SETUP_DIR} && ./run-app-setup.sh"
-show_log "   (This will install all required applications in sequence)"
-show_log ""
-show_log "2. Test SSH access from your dev machine:"
-show_log "   ssh ${ADMIN_USERNAME}@${HOSTNAME_LOWER}.local"
-show_log "   ssh operator@${HOSTNAME_LOWER}.local"
-show_log ""
-show_log "3. After completing app setup, reboot to enable operator auto-login:"
-show_log "   - Rebooting will automatically log in as '${OPERATOR_USERNAME}'"
-show_log "   - Dock cleanup and operator customization will happen automatically"
-show_log "   - Configure any additional operator-specific settings"
-show_log "   - Test that all applications are accessible as the operator"
-show_log ""
-show_log "4. The next Terminal session, window, or tab will use the installed"
-show_log "   Bash shell and custom settings for both Administrator and Operator accounts."
 
 # Clean up temporary sudo timeout configuration
 log "Removing temporary sudo timeout configuration"
 sudo rm -f /etc/sudoers.d/10_setup_timeout
-
-# External keychain preserved in setup directory for idempotent re-runs
-# (Previously removed keychain after completion, breaking re-run capability)
 
 # Clean up administrator password from memory
 if [[ -n "${ADMINISTRATOR_PASSWORD:-}" ]]; then
@@ -1365,5 +1357,20 @@ fi
 
 # Show collected errors and warnings
 show_collected_issues
+
+# Show completion dialog and open new Terminal window for app setup
+osascript <<EOF
+tell application "System Events"
+  display dialog "🎉 Server Setup Complete!" & return & return & "The base system configuration is now finished. Click OK to open a new Terminal window where you can run the application setup script." & return & return & "Next: Run ./run-app-setup.sh to install Plex, Transmission, FileBot, and other applications." buttons {"OK"} default button "OK" with title "Setup Complete"
+end tell
+
+tell application "Terminal"
+  activate
+  do script "cd ${APP_SETUP_DIR}"
+end tell
+EOF
+
+log "✅ Setup complete! New Terminal window opened for application setup."
+log "It's now safe to close this Terminal window."
 
 exit 0
