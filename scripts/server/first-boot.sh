@@ -662,8 +662,21 @@ else
         [yY])
           show_log "Disabling FileVault - this may take 30-60+ minutes..."
           if sudo -p "[FileVault] Enter password to disable FileVault: " fdesetup disable; then
-            show_log "✅ FileVault disabled successfully"
-            show_log "Auto-login should now work properly"
+            # Re-check FileVault status to verify it was actually disabled
+            log "Verifying FileVault disable operation..."
+            new_filevault_status=$(fdesetup status 2>/dev/null || echo "unknown")
+            if [[ "${new_filevault_status}" == *"FileVault is Off"* ]]; then
+              show_log "✅ FileVault disabled successfully"
+              show_log "Auto-login should now work properly"
+            else
+              collect_error "FileVault disable command succeeded but FileVault is still enabled"
+              show_log "❌ FileVault disable failed - this usually means the wrong password was entered"
+              show_log ""
+              show_log "ALTERNATIVE OPTIONS (choose ONE):"
+              show_log "1. System Settings > Privacy & Security > FileVault > Turn Off"
+              show_log "2. Run 'sudo fdesetup disable' manually later"
+              show_log "3. Perform clean system installation without FileVault"
+            fi
           else
             collect_error "Failed to disable FileVault"
             show_log ""
