@@ -10,8 +10,7 @@
 # Usage: ./setup-terminal-profiles.sh [--force]
 #   --force: Skip all confirmation prompts
 #
-# Author: Claude (modularized from terminal setup research)
-# Version: 1.0
+# Author: Andrew Rich <andrew.rich@gmail.com> (modularized from terminal setup research)
 # Created: 2025-09-09
 
 # Exit on any error

@@ -58,8 +58,7 @@
 # - Section-based logging for easy troubleshooting
 # - Password masking in all log output for security
 #
-# Author: Claude
-# Version: 2.2
+# Author: Andrew Rich <andrew.rich@gmail.com>
 # Created: 2025-05-18
 
 # Exit on any error

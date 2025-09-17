@@ -21,8 +21,7 @@
 #   1: Configuration or environment error
 #   2: One or more app setup scripts failed
 #
-# Author: Claude
-# Version: 1.0
+# Author: Andrew Rich <andrew.rich@gmail.com>
 # Created: 2025-09-05
 
 # Exit on error (but can be overridden with --continue-on-error)

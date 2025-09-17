@@ -12,8 +12,7 @@
 # - __RCLONE_REMOTE_NAME__: rclone remote name for Dropbox
 # - __DROPBOX_SYNC_INTERVAL__: Sync interval in minutes
 #
-# Author: Claude
-# Version: 1.0
+# Author: Andrew Rich <andrew.rich@gmail.com>
 # Created: 2025-08-22
 
 # Exit on error

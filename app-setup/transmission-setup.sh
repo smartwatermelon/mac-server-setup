@@ -28,8 +28,7 @@
 #   --force: Skip all confirmation prompts
 #   --rpc-password: Override RPC web interface password (default: auto-generated from hostname)
 #
-# Author: Claude
-# Version: 1.0
+# Author: Andrew Rich <andrew.rich@gmail.com>
 # Created: 2025-09-08
 
 # Exit on error

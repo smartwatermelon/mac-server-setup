@@ -32,7 +32,7 @@ This project provides a complete automation framework for setting up an Apple Si
 - **Central home server** with minimal maintenance requirements
 - **Stable, secure, and recoverable system**
 
-## Recent Improvements (v3.0 - Major Overhaul)
+## Recent Improvements
 
 ### Transmission Setup Complete (2025-09-08)
 
@@ -81,7 +81,7 @@ This project provides a complete automation framework for setting up an Apple Si
   - Migration size estimation and progress reporting
 - **Production-Ready Reliability**: Robust error handling and fallback mechanisms
 
-### Previous Improvements (v2.0)
+### Previous Improvements
 
 - **Keychain-Based Credential Management**: Secure credential storage and transfer via macOS Keychain Services (see [Credential Management](docs/keychain-credential-management.md))
 - **1Password Integration**: Automated credential retrieval from 1Password during setup preparation
