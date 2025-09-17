@@ -1331,31 +1331,10 @@ fi
 # Setup completed successfully
 section "Setup Complete"
 show_log "Server setup has been completed successfully"
-show_log "You can now set up individual applications with scripts in: ${APP_SETUP_DIR}"
-show_log ""
-show_log "Next steps:"
-show_log "1. Set up applications: cd ${APP_SETUP_DIR} && ./run-app-setup.sh"
-show_log "   (This will install all required applications in sequence)"
-show_log ""
-show_log "2. Test SSH access from your dev machine:"
-show_log "   ssh ${ADMIN_USERNAME}@${HOSTNAME_LOWER}.local"
-show_log "   ssh operator@${HOSTNAME_LOWER}.local"
-show_log ""
-show_log "3. After completing app setup, reboot to enable operator auto-login:"
-show_log "   - Rebooting will automatically log in as '${OPERATOR_USERNAME}'"
-show_log "   - Dock cleanup and operator customization will happen automatically"
-show_log "   - Configure any additional operator-specific settings"
-show_log "   - Test that all applications are accessible as the operator"
-show_log ""
-show_log "4. The next Terminal session, window, or tab will use the installed"
-show_log "   Bash shell and custom settings for both Administrator and Operator accounts."
 
 # Clean up temporary sudo timeout configuration
 log "Removing temporary sudo timeout configuration"
 sudo rm -f /etc/sudoers.d/10_setup_timeout
-
-# External keychain preserved in setup directory for idempotent re-runs
-# (Previously removed keychain after completion, breaking re-run capability)
 
 # Clean up administrator password from memory
 if [[ -n "${ADMINISTRATOR_PASSWORD:-}" ]]; then
@@ -1365,5 +1344,20 @@ fi
 
 # Show collected errors and warnings
 show_collected_issues
+
+# Show completion dialog and open new Terminal window for app setup
+osascript <<EOF
+tell application "System Events"
+  display dialog "🎉 Server Setup Complete!" & return & return & "The base system configuration is now finished. Click OK to open a new Terminal window where you can run the application setup script." & return & return & "Next: Run ./run-app-setup.sh to install Plex, Transmission, FileBot, and other applications." buttons {"OK"} default button "OK" with title "Setup Complete"
+end tell
+
+tell application "Terminal"
+  activate
+  do script "cd ${APP_SETUP_DIR}"
+end tell
+EOF
+
+log "✅ Setup complete! New Terminal window opened for application setup."
+log "It's now safe to close this Terminal window."
 
 exit 0
