@@ -656,53 +656,53 @@ else
     collect_error "FileVault is enabled - incompatible with auto-login setup"
 
     if [[ "${FORCE}" != "true" ]]; then
-      read -p "Would you like to disable FileVault now? (y/N): " -n 1 -r response
-      echo
-      case ${response} in
-        [yY])
-          show_log "Disabling FileVault - this may take 30-60+ minutes..."
-          if sudo -p "[FileVault] Enter password to disable FileVault: " fdesetup disable; then
-            # Re-check FileVault status to verify it was actually disabled
-            log "Verifying FileVault disable operation..."
-            new_filevault_status=$(fdesetup status 2>/dev/null || echo "unknown")
-            if [[ "${new_filevault_status}" == *"FileVault is Off"* ]]; then
-              show_log "✅ FileVault disabled successfully"
-              show_log "Auto-login should now work properly"
+      # Loop until FileVault is disabled or user chooses to proceed with it enabled
+      while true; do
+        read -p "Would you like to disable FileVault now? (y/N): " -n 1 -r response
+        echo
+        case ${response} in
+          [yY])
+            show_log "Disabling FileVault - this may take 30-60+ minutes..."
+            if sudo -p "[FileVault] Enter password to disable FileVault: " fdesetup disable; then
+              # Re-check FileVault status to verify it was actually disabled
+              log "Verifying FileVault disable operation..."
+              new_filevault_status=$(fdesetup status 2>/dev/null || echo "unknown")
+              if [[ "${new_filevault_status}" == *"FileVault is Off"* ]]; then
+                show_log "✅ FileVault disabled successfully"
+                show_log "Auto-login should now work properly"
+                break # Success - exit the retry loop
+              else
+                collect_error "FileVault disable command succeeded but FileVault is still enabled"
+                show_log "❌ FileVault disable failed - this usually means the wrong password was entered"
+                show_log ""
+                # Continue the loop to try again
+              fi
             else
-              collect_error "FileVault disable command succeeded but FileVault is still enabled"
-              show_log "❌ FileVault disable failed - this usually means the wrong password was entered"
+              collect_error "Failed to disable FileVault"
+              show_log "❌ FileVault disable command failed"
               show_log ""
-              show_log "ALTERNATIVE OPTIONS (choose ONE):"
-              show_log "1. System Settings > Privacy & Security > FileVault > Turn Off"
-              show_log "2. Run 'sudo fdesetup disable' manually later"
-              show_log "3. Perform clean system installation without FileVault"
+              # Continue the loop to try again
             fi
-          else
-            collect_error "Failed to disable FileVault"
-            show_log ""
-            show_log "ALTERNATIVE OPTIONS (choose ONE):"
-            show_log "1. System Settings > Privacy & Security > FileVault > Turn Off"
-            show_log "2. Run 'sudo fdesetup disable' manually later"
-            show_log "3. Perform clean system installation without FileVault"
-          fi
-          ;;
-        *)
-          show_log "FileVault remains enabled - setup will continue but auto-login may not work"
-          collect_warning "User chose to continue with FileVault enabled"
-          show_log ""
-          show_log "ALTERNATIVE OPTIONS (choose ONE):"
-          show_log "1. Disable via System Settings:"
-          show_log "   • Open System Settings > Privacy & Security > FileVault"
-          show_log "   • Click 'Turn Off...' and follow the prompts"
-          show_log ""
-          show_log "2. Disable via command line:"
-          show_log "   • Run: sudo fdesetup disable"
-          show_log ""
-          show_log "3. If FileVault cannot be disabled:"
-          show_log "   • Wipe this Mac completely and start over"
-          show_log "   • During macOS setup, DO NOT enable FileVault"
-          ;;
-      esac
+            ;;
+          *)
+            show_log "FileVault remains enabled - setup will continue but auto-login may not work"
+            collect_warning "User chose to continue with FileVault enabled"
+            break # User chose to proceed - exit the retry loop
+            ;;
+        esac
+      done
+      show_log ""
+      show_log "ALTERNATIVE OPTIONS (if auto-login fails):"
+      show_log "1. Disable via System Settings:"
+      show_log "   • Open System Settings > Privacy & Security > FileVault"
+      show_log "   • Click 'Turn Off...' and follow the prompts"
+      show_log ""
+      show_log "2. Disable via command line:"
+      show_log "   • Run: sudo fdesetup disable"
+      show_log ""
+      show_log "3. If FileVault cannot be disabled:"
+      show_log "   • Wipe this Mac completely and start over"
+      show_log "   • During macOS setup, DO NOT enable FileVault"
     else
       collect_warning "Force mode - continuing despite FileVault being enabled"
       show_log "Auto-login functionality will NOT work with FileVault enabled"
