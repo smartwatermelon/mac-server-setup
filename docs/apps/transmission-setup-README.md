@@ -4,7 +4,7 @@
 >
 > **VPN Binding Strongly Recommended**: For privacy and security, it is highly recommended to bind Transmission to a VPN connection to prevent IP address exposure during BitTorrent operations.
 >
-> **Not Included in This Setup**: VPN configuration and binding functionality is NOT included in this automation. You will need to configure VPN binding manually after setup completion.
+> **Not Included in This Setup**: VPN configuration and binding functionality is NOT included in this automation. You will need to [configure VPN binding manually](../vpn-transmission.md) after setup completion.
 >
 > **Manual Configuration Required**: Consult your VPN provider's documentation for instructions on binding applications to VPN interfaces (typically involves network interface binding or kill-switch configuration).
 
@@ -206,7 +206,7 @@ TR_TORRENT_NAME     # Torrent display name
 **Common Customizations**:
 
 - FileBot automatic processing
-- Email/notification integration  
+- Email/notification integration
 - Cloud sync triggers
 - Custom file organization
 - Statistics logging
@@ -225,7 +225,7 @@ All preferences use verified keys from actual plist analysis. See `docs/transmis
 ### Quality Standards
 
 - **Zero shellcheck warnings/errors**: Maintains project quality standards
-- **Verified configuration only**: No assumed or untested preference keys  
+- **Verified configuration only**: No assumed or untested preference keys
 - **Comprehensive testing**: Isolated test scripts validate all functionality
 - **Documentation**: Complete coverage of automated and manual settings
 
