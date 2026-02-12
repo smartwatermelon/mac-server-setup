@@ -21,7 +21,7 @@ MONITORING_EMAIL="your-email@example.com"
 # Media NAS configuration
 NAS_HOSTNAME="nas.local"
 NAS_USERNAME="plex"
-NAS_SHARE_NAME="Media"
+NAS_SHARE_NAME="DSMedia"
 
 # Plex migration configuration (optional)
 # If migrating from an existing Plex server, specify the source hostname
@@ -54,6 +54,17 @@ USE_ITERM2="false"        # Set to "true" to copy complete iTerm2 preferences fr
   # When USE_ITERM2 is "true", your entire iTerm2 configuration (profiles, settings, etc.)
   # will be copied to the server during prep-airdrop and imported during first-boot
   # Set TERMINAL_PROFILE_FILE for Terminal.app profile, or leave empty to skip
+
+# VPN and Transmission configuration (optional)
+# VPN monitor deploys automatically with transmission-setup.sh
+# The kill-switch (Stage 4) is configured separately via setup-vpn-killswitch.sh
+
+# Catch magnet handling (optional)
+# Set to "false" to have Catch download .torrent files instead of using magnet links
+# Required for Stage 4 (daemon mode) since daemon can't handle URL scheme magnet links
+CATCH_USE_MAGNETS="true"
+  # "true" = Catch passes magnet links to Transmission.app (Stage 2, GUI mode)
+  # "false" = Catch downloads .torrent files to watch directory (Stage 4, daemon mode)
 
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME

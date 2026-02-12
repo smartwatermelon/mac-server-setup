@@ -393,6 +393,69 @@ log "✅ LaunchAgent creation completed successfully"
 sudo chown "${OPERATOR_USERNAME}:staff" "${LAUNCHAGENT_PLIST}"
 sudo chmod 644 "${LAUNCHAGENT_PLIST}"
 
+# Deploy VPN monitor script
+section "Deploying VPN Monitor"
+
+VPN_MONITOR_TEMPLATE="${SCRIPT_DIR}/templates/vpn-monitor.sh"
+VPN_MONITOR_DEST="${OPERATOR_HOME}/.local/bin/vpn-monitor.sh"
+
+VPN_MONITOR_DEPLOYED=false
+
+if [[ -f "${VPN_MONITOR_TEMPLATE}" ]]; then
+  log "Deploying vpn-monitor.sh from template..."
+
+  # Deploy with variable substitution
+  sudo cp "${VPN_MONITOR_TEMPLATE}" "${VPN_MONITOR_DEST}"
+  sudo sed -i '' "s|__SERVER_NAME__|${HOSTNAME}|g" "${VPN_MONITOR_DEST}"
+  sudo chmod 755 "${VPN_MONITOR_DEST}"
+  sudo chown "${OPERATOR_USERNAME}:staff" "${VPN_MONITOR_DEST}"
+
+  log "VPN monitor script deployed to ${VPN_MONITOR_DEST}"
+
+  # Create VPN monitor LaunchAgent (only if script was deployed)
+  VPN_LAUNCHAGENT_PLIST="${LAUNCHAGENT_DIR}/com.${HOSTNAME_LOWER}.vpn-monitor.plist"
+
+  log "Creating VPN monitor LaunchAgent: ${VPN_LAUNCHAGENT_PLIST}"
+
+  sudo -iu "${OPERATOR_USERNAME}" tee "${VPN_LAUNCHAGENT_PLIST}" >/dev/null <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.${HOSTNAME_LOWER}.vpn-monitor</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${OPERATOR_HOME}/.local/bin/vpn-monitor.sh</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-vpn-monitor-stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-vpn-monitor-stderr.log</string>
+</dict>
+</plist>
+EOF
+
+  # Validate VPN monitor plist syntax
+  # Set proper permissions on VPN monitor LaunchAgent
+  sudo chown "${OPERATOR_USERNAME}:staff" "${VPN_LAUNCHAGENT_PLIST}"
+  sudo chmod 644 "${VPN_LAUNCHAGENT_PLIST}"
+
+  if sudo plutil -lint "${VPN_LAUNCHAGENT_PLIST}" >/dev/null 2>&1; then
+    VPN_MONITOR_DEPLOYED=true
+    log "VPN monitor LaunchAgent created and validated"
+  else
+    log "ERROR: Invalid plist syntax in ${VPN_LAUNCHAGENT_PLIST} — launchd will reject this agent"
+  fi
+else
+  log "WARNING: VPN monitor template not found at ${VPN_MONITOR_TEMPLATE} — skipping VPN monitor deployment"
+fi
+
 # Setup complete
 section "Setup Complete"
 log ""
@@ -405,6 +468,11 @@ log "  • Web Interface: http://${HOSTNAME_LOWER}.local:19091"
 log "  • Username: ${HOSTNAME_LOWER}"
 log "  • Password: ${RPC_PASSWORD}"
 log "  • Auto-start: Enabled for operator login"
+if [[ "${VPN_MONITOR_DEPLOYED}" == "true" ]]; then
+  log "  • VPN Monitor: Enabled (polls every 5s, auto-manages bind-address)"
+else
+  log "  • VPN Monitor: Not deployed (template not found)"
+fi
 log ""
 log "Access the web interface at: http://${HOSTNAME_LOWER}.local:19091"
 log "Use credentials: ${HOSTNAME_LOWER} / ${RPC_PASSWORD}"
