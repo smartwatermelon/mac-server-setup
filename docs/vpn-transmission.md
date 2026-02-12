@@ -92,7 +92,7 @@ tail -f ~/.local/state/tilsit-vpn-monitor.log
 # Monitor should: detect IP -> update bind-address -> resume torrents -> notify
 ```
 
-### Rollback
+### Stage 2 Rollback
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.tilsit.vpn-monitor.plist
@@ -142,7 +142,7 @@ Only proceed if:
 
 ### Architecture
 
-```
+```text
                     ┌─────────────────┐
                     │  PF Firewall    │
                     │  (kernel level) │
@@ -175,14 +175,14 @@ Only proceed if:
 | Daemon | `/Library/LaunchDaemons/com.tilsit.transmission-daemon.plist` | Run transmission-daemon as `_transmission` |
 | Config | `/var/lib/transmission/.config/transmission-daemon/settings.json` | Daemon configuration |
 
-### Deployment
+### Stage 4 Deployment
 
 ```bash
 # On the target server
 sudo ./scripts/server/setup-vpn-killswitch.sh
 ```
 
-### Verification
+### Stage 4 Verification
 
 ```bash
 # 1. Daemon running as correct user
@@ -227,7 +227,7 @@ When running as daemon, Catch cannot use magnet links (URL handler requires GUI)
 3. Catch downloads `.torrent` files to the watch directory
 4. transmission-daemon picks them up automatically
 
-### Rollback
+### Stage 4 Rollback
 
 ```bash
 sudo launchctl unload /Library/LaunchDaemons/com.tilsit.transmission-daemon.plist
@@ -253,14 +253,14 @@ open -a Transmission
 
 macOS updates are **download-only** — no auto-install, no surprise reboots.
 
-### Deployment
+### Stage 5 Deployment
 
 ```bash
 # On the target server (as administrator)
 ./scripts/server/setup-auto-updates.sh
 ```
 
-### Verification
+### Stage 5 Verification
 
 ```bash
 brew autoupdate status
