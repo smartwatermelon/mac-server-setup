@@ -157,6 +157,13 @@ set -euo pipefail
 # Homebrew environment (Apple Silicon)
 eval "$(/opt/homebrew/bin/brew shellenv)"
 
+# Prevent sudo from hanging in unattended context.
+# Some cask upgrades invoke sudo for .pkg installers. Without a TTY,
+# sudo blocks forever waiting for a password. SUDO_ASKPASS=/bin/false
+# makes sudo fail immediately instead of hanging.
+export SUDO_ASKPASS=/bin/false
+export HOMEBREW_NO_AUTO_UPDATE=1
+
 LOG_FILE="__LOG_DIR__/__HOSTNAME_LOWER__-brew-upgrade.log"
 mkdir -p "$(dirname "${LOG_FILE}")"
 
@@ -172,9 +179,13 @@ log "Starting daily brew upgrade..."
 log "Running brew update..."
 brew update 2>&1 | tee -a "${LOG_FILE}" || true
 
-# Upgrade all installed formulae and casks
-log "Running brew upgrade..."
-brew upgrade 2>&1 | tee -a "${LOG_FILE}" || true
+# Upgrade formulae first (never need sudo)
+log "Running brew upgrade --formula..."
+brew upgrade --formula 2>&1 | tee -a "${LOG_FILE}" || true
+
+# Upgrade casks separately — some may fail if they need sudo
+log "Running brew upgrade --cask..."
+brew upgrade --cask 2>&1 | tee -a "${LOG_FILE}" || true
 
 # Clean up old versions
 log "Running brew cleanup..."
