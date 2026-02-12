@@ -246,6 +246,46 @@ create_nas_mount_daemon() {
 
   local plist_path="/Library/LaunchDaemons/com.${HOSTNAME_LOWER}.mount-nas-transmission.plist"
   local mount_script="/var/lib/transmission/mount-nas.sh"
+  local service_name="plex-nas-${HOSTNAME_LOWER}"
+
+  # Copy NAS credential from admin's login keychain to System keychain.
+  # first-boot.sh imports credentials into the admin user's login keychain, but
+  # this mount script runs as a root LaunchDaemon which can only access the
+  # System keychain (/Library/Keychains/System.keychain).
+  log "Migrating NAS credential to System keychain..."
+
+  local nas_password
+  nas_password=$(security find-generic-password -s "${service_name}" -a "${NAS_USERNAME}" -w 2>/dev/null) || {
+    log_error "Cannot find NAS credential '${service_name}' in login keychain"
+    log "Ensure first-boot.sh has been run and imported the external keychain"
+    return 1
+  }
+
+  # Add to System keychain (update if already exists).
+  # Note: -w passes the password on the command line, which is briefly visible in ps.
+  # macOS `security add-generic-password` has no stdin mode (-w at end prompts
+  # interactively, not from pipe). This is acceptable: the script runs once during
+  # setup in a single-user admin session, matching the pattern used by first-boot.sh.
+  if sudo security find-generic-password -s "${service_name}" -a "${NAS_USERNAME}" \
+    /Library/Keychains/System.keychain >/dev/null 2>&1; then
+    log "NAS credential already in System keychain"
+  else
+    if sudo -p "[VPN Kill-Switch] Enter password to add NAS credential to System keychain: " \
+      security add-generic-password \
+      -s "${service_name}" \
+      -a "${NAS_USERNAME}" \
+      -w "${nas_password}" \
+      /Library/Keychains/System.keychain; then
+      show_log "NAS credential added to System keychain"
+    else
+      log_error "Failed to add NAS credential to System keychain"
+      nas_password=""
+      return 1
+    fi
+  fi
+
+  # Clear password from shell variable
+  nas_password=""
 
   # Create mount script for _transmission
   log "Creating NAS mount script at ${mount_script}..."
