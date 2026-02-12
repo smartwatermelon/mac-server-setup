@@ -51,7 +51,7 @@ if [[ -f "${CONFIG_FILE}" ]]; then
   OPERATOR_USERNAME="${OPERATOR_USERNAME:-operator}"
   NAS_HOSTNAME="${NAS_HOSTNAME:-nas.local}"
   NAS_USERNAME="${NAS_USERNAME:-plex}"
-  NAS_SHARE_NAME="${NAS_SHARE_NAME:-Media}"
+  NAS_SHARE_NAME="${NAS_SHARE_NAME:-DSMedia}"
 else
   echo "Error: Configuration file not found at ${CONFIG_FILE}"
   exit 1

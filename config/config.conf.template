@@ -21,7 +21,7 @@ MONITORING_EMAIL="your-email@example.com"
 # Media NAS configuration
 NAS_HOSTNAME="nas.local"
 NAS_USERNAME="plex"
-NAS_SHARE_NAME="Media"
+NAS_SHARE_NAME="DSMedia"
 
 # Plex migration configuration (optional)
 # If migrating from an existing Plex server, specify the source hostname
