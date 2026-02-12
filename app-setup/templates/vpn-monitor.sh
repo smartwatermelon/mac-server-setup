@@ -42,6 +42,8 @@ MAX_LOG_SIZE=5242880 # 5MB
 LAST_VPN_IP=""
 VPN_IS_DOWN=false
 TORRENTS_PAUSED_BY_US=false
+RESUME_RETRY_COUNT=0
+MAX_RESUME_RETRIES=12 # ~60s at 5s poll interval
 
 # Ensure log directory exists
 mkdir -p "${LOG_DIR}"
@@ -161,9 +163,11 @@ resume_all_torrents() {
     log "Resuming all torrents..."
     if rpc_call "torrent-start" '{}' >/dev/null; then
       TORRENTS_PAUSED_BY_US=false
+      RESUME_RETRY_COUNT=0
       log "All torrents resumed"
     else
-      log "ERROR: Failed to resume torrents via RPC"
+      RESUME_RETRY_COUNT=$((RESUME_RETRY_COUNT + 1))
+      log "ERROR: Failed to resume torrents via RPC (attempt ${RESUME_RETRY_COUNT}/${MAX_RESUME_RETRIES})"
     fi
   fi
 }
@@ -200,7 +204,7 @@ update_bind_address() {
   fi
 
   open -a Transmission
-  sleep 3 # Allow time for Transmission to start and bind
+  sleep 3 # Initial grace period for process startup
 
   # Verify Transmission actually restarted
   if ! pgrep -x "Transmission" >/dev/null 2>&1; then
@@ -209,11 +213,25 @@ update_bind_address() {
     sleep 3
   fi
 
-  if pgrep -x "Transmission" >/dev/null 2>&1; then
-    log "Transmission restarted with bind-address ${new_ip}"
-  else
+  if ! pgrep -x "Transmission" >/dev/null 2>&1; then
     log "ERROR: Transmission failed to start after restart attempts"
+    return
   fi
+
+  # Wait for RPC to become available (process is up but RPC may lag behind)
+  local rpc_wait=0
+  local rpc_max=30
+  while [[ ${rpc_wait} -lt ${rpc_max} ]]; do
+    local session_id
+    session_id=$(get_session_id)
+    if [[ -n "${session_id}" ]]; then
+      log "Transmission restarted with bind-address ${new_ip} (RPC ready after ${rpc_wait}s)"
+      return
+    fi
+    sleep 2
+    rpc_wait=$((rpc_wait + 2))
+  done
+  log "WARNING: Transmission running but RPC not ready after ${rpc_max}s"
 }
 
 # ---------------------------------------------------------------------------
@@ -224,6 +242,7 @@ update_bind_address() {
 handle_vpn_down() {
   if [[ "${VPN_IS_DOWN}" == "false" ]]; then
     VPN_IS_DOWN=true
+    RESUME_RETRY_COUNT=0
     log "VPN DOWN detected!"
     notify "VPN Monitor" "VPN connection lost - pausing torrents"
 
@@ -298,6 +317,19 @@ main() {
     local current_ip
     if current_ip=$(get_vpn_ip); then
       handle_vpn_up "${current_ip}"
+      # Retry resume if a previous attempt failed (e.g., Transmission RPC wasn't
+      # ready when VPN first restored). Without this, TORRENTS_PAUSED_BY_US stays
+      # true forever since handle_vpn_up won't re-enter the VPN_IS_DOWN branch.
+      if [[ "${TORRENTS_PAUSED_BY_US}" == "true" ]] && [[ "${VPN_IS_DOWN}" == "false" ]]; then
+        if [[ ${RESUME_RETRY_COUNT} -lt ${MAX_RESUME_RETRIES} ]]; then
+          resume_all_torrents
+        elif [[ ${RESUME_RETRY_COUNT} -eq ${MAX_RESUME_RETRIES} ]]; then
+          log "ERROR: Giving up on resume after ${MAX_RESUME_RETRIES} attempts — manual intervention required"
+          notify "VPN Monitor" "Failed to resume torrents after ${MAX_RESUME_RETRIES} attempts"
+          TORRENTS_PAUSED_BY_US=false
+          RESUME_RETRY_COUNT=$((RESUME_RETRY_COUNT + 1))
+        fi
+      fi
     else
       handle_vpn_down
     fi
