@@ -185,16 +185,29 @@ update_bind_address() {
   # Only quit if Transmission is currently running
   if pgrep -x "Transmission" >/dev/null 2>&1; then
     osascript -e 'quit app "Transmission"' 2>/dev/null || true
-    # Wait for Transmission to fully exit (up to 15s for large resume data writes)
+    # Wait for graceful exit (up to 60s — large resume data can take time)
     local wait_count=0
-    while pgrep -x "Transmission" >/dev/null 2>&1 && [[ ${wait_count} -lt 15 ]]; do
+    while pgrep -x "Transmission" >/dev/null 2>&1 && [[ ${wait_count} -lt 60 ]]; do
       sleep 1
       ((wait_count += 1))
     done
+    # Force-kill if graceful quit failed — bind-address MUST be applied
+    if pgrep -x "Transmission" >/dev/null 2>&1; then
+      log "WARNING: Transmission did not quit gracefully after 60s, force-killing"
+      killall -9 Transmission 2>/dev/null || true
+      sleep 2
+    fi
   fi
 
   open -a Transmission
   sleep 3 # Allow time for Transmission to start and bind
+
+  # Verify Transmission actually restarted
+  if ! pgrep -x "Transmission" >/dev/null 2>&1; then
+    log "WARNING: Transmission did not restart — retrying"
+    open -a Transmission
+    sleep 3
+  fi
 
   log "Transmission restarted with bind-address ${new_ip}"
 }
