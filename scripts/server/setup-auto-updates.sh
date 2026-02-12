@@ -3,9 +3,9 @@
 # setup-auto-updates.sh - Automated update configuration module
 #
 # Configures three layers of automated updates for the Mac Mini server:
-# 1. Homebrew: Daily formula and cask upgrades (as administrator)
-# 2. Mac App Store: Daily app updates via mas (as administrator)
-# 3. macOS Software Update: Weekly download-only (as root via LaunchDaemon)
+# 1. Homebrew: Daily formula and cask upgrades via LaunchAgent (as administrator)
+# 2. Mac App Store: Daily app updates via mas LaunchAgent (as administrator)
+# 3. macOS Software Update: Weekly download-only via LaunchDaemon (as root)
 #
 # The macOS Software Update only downloads — it does NOT install automatically.
 # This prevents surprise reboots while still keeping updates ready.
@@ -131,38 +131,103 @@ setup_homebrew_autoupdate() {
     return 1
   fi
 
-  # Check if brew autoupdate is available (built into modern Homebrew)
-  if brew autoupdate status >/dev/null 2>&1; then
-    log "brew autoupdate is available"
+  local launchagent_dir="${HOME}/Library/LaunchAgents"
+  local plist_path="${launchagent_dir}/com.${HOSTNAME_LOWER}.brew-upgrade.plist"
+  local upgrade_script="${HOME}/.local/bin/${HOSTNAME_LOWER}-brew-upgrade.sh"
 
-    # Check if already configured
-    local current_status
-    current_status=$(brew autoupdate status 2>&1 || true)
-    if echo "${current_status}" | grep -q "running"; then
-      log "brew autoupdate is already running"
-      log "Current status: ${current_status}"
-      return 0
-    fi
+  mkdir -p "${launchagent_dir}"
+  mkdir -p "${HOME}/.local/bin"
 
-    # Start autoupdate: every 86400 seconds (24 hours), upgrade + cleanup
-    log "Starting brew autoupdate (daily, upgrade + cleanup)..."
-    if brew autoupdate start 86400 --upgrade --cleanup --immediate; then
-      show_log "Homebrew auto-update configured (daily)"
-    else
-      log_error "Failed to start brew autoupdate"
-      return 1
-    fi
-  else
-    log "brew autoupdate not available, trying tap..."
-    # Try the tap approach
-    if brew tap domt4/autoupdate 2>/dev/null; then
-      brew autoupdate start 86400 --upgrade --cleanup --immediate
-      show_log "Homebrew auto-update configured via tap (daily)"
-    else
-      log_error "Cannot configure brew autoupdate"
-      return 1
-    fi
+  # Check if already configured
+  if [[ -f "${plist_path}" ]] && [[ -f "${upgrade_script}" ]]; then
+    log "Homebrew auto-update already configured"
+    # Ensure it's loaded (idempotent)
+    launchctl load "${plist_path}" 2>/dev/null || true
+    return 0
   fi
+
+  # Create upgrade wrapper script (needs Homebrew environment on Apple Silicon)
+  log "Creating brew upgrade script at ${upgrade_script}..."
+
+  tee "${upgrade_script}" >/dev/null <<'BREW_EOF'
+#!/usr/bin/env bash
+# Automated Homebrew upgrade (daily via LaunchAgent)
+set -euo pipefail
+
+# Homebrew environment (Apple Silicon)
+eval "$(/opt/homebrew/bin/brew shellenv)"
+
+LOG_FILE="__LOG_DIR__/__HOSTNAME_LOWER__-brew-upgrade.log"
+mkdir -p "$(dirname "${LOG_FILE}")"
+
+log() {
+  local timestamp
+  timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+  printf '[%s] [brew-upgrade] %s\n' "${timestamp}" "$1" | tee -a "${LOG_FILE}"
+}
+
+log "Starting daily brew upgrade..."
+
+# Update formulae list
+log "Running brew update..."
+brew update 2>&1 | tee -a "${LOG_FILE}" || true
+
+# Upgrade all installed formulae and casks
+log "Running brew upgrade..."
+brew upgrade 2>&1 | tee -a "${LOG_FILE}" || true
+
+# Clean up old versions
+log "Running brew cleanup..."
+brew cleanup --prune=7 2>&1 | tee -a "${LOG_FILE}" || true
+
+log "Brew upgrade complete"
+BREW_EOF
+
+  # Replace __PLACEHOLDER__ tokens written by the quoted heredoc above
+  sed -i '' "s|__LOG_DIR__|${LOG_DIR}|g" "${upgrade_script}"
+  sed -i '' "s|__HOSTNAME_LOWER__|${HOSTNAME_LOWER}|g" "${upgrade_script}"
+  chmod 755 "${upgrade_script}"
+
+  # Create LaunchAgent — runs daily at 04:30
+  log "Creating brew upgrade LaunchAgent at ${plist_path}..."
+
+  tee "${plist_path}" >/dev/null <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.${HOSTNAME_LOWER}.brew-upgrade</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${upgrade_script}</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>4</integer>
+    <key>Minute</key>
+    <integer>30</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>${LOG_DIR}/${HOSTNAME_LOWER}-brew-upgrade-stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>${LOG_DIR}/${HOSTNAME_LOWER}-brew-upgrade-stderr.log</string>
+</dict>
+</plist>
+EOF
+
+  chmod 644 "${plist_path}"
+
+  if ! plutil -lint "${plist_path}" >/dev/null 2>&1; then
+    log_error "Invalid plist syntax in ${plist_path}"
+    return 1
+  fi
+
+  # Load the LaunchAgent
+  launchctl load "${plist_path}" 2>/dev/null || true
+  show_log "Homebrew auto-update configured and loaded (daily at 04:30)"
 }
 
 # ============================================================================
@@ -219,14 +284,14 @@ EOF
 
   chmod 644 "${plist_path}"
 
-  if plutil -lint "${plist_path}" >/dev/null 2>&1; then
-    show_log "MAS upgrade LaunchAgent created (daily at 05:30)"
-  else
+  if ! plutil -lint "${plist_path}" >/dev/null 2>&1; then
     log_error "Invalid plist syntax in ${plist_path}"
     return 1
   fi
 
-  log "To activate: launchctl load ${plist_path}"
+  # Load the LaunchAgent
+  launchctl load "${plist_path}" 2>/dev/null || true
+  show_log "MAS upgrade LaunchAgent created and loaded (daily at 05:30)"
 }
 
 # ============================================================================
@@ -314,14 +379,14 @@ EOF
   sudo chown root:wheel "${plist_path}"
   sudo chmod 644 "${plist_path}"
 
-  if sudo plutil -lint "${plist_path}" >/dev/null 2>&1; then
-    show_log "softwareupdate LaunchDaemon created (Sundays at 04:00, download-only)"
-  else
+  if ! sudo plutil -lint "${plist_path}" >/dev/null 2>&1; then
     log_error "Invalid plist syntax in ${plist_path}"
     return 1
   fi
 
-  log "To activate: sudo launchctl load ${plist_path}"
+  # Load the LaunchDaemon (requires sudo)
+  sudo launchctl load "${plist_path}" 2>/dev/null || true
+  show_log "softwareupdate LaunchDaemon created and loaded (Sundays at 04:00, download-only)"
 }
 
 # ============================================================================
@@ -334,7 +399,7 @@ main() {
 
   echo ""
   echo "This script will configure:"
-  echo "  1. Homebrew auto-update (daily, upgrade + cleanup)"
+  echo "  1. Homebrew auto-update (daily at 04:30, upgrade + cleanup)"
   echo "  2. Mac App Store auto-update (daily at 05:30 via mas)"
   echo "  3. macOS Software Update (weekly download-only, Sundays at 04:00)"
   echo ""
@@ -353,12 +418,12 @@ main() {
   section "Auto-Update Setup Complete"
   show_log ""
   show_log "Automated updates configured:"
-  show_log "  Homebrew: Daily (upgrade + cleanup)"
+  show_log "  Homebrew: Daily at 04:30 (update + upgrade + cleanup)"
   show_log "  Mac App Store: Daily at 05:30"
   show_log "  macOS: Weekly download-only (Sundays at 04:00)"
   show_log ""
   show_log "Verification:"
-  show_log "  brew autoupdate status"
+  show_log "  launchctl list | grep brew-upgrade"
   show_log "  launchctl list | grep mas"
   show_log "  sudo launchctl list | grep softwareupdate"
   show_log ""
