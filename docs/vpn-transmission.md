@@ -10,18 +10,19 @@ PIA's split-tunnel "Only VPN for Transmission" frequently forgets its configurat
 
 ## Solution: Defense in Depth
 
-Four stages of increasing protection. Each stage adds a layer; earlier stages remain active.
+| Stage | Layer | Protection | Status |
+|-------|-------|------------|--------|
+| 1 | PIA configuration | Invert split-tunnel default | Deployed |
+| 2 | VPN monitor script | Detect VPN drops, pause torrents, manage bind-address | Deployed |
+| 3 | PF verification | Confirm kernel filtering works | **FAILED** (macOS 26.3) |
+| 4 | PF kill-switch | Kernel-level traffic blocking per user | Not viable |
+| 5 | Automated updates | Homebrew, MAS, macOS updates on schedule | Deployed |
 
-| Stage | Layer | Protection | Runs as |
-|-------|-------|------------|---------|
-| 1 | PIA configuration | Invert split-tunnel default | N/A (GUI) |
-| 2 | VPN monitor script | Detect VPN drops, pause torrents, manage bind-address | operator |
-| 3 | PF verification | Confirm kernel filtering works | N/A (test) |
-| 4 | PF kill-switch | Kernel-level traffic blocking per user | root/_transmission |
+**Production architecture is Stages 1+2.** Stage 3 confirmed that PF `user`-based filtering does not enforce on macOS 26.3, so Stage 4 (kernel-level kill-switch) is not viable. The scripts and PF rules remain in the repo for future macOS versions.
 
 ## Stage 1: PIA Split-Tunnel Inversion
 
-**Status:** Manual configuration via PIA GUI
+**Status:** Deployed (2026-02-12)
 
 ### The Inversion
 
@@ -53,7 +54,7 @@ Revert PIA split tunnel to "Only VPN" mode.
 
 ## Stage 2: VPN Monitor Script
 
-**Status:** Automated via `vpn-monitor.sh` LaunchAgent
+**Status:** Deployed (2026-02-12) via `vpn-monitor.sh` LaunchAgent
 
 ### How It Works
 
@@ -102,7 +103,7 @@ launchctl unload ~/Library/LaunchAgents/com.tilsit.vpn-monitor.plist
 
 ## Stage 3: PF User Keyword Verification
 
-**Status:** One-time diagnostic test
+**Status:** FAILED on macOS 26.3 (2026-02-12)
 
 ### Purpose
 
@@ -122,19 +123,21 @@ The script:
 3. Tests that `_pftest` is blocked and other users are not
 4. Cleans up completely (user, rules, PF state)
 
-### Results
+### Result (macOS 26.3)
 
-- **PASS:** PF `user` filtering works. Proceed to Stage 4.
-- **FAIL:** PF `user` not functional. Stage 4 is not viable. Stay with Stages 1-2.
-- **INCONCLUSIVE:** Check network and retry.
+**VERDICT: FAIL.** PF loaded the rule syntactically (including `user = 299`) but did not enforce traffic filtering. The `_pftest` user was able to reach the internet despite the block rule. Stage 4 is not viable on this macOS version.
+
+The `user` keyword is documented in pf.conf(5) and the rule parses correctly, but the kernel does not enforce it. This may be a regression or intentional change in macOS 26.x.
 
 ---
 
-## Stage 4: Kernel-Level Kill-Switch (Optional)
+## Stage 4: Kernel-Level Kill-Switch (Not Viable)
 
-**Status:** Available via `setup-vpn-killswitch.sh`
+**Status:** Not viable — Stage 3 FAILED on macOS 26.3
 
-Only proceed if:
+The scripts and PF rules remain in the repo in case future macOS versions restore PF `user` enforcement. To re-evaluate, re-run Stage 3 after a macOS update.
+
+Prerequisites (all must be true):
 
 - Stage 3 PASSED
 - Stages 1-2 are stable and proven
@@ -243,7 +246,7 @@ open -a Transmission
 
 ## Stage 5: Automated Updates (Independent)
 
-**Status:** Available via `setup-auto-updates.sh`
+**Status:** Deployed (2026-02-12) via `setup-auto-updates.sh`
 
 | Update Type | Schedule | Method | Scope |
 |-------------|----------|--------|-------|
@@ -273,15 +276,15 @@ cat ~/.local/state/tilsit-mas-upgrade.log
 
 ---
 
-## Decision Guide
+## Current Architecture (Post-Deployment)
 
-After deploying Stage 2, evaluate:
+**Active protection: Stages 1+2.** Stage 3 failed, so Stage 4 is not available.
 
-1. **Is Stage 1+2 sufficient?** Monitor logs show VPN reliability. If VPN rarely drops and recovery is fast, you may not need Stage 4.
-2. **Does Stage 3 pass?** If PF `user` doesn't work, Stage 4 is not viable.
-3. **Is the complexity worth it?** Stage 4 adds significant operational complexity (daemon user, system-level mounts, PF rules). Only pursue if you want the kernel-level guarantee.
+- **Stage 1** inverts the failure mode: if PIA forgets its config, Plex gets slow but Transmission stays on VPN
+- **Stage 2** automates recovery: VPN drops are detected within 5 seconds, torrents are paused, and bind-address is locked to loopback until VPN returns
+- **Stage 5** keeps the system updated without manual intervention
 
-Stage 5 (auto-updates) is independent and should be deployed regardless.
+To re-evaluate Stage 4: re-run `pf-test-user.sh` after a macOS update. If PF `user` enforcement is restored, the kill-switch scripts are ready to deploy.
 
 ---
 
@@ -290,7 +293,6 @@ Stage 5 (auto-updates) is independent and should be deployed regardless.
 | Log | Path |
 |-----|------|
 | VPN monitor | `~operator/.local/state/tilsit-vpn-monitor.log` |
-| Transmission daemon | `/var/lib/transmission/tilsit-daemon-*.log` |
-| NAS mount (daemon) | `/var/lib/transmission/tilsit-mount.log` |
+| Brew upgrade | `~admin/.local/state/tilsit-brew-upgrade.log` |
 | MAS upgrade | `~admin/.local/state/tilsit-mas-upgrade.log` |
 | Software update | `/var/log/tilsit-softwareupdate.log` |
