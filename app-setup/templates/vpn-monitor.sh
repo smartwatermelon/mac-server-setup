@@ -209,7 +209,11 @@ update_bind_address() {
     sleep 3
   fi
 
-  log "Transmission restarted with bind-address ${new_ip}"
+  if pgrep -x "Transmission" >/dev/null 2>&1; then
+    log "Transmission restarted with bind-address ${new_ip}"
+  else
+    log "ERROR: Transmission failed to start after restart attempts"
+  fi
 }
 
 # ---------------------------------------------------------------------------

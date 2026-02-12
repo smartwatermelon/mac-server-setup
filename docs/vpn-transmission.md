@@ -172,7 +172,7 @@ Only proceed if:
 | PF rules | `/etc/pf.anchors/transmission-killswitch` | Block `_transmission` on en0/en1, allow on utun*/lo0 |
 | PF loader | `/Library/LaunchDaemons/com.tilsit.pf-killswitch.plist` | Load PF rules at boot |
 | NAS mount | `/Library/LaunchDaemons/com.tilsit.mount-nas-transmission.plist` | System-level NAS mount for daemon |
-| Daemon | `/Library/LaunchDaemons/com.tilsit.transmission-daemon.plist` | Run transmission-daemon as `_transmission` |
+| Daemon | `/Library/LaunchDaemons/com.tilsit.transmission-daemon.plist` | Runs as `_transmission`, waits for NAS + PF |
 | Config | `/var/lib/transmission/.config/transmission-daemon/settings.json` | Daemon configuration |
 
 ### Stage 4 Deployment

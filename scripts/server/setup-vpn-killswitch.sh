@@ -424,7 +424,7 @@ deploy_pf_rules() {
   <array>
     <string>/bin/bash</string>
     <string>-c</string>
-    <string>/sbin/pfctl -f /etc/pf.conf &amp;&amp; /sbin/pfctl -E</string>
+    <string>/sbin/pfctl -f /etc/pf.conf &amp;&amp; /sbin/pfctl -E &amp;&amp; /usr/bin/touch /var/run/pf-killswitch-loaded</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
@@ -487,9 +487,19 @@ if [[ ! -d "\${MOUNT_POINT}/Media" ]]; then
   exit 1
 fi
 
-# Verify PF kill-switch rules are loaded before allowing traffic
-if ! /sbin/pfctl -sr 2>/dev/null | grep -q "transmission-killswitch"; then
-  echo "ERROR: PF kill-switch rules not loaded — refusing to start without firewall protection" >&2
+# Wait for PF kill-switch rules — the pf-killswitch LaunchDaemon creates
+# a flag file after successfully loading rules. We check for this file
+# instead of calling pfctl (which requires root).
+# /var/run is cleared on every macOS reboot, so no stale flags.
+PF_FLAG="/var/run/pf-killswitch-loaded"
+PF_WAITED=0
+PF_MAX=60
+while [[ ! -f "\${PF_FLAG}" ]] && [[ \${PF_WAITED} -lt \${PF_MAX} ]]; do
+  sleep 2
+  PF_WAITED=\$((PF_WAITED + 2))
+done
+if [[ ! -f "\${PF_FLAG}" ]]; then
+  echo "ERROR: PF kill-switch not loaded after \${PF_MAX}s — refusing to start without firewall protection" >&2
   exit 1
 fi
 
@@ -513,12 +523,12 @@ WRAPPER_EOF
     <string>/bin/bash</string>
     <string>${wrapper_script}</string>
   </array>
-  <key>UserName</key>
-  <string>_transmission</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
+  <key>UserName</key>
+  <string>_transmission</string>
   <key>ThrottleInterval</key>
   <integer>360</integer>
   <key>EnvironmentVariables</key>
