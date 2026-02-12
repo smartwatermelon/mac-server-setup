@@ -247,7 +247,7 @@ open -a Transmission
 
 | Update Type | Schedule | Method | Scope |
 |-------------|----------|--------|-------|
-| Homebrew | Daily | `brew autoupdate` | Formulae + casks |
+| Homebrew | Daily 04:30 | `brew upgrade` LaunchAgent | Formulae + casks |
 | Mac App Store | Daily 05:30 | `mas upgrade` LaunchAgent | App Store apps |
 | macOS | Sundays 04:00 | `softwareupdate --download` LaunchDaemon | OS updates (download-only) |
 
@@ -263,10 +263,11 @@ macOS updates are **download-only** — no auto-install, no surprise reboots.
 ### Stage 5 Verification
 
 ```bash
-brew autoupdate status
+launchctl list | grep brew-upgrade
 launchctl list | grep mas
 sudo launchctl list | grep softwareupdate
 # Check logs after 24h
+cat ~/.local/state/tilsit-brew-upgrade.log
 cat ~/.local/state/tilsit-mas-upgrade.log
 ```
 
