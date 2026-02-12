@@ -1,99 +1,295 @@
-# Transmission + PIA VPN Setup on macOS (Multi-User, Leak-Proof)
+# Transmission VPN Protection — Staged Architecture
 
-This guide outlines a reliable method to run **Transmission GUI** on macOS through **Private Internet Access (PIA)** such that all torrent traffic is routed through the VPN, leaks are prevented, and other apps bypass the VPN.
-
----
-
-## Requirements
-
-- macOS 15.6.1 or later
-- Administrator account (for initial PIA installation)
-- Operator account (or any non-admin account for daily Transmission use)
-- Private Internet Access (PIA) subscription
-- Transmission 4.1.0-beta.2 (GUI version)
+This document describes the multi-layered VPN protection system for Transmission on the Mac Mini server. Each stage is independently valuable, verifiable, and reversible.
 
 ---
 
-## Step 1: Install and Configure PIA (Admin Account)
+## Problem
 
-1. Download and install the PIA macOS client from [PIA’s website](https://www.privateinternetaccess.com/download/mac-vpn).
-2. Log in with your PIA credentials.
-3. Enable **Launch on Startup**.
-4. Enable **Split Tunnel**:
-   - Mode: *Only VPN*
-   - App: `Transmission`
-   - All other apps: *Bypass VPN*
-5. Enable **Advanced Kill Switch**: blocks all non-VPN traffic if VPN drops.
-6. Choose a P2P-friendly server (for example, nearest international endpoint: Vancouver, BC, Canada).
-7. Optionally, enable **Request Port Forwarding** if your server supports it.
+PIA's split-tunnel "Only VPN for Transmission" frequently forgets its configuration, causing Transmission to torrent over the home IP (privacy leak). There was zero kernel-level enforcement — if PIA misbehaved, Transmission leaked silently.
 
-> ✅ Tip: Advanced Kill Switch ensures Transmission cannot leak even if the VPN is disconnected.
+## Solution: Defense in Depth
 
----
+Four stages of increasing protection. Each stage adds a layer; earlier stages remain active.
 
-## Step 2: Copy PIA Configurations to Operator Account
+| Stage | Layer | Protection | Runs as |
+|-------|-------|------------|---------|
+| 1 | PIA configuration | Invert split-tunnel default | N/A (GUI) |
+| 2 | VPN monitor script | Detect VPN drops, pause torrents, manage bind-address | operator |
+| 3 | PF verification | Confirm kernel filtering works | N/A (test) |
+| 4 | PF kill-switch | Kernel-level traffic blocking per user | root/_transmission |
 
-1. Locate PIA preferences in Admin account:
+## Stage 1: PIA Split-Tunnel Inversion
 
-    ```text
-    ~/Library/Application Support/com.privateinternetaccess.vpn/
-    ~/Library/Preferences/com.privateinternetaccess.vpn.plist
-    ```
+**Status:** Manual configuration via PIA GUI
 
-2. Copy these files to the Operator account’s corresponding directories.
-3. Adjust ownership if needed:
+### The Inversion
 
-    ```bash
-    sudo chown -R operator:staff /Users/operator/Library/Application\ Support/com.privateinternetaccess.vpn
-    sudo chown operator:staff /Users/operator/Library/Preferences/com.privateinternetaccess.vpn.plist
-    ```
+Instead of "Only VPN for Transmission" (which PIA forgets), use "Bypass VPN" for everything else:
 
-4. Log in as Operator and launch PIA once. Confirm:
+1. PIA → Settings → Split Tunnel
+2. Mode: **Bypass VPN**
+3. Add bypass entries: Plex, sshd, web browsers
+4. Enable **Advanced Kill Switch**
 
-- Launch on Startup is enabled
-- Auto-connect is active
-- Advanced Kill Switch is on
-- Split Tunnel is bound to Transmission
+**Why this works:** Default traffic now goes through VPN (including Transmission). If PIA "forgets" the bypass list, Plex gets slow but Transmission stays protected.
 
-## Step 3: Verify VPN Binding and Traffic Routing
+### Manual Bind-Address (Quick Fix)
 
-1. Launch Transmission before VPN (optional).
-2. Use a Magnet IP Leak test (ipleak.net → Torrent Address Detection) to confirm Transmission traffic shows the VPN’s IP.
-3. Confirm other apps bypass VPN as expected.
-4. Reboot into Operator account and verify:
+```bash
+# SSH as operator@tilsit.local
+VPN_IP=$(ifconfig | grep -A1 'utun' | grep 'inet ' | awk '{print $2}' | head -1)
+defaults write org.m0k.transmission BindAddressIPv4 -string "${VPN_IP}"
+osascript -e 'quit app "Transmission"' && sleep 2 && open -a Transmission
+```
 
-- PIA auto-starts and auto-connects
-- Transmission only uses VPN
-- Non-VPN apps continue using standard ISP traffic
+This is temporary — Stage 2 automates it.
 
-> ✅ Tip: With Advanced Kill Switch, Transmission will not leak even if it launches before the VPN is up.
+### Rollback
 
-## Step 4: Port Forwarding (Optional, Recommended)
-
-1. In PIA: Settings → Network → Request Port Forwarding → enable.
-2. Reconnect VPN to receive assigned port.
-3. Transmission: Preferences → Network → Incoming TCP Port → set to PIA-assigned port.
-4. Click Test Port → should show “Open.”
-
-> Note: PIA may assign a new port on each connection. For automation, a small shell script can sync the PIA-assigned port to Transmission on login.
-
-## Notes & Best Practices
-
-- Transmission GUI vs Daemon: GUI stores settings in `~/Library/Preferences/org.m0k.transmission.plist`, not `settings.json`.
-- Kill Switch Behavior:
-  - Advanced: Blocks all WAN traffic unless VPN is active (LAN still allowed).
-  - Regular: Blocks only traffic outside VPN while connected.
-- Auto-start Ordering: Advanced Kill Switch protects you even if Transmission launches first.
-- Multi-User: Each macOS user who wants Transmission + VPN needs their own copy of the PIA preferences or must configure PIA in their account.
+Revert PIA split tunnel to "Only VPN" mode.
 
 ---
 
-✅ Summary
+## Stage 2: VPN Monitor Script
 
-- PIA VPN is always on and bound only to Transmission.
-- Advanced Kill Switch prevents any leaks.
-- Split Tunnel ensures other apps bypass VPN normally.
-- Port Forwarding improves swarm connectivity (optional).
-- Multi-user configuration supported by copying prefs or reconfiguring PIA per account.
+**Status:** Automated via `vpn-monitor.sh` LaunchAgent
 
-This setup provides a *bulletproof, leak-free, per-app VPN environment* for torrenting on macOS with the Transmission GUI.
+### How It Works
+
+The VPN monitor polls `utun0-utun15` every 5 seconds:
+
+- **VPN UP:** Updates Transmission's bind-address to VPN IP
+- **VPN IP CHANGE:** Updates bind-address, restarts Transmission
+- **VPN DROP:** Sets bind-address to `127.0.0.1`, pauses all torrents
+- **VPN RESTORE:** Updates bind-address, resumes torrents
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `~operator/.local/bin/vpn-monitor.sh` | Monitor script (deployed from template) |
+| `~/Library/LaunchAgents/com.tilsit.vpn-monitor.plist` | LaunchAgent (RunAtLoad, KeepAlive) |
+| `~operator/.local/state/tilsit-vpn-monitor.log` | Monitor log |
+
+### Deployment
+
+Deployed automatically by `transmission-setup.sh` from the template at `app-setup/templates/vpn-monitor.sh`.
+
+### Verification
+
+```bash
+# Check monitor is running
+launchctl list | grep vpn-monitor
+
+# Watch the log
+tail -f ~/.local/state/tilsit-vpn-monitor.log
+
+# Test: disconnect VPN briefly via PIA GUI
+# Monitor should: detect drop -> pause torrents -> set bind 127.0.0.1 -> notify
+
+# Test: reconnect VPN
+# Monitor should: detect IP -> update bind-address -> resume torrents -> notify
+```
+
+### Rollback
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.tilsit.vpn-monitor.plist
+```
+
+---
+
+## Stage 3: PF User Keyword Verification
+
+**Status:** One-time diagnostic test
+
+### Purpose
+
+Verify that macOS PF (Packet Filter) supports the `user` keyword for per-user traffic filtering. This is the go/no-go gate for Stage 4.
+
+### Running the Test
+
+```bash
+# On the target server (NOT dev machine)
+sudo ./scripts/server/pf-test-user.sh
+```
+
+The script:
+
+1. Creates a throwaway `_pftest` user (UID 299)
+2. Loads a PF rule blocking `_pftest` on `en0`
+3. Tests that `_pftest` is blocked and other users are not
+4. Cleans up completely (user, rules, PF state)
+
+### Results
+
+- **PASS:** PF `user` filtering works. Proceed to Stage 4.
+- **FAIL:** PF `user` not functional. Stage 4 is not viable. Stay with Stages 1-2.
+- **INCONCLUSIVE:** Check network and retry.
+
+---
+
+## Stage 4: Kernel-Level Kill-Switch (Optional)
+
+**Status:** Available via `setup-vpn-killswitch.sh`
+
+Only proceed if:
+
+- Stage 3 PASSED
+- Stages 1-2 are stable and proven
+- You want the additional kernel-level protection
+
+### Architecture
+
+```
+                    ┌─────────────────┐
+                    │  PF Firewall    │
+                    │  (kernel level) │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              │              │              │
+         en0 (block)    utun* (allow)   lo0 (allow)
+              │              │              │
+              ×         ┌────┴────┐    ┌────┴────┐
+         (dropped)      │ VPN     │    │ RPC API │
+                        │ tunnel  │    │ Plex    │
+                        └────┬────┘    └─────────┘
+                             │
+                    ┌────────┴────────┐
+                    │  transmission-  │
+                    │  daemon         │
+                    │  (_transmission)│
+                    └─────────────────┘
+```
+
+### Components
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| System user | `_transmission` (via dscl) | Dedicated daemon user |
+| PF rules | `/etc/pf.anchors/transmission-killswitch` | Block `_transmission` on en0/en1, allow on utun*/lo0 |
+| PF loader | `/Library/LaunchDaemons/com.tilsit.pf-killswitch.plist` | Load PF rules at boot |
+| NAS mount | `/Library/LaunchDaemons/com.tilsit.mount-nas-transmission.plist` | System-level NAS mount for daemon |
+| Daemon | `/Library/LaunchDaemons/com.tilsit.transmission-daemon.plist` | Run transmission-daemon as `_transmission` |
+| Config | `/var/lib/transmission/.config/transmission-daemon/settings.json` | Daemon configuration |
+
+### Deployment
+
+```bash
+# On the target server
+sudo ./scripts/server/setup-vpn-killswitch.sh
+```
+
+### Verification
+
+```bash
+# 1. Daemon running as correct user
+ps aux | grep transmission-daemon  # should show _transmission
+
+# 2. PF blocking on physical interface
+sudo -u _transmission curl --interface en0 --max-time 5 https://ifconfig.me  # should timeout
+
+# 3. Traffic going through VPN
+sudo -u _transmission curl --max-time 5 https://ifconfig.me  # should show VPN IP
+
+# 4. Web UI accessible
+curl http://tilsit.local:19091  # should respond
+
+# 5. Reboot test
+sudo reboot  # all services should recover
+```
+
+### Plist-to-settings.json Key Mapping
+
+These are the critical translations from Transmission.app plist keys to daemon `settings.json` keys:
+
+| Plist Key (GUI) | settings.json Key (Daemon) | Value |
+|-----------------|---------------------------|-------|
+| `BindPort` | `peer-port` | 40944 |
+| `RPCPort` | `rpc-port` | 19091 |
+| `RPCUsername` | `rpc-username` | tilsit |
+| `RPCPassword` | `rpc-password` | tilsit |
+| `DownloadFolder` | `download-dir` | /var/lib/transmission/mnt/... |
+| `AutoImportDirectory` | `watch-dir` | ~/.local/sync/dropbox |
+| `DoneScriptPath` | `script-torrent-done-filename` | path |
+| `EncryptionRequire` | `encryption` | 2 (required) |
+| `PeersTotal` | `peer-limit-global` | 2048 |
+| `PeersTorrent` | `peer-limit-per-torrent` | 256 |
+
+### Catch Integration (Daemon Mode)
+
+When running as daemon, Catch cannot use magnet links (URL handler requires GUI). Instead:
+
+1. Change `CATCH_USE_MAGNETS="false"` in config.conf
+2. Update ShowRSS URL: change `magnets=true` to `magnets=false`
+3. Catch downloads `.torrent` files to the watch directory
+4. transmission-daemon picks them up automatically
+
+### Rollback
+
+```bash
+sudo launchctl unload /Library/LaunchDaemons/com.tilsit.transmission-daemon.plist
+sudo launchctl unload /Library/LaunchDaemons/com.tilsit.pf-killswitch.plist
+sudo launchctl unload /Library/LaunchDaemons/com.tilsit.mount-nas-transmission.plist
+sudo pfctl -a "transmission-killswitch" -F rules
+# Re-enable operator's Transmission.app LaunchAgent
+launchctl load ~/Library/LaunchAgents/com.tilsit.transmission.plist
+open -a Transmission
+```
+
+---
+
+## Stage 5: Automated Updates (Independent)
+
+**Status:** Available via `setup-auto-updates.sh`
+
+| Update Type | Schedule | Method | Scope |
+|-------------|----------|--------|-------|
+| Homebrew | Daily | `brew autoupdate` | Formulae + casks |
+| Mac App Store | Daily 05:30 | `mas upgrade` LaunchAgent | App Store apps |
+| macOS | Sundays 04:00 | `softwareupdate --download` LaunchDaemon | OS updates (download-only) |
+
+macOS updates are **download-only** — no auto-install, no surprise reboots.
+
+### Deployment
+
+```bash
+# On the target server (as administrator)
+./scripts/server/setup-auto-updates.sh
+```
+
+### Verification
+
+```bash
+brew autoupdate status
+launchctl list | grep mas
+sudo launchctl list | grep softwareupdate
+# Check logs after 24h
+cat ~/.local/state/tilsit-mas-upgrade.log
+```
+
+---
+
+## Decision Guide
+
+After deploying Stage 2, evaluate:
+
+1. **Is Stage 1+2 sufficient?** Monitor logs show VPN reliability. If VPN rarely drops and recovery is fast, you may not need Stage 4.
+2. **Does Stage 3 pass?** If PF `user` doesn't work, Stage 4 is not viable.
+3. **Is the complexity worth it?** Stage 4 adds significant operational complexity (daemon user, system-level mounts, PF rules). Only pursue if you want the kernel-level guarantee.
+
+Stage 5 (auto-updates) is independent and should be deployed regardless.
+
+---
+
+## Log Locations
+
+| Log | Path |
+|-----|------|
+| VPN monitor | `~operator/.local/state/tilsit-vpn-monitor.log` |
+| Transmission daemon | `/var/lib/transmission/tilsit-daemon-*.log` |
+| NAS mount (daemon) | `/var/lib/transmission/tilsit-mount.log` |
+| MAS upgrade | `~admin/.local/state/tilsit-mas-upgrade.log` |
+| Software update | `/var/log/tilsit-softwareupdate.log` |
