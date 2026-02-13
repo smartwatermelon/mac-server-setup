@@ -3,12 +3,17 @@
 # setup-auto-updates.sh - Automated update configuration module
 #
 # Configures three layers of automated updates for the Mac Mini server:
-# 1. Homebrew: Daily formula and cask upgrades via LaunchAgent (as administrator)
-# 2. Mac App Store: Daily app updates via mas LaunchAgent (as administrator)
+# 1. Homebrew: Daily formula and cask upgrades via LaunchDaemon (as administrator)
+# 2. Mac App Store: Native macOS auto-update (via defaults write)
 # 3. macOS Software Update: Weekly download-only via LaunchDaemon (as root)
 #
-# The macOS Software Update only downloads — it does NOT install automatically.
-# This prevents surprise reboots while still keeping updates ready.
+# Homebrew uses a LaunchDaemon (not LaunchAgent) with UserName set to the
+# administrator account. LaunchAgents only run when the user has a GUI
+# session — the administrator is rarely logged in on the desktop, so a
+# LaunchAgent would never fire. LaunchDaemons run regardless of GUI state.
+#
+# Mac App Store uses macOS's built-in auto-update mechanism rather than
+# a mas LaunchAgent, since mas requires a GUI session context.
 #
 # Usage: ./setup-auto-updates.sh [--force]
 #   --force: Skip all confirmation prompts
@@ -17,6 +22,12 @@
 # Created: 2026-02-12
 
 set -euo pipefail
+
+# Prevent running as root — whoami would return "root", misconfiguring LaunchDaemons
+if [[ ${EUID} -eq 0 ]]; then
+  echo "ERROR: Do not run this script as root. Run as admin user with sudo prompts."
+  exit 1
+fi
 
 # Parse arguments
 FORCE=false
@@ -53,6 +64,7 @@ if [[ -z "${HOSTNAME}" ]]; then
   exit 1
 fi
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
+ADMIN_USER="$(whoami)"
 
 # Logging
 LOG_DIR="${HOME}/.local/state"
@@ -120,7 +132,24 @@ if [[ -x "${HOMEBREW_PREFIX}/bin/brew" ]]; then
 fi
 
 # ============================================================================
-# 5a: Homebrew Auto-Update (daily, as current administrator)
+# Cleanup: Remove old LaunchAgents from previous deployment
+# ============================================================================
+
+cleanup_old_launchagents() {
+  local old_brew="${HOME}/Library/LaunchAgents/com.${HOSTNAME_LOWER}.brew-upgrade.plist"
+  local old_mas="${HOME}/Library/LaunchAgents/com.${HOSTNAME_LOWER}.mas-upgrade.plist"
+
+  for plist in "${old_brew}" "${old_mas}"; do
+    if [[ -f "${plist}" ]]; then
+      log "Removing old LaunchAgent: ${plist}"
+      launchctl unload "${plist}" 2>/dev/null || true
+      rm -f "${plist}"
+    fi
+  done
+}
+
+# ============================================================================
+# 5a: Homebrew Auto-Update (daily, as administrator via LaunchDaemon)
 # ============================================================================
 
 setup_homebrew_autoupdate() {
@@ -131,27 +160,23 @@ setup_homebrew_autoupdate() {
     return 1
   fi
 
-  local launchagent_dir="${HOME}/Library/LaunchAgents"
-  local plist_path="${launchagent_dir}/com.${HOSTNAME_LOWER}.brew-upgrade.plist"
-  local upgrade_script="${HOME}/.local/bin/${HOSTNAME_LOWER}-brew-upgrade.sh"
+  local plist_path="/Library/LaunchDaemons/com.${HOSTNAME_LOWER}.brew-upgrade.plist"
+  local upgrade_script="/usr/local/bin/${HOSTNAME_LOWER}-brew-upgrade.sh"
 
-  mkdir -p "${launchagent_dir}"
-  mkdir -p "${HOME}/.local/bin"
-
-  # Check if already configured
-  if [[ -f "${plist_path}" ]] && [[ -f "${upgrade_script}" ]]; then
+  # Check if already configured (--force re-applies)
+  if sudo test -f "${plist_path}" && sudo test -f "${upgrade_script}" && [[ "${FORCE}" != "true" ]]; then
     log "Homebrew auto-update already configured"
-    # Ensure it's loaded (idempotent)
-    launchctl load "${plist_path}" 2>/dev/null || true
+    sudo launchctl load "${plist_path}" 2>/dev/null || true
     return 0
   fi
 
   # Create upgrade wrapper script (needs Homebrew environment on Apple Silicon)
   log "Creating brew upgrade script at ${upgrade_script}..."
 
-  tee "${upgrade_script}" >/dev/null <<'BREW_EOF'
+  sudo -p "[Auto-Updates] Enter password to create brew upgrade script: " \
+    tee "${upgrade_script}" >/dev/null <<'BREW_EOF'
 #!/usr/bin/env bash
-# Automated Homebrew upgrade (daily via LaunchAgent)
+# Automated Homebrew upgrade (daily via LaunchDaemon)
 set -euo pipefail
 
 # Homebrew environment (Apple Silicon)
@@ -195,20 +220,23 @@ log "Brew upgrade complete"
 BREW_EOF
 
   # Replace __PLACEHOLDER__ tokens written by the quoted heredoc above
-  sed -i '' "s|__LOG_DIR__|${LOG_DIR}|g" "${upgrade_script}"
-  sed -i '' "s|__HOSTNAME_LOWER__|${HOSTNAME_LOWER}|g" "${upgrade_script}"
-  chmod 755 "${upgrade_script}"
+  sudo sed -i '' "s|__LOG_DIR__|${LOG_DIR}|g" "${upgrade_script}"
+  sudo sed -i '' "s|__HOSTNAME_LOWER__|${HOSTNAME_LOWER}|g" "${upgrade_script}"
+  sudo chmod 755 "${upgrade_script}"
+  sudo chown root:wheel "${upgrade_script}"
 
-  # Create LaunchAgent — runs daily at 04:30
-  log "Creating brew upgrade LaunchAgent at ${plist_path}..."
+  # Create LaunchDaemon — runs daily at 04:30 as administrator
+  log "Creating brew upgrade LaunchDaemon at ${plist_path}..."
 
-  tee "${plist_path}" >/dev/null <<EOF
+  sudo tee "${plist_path}" >/dev/null <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
   <string>com.${HOSTNAME_LOWER}.brew-upgrade</string>
+  <key>UserName</key>
+  <string>${ADMIN_USER}</string>
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
@@ -229,80 +257,43 @@ BREW_EOF
 </plist>
 EOF
 
-  chmod 644 "${plist_path}"
+  sudo chown root:wheel "${plist_path}"
+  sudo chmod 644 "${plist_path}"
 
-  if ! plutil -lint "${plist_path}" >/dev/null 2>&1; then
+  if ! sudo plutil -lint "${plist_path}" >/dev/null 2>&1; then
     log_error "Invalid plist syntax in ${plist_path}"
     return 1
   fi
 
-  # Load the LaunchAgent
-  launchctl load "${plist_path}" 2>/dev/null || true
-  show_log "Homebrew auto-update configured and loaded (daily at 04:30)"
+  # Load the LaunchDaemon
+  sudo launchctl load "${plist_path}" 2>/dev/null || true
+  show_log "Homebrew auto-update configured and loaded (daily at 04:30, as ${ADMIN_USER})"
 }
 
 # ============================================================================
-# 5b: Mac App Store Updates (daily, as administrator via LaunchAgent)
+# 5b: Mac App Store Updates (native macOS auto-update)
 # ============================================================================
 
 setup_mas_updates() {
   set_section "Mac App Store Auto-Update"
 
-  if ! command -v mas >/dev/null 2>&1; then
-    log "mas not found — installing via Homebrew..."
-    if brew install mas; then
-      log "mas installed"
-    else
-      log_error "Failed to install mas"
-      return 1
-    fi
-  fi
+  # Enable macOS built-in App Store auto-updates.
+  # This is more reliable than a mas LaunchAgent/Daemon because:
+  # - mas requires a GUI session context for App Store authentication
+  # - macOS handles this natively without any scheduled task
+  log "Enabling macOS built-in App Store auto-updates..."
 
-  local launchagent_dir="${HOME}/Library/LaunchAgents"
-  local plist_path="${launchagent_dir}/com.${HOSTNAME_LOWER}.mas-upgrade.plist"
-
-  mkdir -p "${launchagent_dir}"
-
-  log "Creating MAS upgrade LaunchAgent at ${plist_path}..."
-
-  tee "${plist_path}" >/dev/null <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.${HOSTNAME_LOWER}.mas-upgrade</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/bin/bash</string>
-    <string>-c</string>
-    <string>/opt/homebrew/bin/mas upgrade 2>&amp;1 | tee -a "${HOME}/.local/state/${HOSTNAME_LOWER}-mas-upgrade.log"</string>
-  </array>
-  <key>StartCalendarInterval</key>
-  <dict>
-    <key>Hour</key>
-    <integer>5</integer>
-    <key>Minute</key>
-    <integer>30</integer>
-  </dict>
-  <key>StandardOutPath</key>
-  <string>${HOME}/.local/state/${HOSTNAME_LOWER}-mas-upgrade-stdout.log</string>
-  <key>StandardErrorPath</key>
-  <string>${HOME}/.local/state/${HOSTNAME_LOWER}-mas-upgrade-stderr.log</string>
-</dict>
-</plist>
-EOF
-
-  chmod 644 "${plist_path}"
-
-  if ! plutil -lint "${plist_path}" >/dev/null 2>&1; then
-    log_error "Invalid plist syntax in ${plist_path}"
+  if sudo defaults write /Library/Preferences/com.apple.commerce AutoUpdate -bool true; then
+    show_log "App Store auto-updates enabled (macOS built-in)"
+  else
+    log_error "Failed to enable App Store auto-updates"
     return 1
   fi
 
-  # Load the LaunchAgent
-  launchctl load "${plist_path}" 2>/dev/null || true
-  show_log "MAS upgrade LaunchAgent created and loaded (daily at 05:30)"
+  # Verify
+  local auto_update
+  auto_update=$(defaults read /Library/Preferences/com.apple.commerce AutoUpdate 2>/dev/null || echo "unset")
+  log "com.apple.commerce AutoUpdate = ${auto_update}"
 }
 
 # ============================================================================
@@ -407,11 +398,12 @@ EOF
 main() {
   section "Automated Updates Setup (Stage 5)"
   log "Server: ${HOSTNAME}"
+  log "Administrator: ${ADMIN_USER}"
 
   echo ""
   echo "This script will configure:"
-  echo "  1. Homebrew auto-update (daily at 04:30, upgrade + cleanup)"
-  echo "  2. Mac App Store auto-update (daily at 05:30 via mas)"
+  echo "  1. Homebrew auto-update (daily at 04:30 via LaunchDaemon, as ${ADMIN_USER})"
+  echo "  2. Mac App Store auto-update (macOS built-in)"
   echo "  3. macOS Software Update (weekly download-only, Sundays at 04:00)"
   echo ""
   echo "macOS Software Update downloads only — it will NOT auto-install or reboot."
@@ -422,6 +414,7 @@ main() {
     exit 0
   fi
 
+  cleanup_old_launchagents
   setup_homebrew_autoupdate
   setup_mas_updates
   setup_softwareupdate
@@ -429,13 +422,13 @@ main() {
   section "Auto-Update Setup Complete"
   show_log ""
   show_log "Automated updates configured:"
-  show_log "  Homebrew: Daily at 04:30 (update + upgrade + cleanup)"
-  show_log "  Mac App Store: Daily at 05:30"
+  show_log "  Homebrew: Daily at 04:30 (LaunchDaemon, as ${ADMIN_USER})"
+  show_log "  Mac App Store: macOS built-in auto-update"
   show_log "  macOS: Weekly download-only (Sundays at 04:00)"
   show_log ""
   show_log "Verification:"
-  show_log "  launchctl list | grep brew-upgrade"
-  show_log "  launchctl list | grep mas"
+  show_log "  sudo launchctl list | grep brew-upgrade"
+  show_log "  defaults read /Library/Preferences/com.apple.commerce AutoUpdate"
   show_log "  sudo launchctl list | grep softwareupdate"
   show_log ""
 }

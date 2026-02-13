@@ -252,11 +252,11 @@ open -a Transmission
 
 | Update Type | Schedule | Method | Scope |
 |-------------|----------|--------|-------|
-| Homebrew | Daily 04:30 | `brew upgrade` LaunchAgent | Formulae + casks |
-| Mac App Store | Daily 05:30 | `mas upgrade` LaunchAgent | App Store apps |
+| Homebrew | Daily 04:30 | `brew upgrade` LaunchDaemon (as admin) | Formulae + casks |
+| Mac App Store | Automatic | macOS built-in auto-update | App Store apps |
 | macOS | Sundays 04:00 | `softwareupdate --download` LaunchDaemon | OS updates (download-only) |
 
-macOS updates are **download-only** — no auto-install, no surprise reboots.
+Homebrew uses a LaunchDaemon (not LaunchAgent) with `UserName` set to the administrator — LaunchAgents only run when the user has a GUI session, and the administrator is rarely logged in on the desktop. macOS Software Update downloads only — no auto-install, no surprise reboots.
 
 ### Stage 5 Deployment
 
@@ -268,12 +268,11 @@ macOS updates are **download-only** — no auto-install, no surprise reboots.
 ### Stage 5 Verification
 
 ```bash
-launchctl list | grep brew-upgrade
-launchctl list | grep mas
+sudo launchctl list | grep brew-upgrade
+defaults read /Library/Preferences/com.apple.commerce AutoUpdate
 sudo launchctl list | grep softwareupdate
 # Check logs after 24h
 cat ~/.local/state/tilsit-brew-upgrade.log
-cat ~/.local/state/tilsit-mas-upgrade.log
 ```
 
 ---
@@ -296,5 +295,4 @@ To re-evaluate Stage 4: re-run `pf-test-user.sh` after a macOS update. If PF `us
 |-----|------|
 | VPN monitor | `~operator/.local/state/tilsit-vpn-monitor.log` |
 | Brew upgrade | `~admin/.local/state/tilsit-brew-upgrade.log` |
-| MAS upgrade | `~admin/.local/state/tilsit-mas-upgrade.log` |
 | Software update | `/var/log/tilsit-softwareupdate.log` |
