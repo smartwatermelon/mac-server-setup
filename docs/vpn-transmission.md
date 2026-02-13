@@ -57,11 +57,11 @@ Revert PIA split tunnel to "Only VPN" mode.
 
 **Status:** Deployed (2026-02-13) via `pia-split-tunnel-monitor.sh` LaunchAgent
 
-### Problem
+### Config Drift Problem
 
 PIA frequently "forgets" its split tunnel configuration. With the Stage 1 inversion architecture, forgetting means all traffic goes through VPN — including Plex, which is unusable through a multi-hop overseas VPN connection. The VPN monitor (Stage 2) handles VPN drops but not PIA config drift.
 
-### How It Works
+### Stage 1.5 Behavior
 
 The PIA monitor polls `/Library/Preferences/com.privateinternetaccess.vpn/settings.json` every 60 seconds and compares monitored fields against a saved reference:
 
@@ -71,7 +71,7 @@ The PIA monitor polls `/Library/Preferences/com.privateinternetaccess.vpn/settin
 
 Monitored fields: `splitTunnelEnabled`, `splitTunnelRules`, `killswitch`, `bypassSubnets`.
 
-### Files
+### Stage 1.5 Files
 
 | File | Purpose |
 |------|---------|
@@ -80,7 +80,7 @@ Monitored fields: `splitTunnelEnabled`, `splitTunnelRules`, `killswitch`, `bypas
 | `~/Library/LaunchAgents/com.tilsit.pia-monitor.plist` | LaunchAgent (RunAtLoad, KeepAlive) |
 | `~operator/.local/state/tilsit-pia-monitor.log` | Monitor log |
 
-### Deployment
+### Stage 1.5 Deployment
 
 Deployed automatically by `transmission-setup.sh` from the template at `app-setup/templates/pia-split-tunnel-monitor.sh`. The deployment saves the current PIA split tunnel config as the reference.
 
@@ -90,7 +90,7 @@ To update the reference after intentionally changing PIA settings:
 ~/.local/bin/pia-split-tunnel-monitor.sh --save-reference
 ```
 
-### Verification
+### Stage 1.5 Verification
 
 ```bash
 # Check monitor is running
