@@ -224,15 +224,12 @@ main() {
   if initial_ip=$(get_vpn_ip); then
     LAST_VPN_IP="${initial_ip}"
     log "Initial VPN IP: ${initial_ip}"
-    # Ensure Transmission is using the VPN IP from the start
+    # Ensure Transmission is using the VPN IP from the start.
+    # Always kill and relaunch — Transmission only reads BindAddressIPv4 at launch,
+    # so a running instance may be bound to a stale IP.
     set_bind_address "${initial_ip}"
-    local pid
-    pid=$(pgrep -x "Transmission" || true)
-    if [[ -z "${pid}" ]]; then
-      launch_transmission
-    else
-      log "Transmission already running (PID ${pid})"
-    fi
+    kill_transmission
+    launch_transmission
   else
     log "WARNING: No VPN connection detected at startup"
     handle_vpn_down
