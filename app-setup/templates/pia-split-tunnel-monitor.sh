@@ -216,7 +216,10 @@ verify_fix() {
   fi
 
   local reference
-  reference=$(cat "${REFERENCE_FILE}")
+  if ! reference=$(cat "${REFERENCE_FILE}" 2>/dev/null) || [[ -z "${reference}" ]]; then
+    log "ERROR: Reference file not found or empty during verification"
+    return 1
+  fi
 
   if configs_match "${current}" "${reference}"; then
     log "Verification passed — settings match reference"
@@ -252,9 +255,12 @@ check_and_fix() {
     return 0
   fi
 
-  # Compare against reference
+  # Compare against reference (atomic read — no TOCTOU race with -f check)
   local reference
-  reference=$(cat "${REFERENCE_FILE}")
+  if ! reference=$(cat "${REFERENCE_FILE}" 2>/dev/null) || [[ -z "${reference}" ]]; then
+    log "ERROR: Reference file missing or empty — cannot check for drift"
+    return 1
+  fi
 
   if configs_match "${current}" "${reference}"; then
     # Config matches — reset failure counter
@@ -333,8 +339,8 @@ main() {
     log "  ${line}"
   done <"${REFERENCE_FILE}"
 
-  # Initial check
-  check_and_fix
+  # Initial check (non-fatal — errors are logged, not terminal)
+  check_and_fix || true
 
   # Main polling loop
   local loop_count=0
@@ -347,7 +353,7 @@ main() {
       rotate_log
     fi
 
-    check_and_fix
+    check_and_fix || true
   done
 }
 
