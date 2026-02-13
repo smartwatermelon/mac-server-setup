@@ -3,17 +3,22 @@
 # vpn-monitor.sh - VPN state monitor for Transmission
 #
 # Monitors VPN tunnel interfaces (utun*) and manages Transmission accordingly:
-# - VPN UP:      Ensures Transmission uses VPN IP as bind-address
-# - VPN IP CHANGE: Updates bind-address to new VPN IP, restarts Transmission
-# - VPN DROP:    Pauses all torrents, sets bind-address to 127.0.0.1
-# - VPN RESTORE: Updates bind-address to new VPN IP, resumes torrents
+# - VPN UP:       Ensures Transmission is running with VPN IP as bind-address
+# - VPN IP CHANGE: Updates bind-address, restarts Transmission
+# - VPN DROP:     Kills Transmission (zero network activity guaranteed)
+# - VPN RESTORE:  Updates bind-address, relaunches Transmission
+#
+# Kill-and-restart is more reliable than RPC pause/resume:
+# - A dead process has zero network activity (no DHT, PEX, tracker leaks)
+# - Transmission persists torrent state — previously-active torrents resume,
+#   paused ones stay paused, no external state tracking needed
+# - No RPC dependency for the critical "stop all traffic" path
 #
 # This script runs as a LaunchAgent under the operator user, alongside
-# Transmission.app (GUI). It communicates with Transmission via RPC API
-# for pause/resume and via defaults write for bind-address changes.
+# Transmission.app (GUI).
 #
 # Template placeholders (replaced during deployment):
-# - __SERVER_NAME__: Server hostname for logging and RPC credentials
+# - __SERVER_NAME__: Server hostname for logging and preferences
 #
 # Usage: Launched automatically by com.tilsit.vpn-monitor LaunchAgent
 #   Not intended for manual execution.
@@ -28,9 +33,6 @@ SERVER_NAME="__SERVER_NAME__"
 
 # Derived configuration
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
-RPC_URL="http://localhost:19091/transmission/rpc"
-RPC_USER="${HOSTNAME_LOWER}"
-RPC_PASS="${HOSTNAME_LOWER}"
 POLL_INTERVAL=5
 
 # Logging configuration
@@ -41,9 +43,6 @@ MAX_LOG_SIZE=5242880 # 5MB
 # State tracking
 LAST_VPN_IP=""
 VPN_IS_DOWN=false
-TORRENTS_PAUSED_BY_US=false
-RESUME_RETRY_COUNT=0
-MAX_RESUME_RETRIES=12 # ~60s at 5s poll interval
 
 # Ensure log directory exists
 mkdir -p "${LOG_DIR}"
@@ -102,160 +101,91 @@ get_vpn_ip() {
 }
 
 # ---------------------------------------------------------------------------
-# Transmission RPC API
+# Transmission Process Management
 # ---------------------------------------------------------------------------
 
-# Get a fresh X-Transmission-Session-Id header (required for all RPC calls).
-# Transmission returns 409 with the session ID in the response headers.
-# We use -si to include headers in output for reliable extraction.
-get_session_id() {
-  local response
-  response=$(curl -si -u "${RPC_USER}:${RPC_PASS}" \
-    --max-time 5 \
-    "${RPC_URL}" 2>/dev/null || true)
-  echo "${response}" | grep -o 'X-Transmission-Session-Id: [^ ]*' | head -1 | cut -d' ' -f2 | tr -d '[:space:]'
-}
+# Kill Transmission and verify it is dead.
+# Uses graceful quit first, then force-kill as fallback.
+kill_transmission() {
+  if ! pgrep -x "Transmission" >/dev/null 2>&1; then
+    log "Transmission is not running"
+    return 0
+  fi
 
-# Make an RPC call to Transmission
-# Args: method [arguments_json]
-rpc_call() {
-  local method="$1"
-  local arguments="${2:-{}}"
+  log "Killing Transmission..."
+  osascript -e 'quit app "Transmission"' 2>/dev/null || true
 
-  local session_id
-  session_id=$(get_session_id)
+  # Wait for graceful exit (up to 10s)
+  local wait_count=0
+  while pgrep -x "Transmission" >/dev/null 2>&1 && [[ ${wait_count} -lt 10 ]]; do
+    sleep 1
+    ((wait_count += 1))
+  done
 
-  if [[ -z "${session_id}" ]]; then
-    log "ERROR: Cannot reach Transmission RPC - is Transmission running?"
+  # Force-kill if graceful quit failed
+  if pgrep -x "Transmission" >/dev/null 2>&1; then
+    log "WARNING: Graceful quit failed after 10s, force-killing"
+    killall -9 Transmission 2>/dev/null || true
+    sleep 2
+  fi
+
+  # Final verification
+  if pgrep -x "Transmission" >/dev/null 2>&1; then
+    log "ERROR: Transmission is STILL running after force-kill!"
     return 1
   fi
 
-  # Build JSON payload using printf (callers must pass safe literal strings only)
-  local payload
-  payload=$(printf '{"method":"%s","arguments":%s}' "${method}" "${arguments}")
-
-  curl -s -u "${RPC_USER}:${RPC_PASS}" \
-    --max-time 10 \
-    -H "X-Transmission-Session-Id: ${session_id}" \
-    -d "${payload}" \
-    "${RPC_URL}" 2>/dev/null
+  log "Transmission killed"
+  return 0
 }
 
-# Pause all torrents via RPC
-# Note: This pauses ALL torrents, including user-intentionally-paused ones.
-# On resume, ALL torrents restart. This is a deliberate simplicity trade-off:
-# tracking individual torrent states would require JSON parsing (jq dependency)
-# or fragile grep-based parsing. Since VPN drops are rare events, the minor
-# inconvenience of manually re-pausing a few torrents is acceptable.
-pause_all_torrents() {
-  log "Pausing all torrents..."
-  if rpc_call "torrent-stop" '{}' >/dev/null; then
-    TORRENTS_PAUSED_BY_US=true
-    log "All torrents paused"
-  else
-    log "ERROR: Failed to pause torrents via RPC"
-  fi
-}
-
-# Resume all torrents (only if we paused them)
-resume_all_torrents() {
-  if [[ "${TORRENTS_PAUSED_BY_US}" == "true" ]]; then
-    log "Resuming all torrents..."
-    if rpc_call "torrent-start" '{}' >/dev/null; then
-      TORRENTS_PAUSED_BY_US=false
-      RESUME_RETRY_COUNT=0
-      log "All torrents resumed"
-    else
-      RESUME_RETRY_COUNT=$((RESUME_RETRY_COUNT + 1))
-      log "ERROR: Failed to resume torrents via RPC (attempt ${RESUME_RETRY_COUNT}/${MAX_RESUME_RETRIES})"
-    fi
-  fi
-}
-
-# ---------------------------------------------------------------------------
-# Bind-Address Management
-# ---------------------------------------------------------------------------
-
-# Update Transmission's bind-address via defaults write, then restart the app.
-# This is the only reliable way to change bind-address for Transmission.app (GUI).
-update_bind_address() {
-  local new_ip="$1"
-  log "Updating bind-address to ${new_ip}..."
-
-  # Write the preference
-  defaults write org.m0k.transmission BindAddressIPv4 -string "${new_ip}"
-
-  # Restart Transmission.app to pick up the new bind-address
-  # Only quit if Transmission is currently running
-  if pgrep -x "Transmission" >/dev/null 2>&1; then
-    osascript -e 'quit app "Transmission"' 2>/dev/null || true
-    # Wait for graceful exit (up to 60s — large resume data can take time)
-    local wait_count=0
-    while pgrep -x "Transmission" >/dev/null 2>&1 && [[ ${wait_count} -lt 60 ]]; do
-      sleep 1
-      ((wait_count += 1))
-    done
-    # Force-kill if graceful quit failed — bind-address MUST be applied
-    if pgrep -x "Transmission" >/dev/null 2>&1; then
-      log "WARNING: Transmission did not quit gracefully after 60s, force-killing"
-      killall -9 Transmission 2>/dev/null || true
-      sleep 2
-    fi
-  fi
-
+# Launch Transmission and verify it is running.
+launch_transmission() {
+  log "Launching Transmission..."
   open -a Transmission
-  sleep 3 # Initial grace period for process startup
+  sleep 3
 
-  # Verify Transmission actually restarted
   if ! pgrep -x "Transmission" >/dev/null 2>&1; then
-    log "WARNING: Transmission did not restart — retrying"
+    log "WARNING: Transmission did not start — retrying"
     open -a Transmission
     sleep 3
   fi
 
-  if ! pgrep -x "Transmission" >/dev/null 2>&1; then
-    log "ERROR: Transmission failed to start after restart attempts"
-    return
+  local pid
+  pid=$(pgrep -x "Transmission" || true)
+  if [[ -n "${pid}" ]]; then
+    log "Transmission launched (PID ${pid})"
+    return 0
+  else
+    log "ERROR: Transmission failed to launch"
+    return 1
   fi
+}
 
-  # Wait for RPC to become available (process is up but RPC may lag behind)
-  local rpc_wait=0
-  local rpc_max=30
-  while [[ ${rpc_wait} -lt ${rpc_max} ]]; do
-    local session_id
-    session_id=$(get_session_id)
-    if [[ -n "${session_id}" ]]; then
-      log "Transmission restarted with bind-address ${new_ip} (RPC ready after ${rpc_wait}s)"
-      return
-    fi
-    sleep 2
-    rpc_wait=$((rpc_wait + 2))
-  done
-  log "WARNING: Transmission running but RPC not ready after ${rpc_max}s"
+# Update Transmission's bind-address preference.
+# Transmission reads this on launch — call before launch_transmission().
+set_bind_address() {
+  local ip="$1"
+  defaults write org.m0k.transmission BindAddressIPv4 -string "${ip}"
+  log "Bind-address set to ${ip}"
 }
 
 # ---------------------------------------------------------------------------
 # VPN State Handlers
 # ---------------------------------------------------------------------------
 
-# Handle VPN going down — called on first detection of missing VPN
+# Handle VPN going down — kill Transmission immediately
 handle_vpn_down() {
   if [[ "${VPN_IS_DOWN}" == "false" ]]; then
     VPN_IS_DOWN=true
-    RESUME_RETRY_COUNT=0
     log "VPN DOWN detected!"
-    notify "VPN Monitor" "VPN connection lost - pausing torrents"
-
-    # Pause torrents FIRST (while Transmission is still running and RPC is available)
-    # This prevents the race where restarting Transmission auto-resumes torrents
-    pause_all_torrents
-
-    # Then set bind-address to loopback and restart to enforce the new binding
-    update_bind_address "127.0.0.1"
+    notify "VPN Monitor" "VPN connection lost — killing Transmission"
+    kill_transmission
+    set_bind_address "127.0.0.1"
   fi
 }
 
-# Handle VPN being up — called when VPN IP is detected
+# Handle VPN being up — set bind-address and launch if needed
 handle_vpn_up() {
   local vpn_ip="$1"
 
@@ -263,16 +193,16 @@ handle_vpn_up() {
     # VPN restored after being down
     VPN_IS_DOWN=false
     log "VPN RESTORED with IP ${vpn_ip}"
-    notify "VPN Monitor" "VPN restored (${vpn_ip}) - resuming torrents"
-
-    update_bind_address "${vpn_ip}"
-    resume_all_torrents
+    notify "VPN Monitor" "VPN restored (${vpn_ip}) — launching Transmission"
+    set_bind_address "${vpn_ip}"
+    launch_transmission
   elif [[ "${vpn_ip}" != "${LAST_VPN_IP}" ]] && [[ -n "${LAST_VPN_IP}" ]]; then
     # VPN IP changed without going down (server switch)
     log "VPN IP changed: ${LAST_VPN_IP} -> ${vpn_ip}"
     notify "VPN Monitor" "VPN IP changed to ${vpn_ip}"
-
-    update_bind_address "${vpn_ip}"
+    set_bind_address "${vpn_ip}"
+    kill_transmission
+    launch_transmission
   fi
 
   LAST_VPN_IP="${vpn_ip}"
@@ -287,7 +217,6 @@ main() {
   log "VPN monitor starting"
   log "=========================================="
   log "Server: ${SERVER_NAME}"
-  log "Transmission RPC: ${RPC_URL}"
   log "Poll interval: ${POLL_INTERVAL}s"
 
   # Initial state check
@@ -295,8 +224,12 @@ main() {
   if initial_ip=$(get_vpn_ip); then
     LAST_VPN_IP="${initial_ip}"
     log "Initial VPN IP: ${initial_ip}"
-    # Ensure Transmission is using the VPN IP from the start
-    update_bind_address "${initial_ip}"
+    # Ensure Transmission is using the VPN IP from the start.
+    # Always kill and relaunch — Transmission only reads BindAddressIPv4 at launch,
+    # so a running instance may be bound to a stale IP.
+    set_bind_address "${initial_ip}"
+    kill_transmission
+    launch_transmission
   else
     log "WARNING: No VPN connection detected at startup"
     handle_vpn_down
@@ -317,19 +250,6 @@ main() {
     local current_ip
     if current_ip=$(get_vpn_ip); then
       handle_vpn_up "${current_ip}"
-      # Retry resume if a previous attempt failed (e.g., Transmission RPC wasn't
-      # ready when VPN first restored). Without this, TORRENTS_PAUSED_BY_US stays
-      # true forever since handle_vpn_up won't re-enter the VPN_IS_DOWN branch.
-      if [[ "${TORRENTS_PAUSED_BY_US}" == "true" ]] && [[ "${VPN_IS_DOWN}" == "false" ]]; then
-        if [[ ${RESUME_RETRY_COUNT} -lt ${MAX_RESUME_RETRIES} ]]; then
-          resume_all_torrents
-        elif [[ ${RESUME_RETRY_COUNT} -eq ${MAX_RESUME_RETRIES} ]]; then
-          log "ERROR: Giving up on resume after ${MAX_RESUME_RETRIES} attempts — manual intervention required"
-          notify "VPN Monitor" "Failed to resume torrents after ${MAX_RESUME_RETRIES} attempts"
-          TORRENTS_PAUSED_BY_US=false
-          RESUME_RETRY_COUNT=$((RESUME_RETRY_COUNT + 1))
-        fi
-      fi
     else
       handle_vpn_down
     fi

@@ -60,10 +60,12 @@ Revert PIA split tunnel to "Only VPN" mode.
 
 The VPN monitor polls `utun0-utun15` every 5 seconds:
 
-- **VPN UP:** Updates Transmission's bind-address to VPN IP
+- **VPN UP:** Ensures Transmission is running with VPN IP as bind-address
 - **VPN IP CHANGE:** Updates bind-address, restarts Transmission
-- **VPN DROP:** Sets bind-address to `127.0.0.1`, pauses all torrents
-- **VPN RESTORE:** Updates bind-address, resumes torrents
+- **VPN DROP:** Kills Transmission (zero network activity guaranteed)
+- **VPN RESTORE:** Updates bind-address, relaunches Transmission
+
+Kill-and-restart is more reliable than RPC pause/resume: a dead process cannot leak traffic (no DHT, PEX, or tracker announces). Transmission persists torrent state in its resume files, so previously-active torrents resume on relaunch and paused ones stay paused.
 
 ### Files
 
@@ -87,10 +89,10 @@ launchctl list | grep vpn-monitor
 tail -f ~/.local/state/tilsit-vpn-monitor.log
 
 # Test: disconnect VPN briefly via PIA GUI
-# Monitor should: detect drop -> pause torrents -> set bind 127.0.0.1 -> notify
+# Monitor should: detect drop -> kill Transmission -> set bind 127.0.0.1 -> notify
 
 # Test: reconnect VPN
-# Monitor should: detect IP -> update bind-address -> resume torrents -> notify
+# Monitor should: detect IP -> set bind-address -> relaunch Transmission -> notify
 ```
 
 ### Stage 2 Rollback
