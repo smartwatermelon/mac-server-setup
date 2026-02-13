@@ -13,6 +13,7 @@ PIA's split-tunnel "Only VPN for Transmission" frequently forgets its configurat
 | Stage | Layer | Protection | Status |
 |-------|-------|------------|--------|
 | 1 | PIA configuration | Invert split-tunnel default | Deployed |
+| 1.5 | PIA config watchdog | Detect and restore split tunnel drift | Deployed |
 | 2 | VPN monitor script | Detect VPN drops, pause torrents, manage bind-address | Deployed |
 | 3 | PF verification | Confirm kernel filtering works | **FAILED** (macOS 26.3) |
 | 4 | PF kill-switch | Kernel-level traffic blocking per user | Not viable |
@@ -49,6 +50,67 @@ This is temporary — Stage 2 automates it.
 ### Rollback
 
 Revert PIA split tunnel to "Only VPN" mode.
+
+---
+
+## Stage 1.5: PIA Config Watchdog
+
+**Status:** Deployed (2026-02-13) via `pia-split-tunnel-monitor.sh` LaunchAgent
+
+### Problem
+
+PIA frequently "forgets" its split tunnel configuration. With the Stage 1 inversion architecture, forgetting means all traffic goes through VPN — including Plex, which is unusable through a multi-hop overseas VPN connection. The VPN monitor (Stage 2) handles VPN drops but not PIA config drift.
+
+### How It Works
+
+The PIA monitor polls `/Library/Preferences/com.privateinternetaccess.vpn/settings.json` every 60 seconds and compares monitored fields against a saved reference:
+
+- **Config matches:** No action (normal state)
+- **Drift detected:** Restores config via `piactl -u applysettings`, reconnects PIA, verifies fix
+- **Fix fails 3 times:** Backs off for 5 minutes, then retries
+
+Monitored fields: `splitTunnelEnabled`, `splitTunnelRules`, `killswitch`, `bypassSubnets`.
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `~operator/.local/bin/pia-split-tunnel-monitor.sh` | Monitor script (deployed from template) |
+| `~operator/.local/etc/pia-split-tunnel-reference.json` | Reference config (saved during deployment) |
+| `~/Library/LaunchAgents/com.tilsit.pia-monitor.plist` | LaunchAgent (RunAtLoad, KeepAlive) |
+| `~operator/.local/state/tilsit-pia-monitor.log` | Monitor log |
+
+### Deployment
+
+Deployed automatically by `transmission-setup.sh` from the template at `app-setup/templates/pia-split-tunnel-monitor.sh`. The deployment saves the current PIA split tunnel config as the reference.
+
+To update the reference after intentionally changing PIA settings:
+
+```bash
+~/.local/bin/pia-split-tunnel-monitor.sh --save-reference
+```
+
+### Verification
+
+```bash
+# Check monitor is running
+launchctl list | grep pia-monitor
+
+# Watch the log
+tail -f ~/.local/state/tilsit-pia-monitor.log
+
+# Check reference file
+cat ~/.local/etc/pia-split-tunnel-reference.json
+
+# Test: via PIA GUI, uncheck split tunnel or remove an app
+# Monitor should detect within 60s, restore config, reconnect, notify
+```
+
+### Stage 1.5 Rollback
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.tilsit.pia-monitor.plist
+```
 
 ---
 
@@ -279,9 +341,10 @@ cat ~/.local/state/tilsit-brew-upgrade.log
 
 ## Current Architecture (Post-Deployment)
 
-**Active protection: Stages 1+2.** Stage 3 failed, so Stage 4 is not available.
+**Active protection: Stages 1+1.5+2.** Stage 3 failed, so Stage 4 is not available.
 
 - **Stage 1** inverts the failure mode: if PIA forgets its config, Plex gets slow but Transmission stays on VPN
+- **Stage 1.5** enforces Stage 1: if PIA forgets its split tunnel config, the watchdog detects it within 60 seconds and auto-restores from a saved reference
 - **Stage 2** automates recovery: VPN drops are detected within 5 seconds, torrents are paused, and bind-address is locked to loopback until VPN returns
 - **Stage 5** keeps the system updated without manual intervention
 
@@ -293,6 +356,7 @@ To re-evaluate Stage 4: re-run `pf-test-user.sh` after a macOS update. If PF `us
 
 | Log | Path |
 |-----|------|
+| PIA monitor | `~operator/.local/state/tilsit-pia-monitor.log` |
 | VPN monitor | `~operator/.local/state/tilsit-vpn-monitor.log` |
 | Brew upgrade | `~admin/.local/state/tilsit-brew-upgrade.log` |
 | Software update | `/var/log/tilsit-softwareupdate.log` |

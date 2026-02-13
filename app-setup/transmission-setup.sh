@@ -456,6 +456,83 @@ else
   log "WARNING: VPN monitor template not found at ${VPN_MONITOR_TEMPLATE} — skipping VPN monitor deployment"
 fi
 
+# Deploy PIA split tunnel monitor
+section "Deploying PIA Split Tunnel Monitor"
+
+PIA_MONITOR_TEMPLATE="${SCRIPT_DIR}/templates/pia-split-tunnel-monitor.sh"
+PIA_MONITOR_DEST="${OPERATOR_HOME}/.local/bin/pia-split-tunnel-monitor.sh"
+PIA_SETTINGS="/Library/Preferences/com.privateinternetaccess.vpn/settings.json"
+
+PIA_MONITOR_DEPLOYED=false
+
+if [[ -f "${PIA_MONITOR_TEMPLATE}" ]]; then
+  log "Deploying pia-split-tunnel-monitor.sh from template..."
+
+  # Deploy with variable substitution
+  sudo cp "${PIA_MONITOR_TEMPLATE}" "${PIA_MONITOR_DEST}"
+  sudo sed -i '' "s|__SERVER_NAME__|${HOSTNAME}|g" "${PIA_MONITOR_DEST}"
+  sudo chmod 755 "${PIA_MONITOR_DEST}"
+  sudo chown "${OPERATOR_USERNAME}:staff" "${PIA_MONITOR_DEST}"
+
+  log "PIA monitor script deployed to ${PIA_MONITOR_DEST}"
+
+  # Save current PIA config as reference (if PIA is installed)
+  # Non-fatal: if this fails, the monitor can still be deployed and the reference saved manually
+  if [[ -f "${PIA_SETTINGS}" ]]; then
+    log "Saving current PIA split tunnel config as reference..."
+    if sudo -iu "${OPERATOR_USERNAME}" bash "${PIA_MONITOR_DEST}" --save-reference; then
+      log "✅ PIA split tunnel reference saved"
+    else
+      log "WARNING: Failed to save PIA reference — run '${PIA_MONITOR_DEST} --save-reference' manually"
+    fi
+  else
+    log "WARNING: PIA settings not found at ${PIA_SETTINGS} — reference not saved"
+    log "Run '${PIA_MONITOR_DEST} --save-reference' after PIA is configured"
+  fi
+
+  # Create PIA monitor LaunchAgent (only if script was deployed)
+  PIA_LAUNCHAGENT_PLIST="${LAUNCHAGENT_DIR}/com.${HOSTNAME_LOWER}.pia-monitor.plist"
+
+  log "Creating PIA monitor LaunchAgent: ${PIA_LAUNCHAGENT_PLIST}"
+
+  sudo -iu "${OPERATOR_USERNAME}" tee "${PIA_LAUNCHAGENT_PLIST}" >/dev/null <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.${HOSTNAME_LOWER}.pia-monitor</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${OPERATOR_HOME}/.local/bin/pia-split-tunnel-monitor.sh</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-pia-monitor-stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-pia-monitor-stderr.log</string>
+</dict>
+</plist>
+EOF
+
+  # Set proper permissions on PIA monitor LaunchAgent
+  sudo chown "${OPERATOR_USERNAME}:staff" "${PIA_LAUNCHAGENT_PLIST}"
+  sudo chmod 644 "${PIA_LAUNCHAGENT_PLIST}"
+
+  if sudo plutil -lint "${PIA_LAUNCHAGENT_PLIST}" >/dev/null 2>&1; then
+    PIA_MONITOR_DEPLOYED=true
+    log "PIA monitor LaunchAgent created and validated"
+  else
+    log "ERROR: Invalid plist syntax in ${PIA_LAUNCHAGENT_PLIST} — launchd will reject this agent"
+  fi
+else
+  log "WARNING: PIA monitor template not found at ${PIA_MONITOR_TEMPLATE} — skipping PIA monitor deployment"
+fi
+
 # Setup complete
 section "Setup Complete"
 log ""
@@ -472,6 +549,11 @@ if [[ "${VPN_MONITOR_DEPLOYED}" == "true" ]]; then
   log "  • VPN Monitor: Enabled (polls every 5s, auto-manages bind-address)"
 else
   log "  • VPN Monitor: Not deployed (template not found)"
+fi
+if [[ "${PIA_MONITOR_DEPLOYED}" == "true" ]]; then
+  log "  • PIA Monitor: Enabled (polls every 60s, auto-restores split tunnel config)"
+else
+  log "  • PIA Monitor: Not deployed (template not found)"
 fi
 log ""
 log "Access the web interface at: http://${HOSTNAME_LOWER}.local:19091"
