@@ -784,14 +784,40 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
     fi
   done
 
-  # Copy template scripts to app-setup/templates
-  copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/templates/mount-nas-media.sh" "app-setup/templates/mount-nas-media.sh" "REQUIRED" || echo "Warning: mount-nas-media.sh not found in templates directory"
-  copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/templates/start-plex.sh" "app-setup/templates/start-plex.sh" "OPTIONAL" || echo "Warning: start-plex.sh not found in templates directory"
-  copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/templates/start-rclone.sh" "app-setup/templates/start-rclone.sh" "REQUIRED" || echo "Warning: start-rclone.sh not found in templates directory"
+  # Generate transmission-done.sh from template if it doesn't exist
   if [[ ! -f "${SCRIPT_SOURCE_DIR}/app-setup/templates/transmission-done.sh" ]]; then
-    cp "${SCRIPT_SOURCE_DIR}/app-setup/templates/transmission-done-template.sh" "${SCRIPT_SOURCE_DIR}/app-setup/templates/transmission-done.sh"
+    if [[ -f "${SCRIPT_SOURCE_DIR}/app-setup/templates/transmission-done-template.sh" ]]; then
+      cp "${SCRIPT_SOURCE_DIR}/app-setup/templates/transmission-done-template.sh" \
+        "${SCRIPT_SOURCE_DIR}/app-setup/templates/transmission-done.sh"
+    else
+      echo "Warning: transmission-done-template.sh not found, skipping generation"
+    fi
   fi
-  copy_with_manifest "${SCRIPT_SOURCE_DIR}/app-setup/templates/transmission-done.sh" "app-setup/templates/transmission-done.sh" "OPTIONAL" || echo "Warning: transmission-done.sh not found in templates directory"
+
+  # Copy all template scripts to app-setup/templates
+  # Templates required for core functionality are marked REQUIRED; others are OPTIONAL
+  echo "Copying template scripts..."
+  for template in "${SCRIPT_SOURCE_DIR}/app-setup/templates/"*.sh; do
+    if [[ -f "${template}" ]]; then
+      template_name="$(basename "${template}")"
+      # Skip the source template (not a deployable script)
+      if [[ "${template_name}" == "transmission-done-template.sh" ]]; then
+        continue
+      fi
+      # Core infrastructure templates are REQUIRED; app-specific monitors are OPTIONAL
+      severity="OPTIONAL"
+      case "${template_name}" in
+        mount-nas-media.sh | start-rclone.sh) severity="REQUIRED" ;;
+        *) ;;
+      esac
+      if copy_with_manifest "${template}" "app-setup/templates/${template_name}" "${severity}"; then
+        chmod +x "${OUTPUT_PATH}/app-setup/templates/${template_name}"
+        echo "  ✅ ${template_name}"
+      else
+        echo "  ❌ Failed to copy ${template_name}"
+      fi
+    fi
+  done
 
   # Copy app setup scripts to app-setup directory
   echo "Copying app setup scripts..."
