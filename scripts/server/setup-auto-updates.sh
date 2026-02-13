@@ -23,6 +23,12 @@
 
 set -euo pipefail
 
+# Prevent running as root — whoami would return "root", misconfiguring LaunchDaemons
+if [[ ${EUID} -eq 0 ]]; then
+  echo "ERROR: Do not run this script as root. Run as admin user with sudo prompts."
+  exit 1
+fi
+
 # Parse arguments
 FORCE=false
 for arg in "$@"; do
