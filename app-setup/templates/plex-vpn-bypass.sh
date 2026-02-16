@@ -199,7 +199,9 @@ ensure_pf_rules() {
 # Plex Integration
 # ---------------------------------------------------------------------------
 
-# Get Plex authentication token from the console user's preferences
+# Get Plex authentication token from the console user's config files.
+# Checks transmission-done config first (explicit token), then falls back
+# to Plex's own Preferences.xml.
 get_plex_token() {
   local console_user
   console_user=$(stat -f%Su /dev/console 2>/dev/null || true)
@@ -208,16 +210,25 @@ get_plex_token() {
     return 1
   fi
 
-  local plex_prefs="/Users/${console_user}/Library/Application Support/Plex Media Server/Preferences.xml"
-  if [[ ! -f "${plex_prefs}" ]]; then
-    log "WARNING: Plex preferences not found at ${plex_prefs}"
-    return 1
+  local token=""
+  local user_home="/Users/${console_user}"
+
+  # Source 1: transmission-done config (media pipeline setup stores token here)
+  local td_config="${user_home}/.config/transmission-done/config.yml"
+  if [[ -f "${td_config}" ]]; then
+    token=$(grep -A5 '^plex:' "${td_config}" | awk '/token:/ {print $2; exit}')
   fi
 
-  local token
-  token=$(sed -n 's/.*PlexOnlineToken="\([^"]*\)".*/\1/p' "${plex_prefs}")
+  # Source 2: Plex Preferences.xml (standard Plex location)
   if [[ -z "${token}" ]]; then
-    log "WARNING: PlexOnlineToken not found in Plex preferences"
+    local plex_prefs="${user_home}/Library/Application Support/Plex Media Server/Preferences.xml"
+    if [[ -f "${plex_prefs}" ]]; then
+      token=$(sed -n 's/.*PlexOnlineToken="\([^"]*\)".*/\1/p' "${plex_prefs}")
+    fi
+  fi
+
+  if [[ -z "${token}" ]]; then
+    log "WARNING: Plex token not found in ${td_config} or Preferences.xml"
     return 1
   fi
 
