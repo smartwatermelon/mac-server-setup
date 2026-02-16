@@ -16,10 +16,11 @@ PIA's split-tunnel "Only VPN for Transmission" frequently forgets its configurat
 | 1.5 | PIA config watchdog | Detect and restore split tunnel drift | Deployed |
 | 2 | VPN monitor script | Detect VPN drops, pause torrents, manage bind-address | Deployed |
 | 3 | PF verification | Confirm kernel filtering works | **FAILED** (macOS 26.3) |
+| 3b | PF route-to bypass | Plex VPN bypass via PF + public IP monitor | Deployed |
 | 4 | PF kill-switch | Kernel-level traffic blocking per user | Not viable |
 | 5 | Automated updates | Homebrew, MAS, macOS updates on schedule | Deployed |
 
-**Production architecture is Stages 1+2.** Stage 3 confirmed that PF `user`-based filtering does not enforce on macOS 26.3, so Stage 4 (kernel-level kill-switch) is not viable. The scripts and PF rules remain in the repo for future macOS versions.
+**Production architecture is Stages 1+1.5+2+3b.** Stage 3 confirmed that PF `user`-based filtering does not enforce on macOS 26.3, so Stage 4 (kernel-level kill-switch) is not viable. Stage 3b uses a different PF mechanism (`route-to`) that works despite Stage 3's failure.
 
 ## Stage 1: PIA Split-Tunnel Inversion
 
@@ -105,6 +106,25 @@ cat ~/.local/etc/pia-split-tunnel-reference.json
 # Test: via PIA GUI, uncheck split tunnel or remove an app
 # Monitor should detect within 60s, restore config, reconnect, notify
 ```
+
+### Changing PIA Settings
+
+When intentionally changing PIA settings (adding or removing bypass apps, changing subnets), the monitor will detect the change as drift and revert it within 60 seconds. Use the pause-file workflow to make changes safely:
+
+```bash
+# 1. Pause the monitor (it keeps running, just stops reverting)
+touch ~/.local/etc/pia-monitor-paused
+
+# 2. Make changes in PIA GUI (add/remove bypass apps, change settings)
+
+# 3. Save new reference and unpause in one step
+~/.local/bin/pia-split-tunnel-monitor.sh --save-reference
+# --save-reference also removes the pause file automatically
+```
+
+While paused, the monitor still logs drift detection but does not auto-restore. This gives you time to make changes and verify them before saving the new reference.
+
+**Warning:** If you unpause without running `--save-reference`, the monitor resumes with the old reference and will revert your changes on the next cycle.
 
 ### Stage 1.5 Rollback
 
@@ -192,6 +212,85 @@ The script:
 **VERDICT: FAIL.** PF loaded the rule syntactically (including `user = 299`) but did not enforce traffic filtering. The `_pftest` user was able to reach the internet despite the block rule. Stage 4 is not viable on this macOS version.
 
 The `user` keyword is documented in pf.conf(5) and the rule parses correctly, but the kernel does not enforce it. This may be a regression or intentional change in macOS 26.x.
+
+---
+
+## Stage 3b: Plex VPN Bypass (PF route-to)
+
+**Status:** Deployed (2026-02-16) via `plex-vpn-bypass.sh` LaunchDaemon
+
+### Problem
+
+PIA's macOS split tunnel transparent proxy is fundamentally broken. The proxy intercepts bypass-app traffic and binds outbound sockets to the physical IP, but data forwarding fails with `ioOnClosedChannel` and `Empty buffer` errors for all bypass apps. Every proxied session closes with zero bytes transferred. This affects both OpenVPN and WireGuard protocols.
+
+See `docs/pia-split-tunnel-bug.md` for full bug documentation with proxy log excerpts.
+
+### Solution
+
+PF `route-to` rules loaded into a custom anchor force traffic from the physical IP through the physical interface at the kernel level, bypassing PIA's broken userspace proxy entirely. A companion daemon monitors the public IP and updates Plex's `customConnections` setting when it changes.
+
+```text
+table <rfc1918> const { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 }
+pass in quick on en0 proto tcp to port 32400
+pass out quick route-to (en0 10.0.15.1) from 10.0.15.15 to ! <rfc1918>
+```
+
+**How it works:**
+
+- `pass in` — allows external clients to reach Plex on port 32400 via the physical interface
+- `pass out route-to` — forces outbound traffic from the physical IP through the physical gateway instead of the VPN tunnel, so Plex can reach plex.tv for authentication and serve remote clients
+
+The rules are loaded into anchor `com.apple/100.<hostname>.vpn-bypass`. The script auto-detects the physical interface, IP, and gateway at runtime (not hardcoded).
+
+### Why This Works Despite Stage 3 Failure
+
+Stage 3 tested PF's `user` keyword for per-user filtering (blocking traffic by UID). That failed because macOS 26.3 does not enforce user-based PF rules. Stage 3b uses a completely different PF mechanism: `route-to` for policy-based routing. This is a routing directive, not a filter, and it works on macOS 26.3.
+
+### Stage 3b Files
+
+| File | Purpose |
+|------|---------|
+| `/usr/local/bin/plex-vpn-bypass.sh` | Daemon script (deployed from template) |
+| `/Library/LaunchDaemons/com.<hostname>.plex-vpn-bypass.plist` | LaunchDaemon (RunAtLoad, KeepAlive, runs as root) |
+| `/var/log/<hostname>-plex-vpn-bypass.log` | Daemon log |
+
+### Stage 3b Behavior
+
+The daemon polls every 60 seconds:
+
+1. **Ensure PF rules** — check anchor, reload if missing or network config changed
+2. **Check public IP** — `curl --interface <physical_ip> checkip.amazonaws.com`
+3. **If IP changed** — update Plex `customConnections` via local API, log, notify
+
+### Stage 3b Deployment
+
+Deployed by `transmission-setup.sh` from the template at `app-setup/templates/plex-vpn-bypass.sh`. The deployment creates a root-level LaunchDaemon (PF operations require root).
+
+### Stage 3b Verification
+
+```bash
+# Check daemon is running
+sudo launchctl list | grep plex-vpn-bypass
+
+# Verify PF rules are loaded
+sudo pfctl -a 'com.apple/100.tilsit.vpn-bypass' -sr
+
+# Verify bypass works (should return home IP, not VPN IP)
+curl --interface 10.0.15.15 http://checkip.amazonaws.com
+
+# Watch the log
+tail -f /var/log/tilsit-plex-vpn-bypass.log
+
+# Test: change IP (disconnect/reconnect router)
+# Daemon should detect within 60s and update Plex customConnections
+```
+
+### Stage 3b Rollback
+
+```bash
+sudo launchctl unload /Library/LaunchDaemons/com.tilsit.plex-vpn-bypass.plist
+sudo pfctl -a 'com.apple/100.tilsit.vpn-bypass' -F rules
+```
 
 ---
 
@@ -341,11 +440,12 @@ cat ~/.local/state/tilsit-brew-upgrade.log
 
 ## Current Architecture (Post-Deployment)
 
-**Active protection: Stages 1+1.5+2.** Stage 3 failed, so Stage 4 is not available.
+**Active protection: Stages 1+1.5+2+3b.** Stage 3 failed (PF `user` keyword), so Stage 4 is not available. Stage 3b uses a different PF mechanism (`route-to`) that works despite Stage 3's failure.
 
 - **Stage 1** inverts the failure mode: if PIA forgets its config, Plex gets slow but Transmission stays on VPN
 - **Stage 1.5** enforces Stage 1: if PIA forgets its split tunnel config, the watchdog detects it within 60 seconds and auto-restores from a saved reference
 - **Stage 2** automates recovery: VPN drops are detected within 5 seconds, torrents are paused, and bind-address is locked to loopback until VPN returns
+- **Stage 3b** bypasses PIA's broken split tunnel proxy: PF `route-to` rules force Plex traffic through the physical interface, and the daemon monitors the public IP to keep Plex's `customConnections` current
 - **Stage 5** keeps the system updated without manual intervention
 
 To re-evaluate Stage 4: re-run `pf-test-user.sh` after a macOS update. If PF `user` enforcement is restored, the kill-switch scripts are ready to deploy.
@@ -358,5 +458,6 @@ To re-evaluate Stage 4: re-run `pf-test-user.sh` after a macOS update. If PF `us
 |-----|------|
 | PIA monitor | `~operator/.local/state/tilsit-pia-monitor.log` |
 | VPN monitor | `~operator/.local/state/tilsit-vpn-monitor.log` |
+| Plex VPN bypass | `/var/log/tilsit-plex-vpn-bypass.log` |
 | Brew upgrade | `~admin/.local/state/tilsit-brew-upgrade.log` |
 | Software update | `/var/log/tilsit-softwareupdate.log` |

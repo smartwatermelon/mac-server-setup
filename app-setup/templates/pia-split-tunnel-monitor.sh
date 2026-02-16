@@ -42,6 +42,7 @@ POLL_INTERVAL=60
 PIA_SETTINGS="/Library/Preferences/com.privateinternetaccess.vpn/settings.json"
 REFERENCE_DIR="${HOME}/.local/etc"
 REFERENCE_FILE="${REFERENCE_DIR}/pia-split-tunnel-reference.json"
+PAUSE_FILE="${REFERENCE_DIR}/pia-monitor-paused"
 PIACTL="/usr/local/bin/piactl"
 
 # Logging configuration
@@ -172,6 +173,13 @@ save_reference() {
   while IFS= read -r line; do
     log "  ${line}"
   done <<<"${extracted}"
+
+  # Remove pause file if present — saving reference means we're done changing
+  if [[ -f "${PAUSE_FILE}" ]]; then
+    rm -f "${PAUSE_FILE}"
+    log "Pause file removed — monitoring resumed with new reference"
+  fi
+
   return 0
 }
 
@@ -262,6 +270,17 @@ check_and_fix() {
     return 1
   fi
 
+  # Pause-file check: when paused, detect drift but skip auto-restore.
+  # This allows intentional PIA config changes without the monitor reverting them.
+  # Use --save-reference to save new config and unpause in one step.
+  if [[ -f "${PAUSE_FILE}" ]]; then
+    if ! configs_match "${current}" "${reference}"; then
+      log "PAUSED — drift detected but auto-restore disabled (${PAUSE_FILE} exists)"
+      log "  Run with --save-reference to save current config and resume monitoring"
+    fi
+    return 0
+  fi
+
   if configs_match "${current}" "${reference}"; then
     # Config matches — reset failure counter
     if [[ "${CONSECUTIVE_FAILURES}" -gt 0 ]]; then
@@ -338,6 +357,11 @@ main() {
   while IFS= read -r line; do
     log "  ${line}"
   done <"${REFERENCE_FILE}"
+
+  # Log pause state
+  if [[ -f "${PAUSE_FILE}" ]]; then
+    log "WARNING: Pause file present — auto-restore disabled until --save-reference or manual removal"
+  fi
 
   # Initial check (non-fatal — errors are logged, not terminal)
   check_and_fix || true
