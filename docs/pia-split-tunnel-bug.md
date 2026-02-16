@@ -94,7 +94,7 @@ The failure is not app-specific. Every bypass app exhibits the same behavior:
 44.210.41.33:443    (plex.tv)     — ioOnClosedChannel, 0 bytes
 34.238.225.186:443  (plex.tv)     — ioOnClosedChannel, 0 bytes
 172.64.151.205:443  (plex.tv)     — ioOnClosedChannel, 0 bytes
-174.31.0.47:32400   (self-check)  — connectTimeout, 0 bytes
+<HOME_IP>:32400   (self-check)  — connectTimeout, 0 bytes
 ```
 
 ## Root Cause Hypothesis
@@ -129,10 +129,10 @@ Verification:
 
 ```bash
 curl --interface 10.0.15.15 http://checkip.amazonaws.com
-# Returns: 174.31.0.47 (home IP, NOT VPN IP 91.90.126.18)
+# Returns: <HOME_IP> (home IP, NOT VPN IP <VPN_IP>)
 ```
 
-Combined with Plex `customConnections = https://174.31.0.47:32400`, this restores full Plex remote access.
+Combined with Plex `customConnections = https://<HOME_IP>:32400`, this restores full Plex remote access.
 
 ## Relevant Source Files
 
@@ -157,9 +157,9 @@ From the `pia-foss/mac-split-tunnel` repository:
 | Physical IP | 10.0.15.15 |
 | VPN tunnel interface | utun4 |
 | VPN tunnel IP | 10.16.11.143 |
-| VPN exit IP | 91.90.126.18 |
+| VPN exit IP | <VPN_IP> |
 | Default gateway | 10.0.15.1 |
-| Home public IP | 174.31.0.47 |
+| Home public IP | <HOME_IP> |
 | VPN region | Panama |
 
 ---
