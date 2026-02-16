@@ -1,10 +1,10 @@
 # Mac Mini Server Setup
 
-Automated setup scripts for configuring an Apple Silicon Mac Mini as a home server with native macOS applications.
+Automated setup for an Apple Silicon Mac Mini as a home server. Plex, Transmission over VPN, RSS show tracking, Dropbox sync, the whole deal.
 
-## TL;DR - Quick Start
+## TL;DR
 
-**What this does**: Turns a fresh Mac Mini into a configured home server with Plex, BitTorrent, Dropbox sync, and remote access.
+**What this does**: Takes a fresh Mac Mini and turns it into a media server with Plex, VPN-protected torrents, automatic show downloads, backups, and remote access.
 
 **Prerequisites** (5 minutes):
 
@@ -15,214 +15,230 @@ Automated setup scripts for configuring an Apple Silicon Mac Mini as a home serv
 
 **Setup** (15-30 minutes):
 
-1. **On dev Mac**: `./prep-airdrop.sh` (creates deployment package)
+1. **On dev Mac**: `./prep-airdrop.sh` (builds deployment package)
 2. **AirDrop** the generated folder to your Mac Mini
 3. **On Mac Mini desktop** (not SSH): `cd ~/Downloads/MACMINI-setup && ./first-boot.sh`
-4. **Reboot** and login as operator for automatic final setup
+4. **Reboot** and log in as operator for automatic final setup
 
-**Result**: Fully configured server accessible at `your-server-name.local` with web interfaces for all services.
+**Result**: Server at `your-server-name.local`, everything running.
 
-📖 **Need details?** See [Prerequisites](docs/prerequisites.md) and [Environment Variables](docs/environment-variables.md) for complete guidance.
+More detail in [Prerequisites](docs/prerequisites.md) and [Environment Variables](docs/environment-variables.md).
 
-## Project Overview
+## What's running
 
-This project provides a complete automation framework for setting up an Apple Silicon Mac Mini server that functions as:
+After setup, these all start automatically on login (LaunchAgents):
 
-- **Native application host** (Plex Media Server, web services, system utilities)
-- **Central home server** with minimal maintenance requirements
-- **Stable, secure, and recoverable system**
+| Service | What it does |
+|---------|-------------|
+| Plex Media Server | Streams media to any device |
+| Transmission | BitTorrent client, bound to VPN |
+| Catch | Polls ShowRSS feed, grabs new episodes |
+| FileBot | Renames and sorts downloads into the Plex library |
+| rclone | Bidirectional Dropbox sync for torrent file delivery |
+| VPN Monitor | Kills Transmission within 5s if VPN drops, restarts when it's back |
+| PIA Monitor | Detects PIA split tunnel config drift, restores settings |
+| Plex VPN Bypass | PF rules so Plex stays reachable through the VPN |
+| NAS Mount | SMB mount to NAS on login |
+| Backblaze | Off-site backup |
+| Caddy | Local web server |
 
-## Recent Improvements
+### Media pipeline
 
-### Transmission Setup Complete (2025-09-08)
+How a new episode gets from RSS to your TV:
 
-- **Complete BitTorrent Automation**: New `transmission-setup.sh` provides comprehensive GUI automation
-  - **~95% automation coverage** using only verified plist keys from actual configuration
-  - **Magnet link handling** automated via Launch Services integration
-  - **Media pipeline integration** with download paths and completion scripts
-  - **RPC web interface** with authentication and remote access
-  - **LaunchAgent auto-start** for seamless operator experience
-- **Quality Standards Maintained**: Zero shellcheck compliance throughout development
-- **Documentation Updates**: Reduced manual setup tasks from 3 to 2 items
-- **Research Documentation**: Catalogued remaining 10% of GUI settings for future development
+```text
+ShowRSS feed
+  -> Catch (polls the RSS feed, downloads .torrent files)
+  -> Dropbox (rclone syncs torrent files to the server)
+  -> Transmission (imports from watch folder, downloads over VPN)
+  -> transmission-done.sh (FileBot renames + moves to library)
+  -> Plex (detects new media, serves to your devices)
+```
 
-### Comprehensive Error and Warning Collection (2025-08-26)
+### VPN protection
 
-- **Real-time + End Summary**: All errors and warnings display immediately during setup, plus consolidated review at completion
-  - Preserves existing immediate feedback during fast-scrolling operations
-  - Shows organized summary when setup completes and user attention returns
-  - Context tracking shows which setup section each issue occurred in
-- **Consistent Across All Scripts**: Unified error handling across the entire setup process
-  - **prep-airdrop.sh**: Missing files, SSH keys, WiFi detection, credential issues
-  - **first-boot.sh**: System setup, package installation, service configuration
-  - **plex-setup.sh**: Plex installation, SMB mounting, migration processes
-  - **rclone-setup.sh**: Dropbox sync configuration and testing
-  - **transmission-setup.sh**: BitTorrent client configuration and GUI automation
-- **Better Troubleshooting**: Clear distinction between expected warnings vs critical errors
-  - Expected warnings (optional components): SSH private keys, WiFi detection
-  - Critical errors (setup blockers): Missing credentials, system failures
-  - Section context helps pinpoint exactly where issues occurred
+Transmission never touches your real IP. Multiple layers back each other up:
 
-### Per-User SMB Mounting with Enhanced Reliability (2025-08-18)
+| Layer | What it does |
+|-------|-------------|
+| PIA split-tunnel inversion | All traffic goes through VPN; only Plex/Backblaze/Safari bypass |
+| PIA config watchdog | PIA has a habit of forgetting its split tunnel config. This catches that. |
+| VPN monitor | Polls every 5s, kills Transmission if VPN drops, restarts when it's back |
+| Plex VPN bypass | PF `route-to` rules so Plex stays reachable on your public IP |
+| Auto-updates | Homebrew daily at 04:30, MAS via macOS, softwareupdate download-only |
 
-- **Per-user LaunchAgent approach**: Replaced system-level LaunchDaemon with user-specific mounting
-  - Each user gets private mount in `~/.local/mnt/MOUNT_POINT`
-  - LaunchAgents activate on user login, no root permissions needed
-  - Same SMB credentials work for both admin and operator users
-  - Eliminates SIP restrictions and permission issues
-- **Enhanced Security and UX**: Comprehensive improvements for production use
-  - Password masking in logs prevents credential exposure
-  - Automatic firewall configuration for Plex Media Server
-  - Network volume permissions pre-granted via tccutil
-  - Application quarantine removal for seamless operation
-- **Restored Migration Features**: Full SSH-based remote migration capability
-  - Automatic Plex server discovery on network
-  - Remote configuration transfer with rsync/scp fallback
-  - Migration size estimation and progress reporting
-- **Production-Ready Reliability**: Robust error handling and fallback mechanisms
+More in [VPN Architecture](docs/vpn-transmission.md).
 
-### Previous Improvements
+## How it works
 
-- **Keychain-Based Credential Management**: Secure credential storage and transfer via macOS Keychain Services (see [Credential Management](docs/keychain-credential-management.md))
-- **1Password Integration**: Automated credential retrieval from 1Password during setup preparation
-- **Intuitive Confirmations**: Sensible defaults for all prompts
+Three phases, two machines.
 
-## Key Principles
+**Phase 1** (`prep-airdrop.sh`, on your dev Mac): Pulls credentials from 1Password, creates a hardware-locked keychain, copies SSH keys and configs, runs the rclone OAuth dance, packages it all into a folder.
 
-- **Separation of Concerns**: Base OS setup separate from native application deployment
-- **Automation First**: Minimal human intervention throughout lifecycle
-- **Idempotency**: Scripts can be run multiple times safely
-- **Security**: Hardening and isolation best practices
-- **Documentation**: Clear runbooks for all procedures
+**Phase 2** (`first-boot.sh`, on the Mac Mini): Validates the hardware fingerprint, imports the keychain, creates the operator user account with auto-login, runs 19 setup modules (SSH, Homebrew, FileVault, Time Machine, etc). Has to be run from the local desktop, not SSH.
 
-## Architecture
+**Phase 3** (`run-app-setup.sh`, on the Mac Mini): Discovers and runs all `*-setup.sh` scripts in dependency order: rclone, transmission, filebot, catch, plex. Each one installs the app, sets preferences, creates a LaunchAgent.
 
-The setup process consists of two main phases:
+### Configuration flow
 
-1. **Base System Setup** (`prep-airdrop.sh` + `first-boot.sh`)
+One config file runs the show:
 
-   - System configuration and hardening
-   - User account management
-   - SSH access and security
-   - Package installation (Homebrew)
+```text
+config/config.conf
+  ├── prep-airdrop.sh reads it     (Phase 1)
+  ├── first-boot.sh sources it     (Phase 2)
+  └── run-app-setup.sh sources it  (Phase 3)
+```
 
-2. **Application Setup** (separate scripts in `app-setup/`)
+Key variables: `SERVER_NAME`, `OPERATOR_USERNAME`, `NAS_HOSTNAME`, `NAS_SHARE_NAME`, `ONEPASSWORD_VAULT`.
 
-   - Native macOS application installation and configuration
-   - Shared configuration directory setup
-   - LaunchAgent auto-start configuration
+### Credentials
 
-## Quick Start
+No plaintext secrets in the deployment package:
 
-### Prerequisites
+```text
+1Password (dev Mac)
+  -> prep-airdrop.sh retrieves via `op` CLI
+  -> Stored in external keychain (password = hardware UUID)
+  -> AirDropped as .keychain-db file
 
-- Apple Silicon Mac Mini with fresh macOS installation
+first-boot.sh (Mac Mini)
+  -> Imports external keychain
+  -> Extracts credentials to system/login keychain
+  -> Scripts read via `security find-generic-password`
+```
+
+1Password is dev-machine only. The server never needs it.
+
+## Design choices
+
+No Docker. Native macOS apps get hardware acceleration and don't fight the OS on mounts and permissions. All configuration happens under the admin account; the operator logs in to a working system and doesn't need to touch anything.
+
+Every script is idempotent (safe to re-run). Errors display immediately during setup and again in a summary at the end, so nothing gets buried in scroll.
+
+## Prerequisites
+
+- Apple Silicon Mac Mini with a fresh macOS install
 - Development Mac with:
-  - **1Password CLI installed and authenticated** (`brew install 1password-cli && op signin`)
-  - **SSH keys generated** (`~/.ssh/id_ed25519` and `~/.ssh/id_ed25519.pub`)
-  - **Required 1Password vault items**: operator, TimeMachine, Plex NAS, Apple ID, OpenSubtitles
-  - **Core tools**: `jq`, `openssl` (pre-installed on macOS)
-  - **Valid configuration**: Copy `config/config.conf.template` to `config/config.conf` and customize
+  - 1Password CLI (`brew install 1password-cli && op signin`)
+  - SSH keys (`~/.ssh/id_ed25519` and `~/.ssh/id_ed25519.pub`)
+  - 1Password vault items: operator, TimeMachine, Plex NAS, Apple ID, OpenSubtitles
+  - `jq` and `openssl` (both pre-installed on macOS)
+  - `config/config.conf` created from the template
 
-**📖 See [Prerequisites Guide](docs/prerequisites.md) for complete setup requirements and validation commands**
+See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
 
-> **Compatibility Note**: This automation is designed and tested for **macOS 15.x on Apple Silicon**. It may work on earlier macOS versions or Intel-based Macs, but compatibility is not guaranteed and has not been tested.
+> Tested on macOS 15.x, Apple Silicon only. Might work on Intel or older macOS but I haven't tried.
 
-### Setup Process
+## Setup
 
-1. **Prepare deployment package** on your development Mac:
+1. **Build the deployment package** on your dev Mac:
 
    ```bash
    ./prep-airdrop.sh
    ```
 
-   This comprehensive script:
-   - Retrieves credentials from 1Password and transfers them securely via external keychain
-   - Creates hardware fingerprint validation to prevent wrong-machine execution
-   - Configures WiFi credentials (offers Migration Assistant or script-based options)
-   - Generates deployment manifest for package validation
-   - Processes all configuration files with environment-specific substitutions
+   Pulls credentials from 1Password, builds a hardware-locked keychain, processes config templates, generates a deployment manifest.
 
-2. **Transfer to Mac Mini** via AirDrop (entire setup folder)
+2. **AirDrop the folder** to your Mac Mini.
 
-   > You can use [airdrop-cli](https://github.com/vldmrkl/airdrop-cli) (requires Xcode) to AirDrop files from the command line!
-   > Install: (`brew install --HEAD vldmrkl/formulae/airdrop-cli`)
+   > [airdrop-cli](https://github.com/vldmrkl/airdrop-cli) lets you do this from the terminal:
+   > `brew install --HEAD vldmrkl/formulae/airdrop-cli`
 
-3. **Run system provisioning** on Mac Mini (**requires local desktop session**):
+3. **Run first-boot** on the Mac Mini (local desktop session, not SSH):
 
    ```bash
-   cd ~/Downloads/MACMINI-setup # default name
+   cd ~/Downloads/MACMINI-setup  # default name
    ./first-boot.sh
    ```
 
-   > **Critical**: Must be run from the Mac Mini's local desktop session (Terminal.app) - CANNOT run via SSH. The script performs comprehensive system provisioning including user account creation, credential import, FileVault management, and configuration of 15+ system modules.
+   > This needs the local desktop for System Settings dialogs and FileVault management. It will not work over SSH.
 
-   This script performs:
-   - Hardware fingerprint validation and FileVault compatibility checks
-   - Operator user account creation with automatic login configuration
-   - SSH key deployment and credential import from external keychain
-   - Multi-phase system configuration via specialized modules
-   - Comprehensive error collection and end-of-run validation
+4. **Reboot and log in as operator.** The rest happens automatically via LaunchAgent.
 
-4. **Complete operator setup** after reboot (see [Operator Setup](docs/operator.md))
-
-## Documentation
-
-- **[Prerequisites Guide](docs/prerequisites.md)** - Complete setup requirements and validation
-- **[Environment Variables](docs/environment-variables.md)** - Comprehensive customization reference
-- [AirDrop Prep Instructions](docs/setup/prep-airdrop.md) - Preparing the setup package
-- [First Boot Instructions](docs/setup/first-boot.md) - Running the initial setup
-- [Operator Setup](docs/operator.md) - Post-reboot configuration
-- [Configuration Reference](docs/configuration.md) - Customizing setup parameters
-
-## File Structure
+## File structure
 
 ```plaintext
 .
-├── README.md                   # This file
-├── prep-airdrop.sh             # Setup package preparation (primary entry point)
-├── app-setup/                  # Application setup scripts
-│   ├── templates/             # Runtime script templates
-│   │   ├── mount-nas-media.sh # SMB mount script template
-│   │   ├── start-plex.sh      # Plex startup wrapper template
-│   │   ├── start-rclone.sh    # rclone sync script template
-│   │   ├── transmission-done.sh # Transmission completion script
-│   │   └── transmission-done-template.sh # Transmission completion template
-│   ├── plex-setup.sh          # Plex Media Server setup
-│   ├── rclone-setup.sh        # Dropbox sync setup
-│   ├── transmission-setup.sh   # BitTorrent client with GUI automation
-│   └── run-app-setup.sh       # Orchestrator for all applications
-├── scripts/                    # Setup and deployment scripts
-│   ├── airdrop/               # AirDrop preparation scripts
-│   │   └── rclone-airdrop-prep.sh # Dropbox setup for AirDrop
-│   └── server/                # Server setup scripts
-│       ├── first-boot.sh      # Main setup script (requires GUI session)
-│       ├── setup-remote-desktop.sh # Remote Desktop configuration (requires GUI session)
-│       └── operator-first-login.sh # Operator account customization (automatic via LaunchAgent)
-├── config/                     # Configuration files
-│   ├── config.conf.template   # Configuration template
-│   ├── config.conf            # Active configuration file
-│   ├── formulae.txt           # Homebrew formulae list
-│   ├── casks.txt              # Homebrew casks list
-│   ├── logrotate.conf         # Log rotation configuration
-│   ├── com.googlecode.iterm2.plist           # iTerm2 profile settings
-│   └── Orangebrew.terminal    # Terminal.app profile
-└── docs/                       # Documentation
-    ├── setup/                 # Setup documentation
-    │   ├── prep-airdrop.md
-    │   └── first-boot.md
-    ├── apps/                  # App-specific docs
-    ├── operator.md
-    └── configuration.md
+├── prep-airdrop.sh                # Entry point: builds deployment package
+├── app-setup/                     # Application setup scripts
+│   ├── run-app-setup.sh          # Orchestrator (runs scripts in dependency order)
+│   ├── catch-setup.sh            # RSS feed monitor (ShowRSS)
+│   ├── filebot-setup.sh          # Media renaming and sorting
+│   ├── plex-setup.sh             # Plex Media Server (with migration support)
+│   ├── rclone-setup.sh           # Dropbox bidirectional sync
+│   ├── transmission-setup.sh     # BitTorrent client with GUI automation
+│   └── templates/                # Runtime script templates
+│       ├── mount-nas-media.sh    # SMB mount script
+│       ├── start-plex.sh         # Plex startup wrapper
+│       ├── start-rclone.sh       # rclone sync script
+│       ├── transmission-done.sh  # Download completion handler (FileBot)
+│       ├── transmission-done-template.sh  # Completion script template
+│       ├── vpn-monitor.sh        # VPN drop detection daemon
+│       ├── pia-split-tunnel-monitor.sh    # PIA config watchdog
+│       └── plex-vpn-bypass.sh    # PF rules for Plex reachability
+├── scripts/
+│   ├── airdrop/
+│   │   └── rclone-airdrop-prep.sh  # Dropbox OAuth for AirDrop
+│   └── server/
+│       ├── first-boot.sh          # Main provisioning script (19 modules)
+│       ├── operator-first-login.sh # Operator customization (LaunchAgent)
+│       ├── pf-test-user.sh        # PF user-keyword test utility
+│       ├── setup-apple-id.sh
+│       ├── setup-application-preparation.sh
+│       ├── setup-auto-updates.sh  # Homebrew/MAS/macOS auto-updates
+│       ├── setup-bash-configuration.sh
+│       ├── setup-command-line-tools.sh
+│       ├── setup-dock-configuration.sh
+│       ├── setup-firewall.sh
+│       ├── setup-hostname-volume.sh
+│       ├── setup-log-rotation.sh
+│       ├── setup-package-installation.sh
+│       ├── setup-power-management.sh
+│       ├── setup-remote-desktop.sh
+│       ├── setup-shell-configuration.sh
+│       ├── setup-ssh-access.sh
+│       ├── setup-system-preferences.sh
+│       ├── setup-terminal-profiles.sh
+│       ├── setup-timemachine.sh
+│       ├── setup-touchid-sudo.sh
+│       ├── setup-vpn-killswitch.sh  # VPN protection setup
+│       └── setup-wifi-network.sh
+├── config/
+│   ├── config.conf.template      # Configuration template
+│   ├── config.conf               # Your active configuration
+│   ├── formulae.txt              # Homebrew CLI packages
+│   ├── casks.txt                 # Homebrew GUI applications
+│   ├── logrotate.conf            # Log rotation rules
+│   ├── com.googlecode.iterm2.plist  # iTerm2 profile
+│   └── Orangebrew.terminal       # Terminal.app profile
+└── docs/
+    ├── prerequisites.md          # Setup requirements
+    ├── environment-variables.md  # Configuration reference
+    ├── configuration.md          # Customization guide
+    ├── operator.md               # Post-reboot operator setup
+    ├── vpn-transmission.md       # VPN architecture details
+    ├── pia-split-tunnel-bug.md   # PIA bug documentation
+    ├── keychain-credential-management.md  # Credential system
+    ├── setup/
+    │   ├── prep-airdrop.md       # Package preparation details
+    │   ├── first-boot.md         # Provisioning details
+    │   └── apple-first-boot-dialogs.md  # macOS setup wizard notes
+    └── apps/
+        ├── plex-setup-README.md
+        ├── rclone-setup-README.md
+        └── transmission-setup-README.md
 ```
 
 ## Configuration
 
-The system uses `config/config.conf` for customization:
+Everything lives in `config/config.conf`:
 
 ```bash
 SERVER_NAME="YOUR_SERVER_NAME"
 OPERATOR_USERNAME="operator"
+NAS_HOSTNAME="your-nas.local"
+NAS_SHARE_NAME="DSMedia"
 ONEPASSWORD_VAULT="personal"
 ONEPASSWORD_OPERATOR_ITEM="server operator"
 ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
@@ -230,88 +246,80 @@ ONEPASSWORD_APPLEID_ITEM="Apple"
 MONITORING_EMAIL="your-email@example.com"
 ```
 
-## Native Application Architecture
+## Security
 
-This project uses **native macOS applications** with **direct SMB mounting**:
+SSH is key-only (password login disabled). The admin account gets TouchID sudo. A separate operator account with automatic login handles day-to-day use.
 
-- **Optimal performance** - Direct access to macOS hardware acceleration and native mount handling
-- **Shared configuration** - Multi-user access via `/Users/Shared/` directories
-- **LaunchAgent integration** - Applications start automatically with operator login
-- **Direct SMB mounting** - Reliable mount process without complex autofs dependencies
-- **Administrator-centric setup** - Complete configuration by admin, consumption by operator
+Firewall is on with an SSH allowlist. Transmission traffic is VPN-bound and never touches the real IP. Credentials travel in a hardware-locked keychain, not plaintext. The setup script checks the hardware fingerprint and refuses to run on the wrong machine. The Mac restarts automatically after power failure.
 
-Key improvements eliminate previous autofs reliability issues and provide robust, debuggable mounting.
+## Error handling
 
-## Security Features
-
-- **SSH key-based authentication** with password fallback disabled
-- **TouchID sudo access** configured during setup for local administration
-- **Separate operator account** for day-to-day use
-- **Automatic login** configured for operator account
-- **Firewall configuration** with SSH allowlist
-- **Auto-restart** on power failure
-
-## Troubleshooting
-
-### Common Issues
-
-**"GUI session required" error**: Setup scripts require local desktop access, not SSH.
-
-- Run `first-boot.sh` and `setup-remote-desktop.sh` from the Mac Mini's desktop (Terminal.app)
-- Check session: `launchctl managername` should return `Aqua` (not `Background`)
-- Cannot run via SSH - requires direct access for System Settings and AppleScript dialogs
-
-**SSH access denied**: Verify SSH keys were copied correctly and SSH service is enabled.
-
-**TouchID not working**: TouchID sudo is configured during first-boot setup. **Note:** TouchID cannot coexist with automatic login, so the operator account cannot use TouchID.
-
-**Homebrew not found**: Source shell environment or restart Terminal session.
-
-**1Password items not found**: Verify vault name and item titles match configuration.
-
-**Application not starting**: Check LaunchAgent status with `launchctl list | grep <app>`. Verify shared configuration directory permissions.
-
-### Error Collection and Logs
-
-**Error Collection System**: All setup scripts now provide both immediate error feedback and end-of-run summaries:
+Errors show up immediately during setup and again in a summary at the end:
 
 ```bash
 ====== SETUP SUMMARY ======
 Setup completed, but 1 error and 2 warnings occurred:
 
 ERRORS:
-  ❌ Installing Homebrew Packages: Formula installation failed: some-package
+  x Installing Homebrew Packages: Formula installation failed: some-package
 
 WARNINGS:
-  ⚠️ Copying SSH Keys: SSH private key not found at ~/.ssh/id_ed25519
-  ⚠️ WiFi Network Configuration: Could not detect current WiFi network
+  ! Copying SSH Keys: SSH private key not found at ~/.ssh/id_ed25519
+  ! WiFi Network Configuration: Could not detect current WiFi network
 
 Review the full log for details: ~/.local/state/macmini-setup.log
 ```
 
-**Log Files**: Setup logs are stored in `~/.local/state/MACMINI-setup.log` with automatic rotation. (Default name)
+Errors block setup. Warnings are optional stuff that wasn't available (SSH keys you didn't generate, WiFi you're not connected to). Each message tags which setup section it came from.
 
-- **prep-airdrop.sh**: Console output during preparation (no separate log file)
-- **first-boot.sh**: `~/.local/state/macmini-setup.log`
-- **plex-setup.sh**: `~/.local/state/macmini-apps.log`
-- **rclone-setup.sh**: `~/.local/state/macmini-apps.log`
-- **transmission-setup.sh**: `~/.local/state/macmini-apps.log`
+## Logs
+
+| Script | Log location |
+|--------|-------------|
+| `prep-airdrop.sh` | Console output only |
+| `first-boot.sh` | `~/.local/state/<hostname>-setup.log` |
+| App setup scripts | `~/.local/state/<hostname>-app-setup.log` |
+| SMB mount | `~/.local/state/<hostname>-mount.log` |
+| Operator login | `~/.local/state/<hostname>-operator-login.log` |
+
+## Troubleshooting
+
+**"GUI session required"**: You're running over SSH. `first-boot.sh` needs the local desktop. Check: `launchctl managername` should say `Aqua`, not `Background`.
+
+**SSH access denied**: SSH keys didn't make it into the deployment package, or SSH isn't enabled on the target.
+
+**TouchID not working for operator**: By design. TouchID and automatic login are mutually exclusive on macOS. The admin account has TouchID; the operator account has auto-login.
+
+**Homebrew not found**: Restart Terminal or `source ~/.bash_profile`.
+
+**1Password items not found**: Vault name and item titles in `config.conf` have to match exactly.
+
+**VPN monitor keeps restarting Transmission**: That means it's working. The VPN dropped, so the monitor killed Transmission. It'll restart once the tunnel is back. Check PIA's connection.
+
+**Plex not reachable remotely**: Check if the VPN bypass daemon is running: `launchctl list | grep plex-vpn-bypass`. If not, the PF rules aren't in place.
+
+**App not starting on login**: `launchctl list | grep <app>` to check status. Also check `/Users/Shared/` directory permissions.
+
+## Docs
+
+| Topic | Link |
+|-------|------|
+| What you need before starting | [Prerequisites](docs/prerequisites.md) |
+| Configuration options | [Environment Variables](docs/environment-variables.md) |
+| Customizing parameters | [Configuration Reference](docs/configuration.md) |
+| Building the deployment package | [Prep-AirDrop](docs/setup/prep-airdrop.md) |
+| Running system provisioning | [First Boot](docs/setup/first-boot.md) |
+| Post-reboot setup | [Operator Setup](docs/operator.md) |
+| VPN protection design | [VPN Architecture](docs/vpn-transmission.md) |
+| The PIA split tunnel bug | [PIA Bug](docs/pia-split-tunnel-bug.md) |
+| How credentials move between machines | [Keychain Management](docs/keychain-credential-management.md) |
 
 ## Contributing
 
-When modifying scripts:
-
-1. Maintain idempotency - scripts should handle re-runs gracefully
-2. Add comprehensive logging via the `log()` and `show_log()` functions
-3. Use error collection system:
-   - `collect_error()` for critical failures that may block setup
-   - `collect_warning()` for non-critical issues (missing optional components)
-   - `set_section()` to provide context for error tracking
-   - `check_success()` for automatic error handling
-4. Update documentation for any configuration changes
+Scripts must be idempotent (re-runnable without breaking things). Use `log()`/`show_log()` for output. Use `collect_error()` for blockers, `collect_warning()` for optional stuff, `set_section()` so errors have context. Update docs when you change config. `shellcheck` must pass clean, no exceptions.
 
 ## License
 
-1. MIT; see [LICENSE](license.md)
+MIT; see [LICENSE](license.md)
 
 [![CI Tests](https://github.com/smartwatermelon/mac-server-setup/actions/workflows/ci.yml/badge.svg)](https://github.com/smartwatermelon/mac-server-setup/actions)
