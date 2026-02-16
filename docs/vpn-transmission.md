@@ -219,7 +219,7 @@ The `user` keyword is documented in pf.conf(5) and the rule parses correctly, bu
 
 **Status:** Deployed (2026-02-16) via `plex-vpn-bypass.sh` LaunchDaemon
 
-### Problem
+### PIA Transparent Proxy Failure
 
 PIA's macOS split tunnel transparent proxy is fundamentally broken. The proxy intercepts bypass-app traffic and binds outbound sockets to the physical IP, but data forwarding fails with `ioOnClosedChannel` and `Empty buffer` errors for all bypass apps. Every proxied session closes with zero bytes transferred. This affects both OpenVPN and WireGuard protocols.
 
