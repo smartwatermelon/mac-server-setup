@@ -13,6 +13,7 @@ PIA's split-tunnel "Only VPN for Transmission" frequently forgets its configurat
 | Stage | Layer | Protection | Status |
 |-------|-------|------------|--------|
 | 1 | PIA configuration | Invert split-tunnel default | Deployed |
+| 1a | NE proxy consent | Auto-click proxy consent dialog after reboot | Deployed |
 | 1.5 | PIA config watchdog | Detect and restore split tunnel drift | Deployed |
 | 2 | VPN monitor script | Detect VPN drops, pause torrents, manage bind-address | Deployed |
 | 3 | PF verification | Confirm kernel filtering works | **FAILED** (macOS 26.3) |
@@ -20,7 +21,7 @@ PIA's split-tunnel "Only VPN for Transmission" frequently forgets its configurat
 | 4 | PF kill-switch | Kernel-level traffic blocking per user | Not viable |
 | 5 | Automated updates | Homebrew, MAS, macOS updates on schedule | Deployed |
 
-**Production architecture is Stages 1+1.5+2+3b.** Stage 3 confirmed that PF `user`-based filtering does not enforce on macOS 26.3, so Stage 4 (kernel-level kill-switch) is not viable. Stage 3b uses a different PF mechanism (`route-to`) that works despite Stage 3's failure.
+**Production architecture is Stages 1+1a+1.5+2+3b.** Stage 3 confirmed that PF `user`-based filtering does not enforce on macOS 26.3, so Stage 4 (kernel-level kill-switch) is not viable. Stage 3b uses a different PF mechanism (`route-to`) that works despite Stage 3's failure.
 
 ## Stage 1: PIA Split-Tunnel Inversion
 
@@ -51,6 +52,62 @@ This is temporary — Stage 2 automates it.
 ### Rollback
 
 Revert PIA split tunnel to "Only VPN" mode.
+
+---
+
+## Stage 1a: NE Proxy Consent Auto-Clicker
+
+**Status:** Deployed (2026-02-17) via `pia-proxy-consent.sh` LaunchAgent
+
+### The Problem
+
+After reboot, macOS intermittently loses the NE (Network Extension) proxy consent signature for PIA's split tunnel. When `NETransparentProxyManager.saveToPreferences()` finds `existing signature (null)`, macOS presents a "Would Like to Add Proxy Configurations" dialog. On a headless server, this dialog blocks split tunnel activation indefinitely — all downstream stages (1.5, 2, 3b) cannot function.
+
+### Stage 1a Behavior
+
+An AppleScript auto-clicker runs once at login, polls for up to 5 minutes (the dialog typically appears within ~15 seconds of boot), and clicks "Allow" when found. If no dialog appears (consent persisted), the script exits normally after 5 minutes.
+
+The script checks known dialog-hosting processes first (UserNotificationCenter, SystemUIServer, SecurityAgent) for speed, then falls back to scanning all processes.
+
+### Prerequisites
+
+**Accessibility permission** must be granted for `/bin/bash`:
+
+System Settings > Privacy & Security > Accessibility > add `/bin/bash`
+
+### Stage 1a Files
+
+| File | Purpose |
+|------|---------|
+| `~operator/.local/bin/pia-proxy-consent.sh` | Auto-clicker script (deployed from template) |
+| `~/Library/LaunchAgents/com.tilsit.pia-proxy-consent.plist` | LaunchAgent (RunAtLoad, no KeepAlive) |
+| `~operator/.local/state/tilsit-pia-proxy-consent.log` | Script log |
+
+### Stage 1a Deployment
+
+Deployed automatically by `transmission-setup.sh` from the template at `app-setup/templates/pia-proxy-consent.sh`.
+
+### Stage 1a Verification
+
+```bash
+# Check script ran at last login
+cat ~/.local/state/tilsit-pia-proxy-consent.log
+
+# If consent was needed:
+# [timestamp] [pia-proxy-consent] Clicked Allow on PIA proxy consent dialog (process: UserNotificationCenter)
+# [timestamp] [pia-proxy-consent] Consent granted. Exiting.
+
+# If consent persisted (normal):
+# [timestamp] [pia-proxy-consent] No dialog seen after 300s. Exiting (normal if consent persisted this boot).
+```
+
+### Stage 1a Rollback
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.tilsit.pia-proxy-consent.plist
+```
+
+See `docs/pia-proxy-consent-bug.md` for full bug documentation with unified log evidence.
 
 ---
 
@@ -440,9 +497,10 @@ cat ~/.local/state/tilsit-brew-upgrade.log
 
 ## Current Architecture (Post-Deployment)
 
-**Active protection: Stages 1+1.5+2+3b.** Stage 3 failed (PF `user` keyword), so Stage 4 is not available. Stage 3b uses a different PF mechanism (`route-to`) that works despite Stage 3's failure.
+**Active protection: Stages 1+1a+1.5+2+3b.** Stage 3 failed (PF `user` keyword), so Stage 4 is not available. Stage 3b uses a different PF mechanism (`route-to`) that works despite Stage 3's failure.
 
 - **Stage 1** inverts the failure mode: if PIA forgets its config, Plex gets slow but Transmission stays on VPN
+- **Stage 1a** ensures split tunnel can activate: auto-clicks the proxy consent dialog that macOS intermittently presents after reboot when the NE signature is lost
 - **Stage 1.5** enforces Stage 1: if PIA forgets its split tunnel config, the watchdog detects it within 60 seconds and auto-restores from a saved reference
 - **Stage 2** automates recovery: VPN drops are detected within 5 seconds, torrents are paused, and bind-address is locked to loopback until VPN returns
 - **Stage 3b** bypasses PIA's broken split tunnel proxy: PF `route-to` rules force Plex traffic through the physical interface, and the daemon monitors the public IP to keep Plex's `customConnections` current
@@ -456,6 +514,7 @@ To re-evaluate Stage 4: re-run `pf-test-user.sh` after a macOS update. If PF `us
 
 | Log | Path |
 |-----|------|
+| PIA proxy consent | `~operator/.local/state/tilsit-pia-proxy-consent.log` |
 | PIA monitor | `~operator/.local/state/tilsit-pia-monitor.log` |
 | VPN monitor | `~operator/.local/state/tilsit-vpn-monitor.log` |
 | Plex VPN bypass | `/var/log/tilsit-plex-vpn-bypass.log` |
