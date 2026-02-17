@@ -138,4 +138,4 @@ log show --predicate 'subsystem == "com.apple.networkextension"' \
 
 ## PIA Bug Report
 
-Filed as a GitHub issue on [pia-foss/desktop](https://github.com/pia-foss/desktop/issues). The core issue is that `saveToPreferences()` is called on every `piactl proxy sync` invocation, and macOS does not reliably persist the consent across reboots on non-supervised devices.
+Filed as [pia-foss/desktop#94](https://github.com/pia-foss/desktop/issues/94).

@@ -164,13 +164,15 @@ From the `pia-foss/mac-split-tunnel` repository:
 
 ---
 
-## Draft GitHub Issue for `pia-foss/desktop`
+## GitHub Issue
 
-### Title
+Filed as [pia-foss/desktop#93](https://github.com/pia-foss/desktop/issues/93).
+
+### Original draft title
 
 macOS split tunnel transparent proxy fails for all bypass apps — zero bytes transferred (3.7.0, macOS 26.3, Apple Silicon)
 
-### Body
+### Original draft body
 
 **Environment:**
 
