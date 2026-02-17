@@ -533,6 +533,62 @@ else
   log "WARNING: PIA monitor template not found at ${PIA_MONITOR_TEMPLATE} — skipping PIA monitor deployment"
 fi
 
+# Deploy PIA proxy consent auto-clicker (Stage 1a)
+section "Deploying PIA Proxy Consent Auto-Clicker"
+
+CONSENT_TEMPLATE="${SCRIPT_DIR}/templates/pia-proxy-consent.sh"
+CONSENT_DEST="${OPERATOR_HOME}/.local/bin/pia-proxy-consent.sh"
+
+CONSENT_DEPLOYED=false
+
+if [[ -f "${CONSENT_TEMPLATE}" ]]; then
+  log "Deploying pia-proxy-consent.sh from template..."
+
+  # Deploy with variable substitution
+  sudo cp "${CONSENT_TEMPLATE}" "${CONSENT_DEST}"
+  sudo sed -i '' "s|__SERVER_NAME__|${HOSTNAME}|g" "${CONSENT_DEST}"
+  sudo chmod 755 "${CONSENT_DEST}"
+  sudo chown "${OPERATOR_USERNAME}:staff" "${CONSENT_DEST}"
+
+  log "PIA proxy consent script deployed to ${CONSENT_DEST}"
+
+  # Create PIA proxy consent LaunchAgent (only if script was deployed)
+  CONSENT_LAUNCHAGENT_PLIST="${LAUNCHAGENT_DIR}/com.${HOSTNAME_LOWER}.pia-proxy-consent.plist"
+
+  log "Creating PIA proxy consent LaunchAgent: ${CONSENT_LAUNCHAGENT_PLIST}"
+
+  sudo -iu "${OPERATOR_USERNAME}" tee "${CONSENT_LAUNCHAGENT_PLIST}" >/dev/null <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.${HOSTNAME_LOWER}.pia-proxy-consent</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${OPERATOR_HOME}/.local/bin/pia-proxy-consent.sh</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>
+EOF
+
+  # Set proper permissions on PIA proxy consent LaunchAgent
+  sudo chown "${OPERATOR_USERNAME}:staff" "${CONSENT_LAUNCHAGENT_PLIST}"
+  sudo chmod 644 "${CONSENT_LAUNCHAGENT_PLIST}"
+
+  if sudo plutil -lint "${CONSENT_LAUNCHAGENT_PLIST}" >/dev/null 2>&1; then
+    CONSENT_DEPLOYED=true
+    log "PIA proxy consent LaunchAgent created and validated"
+  else
+    log "ERROR: Invalid plist syntax in ${CONSENT_LAUNCHAGENT_PLIST} — launchd will reject this agent"
+  fi
+else
+  log "WARNING: PIA proxy consent template not found at ${CONSENT_TEMPLATE} — skipping deployment"
+fi
+
 # Deploy Plex VPN bypass daemon (root-level for PF operations)
 section "Deploying Plex VPN Bypass"
 
@@ -615,6 +671,11 @@ if [[ "${PIA_MONITOR_DEPLOYED}" == "true" ]]; then
   log "  • PIA Monitor: Enabled (polls every 60s, auto-restores split tunnel config)"
 else
   log "  • PIA Monitor: Not deployed (template not found)"
+fi
+if [[ "${CONSENT_DEPLOYED}" == "true" ]]; then
+  log "  • PIA Proxy Consent: Enabled (auto-clicks Allow dialog at login, exits after 5min)"
+else
+  log "  • PIA Proxy Consent: Not deployed (template not found)"
 fi
 if [[ "${BYPASS_DEPLOYED}" == "true" ]]; then
   log "  • Plex VPN Bypass: Enabled (PF rules + public IP monitor, root LaunchDaemon)"
