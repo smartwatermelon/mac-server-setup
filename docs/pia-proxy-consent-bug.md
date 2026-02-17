@@ -11,7 +11,7 @@ The consent loss is intermittent — some reboots retain the signature, others d
 | Component | Version |
 |-----------|---------|
 | PIA Desktop | 3.7.0+08412 |
-| macOS | Sequoia 15.3 (Build 25D125, Darwin 25.3.0) |
+| macOS | 26.3 (Build 25D125, Darwin 25.3.0) |
 | Architecture | Apple Silicon (Mac Mini) |
 | Device Management | Non-supervised (not enrolled via MDM/DEP) |
 
