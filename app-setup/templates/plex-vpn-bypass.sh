@@ -28,6 +28,7 @@
 #
 # Template placeholders (replaced during deployment):
 #   - __SERVER_NAME__: Server hostname for logging and notifications
+#   - __OPERATOR_USERNAME__: Operator account username for token lookup and notifications
 #
 # Usage: Launched automatically by LaunchDaemon
 #   Not intended for manual execution.
@@ -39,6 +40,7 @@ set -euo pipefail
 
 # Configuration (replaced during deployment)
 SERVER_NAME="__SERVER_NAME__"
+OPERATOR_USERNAME="__OPERATOR_USERNAME__"
 
 # Derived configuration
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
@@ -83,15 +85,9 @@ rotate_log() {
 notify() {
   local title="$1"
   local message="$2"
-  # Find the console user for notification delivery (we run as root)
-  local console_user
-  console_user=$(stat -f%Su /dev/console 2>/dev/null || true)
-  if [[ -z "${console_user}" ]] || [[ "${console_user}" == "root" ]]; then
-    return 0
-  fi
-  # Deliver notification as the console user (needs their Homebrew PATH)
-  if sudo -iu "${console_user}" command -v terminal-notifier >/dev/null 2>&1; then
-    sudo -iu "${console_user}" terminal-notifier \
+  # Deliver notification as the operator user (needs their Homebrew PATH)
+  if sudo -iu "${OPERATOR_USERNAME}" command -v terminal-notifier >/dev/null 2>&1; then
+    sudo -iu "${OPERATOR_USERNAME}" terminal-notifier \
       -title "${title}" \
       -message "${message}" \
       -group "plex-vpn-bypass" \
@@ -199,19 +195,12 @@ ensure_pf_rules() {
 # Plex Integration
 # ---------------------------------------------------------------------------
 
-# Get Plex authentication token from the console user's config files.
+# Get Plex authentication token from the operator user's config files.
 # Checks transmission-done config first (explicit token), then falls back
 # to Plex's own Preferences.xml.
 get_plex_token() {
-  local console_user
-  console_user=$(stat -f%Su /dev/console 2>/dev/null || true)
-  if [[ -z "${console_user}" ]] || [[ "${console_user}" == "root" ]]; then
-    log "WARNING: Cannot determine console user for Plex token"
-    return 1
-  fi
-
   local token=""
-  local user_home="/Users/${console_user}"
+  local user_home="/Users/${OPERATOR_USERNAME}"
 
   # Source 1: transmission-done config (media pipeline setup stores token here)
   local td_config="${user_home}/.config/transmission-done/config.yml"

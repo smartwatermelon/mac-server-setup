@@ -323,6 +323,11 @@ The daemon polls every 60 seconds:
 
 Deployed by `transmission-setup.sh` from the template at `app-setup/templates/plex-vpn-bypass.sh`. The deployment creates a root-level LaunchDaemon (PF operations require root).
 
+Template placeholders (replaced during deployment):
+
+- `__SERVER_NAME__`: Server hostname for logging and notifications
+- `__OPERATOR_USERNAME__`: Operator account username for token lookup and notifications
+
 ### Stage 3b Verification
 
 ```bash

@@ -604,6 +604,7 @@ if [[ -f "${BYPASS_TEMPLATE}" ]]; then
   # Deploy with variable substitution (root-owned for PF operations)
   sudo cp "${BYPASS_TEMPLATE}" "${BYPASS_DEST}"
   sudo sed -i '' "s|__SERVER_NAME__|${HOSTNAME}|g" "${BYPASS_DEST}"
+  sudo sed -i '' "s|__OPERATOR_USERNAME__|${OPERATOR_USERNAME}|g" "${BYPASS_DEST}"
   sudo chmod 755 "${BYPASS_DEST}"
   sudo chown root:wheel "${BYPASS_DEST}"
 
