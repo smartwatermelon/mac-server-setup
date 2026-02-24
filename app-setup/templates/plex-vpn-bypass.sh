@@ -29,6 +29,9 @@
 # Template placeholders (replaced during deployment):
 #   - __SERVER_NAME__: Server hostname for logging and notifications
 #   - __OPERATOR_USERNAME__: Operator account username for token lookup and notifications
+#   - __EXTERNAL_HOSTNAME__: Public hostname for Plex customConnections and DDNS (e.g. tilsit.vip)
+#   - __CLOUDFLARE_ZONE_ID__: Cloudflare zone ID for the external hostname
+#   - __CLOUDFLARE_RECORD_ID__: Cloudflare DNS record ID for the A record
 #
 # Usage: Launched automatically by LaunchDaemon
 #   Not intended for manual execution.
@@ -41,6 +44,9 @@ set -euo pipefail
 # Configuration (replaced during deployment)
 SERVER_NAME="__SERVER_NAME__"
 OPERATOR_USERNAME="__OPERATOR_USERNAME__"
+EXTERNAL_HOSTNAME="__EXTERNAL_HOSTNAME__"
+CLOUDFLARE_ZONE_ID="__CLOUDFLARE_ZONE_ID__"
+CLOUDFLARE_RECORD_ID="__CLOUDFLARE_RECORD_ID__"
 
 # Derived configuration
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
@@ -227,7 +233,7 @@ get_plex_token() {
 # Update Plex customConnections setting via the local API
 update_plex_custom_connections() {
   local public_ip="$1"
-  local custom_url="https://${public_ip}:32400"
+  local custom_url="https://${EXTERNAL_HOSTNAME}:32400"
 
   local token
   if ! token=$(get_plex_token); then
@@ -253,6 +259,37 @@ update_plex_custom_connections() {
     return 0
   else
     log "ERROR: Plex API returned HTTP ${http_code}"
+    return 1
+  fi
+}
+
+# Update Cloudflare A record for the external hostname to the current public IP.
+# Reads CF_API_TOKEN from System keychain at runtime (daemon runs as root).
+update_cloudflare_dns() {
+  local public_ip="$1"
+
+  local cf_token
+  cf_token=$(security find-generic-password \
+    -s "cloudflare-api-token" \
+    -a "${EXTERNAL_HOSTNAME}" \
+    -w /Library/Keychains/System.keychain) || {
+    log "WARNING: cloudflare-api-token not found in System keychain — skipping DNS update"
+    return 1
+  }
+
+  local http_code
+  http_code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH \
+    "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records/${CLOUDFLARE_RECORD_ID}" \
+    -H "Authorization: Bearer ${cf_token}" \
+    -H "Content-Type: application/json" \
+    --data "{\"content\":\"${public_ip}\",\"proxied\":false}" \
+    --max-time 10)
+
+  if [[ "${http_code}" == "200" ]]; then
+    log "Cloudflare DNS updated: ${EXTERNAL_HOSTNAME} -> ${public_ip}"
+    return 0
+  else
+    log "ERROR: Cloudflare DNS update returned HTTP ${http_code}"
     return 1
   fi
 }
@@ -310,6 +347,8 @@ main() {
     LAST_PUBLIC_IP="${initial_ip}"
     log "Initial public IP: ${initial_ip}"
     # Update Plex on startup to ensure customConnections is current
+    update_cloudflare_dns "${initial_ip}" \
+      || log "WARNING: Initial Cloudflare DNS update failed — will retry on next change"
     update_plex_custom_connections "${initial_ip}" \
       || log "WARNING: Initial Plex update failed — will retry on next change"
   else
@@ -342,10 +381,14 @@ main() {
       if [[ "${current_ip}" != "${LAST_PUBLIC_IP}" ]]; then
         log "Public IP changed: ${LAST_PUBLIC_IP:-<unknown>} -> ${current_ip}"
         notify "Plex VPN Bypass" "Public IP changed to ${current_ip}"
-        if update_plex_custom_connections "${current_ip}"; then
+        local dns_ok=true
+        local plex_ok=true
+        update_cloudflare_dns "${current_ip}" || dns_ok=false
+        update_plex_custom_connections "${current_ip}" || plex_ok=false
+        if [[ "${dns_ok}" == "true" ]] && [[ "${plex_ok}" == "true" ]]; then
           LAST_PUBLIC_IP="${current_ip}"
         else
-          log "WARNING: Plex update failed — will retry next cycle"
+          log "WARNING: DNS or Plex update failed — will retry next cycle"
         fi
       fi
     else

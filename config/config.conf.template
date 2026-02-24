@@ -66,5 +66,10 @@ CATCH_USE_MAGNETS="true"
   # "true" = Catch passes magnet links to Transmission.app (Stage 2, GUI mode)
   # "false" = Catch downloads .torrent files to watch directory (Stage 4, daemon mode)
 
+# External access (Cloudflare DDNS)
+EXTERNAL_HOSTNAME=""               # Public hostname (e.g. tilsit.vip)
+CLOUDFLARE_ZONE_ID=""              # Cloudflare zone ID for external hostname
+CLOUDFLARE_RECORD_ID=""            # Cloudflare A record ID for external hostname
+
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME

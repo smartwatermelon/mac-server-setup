@@ -75,6 +75,9 @@ if [[ -f "${CONFIG_FILE}" ]]; then
   source "${CONFIG_FILE}"
   OPERATOR_USERNAME="${OPERATOR_USERNAME:-operator}"
   NAS_SHARE_NAME="${NAS_SHARE_NAME:-Media}"
+  EXTERNAL_HOSTNAME="${EXTERNAL_HOSTNAME:-}"
+  CLOUDFLARE_ZONE_ID="${CLOUDFLARE_ZONE_ID:-}"
+  CLOUDFLARE_RECORD_ID="${CLOUDFLARE_RECORD_ID:-}"
 else
   echo "❌ Error: Configuration file not found at ${CONFIG_FILE}"
   exit 1
@@ -605,6 +608,9 @@ if [[ -f "${BYPASS_TEMPLATE}" ]]; then
   sudo cp "${BYPASS_TEMPLATE}" "${BYPASS_DEST}"
   sudo sed -i '' "s|__SERVER_NAME__|${HOSTNAME}|g" "${BYPASS_DEST}"
   sudo sed -i '' "s|__OPERATOR_USERNAME__|${OPERATOR_USERNAME}|g" "${BYPASS_DEST}"
+  sudo sed -i '' "s|__EXTERNAL_HOSTNAME__|${EXTERNAL_HOSTNAME}|g" "${BYPASS_DEST}"
+  sudo sed -i '' "s|__CLOUDFLARE_ZONE_ID__|${CLOUDFLARE_ZONE_ID}|g" "${BYPASS_DEST}"
+  sudo sed -i '' "s|__CLOUDFLARE_RECORD_ID__|${CLOUDFLARE_RECORD_ID}|g" "${BYPASS_DEST}"
   sudo chmod 755 "${BYPASS_DEST}"
   sudo chown root:wheel "${BYPASS_DEST}"
 
