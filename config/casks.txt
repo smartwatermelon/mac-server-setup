@@ -13,7 +13,6 @@ hot
 iterm2
 knockknock
 lulu
-no-ip-duc
 notunes
 plex-media-server
 smartwatermelon/tap/progress-indicator
