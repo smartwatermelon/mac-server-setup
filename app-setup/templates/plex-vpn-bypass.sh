@@ -232,7 +232,6 @@ get_plex_token() {
 
 # Update Plex customConnections setting via the local API
 update_plex_custom_connections() {
-  local public_ip="$1"
   local custom_url="https://${EXTERNAL_HOSTNAME}:32400"
 
   local token
@@ -272,7 +271,7 @@ update_cloudflare_dns() {
   cf_token=$(security find-generic-password \
     -s "cloudflare-api-token" \
     -a "${EXTERNAL_HOSTNAME}" \
-    -w /Library/Keychains/System.keychain) || {
+    -w /Library/Keychains/System.keychain 2>/dev/null) || {
     log "WARNING: cloudflare-api-token not found in System keychain — skipping DNS update"
     return 1
   }
@@ -344,13 +343,17 @@ main() {
   # Initial public IP check
   local initial_ip
   if initial_ip=$(check_public_ip); then
-    LAST_PUBLIC_IP="${initial_ip}"
     log "Initial public IP: ${initial_ip}"
-    # Update Plex on startup to ensure customConnections is current
-    update_cloudflare_dns "${initial_ip}" \
-      || log "WARNING: Initial Cloudflare DNS update failed — will retry on next change"
-    update_plex_custom_connections "${initial_ip}" \
-      || log "WARNING: Initial Plex update failed — will retry on next change"
+    # Update DNS and Plex on startup; only record IP as handled if both succeed
+    local init_dns_ok=true
+    local init_plex_ok=true
+    update_cloudflare_dns "${initial_ip}" || init_dns_ok=false
+    update_plex_custom_connections || init_plex_ok=false
+    if [[ "${init_dns_ok}" == "true" ]] && [[ "${init_plex_ok}" == "true" ]]; then
+      LAST_PUBLIC_IP="${initial_ip}"
+    else
+      log "WARNING: Initial DNS or Plex update failed — will retry next cycle"
+    fi
   else
     log "WARNING: Could not determine public IP at startup — will retry"
   fi
@@ -384,7 +387,7 @@ main() {
         local dns_ok=true
         local plex_ok=true
         update_cloudflare_dns "${current_ip}" || dns_ok=false
-        update_plex_custom_connections "${current_ip}" || plex_ok=false
+        update_plex_custom_connections || plex_ok=false
         if [[ "${dns_ok}" == "true" ]] && [[ "${plex_ok}" == "true" ]]; then
           LAST_PUBLIC_IP="${current_ip}"
         else
