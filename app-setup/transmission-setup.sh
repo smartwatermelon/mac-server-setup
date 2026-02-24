@@ -602,24 +602,27 @@ BYPASS_LAUNCHDAEMON_PLIST="/Library/LaunchDaemons/com.${HOSTNAME_LOWER}.plex-vpn
 BYPASS_DEPLOYED=false
 
 if [[ -f "${BYPASS_TEMPLATE}" ]]; then
-  log "Deploying plex-vpn-bypass.sh from template..."
+  if [[ -z "${EXTERNAL_HOSTNAME}" ]] || [[ -z "${CLOUDFLARE_ZONE_ID}" ]] || [[ -z "${CLOUDFLARE_RECORD_ID}" ]]; then
+    log "WARNING: EXTERNAL_HOSTNAME, CLOUDFLARE_ZONE_ID, and CLOUDFLARE_RECORD_ID must be set in config.conf — skipping plex-vpn-bypass deployment"
+  else
+    log "Deploying plex-vpn-bypass.sh from template..."
 
-  # Deploy with variable substitution (root-owned for PF operations)
-  sudo cp "${BYPASS_TEMPLATE}" "${BYPASS_DEST}"
-  sudo sed -i '' "s|__SERVER_NAME__|${HOSTNAME}|g" "${BYPASS_DEST}"
-  sudo sed -i '' "s|__OPERATOR_USERNAME__|${OPERATOR_USERNAME}|g" "${BYPASS_DEST}"
-  sudo sed -i '' "s|__EXTERNAL_HOSTNAME__|${EXTERNAL_HOSTNAME}|g" "${BYPASS_DEST}"
-  sudo sed -i '' "s|__CLOUDFLARE_ZONE_ID__|${CLOUDFLARE_ZONE_ID}|g" "${BYPASS_DEST}"
-  sudo sed -i '' "s|__CLOUDFLARE_RECORD_ID__|${CLOUDFLARE_RECORD_ID}|g" "${BYPASS_DEST}"
-  sudo chmod 755 "${BYPASS_DEST}"
-  sudo chown root:wheel "${BYPASS_DEST}"
+    # Deploy with variable substitution (root-owned for PF operations)
+    sudo cp "${BYPASS_TEMPLATE}" "${BYPASS_DEST}"
+    sudo sed -i '' "s|__SERVER_NAME__|${HOSTNAME}|g" "${BYPASS_DEST}"
+    sudo sed -i '' "s|__OPERATOR_USERNAME__|${OPERATOR_USERNAME}|g" "${BYPASS_DEST}"
+    sudo sed -i '' "s|__EXTERNAL_HOSTNAME__|${EXTERNAL_HOSTNAME}|g" "${BYPASS_DEST}"
+    sudo sed -i '' "s|__CLOUDFLARE_ZONE_ID__|${CLOUDFLARE_ZONE_ID}|g" "${BYPASS_DEST}"
+    sudo sed -i '' "s|__CLOUDFLARE_RECORD_ID__|${CLOUDFLARE_RECORD_ID}|g" "${BYPASS_DEST}"
+    sudo chmod 755 "${BYPASS_DEST}"
+    sudo chown root:wheel "${BYPASS_DEST}"
 
-  log "Plex VPN bypass script deployed to ${BYPASS_DEST}"
+    log "Plex VPN bypass script deployed to ${BYPASS_DEST}"
 
-  # Create LaunchDaemon plist (root-level for PF operations)
-  log "Creating Plex VPN bypass LaunchDaemon: ${BYPASS_LAUNCHDAEMON_PLIST}"
+    # Create LaunchDaemon plist (root-level for PF operations)
+    log "Creating Plex VPN bypass LaunchDaemon: ${BYPASS_LAUNCHDAEMON_PLIST}"
 
-  sudo tee "${BYPASS_LAUNCHDAEMON_PLIST}" >/dev/null <<EOF
+    sudo tee "${BYPASS_LAUNCHDAEMON_PLIST}" >/dev/null <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -643,16 +646,17 @@ if [[ -f "${BYPASS_TEMPLATE}" ]]; then
 </plist>
 EOF
 
-  # Set proper permissions on LaunchDaemon
-  sudo chown root:wheel "${BYPASS_LAUNCHDAEMON_PLIST}"
-  sudo chmod 644 "${BYPASS_LAUNCHDAEMON_PLIST}"
+    # Set proper permissions on LaunchDaemon
+    sudo chown root:wheel "${BYPASS_LAUNCHDAEMON_PLIST}"
+    sudo chmod 644 "${BYPASS_LAUNCHDAEMON_PLIST}"
 
-  if sudo plutil -lint "${BYPASS_LAUNCHDAEMON_PLIST}" >/dev/null 2>&1; then
-    BYPASS_DEPLOYED=true
-    log "Plex VPN bypass LaunchDaemon created and validated"
-  else
-    log "ERROR: Invalid plist syntax in ${BYPASS_LAUNCHDAEMON_PLIST} — launchd will reject this daemon"
-  fi
+    if sudo plutil -lint "${BYPASS_LAUNCHDAEMON_PLIST}" >/dev/null 2>&1; then
+      BYPASS_DEPLOYED=true
+      log "Plex VPN bypass LaunchDaemon created and validated"
+    else
+      log "ERROR: Invalid plist syntax in ${BYPASS_LAUNCHDAEMON_PLIST} — launchd will reject this daemon"
+    fi
+  fi # end Cloudflare variable guard
 else
   log "WARNING: Plex VPN bypass template not found at ${BYPASS_TEMPLATE} — skipping deployment"
 fi
