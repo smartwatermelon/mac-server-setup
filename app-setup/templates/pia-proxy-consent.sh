@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# pia-proxy-consent.sh - PIA Proxy Configuration Consent Auto-Clicker
+# pia-proxy-consent.sh - PIA Proxy Configuration Consent Auto-Clicker (Daemon)
 #
 # After reboot, macOS intermittently loses the NE (Network Extension) proxy
 # consent signature for PIA's split tunnel. When NETransparentProxyManager
@@ -9,13 +9,15 @@
 # interaction. On a headless server, this blocks split tunnel activation
 # indefinitely.
 #
-# This script watches for that dialog via AppleScript and clicks "Allow"
-# within seconds of it appearing. It runs once at login, polls for up to
-# 5 minutes (the dialog typically appears within ~15s of boot), then exits.
+# This script runs as a persistent daemon (KeepAlive LaunchAgent) that checks
+# every 10 seconds for the consent dialog and clicks "Allow" when found. The
+# daemon pattern avoids the launchd ThrottleInterval escalation that occurs
+# when StartInterval jobs exit quickly: repeated rapid exits cause launchd to
+# back off well beyond the configured interval, causing multi-hour gaps.
 #
-# This is "Stage 1a" — ensuring PIA's split tunnel can activate after reboot.
-# Without consent, Stages 1/1.5/2/3b cannot function because split tunnel
-# never starts.
+# This is "Stage 1a" — ensuring PIA's split tunnel can activate after reboot
+# or after any mid-session consent reset. Without consent, Stages 1/1.5/2/3b
+# cannot function because split tunnel never starts.
 #
 # Prerequisites:
 #   Accessibility permission for /bin/bash (or the shell running this script).
@@ -29,6 +31,8 @@
 #
 # Author: Andrew Rich <andrew.rich@gmail.com>
 # Created: 2026-02-17
+# Updated: 2026-02-27 — converted to daemon pattern to fix launchd throttle
+#                        escalation that caused multi-hour gaps between checks
 
 set -euo pipefail
 
@@ -37,12 +41,13 @@ SERVER_NAME="__SERVER_NAME__"
 
 # Derived configuration
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
-POLL_INTERVAL=3 # Check every 3 seconds
-MAX_WAIT=300    # Stop polling after 5 minutes
+POLL_INTERVAL=10    # Check every 10 seconds
+POST_CLICK_SLEEP=60 # After clicking, back off 60s before resuming
 
 # Logging configuration
 LOG_DIR="${HOME}/.local/state"
 LOG_FILE="${LOG_DIR}/${HOSTNAME_LOWER}-pia-proxy-consent.log"
+MAX_LOG_SIZE=5242880 # 5MB
 
 mkdir -p "${LOG_DIR}"
 
@@ -50,6 +55,17 @@ log() {
   local timestamp
   timestamp=$(date '+%Y-%m-%d %H:%M:%S')
   printf '[%s] [pia-proxy-consent] %s\n' "${timestamp}" "$1" | tee -a "${LOG_FILE}"
+}
+
+rotate_log() {
+  if [[ -f "${LOG_FILE}" ]]; then
+    local size
+    size=$(stat -f%z "${LOG_FILE}" 2>/dev/null || echo "0")
+    if [[ "${size}" -gt ${MAX_LOG_SIZE} ]]; then
+      mv "${LOG_FILE}" "${LOG_FILE}.old"
+      log "Log rotated (previous log exceeded ${MAX_LOG_SIZE} bytes)"
+    fi
+  fi
 }
 
 # Send desktop notification via terminal-notifier (if available)
@@ -70,7 +86,8 @@ notify() {
 click_allow() {
   local result="not_found"
 
-  # Try known dialog-hosting processes first (faster than scanning all)
+  # Try known dialog-hosting processes first (faster than scanning all).
+  # UserNotificationCenter is the most common presenter on macOS 15/16.
   local candidates=(
     "UserNotificationCenter"
     "SystemUIServer"
@@ -140,25 +157,35 @@ click_allow() {
 }
 
 # ---------------------------------------------------------------------------
-# Main
+# Main daemon loop
 # ---------------------------------------------------------------------------
 
+trap 'log "PIA proxy consent watcher stopping (signal received)"; exit 0' INT TERM
+
 log "=========================================="
-log "PIA proxy consent watcher starting"
+log "PIA proxy consent watcher starting (daemon)"
 log "=========================================="
 log "Server: ${SERVER_NAME}"
-log "Poll interval: ${POLL_INTERVAL}s, max wait: ${MAX_WAIT}s"
+log "Poll interval: ${POLL_INTERVAL}s"
 
-elapsed=0
-while ((elapsed < MAX_WAIT)); do
+# Brief initial delay to let the desktop session fully initialize before
+# the first AppleScript attempt.
+sleep 15
+
+loop_count=0
+while true; do
+  ((loop_count += 1))
+
+  # Rotate log every ~hour (360 * 10s = 3600s)
+  if [[ $((loop_count % 360)) -eq 0 ]]; then
+    rotate_log
+  fi
+
   if click_allow; then
     notify "PIA Proxy Consent" "Auto-clicked Allow for proxy configuration"
-    log "Consent granted. Exiting."
-    exit 0
+    log "Consent granted. Backing off ${POST_CLICK_SLEEP}s before resuming."
+    sleep "${POST_CLICK_SLEEP}"
+  else
+    sleep "${POLL_INTERVAL}"
   fi
-  sleep "${POLL_INTERVAL}"
-  ((elapsed += POLL_INTERVAL))
 done
-
-log "No dialog seen after ${MAX_WAIT}s. Exiting (normal if consent persisted this boot)."
-exit 0
