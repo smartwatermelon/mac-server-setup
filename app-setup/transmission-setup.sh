@@ -574,6 +574,12 @@ if [[ -f "${CONSENT_TEMPLATE}" ]]; then
   </array>
   <key>RunAtLoad</key>
   <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-pia-proxy-consent-stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-pia-proxy-consent-stderr.log</string>
 </dict>
 </plist>
 EOF

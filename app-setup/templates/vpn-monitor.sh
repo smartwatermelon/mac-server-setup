@@ -195,14 +195,14 @@ handle_vpn_up() {
     log "VPN RESTORED with IP ${vpn_ip}"
     notify "VPN Monitor" "VPN restored (${vpn_ip}) — launching Transmission"
     set_bind_address "${vpn_ip}"
-    launch_transmission
+    launch_transmission || log "WARNING: Transmission launch after VPN restore failed — will retry next cycle"
   elif [[ "${vpn_ip}" != "${LAST_VPN_IP}" ]] && [[ -n "${LAST_VPN_IP}" ]]; then
     # VPN IP changed without going down (server switch)
     log "VPN IP changed: ${LAST_VPN_IP} -> ${vpn_ip}"
     notify "VPN Monitor" "VPN IP changed to ${vpn_ip}"
     set_bind_address "${vpn_ip}"
     kill_transmission
-    launch_transmission
+    launch_transmission || log "WARNING: Transmission launch after IP change failed — will retry next cycle"
   fi
 
   LAST_VPN_IP="${vpn_ip}"
@@ -229,7 +229,7 @@ main() {
     # so a running instance may be bound to a stale IP.
     set_bind_address "${initial_ip}"
     kill_transmission
-    launch_transmission
+    launch_transmission || log "WARNING: Initial Transmission launch failed — will retry in polling loop"
   else
     log "WARNING: No VPN connection detected at startup"
     handle_vpn_down
@@ -252,6 +252,16 @@ main() {
       handle_vpn_up "${current_ip}"
     else
       handle_vpn_down
+    fi
+
+    # Health check: if VPN is up but Transmission is not running, relaunch.
+    # Catches Transmission crashes mid-session and failed initial launches.
+    if [[ "${VPN_IS_DOWN}" == "false" ]] && [[ -n "${LAST_VPN_IP}" ]]; then
+      if ! pgrep -x "Transmission" >/dev/null 2>&1; then
+        log "Transmission not running (VPN up at ${LAST_VPN_IP}) — relaunching"
+        set_bind_address "${LAST_VPN_IP}"
+        launch_transmission || log "WARNING: Transmission relaunch failed — will retry next cycle"
+      fi
     fi
   done
 }
