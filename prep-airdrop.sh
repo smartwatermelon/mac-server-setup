@@ -315,6 +315,7 @@ OUTPUT_PATH="${1:-${HOME}/${SERVER_NAME_LOWER}-setup}"
 OP_TIMEMACHINE_ENTRY="${ONEPASSWORD_TIMEMACHINE_ITEM}"
 OP_PLEX_NAS_ENTRY="${ONEPASSWORD_PLEX_NAS_ITEM}"
 OP_OPENSUBTITLES_ENTRY="${ONEPASSWORD_OPENSUBTITLES_ITEM}"
+OP_PIA_ENTRY="${ONEPASSWORD_PIA_ITEM:-}"
 
 # Check if output directory exists
 if [[ -d "${OUTPUT_PATH}" ]]; then
@@ -711,6 +712,38 @@ else
   # Clear credentials from memory
   unset OPENSUBTITLES_USERNAME OPENSUBTITLES_PASSWORD
   echo "✅ OpenSubtitles credentials stored in Keychain"
+fi
+
+# Set up PIA account credentials for containerized Transmission (haugene/podman)
+if [[ -n "${OP_PIA_ENTRY}" ]]; then
+  echo "Setting up PIA account credentials..."
+
+  if ! op item get "${OP_PIA_ENTRY}" --vault "${ONEPASSWORD_VAULT}" >/dev/null 2>&1; then
+    echo "⚠️ PIA account credentials not found in 1Password"
+    echo "Please create '${OP_PIA_ENTRY}' entry manually"
+    echo "Skipping PIA credential setup"
+  else
+    echo "✅ Found PIA account credentials in 1Password"
+
+    echo "Retrieving PIA account credentials from 1Password..."
+    PIA_USERNAME=$(op item get "${OP_PIA_ENTRY}" --vault "${ONEPASSWORD_VAULT}" --fields username)
+    PIA_PASSWORD=$(op read "op://${ONEPASSWORD_VAULT}/${OP_PIA_ENTRY}/password")
+
+    # Store as "username:password" combined string per project keychain convention.
+    # Retrieved on server with: security find-generic-password -s "pia-account-${HOSTNAME_LOWER}" \
+    #   -a "${HOSTNAME_LOWER}" -w | cut -d: -f1 (username) or cut -d: -f2- (password)
+    store_external_keychain_credential \
+      "pia-account-${SERVER_NAME_LOWER}" \
+      "${SERVER_NAME_LOWER}" \
+      "${PIA_USERNAME}:${PIA_PASSWORD}" \
+      "Mac Server Setup - PIA Account Credentials"
+
+    # Clear credentials from memory
+    unset PIA_USERNAME PIA_PASSWORD
+    echo "✅ PIA account credentials stored in Keychain"
+  fi
+else
+  echo "No PIA item configured (ONEPASSWORD_PIA_ITEM empty) - skipping PIA credential setup"
 fi
 
 # Set up Dropbox synchronization if configured
