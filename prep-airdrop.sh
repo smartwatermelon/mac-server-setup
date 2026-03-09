@@ -726,7 +726,7 @@ if [[ -n "${OP_PIA_ENTRY}" ]]; then
     echo "✅ Found PIA account credentials in 1Password"
 
     echo "Retrieving PIA account credentials from 1Password..."
-    PIA_USERNAME=$(op item get "${OP_PIA_ENTRY}" --vault "${ONEPASSWORD_VAULT}" --fields username)
+    PIA_USERNAME=$(op read "op://${ONEPASSWORD_VAULT}/${OP_PIA_ENTRY}/username")
     PIA_PASSWORD=$(op read "op://${ONEPASSWORD_VAULT}/${OP_PIA_ENTRY}/password")
 
     # Store as "username:password" combined string per project keychain convention.
