@@ -609,8 +609,9 @@ elif [[ "${ENV_WRITTEN}" == "false" ]]; then
   log "Skipping container start: .env not written (missing PIA credentials)"
 else
   log "Starting container stack (podman compose up -d)..."
-  if sudo -iu "${OPERATOR_USERNAME}" bash -c \
-    "cd '${CONTAINER_DIR}' && podman compose --env-file .env up -d"; then
+  if sudo -iu "${OPERATOR_USERNAME}" \
+    podman compose --project-directory "${CONTAINER_DIR}" \
+    --env-file "${CONTAINER_DIR}/.env" up -d; then
     log "✅ Container stack started"
     log ""
     log "Verify with:"

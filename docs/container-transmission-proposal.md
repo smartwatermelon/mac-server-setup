@@ -71,47 +71,57 @@ There is no race condition and no "unguarded window."
 
 ## 3. Components
 
-### 3.1 OrbStack
+> **Note:** The original proposal evaluated gluetun + linuxserver/transmission on OrbStack.
+> The decision changed to haugene/transmission-openvpn on Podman. This section describes
+> the implemented components.
 
-[OrbStack](https://orbstack.dev) is the container runtime. Preferred over Docker Desktop because:
+### 3.1 Podman
 
-- Lower memory overhead (~300MB vs ~1GB+ for Docker Desktop)
-- Faster startup (Linux VM in ~1 second vs ~10-15s)
-- Native Apple Silicon support
-- Better macOS filesystem integration (VirtioFS)
-- `orb` CLI is simpler than Docker Desktop's tooling
+[Podman](https://podman.io) is the container runtime. Chosen over OrbStack because:
 
-OrbStack's containers run in a Linux VM via Apple Virtualization.framework. This gives containers
-genuine Linux kernel networking (iptables, WireGuard, network namespaces) — not emulated.
+- CLI formula (Homebrew) — scriptable and headless-friendly
+- No GUI dependency (`orbstack` is a Cask, harder to automate)
+- Rootful machine mode (`podman machine init --rootful`) provides `CAP_NET_ADMIN`
+  and `/dev/net/tun` access required by OpenVPN
 
-### 3.2 gluetun
+Podman uses QEMU for the Linux VM. The VM is named `transmission-vm` and is registered as
+the default Podman connection so `podman compose` targets it without extra flags.
 
-[gluetun](https://github.com/qdm12/gluetun) (`qmcgaw/gluetun`) is a VPN client container with:
+### 3.2 haugene/transmission-openvpn
 
-- Native PIA support (WireGuard and OpenVPN)
-- Built-in iptables kill switch
-- PIA dynamic port forwarding via API (`VPN_PORT_FORWARDING=on`)
-- HTTP control server for reading the forwarded port
-- Automatic server selection and reconnection
+[haugene/transmission-openvpn](https://github.com/haugene/docker-transmission-openvpn) is a
+single container bundling:
 
-gluetun authenticates to PIA via their token API (username + password → token → WireGuard
-config). No PIA Desktop app is involved.
+- OpenVPN client with PIA support (Panama endpoint)
+- iptables kill switch (all non-VPN traffic dropped at container network level)
+- PIA port forwarding via the bundled `transmission-openvpn-pia-portforward.sh` script
+- Transmission BitTorrent client + web UI
 
-### 3.3 Transmission
+Authentication: `OPENVPN_USERNAME` + `OPENVPN_PASSWORD` (standard PIA account credentials).
+Credentials are injected via a `.env` file (permissions 600) written by the setup script from
+the macOS login keychain — never stored in the compose file or the git repo.
 
-[linuxserver/transmission](https://hub.docker.com/r/linuxserver/transmission) runs with
-`network_mode: "service:gluetun"`, meaning it shares gluetun's network namespace entirely. From
-the Linux kernel's perspective, gluetun and Transmission are the same network entity.
+`LOCAL_NETWORK` allows LAN hosts to reach the Transmission web UI on port 9091 while all
+other outbound traffic goes through the VPN.
 
-The web UI replaces the macOS Transmission.app. It is accessible at
-`http://tilsit.local:9091` from any browser on the LAN.
+### 3.3 Trigger-file handoff (container → macOS)
 
-### 3.4 Port forwarding update
+The existing `transmission-done.sh` post-processing script is macOS-specific and cannot run
+inside the container. The handoff mechanism:
 
-PIA's forwarded port is dynamic and changes on reconnection. gluetun exposes it at
-`http://localhost:8000/v1/openvpn/portforwarded`. A small companion script (run on a timer or
-triggered by gluetun's port change event) reads this endpoint and updates Transmission's
-listening port via its RPC API. This is a solved pattern with documented recipes.
+1. Container: `transmission-post-done.sh` (in `/scripts`, bind-mounted from the host) runs
+   inside the container when a torrent completes. It writes a KEY=VALUE trigger file to
+   `/data/.done/${TR_TORRENT_HASH}` (the NAS share, visible from both sides).
+2. macOS: `transmission-trigger-watcher.sh` LaunchAgent polls `~/.local/mnt/DSMedia/.done/`
+   every 60 seconds, maps the container `/data` prefix to the macOS NAS path, and invokes
+   the existing `transmission-done.sh` with the correct environment variables.
+
+This preserves the existing FileBot post-processing pipeline without modification.
+
+### 3.4 Port forwarding
+
+PIA port forwarding is handled automatically by the bundled haugene script. No external
+port-update companion service is required.
 
 ---
 
@@ -216,66 +226,25 @@ access) is a Phase 2 task in the separate Caddy config repo.
 
 ---
 
-## 6. Draft compose.yml
+## 6. Compose file
 
-This is illustrative — not final. Sensitive values are placeholders.
+The deployed template is at `app-setup/containers/transmission/compose.yml`. Placeholder
+variables (`__SERVER_NAME__`, `__PIA_VPN_REGION__`, `__LAN_SUBNET__`, `__OPERATOR_HOME__`,
+`__PUID__`, `__PGID__`, `__TZ__`) are replaced by `podman-transmission-setup.sh` at deploy time.
 
-```yaml
-# /Users/operator/containers/transmission/compose.yml
+Key design points:
 
-services:
-  gluetun:
-    image: qmcgaw/gluetun:latest
-    container_name: gluetun
-    cap_add:
-      - NET_ADMIN
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    environment:
-      - VPN_SERVICE_PROVIDER=private internet access
-      - VPN_TYPE=wireguard
-      - OPENVPN_USER=${PIA_USERNAME}
-      - OPENVPN_PASSWORD=${PIA_PASSWORD}
-      - SERVER_REGIONS=US East          # or nearest/preferred region
-      - VPN_PORT_FORWARDING=on
-      - VPN_PORT_FORWARDING_PROVIDER=private internet access
-      - FIREWALL_OUTBOUND_SUBNETS=192.168.1.0/24  # LAN: for Transmission RPC access
-    ports:
-      - 9091:9091                       # Transmission web UI
-      - 51413:51413                     # Transmission peer port (dynamic — see §5.4)
-      - 51413:51413/udp
-    volumes:
-      - gluetun-data:/gluetun
-    restart: unless-stopped
-
-  transmission:
-    image: lscr.io/linuxserver/transmission:latest
-    container_name: transmission
-    network_mode: "service:gluetun"     # shares gluetun's network namespace
-    environment:
-      - PUID=502                        # operator UID on tilsit
-      - PGID=20                         # staff GID
-      - TZ=America/Los_Angeles
-    volumes:
-      - transmission-config:/config
-      - /Users/operator/.local/mnt/DSMedia:/data   # see §5.1
-    restart: unless-stopped
-    depends_on:
-      - gluetun
-
-volumes:
-  gluetun-data:
-  transmission-config:
-```
-
-Key points:
-
-- `FIREWALL_OUTBOUND_SUBNETS` allows the Transmission web UI to be reachable from the LAN while
-  all other outbound traffic goes through the VPN.
-- `network_mode: "service:gluetun"` means Transmission has no independent network interface —
-  it is fully contained within gluetun's namespace.
-- Download/incomplete paths within the container map to `/data/Media/Torrents/...` — matching
-  the existing NAS structure.
+- `OPENVPN_PROVIDER=PIA` + `OPENVPN_CONFIG=<region>` — haugene's built-in PIA OpenVPN support.
+  Region must match a file stem in `/etc/openvpn/pia/` inside the container.
+- `LOCAL_NETWORK` — allows LAN hosts to reach port 9091 while all other outbound traffic
+  routes through the VPN.
+- `TRANSMISSION_SCRIPT_TORRENT_DONE_FILENAME=/scripts/transmission-post-done.sh` — the
+  container-side trigger that writes to the NAS `.done/` directory for the macOS watcher.
+- `restart: unless-stopped` — keeps the container alive within a running Podman machine
+  session. Machine restart across reboots is handled by the `podman-machine-start.sh`
+  LaunchAgent (separate from this policy).
+- Credentials come from `${PIA_USERNAME}` / `${PIA_PASSWORD}` in the `.env` file (600
+  permissions, not committed to git).
 
 ---
 
@@ -312,8 +281,8 @@ Cutover steps:
 1. Stop existing Transmission.app (`launchctl unload ~/Library/LaunchAgents/com.tilsit.transmission.plist` or equivalent).
 2. Re-add any active torrents via the container web UI (no config migration — see §5.5).
 3. Update `rclone-setup.sh` watch directory if needed (should already point to NAS).
-4. Run `podman-transmission-setup.sh --force` with `TRANSMISSION_PORT=9091` to switch to primary port.
-   (Or manually edit compose.yml port mapping and restart: `podman compose down && podman compose up -d`)
+4. Edit `~/containers/transmission/compose.yml`: change `"9092:9091"` → `"9091:9091"`, then:
+   `podman compose --project-directory ~/containers/transmission --env-file ~/containers/transmission/.env down && podman compose --project-directory ~/containers/transmission --env-file ~/containers/transmission/.env up -d`
 5. Reset macOS magnet/torrent handlers: `duti -s tilsit.local.transmission-web magnet` (exact
    `duti` invocation TBD — depends on Caddy hostname and whether a custom URI handler is installed).
 6. Confirm Caddy routes `http://tilsit.local/transmission` → port 9091.
@@ -341,12 +310,12 @@ existing setup is fully preserved during Phase 1 and Phase 2.
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| NAS bind mount doesn't work through VirtioFS | Medium | High | VM-level SMB mount fallback (§5.1) |
-| OrbStack updates break container networking | Low | Medium | Pin image versions; monitor OrbStack changelog |
-| PIA changes WireGuard API | Low | High | gluetun is actively maintained for PIA; same risk exists with PIA Desktop |
-| Port forwarding update lag causes poor peering | Low | Medium | Port-update service polls gluetun endpoint every 30s |
-| OrbStack VM startup is slower than expected | Low | Low | Containers restart gracefully; not latency-sensitive |
-| Transmission config migration loses active torrents | Medium | Medium | Export torrent files before migration; re-add if necessary |
+| NAS SMB mount not ready when Podman machine starts | Medium | High | `restart: unless-stopped` recovers; manual `podman compose up -d` after confirming NAS mount |
+| Podman machine updates break container networking | Low | Medium | Pin image versions; Podman is a Homebrew formula with pinnable versions |
+| PIA changes OpenVPN server config or API | Low | High | haugene is actively maintained for PIA; same risk exists with PIA Desktop |
+| haugene port forwarding script fails on PIA API change | Low | Medium | Transmission continues downloading; peering degrades until fixed |
+| Podman VM startup is slower than expected | Low | Low | Containers restart gracefully; not latency-sensitive |
+| Transmission config migration loses active torrents | Medium | Medium | Re-add active torrents via web UI; completed torrents unaffected |
 
 ---
 
@@ -366,13 +335,17 @@ existing setup is fully preserved during Phase 1 and Phase 2.
 The migration is complete when:
 
 - [ ] Transmission downloads exclusively through the VPN (verified by IP check from within
-  container: `docker exec transmission curl -s ifconfig.io`)
-- [ ] Forced VPN disconnect causes Transmission traffic to stop immediately (kill switch test)
-- [ ] PIA port forwarding is active and Transmission's listening port matches
+  container: `podman exec transmission-vpn curl -s ifconfig.io` — must return Panama PIA exit IP)
+- [ ] Forced VPN disconnect causes Transmission traffic to stop immediately (kill switch test:
+  `podman exec transmission-vpn pkill openvpn`, then verify traffic stops)
+- [ ] PIA port forwarding is active and Transmission's listening port matches the forwarded port
 - [ ] Downloads land in the correct NAS path for FileBot/Catch to process
+  (`~/.local/mnt/DSMedia/Media/Torrents/pending-move/`)
 - [ ] Web UI is accessible from LAN at `http://tilsit.local:9091`
-- [ ] OrbStack and containers start automatically after server reboot without intervention
+- [ ] Podman machine and container start automatically after server reboot without intervention
+- [ ] Trigger-watcher fires and FileBot processes a completed torrent end-to-end
 - [ ] No PIA Desktop app, no vpn-monitor, no pia-proxy-consent, no split tunnel daemons running
+  (Phase 3 complete)
 
 ---
 
