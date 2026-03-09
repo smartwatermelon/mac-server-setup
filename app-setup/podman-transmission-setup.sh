@@ -463,6 +463,10 @@ set -euo pipefail
 # Ensures the machine is running, waits for the socket, then runs compose up.
 # Separate from the setup script so it can be re-run safely at each login.
 
+# LaunchAgents run with a minimal PATH that does not include Homebrew.
+# Bake in the Homebrew prefix determined at deploy time.
+export PATH="${HOMEBREW_PREFIX}/bin:${HOMEBREW_PREFIX}/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
 MACHINE_STATE=\$(podman machine inspect transmission-vm --format '{{.State}}' 2>/dev/null || echo "unknown")
 if [[ "\${MACHINE_STATE}" != "running" ]]; then
     podman machine start transmission-vm
