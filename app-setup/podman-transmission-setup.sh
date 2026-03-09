@@ -297,13 +297,13 @@ if [[ "${MACHINE_EXISTS}" == "false" ]]; then
     --disk-size 20 \
     transmission-vm
   log "Machine initialized"
-
-  # Register as default connection so 'podman compose' targets this machine
-  sudo -iu "${OPERATOR_USERNAME}" podman system connection default transmission-vm
-  log "Default Podman connection set to transmission-vm"
 else
   log "Machine 'transmission-vm' already exists — skipping init"
 fi
+
+# Always set the default connection — this is client-side config and must survive re-runs
+sudo -iu "${OPERATOR_USERNAME}" podman system connection default transmission-vm
+log "Default Podman connection confirmed: transmission-vm"
 
 MACHINE_STATE=$(sudo -iu "${OPERATOR_USERNAME}" podman machine inspect transmission-vm \
   --format '{{.State}}' 2>/dev/null || echo "unknown")
@@ -476,8 +476,8 @@ for _ in {1..30}; do
     sleep 1
 done
 
-cd "${OPERATOR_HOME}/containers/transmission"
-podman compose --env-file .env up -d
+podman compose --project-directory "${OPERATOR_HOME}/containers/transmission" \
+    --env-file "${OPERATOR_HOME}/containers/transmission/.env" up -d
 WRAPPER
 
 sudo chmod 755 "${MACHINE_START_DEST}"
