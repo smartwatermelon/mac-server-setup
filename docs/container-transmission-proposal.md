@@ -1,6 +1,9 @@
 # Proposal: Containerized Transmission with gluetun VPN
 
-**Status:** Draft — for review, not yet approved for implementation
+**Status:** Active — approved for implementation 2026-03-08
+**Decision:** haugene/transmission-openvpn (not gluetun + linuxserver/transmission)
+  Rationale: single container, automatic PIA port forwarding, battle-tested.
+  Server uses Panama PIA endpoint (non-US = port forwarding supported with OpenVPN).
 **Date:** 2026-02-27
 **Motivation:** Replace the current PIA Desktop + split tunnel + shell script monitoring stack with a
 container-based architecture that provides kernel-level VPN enforcement and eliminates recurring
@@ -14,7 +17,7 @@ The current Transmission + VPN setup has required multiple debugging sessions an
 
 | Problem | Root Cause | Fix Applied |
 |---------|-----------|-------------|
-| Transmission on wrong IP after VPN restart | `launch_transmission` failure → `set -e` crash-loop | `|| log "WARNING"` guards (PR #75) |
+| Transmission on wrong IP after VPN restart | `launch_transmission` failure → `set -e` crash-loop | `\|\| log "WARNING"` guards (PR #75) |
 | PIA consent dialog ignored for 90+ minutes | `StartInterval` job exits in ~3s → launchd throttle escalation | Converted to daemon (PR #75) |
 | Split tunnel loses consent after reboot | NETransparentProxy loses signature at boot | pia-proxy-consent auto-clicker daemon |
 | Transmission briefly unguarded on monitor restart | KeepAlive restarts vpn-monitor before kill completes | Mitigated by PR #75, not eliminated |
