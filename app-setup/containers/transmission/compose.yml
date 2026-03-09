@@ -7,8 +7,9 @@
 #                        Verify on tilsit during Phase 1:
 #                          podman run --rm --entrypoint ls haugene/transmission-openvpn \
 #                            /etc/openvpn/pia/ | grep -i panama
-#   __LAN_SUBNET__     → local network CIDR (e.g. 192.168.1.0/24)
-#   __OPERATOR_HOME__  → operator home directory (e.g. /Users/operator)
+#   __LAN_SUBNET__          → local network CIDR (e.g. 192.168.1.0/24)
+#   __TRANSMISSION_HOST_PORT__ → host port for web UI (9092 for Phase 1, 9091 for Phase 2+)
+#   __OPERATOR_HOME__       → operator home directory (e.g. /Users/operator)
 #   __PUID__           → operator UID (e.g. 502)
 #   __PGID__           → operator primary GID (e.g. 20)
 #   __TZ__             → timezone (e.g. America/Los_Angeles)
@@ -51,7 +52,7 @@ services:
       - __OPERATOR_HOME__/containers/transmission/scripts:/scripts
       - __OPERATOR_HOME__/containers/transmission/config:/config
     ports:
-      - "9091:9091"
+      - "__TRANSMISSION_HOST_PORT__:9091"
     restart: unless-stopped
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=0

@@ -236,6 +236,7 @@ fi
 # PIA_VPN_REGION and LAN_SUBNET default gracefully if missing from config
 PIA_REGION="${PIA_VPN_REGION:-panama}"
 LAN="${LAN_SUBNET:-192.168.1.0/24}"
+HOST_PORT="${TRANSMISSION_HOST_PORT:-9091}"
 
 if [[ "${FORCE}" != "true" ]]; then
   echo ""
@@ -387,12 +388,13 @@ else
   TZ_VALUE=$(readlink /etc/localtime | sed 's|.*/zoneinfo/||' || true)
   TZ_VALUE="${TZ_VALUE:-America/Los_Angeles}"
 
-  log "Deploying compose.yml (region: ${PIA_REGION}, LAN: ${LAN}, TZ: ${TZ_VALUE})"
+  log "Deploying compose.yml (region: ${PIA_REGION}, LAN: ${LAN}, TZ: ${TZ_VALUE}, host port: ${HOST_PORT})"
 
   sudo sed \
     -e "s|__SERVER_NAME__|${HOSTNAME}|g" \
     -e "s|__PIA_VPN_REGION__|${PIA_REGION}|g" \
     -e "s|__LAN_SUBNET__|${LAN}|g" \
+    -e "s|__TRANSMISSION_HOST_PORT__|${HOST_PORT}|g" \
     -e "s|__OPERATOR_HOME__|${OPERATOR_HOME}|g" \
     -e "s|__PUID__|${PUID}|g" \
     -e "s|__PGID__|${PGID}|g" \
@@ -621,7 +623,7 @@ else
     log "Verify with:"
     log "  podman logs transmission-vpn"
     log "  podman exec transmission-vpn curl -s ifconfig.io  (should return Panama PIA exit IP)"
-    log "  Transmission web UI: http://${HOSTNAME_LOWER}.local:9091"
+    log "  Transmission web UI: http://${HOSTNAME_LOWER}.local:${HOST_PORT}"
   else
     collect_error "podman compose up failed — check 'podman logs transmission-vpn' for details"
   fi
