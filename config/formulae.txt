@@ -33,6 +33,8 @@ node
 open-completion
 openssh
 pipx
+podman
+podman-compose
 pv
 python@3.13
 qrencode
