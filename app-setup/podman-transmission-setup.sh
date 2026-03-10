@@ -264,6 +264,11 @@ if ! command -v podman >/dev/null 2>&1; then
   brew install podman
 fi
 
+if ! command -v podman-compose >/dev/null 2>&1; then
+  log "Installing podman-compose via Homebrew (required compose provider for 'podman compose')..."
+  brew install podman-compose
+fi
+
 PODMAN_VERSION=$(podman --version | awk '{print $3}')
 PODMAN_MAJOR=$(cut -d. -f1 <<<"${PODMAN_VERSION}")
 PODMAN_MINOR=$(cut -d. -f2 <<<"${PODMAN_VERSION}")
