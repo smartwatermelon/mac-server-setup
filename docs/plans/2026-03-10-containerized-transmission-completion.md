@@ -16,7 +16,7 @@
 
 - Branch: `claude/feature-blocklist-magnet-handler-<timestamp>` (2 commits: blocklist+magnet handler feat, awk session ID fix)
 
-**Step 1: Push and create PR**
+### Step 1: Push and create PR
 
 ```bash
 git push -u origin claude/feature-blocklist-magnet-handler-<timestamp>
@@ -24,7 +24,7 @@ gh pr create --title "feat(podman-transmission): IP blocklist, magnet handler, a
   --body "..."
 ```
 
-**Step 2: Confirm CI passes, merge**
+### Step 2: Confirm CI passes, merge
 
 Follow Protocol 6 — create PR, wait for CI, merge on explicit approval.
 
@@ -34,11 +34,11 @@ Follow Protocol 6 — create PR, wait for CI, merge on explicit approval.
 
 **Context:** The running container was started with the old `compose.yml` (no blocklist env vars). The updated `compose.yml` is in the repo but not yet on TILSIT.
 
-**Step 1: Remove the Debian test torrent**
+### Step 1: Remove the Debian test torrent
 
 In browser: `http://tilsit.local:9092/transmission/web/` → select debian torrent → Remove (delete local data too, nothing was downloaded).
 
-**Step 2: rsync updated compose.yml to TILSIT**
+### Step 2: rsync updated compose.yml to TILSIT
 
 ```bash
 # On dev Mac, from repo root:
@@ -58,7 +58,7 @@ ssh operator@tilsit.local
 #   - TRANSMISSION_BLOCKLIST_URL=https://github.com/Naunter/BT_BlockLists/raw/master/bt_blocklists.gz
 ```
 
-**Step 3: Restart the container stack to pick up new env vars**
+### Step 3: Restart the container stack to pick up new env vars
 
 ```bash
 ssh operator@tilsit.local
@@ -70,7 +70,7 @@ podman compose -f ~/containers/transmission/compose.yml \
 podman logs transmission-vpn 2>&1 | grep -i blocklist
 ```
 
-**Step 4: Verify container is back up**
+### Step 4: Verify container is back up
 
 ```bash
 podman exec transmission-vpn curl -s ifconfig.io  # should return PIA exit IP
@@ -143,22 +143,22 @@ open "magnet:?xt=urn:btih:86d0b154b81ba13fdbc6f4fba11c56b2c06bbf30&dn=test"
 
 **Goal:** Confirm that when the VPN drops, Transmission has zero network activity (the container's network is enforced at the kernel level by gluetun).
 
-**Step 1: Note current download activity**
+### Step 1: Note current download activity
 
 In the web UI, start a well-seeded public torrent so there's active traffic.
 
-**Step 2: Force VPN disconnect from TILSIT**
+### Step 2: Force VPN disconnect from TILSIT
 
 ```bash
 ssh andrewrich@tilsit.local  # as administrator
 piactl disconnect
 ```
 
-**Step 3: Verify Transmission traffic stops**
+### Step 3: Verify Transmission traffic stops
 
 In the web UI, download rate should drop to 0 immediately. The container should still be running (the kill switch is inside gluetun, not a process kill).
 
-**Step 4: Reconnect and confirm recovery**
+### Step 4: Reconnect and confirm recovery
 
 ```bash
 piactl connect
@@ -176,18 +176,18 @@ podman exec transmission-vpn curl -s ifconfig.io  # should return PIA IP again
 
 **Goal:** Confirm the forwarded port from PIA matches the peer port Transmission is advertising. This allows peers to initiate connections to us (better download speeds).
 
-**Step 1: Check container logs for forwarded port**
+### Step 1: Check container logs for forwarded port
 
 ```bash
 ssh operator@tilsit.local
 podman logs transmission-vpn 2>&1 | grep -i "port\|forward" | tail -20
 ```
 
-**Step 2: Check Transmission peer port setting**
+### Step 2: Check Transmission peer port setting
 
 In the web UI: Edit → Preferences → Network → "Peer listening port". This value should match the forwarded port from Step 1.
 
-**Step 3: Test port is open**
+### Step 3: Test port is open
 
 From outside the LAN (or via a port-check service), verify the port is reachable at the server's public IP.
 
@@ -197,11 +197,11 @@ From outside the LAN (or via a port-check service), verify the port is reachable
 
 **Goal:** Confirm the full pipeline: torrent completes → `transmission-post-done.sh` fires inside container → `.done` signal written to NAS → `transmission-trigger-watcher.sh` picks it up on macOS → FileBot renames and moves the file.
 
-**Step 1: Add a small well-seeded test torrent**
+### Step 1: Add a small well-seeded test torrent
 
 Use a small public domain file (e.g., a CC-licensed short film or a small Linux ISO). Add via magnet or `.torrent` file to the watch directory.
 
-**Step 2: Monitor the pipeline**
+### Step 2: Monitor the pipeline
 
 ```bash
 ssh operator@tilsit.local
@@ -213,7 +213,7 @@ tail -f ~/.local/state/tilsit-trigger-watcher-stdout.log
 ls ~/.local/mnt/DSMedia/Media/Torrents/done/
 ```
 
-**Step 3: Confirm FileBot output**
+### Step 3: Confirm FileBot output
 
 Check `~/.local/mnt/DSMedia/Media/` for the renamed and moved file.
 
@@ -225,11 +225,11 @@ Check `~/.local/mnt/DSMedia/Media/` for the renamed and moved file.
 
 **Prerequisites:** Tasks 1–6 complete, container stable for ≥3 days.
 
-**Step 1: Update Caddy config (tilsit-caddy-v1 repo)**
+### Step 1: Update Caddy config (tilsit-caddy-v1 repo)
 
 Update any Caddy reverse proxy rules that reference port 9092 to point to 9091.
 
-**Step 2: Update config.conf and re-run setup**
+### Step 2: Update config.conf and re-run setup
 
 ```bash
 # On dev Mac:
@@ -242,7 +242,7 @@ cd ~/setup/app-setup
 
 This redeploys `compose.yml` with port 9091, recreates the `podman-machine-start.sh` wrapper with the new port, redeploys `transmission-add-magnet.sh` with port 9091 baked in, and reregisters the magnet handler.
 
-**Step 3: Restart container on new port**
+### Step 3: Restart container on new port
 
 ```bash
 ssh operator@tilsit.local
@@ -252,7 +252,7 @@ podman compose -f ~/containers/transmission/compose.yml \
   --env-file ~/containers/transmission/.env up -d
 ```
 
-**Step 4: Decommission native Transmission**
+### Step 4: Decommission native Transmission
 
 ```bash
 ssh operator@tilsit.local
@@ -265,7 +265,7 @@ rm ~/Library/LaunchAgents/com.tilsit.vpn-monitor.plist
 
 The VPN monitor is no longer needed — gluetun enforces the kill switch at the container level.
 
-**Step 5: Update plan.md**
+### Step 5: Update plan.md
 
 Mark Phase 1 complete, Phase 2 in progress, update Running Services table, remove vpn-monitor from services list.
 
