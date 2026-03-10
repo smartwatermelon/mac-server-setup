@@ -487,7 +487,7 @@ for _ in {1..30}; do
     sleep 1
 done
 
-podman compose --project-directory "${OPERATOR_HOME}/containers/transmission" \
+podman compose -f "${OPERATOR_HOME}/containers/transmission/compose.yml" \
     --env-file "${OPERATOR_HOME}/containers/transmission/.env" up -d
 WRAPPER
 
@@ -621,7 +621,7 @@ elif [[ "${ENV_WRITTEN}" == "false" ]]; then
 else
   log "Starting container stack (podman compose up -d)..."
   if sudo -iu "${OPERATOR_USERNAME}" \
-    podman compose --project-directory "${CONTAINER_DIR}" \
+    podman compose -f "${CONTAINER_DIR}/compose.yml" \
     --env-file "${CONTAINER_DIR}/.env" up -d; then
     log "✅ Container stack started"
     log ""
