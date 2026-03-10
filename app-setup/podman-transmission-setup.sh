@@ -693,7 +693,7 @@ APPSRC=$(mktemp /tmp/transmission-magnet-XXXXXX.applescript)
 chmod 644 "${APPSRC}"
 cat >"${APPSRC}" <<APPLESCRIPT_EOF
 on open location this_URL
-    do shell script "${MAGNET_HELPER} " & quoted form of this_URL
+    do shell script (quoted form of "${MAGNET_HELPER}") & " " & quoted form of this_URL
 end open location
 APPLESCRIPT_EOF
 
