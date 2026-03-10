@@ -335,12 +335,12 @@ import_iterm2_preferences_for_user() {
 
     # Copy preferences file to operator's config directory
     if sudo cp "${preferences_file}" "${operator_library_prefs_dir}" \
-      && sudo chown "${username}:staff" "${operator_library_prefs_dir}/${preferences_file}"; then
-      sudo -iu "{username}" killall iTerm2 &>/dev/null || true
+      && sudo chown "${username}:staff" "${operator_library_prefs_dir}/$(basename "${preferences_file}")"; then
+      sudo -iu "${username}" killall iTerm2 &>/dev/null || true
       sleep 1
-      sudo -iu "{username}" open -a iTerm2 &>/dev/null || true
+      sudo -iu "${username}" open -a iTerm2 &>/dev/null || true
       sleep 1
-      sudo -iu "{username}" killall iTerm2 &>/dev/null || true
+      sudo -iu "${username}" killall iTerm2 &>/dev/null || true
       log "Successfully copied iTerm2 preferences to ${operator_library_prefs_dir}"
       log "Preferences will be imported during operator first login"
       return 0
