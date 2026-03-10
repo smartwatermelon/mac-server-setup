@@ -636,5 +636,113 @@ else
   fi
 fi
 
+# ---------------------------------------------------------------------------
+# Section 12: macOS magnet link handler
+# ---------------------------------------------------------------------------
+
+set_section "Magnet Link Handler"
+
+MAGNET_HELPER="${OPERATOR_HOME}/.local/bin/transmission-add-magnet.sh"
+MAGNET_APP="${OPERATOR_HOME}/Applications/TransmissionMagnetHandler.app"
+MAGNET_BUNDLE_ID="com.${HOSTNAME_LOWER}.transmission-magnet-handler"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+# Ensure .local/bin exists (idempotent; also created by Section 7, but guard here too)
+sudo -iu "${OPERATOR_USERNAME}" mkdir -p "${OPERATOR_HOME}/.local/bin"
+
+# Deploy the shell helper that handles Transmission RPC.
+# HOST_PORT is baked in at deploy time; all other variables are runtime.
+sudo tee "${MAGNET_HELPER}" >/dev/null <<MAGNET_HELPER_EOF
+#!/usr/bin/env bash
+set -euo pipefail
+# transmission-add-magnet.sh — Add a magnet URL to Transmission via RPC.
+# Called by TransmissionMagnetHandler.app when macOS opens a magnet: link.
+
+MAGNET_URL="\$1"
+RPC_URL="http://localhost:${HOST_PORT}/transmission/rpc"
+
+# Transmission's CSRF protection requires a session token from a 409 response.
+# Anchor to ^ so the <code> body line in the 409 HTML doesn't also match; exit
+# after the first match to avoid a multiline SESSION_ID from the duplicate.
+SESSION_ID=\$(curl -s -D - "\${RPC_URL}" 2>/dev/null | \
+  awk 'tolower(\$0) ~ /^x-transmission-session-id:/{gsub(/\r/,""); print \$2; exit}')
+
+if [[ -z "\${SESSION_ID}" ]]; then
+  osascript -e "display notification \"Could not connect to Transmission (port ${HOST_PORT})\" with title \"Transmission\""
+  exit 1
+fi
+
+RESPONSE=\$(curl -s "\${RPC_URL}" \
+  -H "X-Transmission-Session-Id: \${SESSION_ID}" \
+  --data-raw "{\"method\":\"torrent-add\",\"arguments\":{\"filename\":\"\${MAGNET_URL}\"}}")
+
+if echo "\${RESPONSE}" | grep -q '"result":"success"'; then
+  osascript -e "display notification \"Magnet link added to Transmission\" with title \"Transmission\""
+else
+  osascript -e "display notification \"Failed to add magnet link — check Transmission\" with title \"Transmission\""
+  exit 1
+fi
+MAGNET_HELPER_EOF
+
+sudo chmod 755 "${MAGNET_HELPER}"
+sudo chown "${OPERATOR_USERNAME}:staff" "${MAGNET_HELPER}"
+log "✅ transmission-add-magnet.sh deployed to ${MAGNET_HELPER}"
+
+# Compile AppleScript app that delegates to the shell helper
+APPSRC=$(mktemp /tmp/transmission-magnet-XXXXXX.applescript)
+chmod 644 "${APPSRC}"
+cat >"${APPSRC}" <<APPLESCRIPT_EOF
+on open location this_URL
+    do shell script (quoted form of "${MAGNET_HELPER}") & " " & quoted form of this_URL
+end open location
+APPLESCRIPT_EOF
+
+# Remove any previous version before recompiling (idempotent)
+if [[ -d "${MAGNET_APP}" ]]; then
+  sudo rm -rf "${MAGNET_APP}"
+fi
+
+sudo -iu "${OPERATOR_USERNAME}" mkdir -p "${OPERATOR_HOME}/Applications"
+if sudo -iu "${OPERATOR_USERNAME}" osacompile -o "${MAGNET_APP}" "${APPSRC}"; then
+  rm -f "${APPSRC}"
+
+  # Inject bundle identifier and URL scheme into the compiled app's Info.plist
+  MAGNET_PLIST="${MAGNET_APP}/Contents/Info.plist"
+  sudo /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ${MAGNET_BUNDLE_ID}" "${MAGNET_PLIST}"
+  sudo /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" "${MAGNET_PLIST}" 2>/dev/null || true
+  sudo /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" "${MAGNET_PLIST}" 2>/dev/null || true
+  sudo /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" "${MAGNET_PLIST}" 2>/dev/null || true
+  sudo /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string magnet" "${MAGNET_PLIST}" 2>/dev/null || true
+  sudo /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLName string BitTorrent Magnet Link" "${MAGNET_PLIST}" 2>/dev/null || true
+  sudo chown -R "${OPERATOR_USERNAME}:staff" "${MAGNET_APP}"
+  log "✅ TransmissionMagnetHandler.app compiled (bundle: ${MAGNET_BUNDLE_ID})"
+
+  # Register with Launch Services and set as default magnet: handler
+  sudo -iu "${OPERATOR_USERNAME}" "${LSREGISTER}" -f "${MAGNET_APP}"
+
+  magnet_handler_plist='{
+    LSHandlerURLScheme = "magnet";
+    LSHandlerRoleAll = "'"${MAGNET_BUNDLE_ID}"'";
+    LSHandlerPreferredVersions = {
+        LSHandlerRoleAll = "-";
+    };
+}'
+  # Guard -array-add with an existence check to preserve idempotency — re-running
+  # without this check would accumulate duplicate entries in LSHandlers.
+  if sudo -iu "${OPERATOR_USERNAME}" defaults read \
+    com.apple.LaunchServices/com.apple.launchservices.secure \
+    LSHandlers 2>/dev/null | grep -q "${MAGNET_BUNDLE_ID}"; then
+    log "Magnet link handler already registered — skipping"
+  else
+    sudo -iu "${OPERATOR_USERNAME}" defaults write \
+      com.apple.LaunchServices/com.apple.launchservices.secure \
+      LSHandlers -array-add "${magnet_handler_plist}"
+    log "✅ Magnet link handler registered: ${MAGNET_BUNDLE_ID} → ${OPERATOR_USERNAME}"
+  fi
+else
+  rm -f "${APPSRC}"
+  collect_error "Failed to compile TransmissionMagnetHandler.app — magnet links will not be handled"
+fi
+
 log ""
 log "Podman Transmission setup complete for ${SERVER_NAME}"
