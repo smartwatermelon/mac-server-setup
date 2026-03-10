@@ -45,7 +45,6 @@ services:
       - TRANSMISSION_RPC_WHITELIST_ENABLED=false
       - TRANSMISSION_SCRIPT_TORRENT_DONE_ENABLED=true
       - TRANSMISSION_SCRIPT_TORRENT_DONE_FILENAME=/scripts/transmission-post-done.sh
-      - CREATE_TUN_DEVICE=true
       - LOG_TO_STDOUT=true
     volumes:
       - __OPERATOR_HOME__/.local/mnt/DSMedia:/data
