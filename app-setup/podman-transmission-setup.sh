@@ -672,11 +672,16 @@ if [[ -z "\${SESSION_ID}" ]]; then
   exit 1
 fi
 
-curl -s "\${RPC_URL}" \
+RESPONSE=\$(curl -s "\${RPC_URL}" \
   -H "X-Transmission-Session-Id: \${SESSION_ID}" \
-  --data-raw "{\"method\":\"torrent-add\",\"arguments\":{\"filename\":\"\${MAGNET_URL}\"}}" >/dev/null
+  --data-raw "{\"method\":\"torrent-add\",\"arguments\":{\"filename\":\"\${MAGNET_URL}\"}}")
 
-osascript -e "display notification \"Magnet link added to Transmission\" with title \"Transmission\""
+if echo "\${RESPONSE}" | grep -q '"result":"success"'; then
+  osascript -e "display notification \"Magnet link added to Transmission\" with title \"Transmission\""
+else
+  osascript -e "display notification \"Failed to add magnet link — check Transmission\" with title \"Transmission\""
+  exit 1
+fi
 MAGNET_HELPER_EOF
 
 sudo chmod 755 "${MAGNET_HELPER}"
@@ -722,11 +727,18 @@ if sudo -iu "${OPERATOR_USERNAME}" osacompile -o "${MAGNET_APP}" "${APPSRC}"; th
         LSHandlerRoleAll = "-";
     };
 }'
-  sudo -iu "${OPERATOR_USERNAME}" defaults write \
+  # Guard -array-add with an existence check to preserve idempotency — re-running
+  # without this check would accumulate duplicate entries in LSHandlers.
+  if sudo -iu "${OPERATOR_USERNAME}" defaults read \
     com.apple.LaunchServices/com.apple.launchservices.secure \
-    LSHandlers -array-add "${magnet_handler_plist}"
-
-  log "✅ Magnet link handler registered: ${MAGNET_BUNDLE_ID} → ${OPERATOR_USERNAME}"
+    LSHandlers 2>/dev/null | grep -q "${MAGNET_BUNDLE_ID}"; then
+    log "Magnet link handler already registered — skipping"
+  else
+    sudo -iu "${OPERATOR_USERNAME}" defaults write \
+      com.apple.LaunchServices/com.apple.launchservices.secure \
+      LSHandlers -array-add "${magnet_handler_plist}"
+    log "✅ Magnet link handler registered: ${MAGNET_BUNDLE_ID} → ${OPERATOR_USERNAME}"
+  fi
 else
   rm -f "${APPSRC}"
   collect_error "Failed to compile TransmissionMagnetHandler.app — magnet links will not be handled"
