@@ -662,8 +662,10 @@ MAGNET_URL="\$1"
 RPC_URL="http://localhost:${HOST_PORT}/transmission/rpc"
 
 # Transmission's CSRF protection requires a session token from a 409 response.
+# Anchor to ^ so the <code> body line in the 409 HTML doesn't also match; exit
+# after the first match to avoid a multiline SESSION_ID from the duplicate.
 SESSION_ID=\$(curl -s -D - "\${RPC_URL}" 2>/dev/null | \
-  awk 'tolower(\$0) ~ /x-transmission-session-id:/{gsub(/\r/,""); print \$2}')
+  awk 'tolower(\$0) ~ /^x-transmission-session-id:/{gsub(/\r/,""); print \$2; exit}')
 
 if [[ -z "\${SESSION_ID}" ]]; then
   osascript -e "display notification \"Could not connect to Transmission (port ${HOST_PORT})\" with title \"Transmission\""
