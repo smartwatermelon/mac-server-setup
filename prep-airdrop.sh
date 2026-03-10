@@ -863,6 +863,20 @@ if [[ -d "${SCRIPT_SOURCE_DIR}" ]]; then
     fi
   done
 
+  # Copy container compose templates (app-setup/containers/**/*.yml)
+  echo "Copying container compose templates..."
+  if [[ -d "${SCRIPT_SOURCE_DIR}/app-setup/containers" ]]; then
+    while IFS= read -r -d '' compose_file; do
+      rel_path="${compose_file#"${SCRIPT_SOURCE_DIR}/"}"
+      dest_dir="${OUTPUT_PATH}/$(dirname "${rel_path}")"
+      mkdir -p "${dest_dir}"
+      copy_with_manifest "${compose_file}" "${rel_path}" "REQUIRED"
+      echo "  ✅ ${rel_path}"
+    done < <(find "${SCRIPT_SOURCE_DIR}/app-setup/containers" -name "*.yml" -print0 || true)
+  else
+    echo "  ℹ️  No app-setup/containers directory found, skipping"
+  fi
+
   # Copy system configuration files
   copy_with_manifest "${SCRIPT_SOURCE_DIR}/config/formulae.txt" "config/formulae.txt" "REQUIRED" || echo "Warning: formulae.txt not found in source directory"
   copy_with_manifest "${SCRIPT_SOURCE_DIR}/config/casks.txt" "config/casks.txt" "REQUIRED" || echo "Warning: casks.txt not found in source directory"
