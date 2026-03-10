@@ -536,6 +536,20 @@ import_external_keychain_credentials() {
     show_log "⚠️ WiFi credential not found in external keychain (optional)"
   fi
 
+  # Import PIA credential (optional — only present when ONEPASSWORD_PIA_ITEM was set during prep-airdrop)
+  # shellcheck disable=SC2154 # KEYCHAIN_PIA_SERVICE loaded from sourced manifest
+  if pia_credential=$(security find-generic-password -s "${KEYCHAIN_PIA_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then
+    security delete-generic-password -s "${KEYCHAIN_PIA_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" &>/dev/null || true
+    if security add-generic-password -s "${KEYCHAIN_PIA_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${pia_credential}" -D "Mac Server Setup - PIA Account Credentials" -A -U; then
+      show_log "✅ PIA credential imported to administrator keychain"
+    else
+      collect_warning "Failed to import PIA credential to administrator keychain"
+    fi
+    unset pia_credential
+  else
+    show_log "⚠️ PIA credential not found in external keychain (optional — needed for containerized Transmission)"
+  fi
+
   # Import OpenSubtitles credential (optional)
   # shellcheck disable=SC2154 # KEYCHAIN_OPENSUBTITLES_SERVICE loaded from sourced manifest
   if opensubtitles_credential=$(security find-generic-password -s "${KEYCHAIN_OPENSUBTITLES_SERVICE}" -a "${KEYCHAIN_ACCOUNT}" -w "${EXTERNAL_KEYCHAIN}" 2>/dev/null); then

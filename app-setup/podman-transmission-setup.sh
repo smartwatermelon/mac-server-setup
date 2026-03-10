@@ -82,6 +82,7 @@ fi
 # shellcheck source=config/config.conf
 source "${CONFIG_FILE}"
 
+SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
 OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
@@ -349,15 +350,16 @@ log "✅ Container directories created"
 set_section "PIA Credentials"
 
 # Credentials stored as "username:password" combined string per project keychain convention.
-# Account field = ${HOSTNAME_LOWER}, service = pia-account-${HOSTNAME_LOWER}.
+# Service and account use SERVER_NAME_LOWER (matches how prep-airdrop.sh stored them).
+# HOSTNAME_LOWER may differ when HOSTNAME_OVERRIDE is set; SERVER_NAME_LOWER never does.
 PIA_CREDS=$(security find-generic-password \
-  -s "pia-account-${HOSTNAME_LOWER}" \
-  -a "${HOSTNAME_LOWER}" \
+  -s "pia-account-${SERVER_NAME_LOWER}" \
+  -a "${SERVER_NAME_LOWER}" \
   -w 2>/dev/null || true)
 
 ENV_WRITTEN=false
 if [[ -z "${PIA_CREDS}" ]]; then
-  collect_error "PIA credentials not found in keychain (service: pia-account-${HOSTNAME_LOWER}, account: ${HOSTNAME_LOWER}). Run prep-airdrop.sh with ONEPASSWORD_PIA_ITEM set."
+  collect_error "PIA credentials not found in keychain (service: pia-account-${SERVER_NAME_LOWER}, account: ${SERVER_NAME_LOWER}). Run prep-airdrop.sh with ONEPASSWORD_PIA_ITEM set."
 else
   PIA_USERNAME=$(cut -d: -f1 <<<"${PIA_CREDS}")
   PIA_PASSWORD=$(cut -d: -f2- <<<"${PIA_CREDS}")
