@@ -2,10 +2,12 @@
 #
 # transmission-trigger-watcher.sh - macOS trigger file watcher for containerized Transmission
 #
-# Polls ~/.local/mnt/DSMedia/.done/ for trigger files written by the
+# Polls ~/containers/transmission/config/triggers/ for trigger files written by the
 # transmission-post-done.sh script running inside the haugene container.
 # On finding a trigger file, maps the container-internal /data path to the macOS NAS
-# mount path and invokes the existing transmission-done.sh with the correct env vars.
+# mount path and invokes the existing transmission-done with the correct env vars.
+# Triggers are written to a host-local path (not the NAS) to avoid macOS TCC/sandbox
+# restrictions that prevent LaunchAgents from reading SMB-mounted directories.
 #
 # Runs as a persistent daemon via com.<hostname>.transmission-trigger-watcher LaunchAgent.
 # Replaces the native Transmission.app "Done Script" mechanism used before containerization.
@@ -24,8 +26,8 @@ set -euo pipefail
 SERVER_NAME="__SERVER_NAME__"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 
-DONE_DIR="${HOME}/.local/mnt/DSMedia/.done"
-DONE_SCRIPT="${HOME}/.local/bin/transmission-done.sh"
+DONE_DIR="${HOME}/containers/transmission/config/triggers"
+DONE_SCRIPT="${HOME}/.local/bin/transmission-done"
 LOG_FILE="${HOME}/.local/state/${HOSTNAME_LOWER}-transmission-trigger-watcher.log"
 MAX_LOG_SIZE=5242880 # 5MB
 POLL_INTERVAL=60
