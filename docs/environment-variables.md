@@ -214,7 +214,7 @@ PLEX_NEW_CONFIG="/Users/Shared/PlexMediaServer"
 
 ### Transmission Configuration
 
-**Location**: transmission-setup.sh
+**Location**: podman-transmission-setup.sh
 
 ```bash
 # RPC web interface password (optional override)

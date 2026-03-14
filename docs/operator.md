@@ -115,7 +115,7 @@ Common application setup scripts:
 
 - `plex-setup.sh` - Native Plex Media Server installation and configuration
 - `rclone-setup.sh` - Dropbox synchronization for media file management
-- `transmission-setup.sh` - BitTorrent client with automated GUI configuration and magnet link handling
+- `podman-transmission-setup.sh` - Containerized Transmission with VPN enforcement (Podman)
 - `run-app-setup.sh` - Orchestrator script to install all applications in dependency order
 - `caddy-setup.sh` - Web server/reverse proxy (planned)
 
@@ -142,7 +142,7 @@ chmod +x ~/app-setup/*.sh
 ```bash
 ./plex-setup.sh
 ./rclone-setup.sh
-./transmission-setup.sh
+./podman-transmission-setup.sh
 ```
 
 **Follow prompts** for application-specific configuration:

@@ -98,7 +98,7 @@ macmini-setup/
 │   │   ├── start-plex.sh
 │   │   ├── start-rclone.sh
 │   │   └── transmission-done.sh
-│   └── transmission-setup.sh
+│   └── podman-transmission-setup.sh
 ├── bash/                        # Bash config (if configured)
 ├── config/
 │   ├── apple_id_password.url    # One-time Apple ID link

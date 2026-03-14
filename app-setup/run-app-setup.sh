@@ -4,11 +4,10 @@
 #
 # This script runs all app-setup scripts in the optimal dependency order:
 # 1. rclone-setup.sh              - Cloud storage synchronization (independent)
-# 2. transmission-setup.sh        - Torrent client, native macOS (legacy)
-# 3. podman-transmission-setup.sh - Containerized Transmission + VPN (Podman)
-# 4. filebot-setup.sh             - Media file organization (processes downloads)
-# 5. catch-setup.sh               - RSS feed automation (monitors for new content)
-# 6. plex-setup.sh                - Media server (serves organized content)
+# 2. podman-transmission-setup.sh - Containerized Transmission + VPN (Podman)
+# 3. filebot-setup.sh             - Media file organization (processes downloads)
+# 4. catch-setup.sh               - RSS feed automation (monitors for new content)
+# 5. plex-setup.sh                - Media server (serves organized content)
 #
 # Unknown setup scripts are executed after the known ordered scripts.
 #
@@ -103,11 +102,10 @@ while [[ $# -gt 0 ]]; do
       echo ""
       echo "App execution order:"
       echo "  1. rclone-setup.sh              (Cloud storage sync)"
-      echo "  2. transmission-setup.sh        (Torrent client, legacy)"
-      echo "  3. podman-transmission-setup.sh (Containerized Transmission + VPN)"
-      echo "  4. filebot-setup.sh             (Media organization)"
-      echo "  5. catch-setup.sh               (RSS automation)"
-      echo "  6. plex-setup.sh                (Media server)"
+      echo "  2. podman-transmission-setup.sh (Containerized Transmission + VPN)"
+      echo "  3. filebot-setup.sh             (Media organization)"
+      echo "  4. catch-setup.sh               (RSS automation)"
+      echo "  5. plex-setup.sh                (Media server)"
       echo ""
       exit 0
       ;;
@@ -194,11 +192,10 @@ show_collected_issues() {
 # Define optimal execution order with descriptions
 declare -A SCRIPT_ORDER=()
 SCRIPT_ORDER["rclone-setup.sh"]="1:Cloud storage synchronization"
-SCRIPT_ORDER["transmission-setup.sh"]="2:Torrent client (legacy, native macOS)"
-SCRIPT_ORDER["podman-transmission-setup.sh"]="3:Containerized Transmission + PIA VPN (Podman)"
-SCRIPT_ORDER["filebot-setup.sh"]="4:Media file organization"
-SCRIPT_ORDER["catch-setup.sh"]="5:RSS feed automation"
-SCRIPT_ORDER["plex-setup.sh"]="6:Media server"
+SCRIPT_ORDER["podman-transmission-setup.sh"]="2:Containerized Transmission + VPN (Podman)"
+SCRIPT_ORDER["filebot-setup.sh"]="3:Media file organization"
+SCRIPT_ORDER["catch-setup.sh"]="4:RSS feed automation"
+SCRIPT_ORDER["plex-setup.sh"]="5:Media server"
 # Function to get all setup scripts
 get_setup_scripts() {
   local scripts=()
