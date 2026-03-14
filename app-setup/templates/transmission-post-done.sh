@@ -3,8 +3,10 @@
 # transmission-post-done.sh - Container-side torrent completion trigger
 #
 # Runs inside the haugene/transmission-openvpn container when a torrent finishes.
-# Writes a trigger file to /data/.done/ (NAS-mounted at /data) that the macOS
-# transmission-trigger-watcher.sh LaunchAgent picks up to invoke FileBot processing.
+# Writes a trigger file to /config/triggers/ (host-local via bind mount) that the
+# macOS transmission-trigger-watcher.sh LaunchAgent picks up to invoke FileBot.
+# Uses /config (local disk) instead of /data (NAS/SMB) so the LaunchAgent can
+# read triggers without Full Disk Access to network mounts.
 #
 # Environment variables provided by Transmission:
 #   TR_TORRENT_DIR    — parent download directory in container
@@ -34,7 +36,7 @@ set -euo pipefail
 : "${TR_TORRENT_DIR:?TR_TORRENT_DIR must be set by Transmission}"
 : "${TR_TORRENT_HASH:?TR_TORRENT_HASH must be set by Transmission}"
 
-DONE_DIR="/data/.done"
+DONE_DIR="/config/triggers"
 mkdir -p "${DONE_DIR}"
 
 # Write trigger file named by hash to avoid collisions between concurrent completions

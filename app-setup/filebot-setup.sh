@@ -418,7 +418,7 @@ main() {
   echo "• Organized output to: ${FILEBOT_MEDIA_PATH}/{plex} format"
   echo "• Automatic subtitle downloads (if OpenSubtitles configured)"
   echo ""
-  echo "Integration with transmission-setup.sh:"
+  echo "Integration with podman-transmission-setup.sh:"
   echo "• Transmission downloads to pending-move directory"
   echo "• FileBot can process completed downloads"
   echo ""

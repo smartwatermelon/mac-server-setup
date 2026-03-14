@@ -708,7 +708,8 @@ if sudo -iu "${OPERATOR_USERNAME}" osacompile -o "${MAGNET_APP}" "${APPSRC}"; th
 
   # Inject bundle identifier and URL scheme into the compiled app's Info.plist
   MAGNET_PLIST="${MAGNET_APP}/Contents/Info.plist"
-  sudo /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ${MAGNET_BUNDLE_ID}" "${MAGNET_PLIST}"
+  sudo /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier ${MAGNET_BUNDLE_ID}" "${MAGNET_PLIST}" 2>/dev/null \
+    || sudo /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string ${MAGNET_BUNDLE_ID}" "${MAGNET_PLIST}"
   sudo /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes array" "${MAGNET_PLIST}" 2>/dev/null || true
   sudo /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0 dict" "${MAGNET_PLIST}" 2>/dev/null || true
   sudo /usr/libexec/PlistBuddy -c "Add :CFBundleURLTypes:0:CFBundleURLSchemes array" "${MAGNET_PLIST}" 2>/dev/null || true

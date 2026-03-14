@@ -36,7 +36,7 @@ services:
       - TZ=__TZ__
       - TRANSMISSION_DOWNLOAD_DIR=/data/Media/Torrents/pending-move
       - TRANSMISSION_INCOMPLETE_DIR=/data/Media/Torrents/incomplete
-      - TRANSMISSION_WATCH_DIR=/data/Media/Torrents/watch
+      - TRANSMISSION_WATCH_DIR=/watch
       - TRANSMISSION_WATCH_DIR_ENABLED=true
       - TRANSMISSION_RATIO_LIMIT_ENABLED=false
       - TRANSMISSION_ENCRYPTION=2
@@ -52,6 +52,7 @@ services:
       - __OPERATOR_HOME__/.local/mnt/DSMedia:/data
       - __OPERATOR_HOME__/containers/transmission/scripts:/scripts
       - __OPERATOR_HOME__/containers/transmission/config:/config
+      - __OPERATOR_HOME__/containers/transmission/watch:/watch
     ports:
       - "__TRANSMISSION_HOST_PORT__:9091"
     restart: unless-stopped

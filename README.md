@@ -31,16 +31,13 @@ After setup, these all start automatically on login (LaunchAgents):
 | Service | What it does |
 |---------|-------------|
 | Plex Media Server | Streams media to any device |
-| Transmission | BitTorrent client, bound to VPN |
+| Podman + Transmission | Containerized BitTorrent client with VPN enforced at the kernel level |
 | Catch | Polls ShowRSS feed, grabs new episodes |
 | FileBot | Renames and sorts downloads into the Plex library |
-| rclone | Bidirectional Dropbox sync for torrent file delivery |
-| VPN Monitor | Kills Transmission within 5s if VPN drops, restarts when it's back |
-| PIA Monitor | Detects PIA split tunnel config drift, restores settings |
-| Plex VPN Bypass | PF rules so Plex stays reachable through the VPN |
+| rclone | Syncs Dropbox torrent files to the Transmission watch directory |
 | NAS Mount | SMB mount to NAS on login |
 | Backblaze | Off-site backup |
-| Caddy | Local web server |
+| Caddy | Reverse proxy with internal TLS and external HTTPS |
 
 ### Media pipeline
 
@@ -57,17 +54,7 @@ ShowRSS feed
 
 ### VPN protection
 
-Transmission never touches your real IP. Multiple layers back each other up:
-
-| Layer | What it does |
-|-------|-------------|
-| PIA split-tunnel inversion | All traffic goes through VPN; only Plex/Backblaze/Safari bypass |
-| PIA config watchdog | PIA has a habit of forgetting its split tunnel config. This catches that. |
-| VPN monitor | Polls every 5s, kills Transmission if VPN drops, restarts when it's back |
-| Plex VPN bypass | PF `route-to` rules so Plex stays reachable on your public IP |
-| Auto-updates | Homebrew daily at 04:30, MAS via macOS, softwareupdate download-only |
-
-More in [VPN Architecture](docs/vpn-transmission.md).
+Transmission runs inside a Podman container with OpenVPN enforced at the kernel level (haugene/transmission-openvpn). The container cannot route traffic outside the VPN tunnel — no kill switch scripts needed, no monitoring daemons, no PIA Desktop app. If the VPN drops, the container has no network.
 
 ## How it works
 
@@ -112,7 +99,7 @@ first-boot.sh (Mac Mini)
 
 ## Design choices
 
-No Docker. Native macOS apps get hardware acceleration and don't fight the OS on mounts and permissions. All configuration happens under the admin account; the operator logs in to a working system and doesn't need to touch anything.
+Native macOS apps where possible, containers where isolation matters. Transmission runs in a Podman VM for VPN enforcement; everything else is native. All configuration happens under the admin account; the operator logs in to a working system and doesn't need to touch anything.
 
 Every script is idempotent (safe to re-run). Errors display immediately during setup and again in a summary at the end, so nothing gets buried in scroll.
 
@@ -166,24 +153,23 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
 │   ├── catch-setup.sh            # RSS feed monitor (ShowRSS)
 │   ├── filebot-setup.sh          # Media renaming and sorting
 │   ├── plex-setup.sh             # Plex Media Server (with migration support)
-│   ├── rclone-setup.sh           # Dropbox bidirectional sync
-│   ├── transmission-setup.sh     # BitTorrent client with GUI automation
+│   ├── podman-transmission-setup.sh  # Containerized Transmission + VPN
+│   ├── rclone-setup.sh           # Dropbox sync to watch directory
+│   ├── containers/
+│   │   └── transmission/
+│   │       └── compose.yml       # Podman compose template (haugene)
 │   └── templates/                # Runtime script templates
 │       ├── mount-nas-media.sh    # SMB mount script
 │       ├── start-plex.sh         # Plex startup wrapper
 │       ├── start-rclone.sh       # rclone sync script
-│       ├── transmission-done.sh  # Download completion handler (FileBot)
-│       ├── transmission-done-template.sh  # Completion script template
-│       ├── vpn-monitor.sh        # VPN drop detection daemon
-│       ├── pia-split-tunnel-monitor.sh    # PIA config watchdog
-│       └── plex-vpn-bypass.sh    # PF rules for Plex reachability
+│       ├── transmission-post-done.sh    # Container-side completion trigger
+│       └── transmission-trigger-watcher.sh  # Host-side trigger → FileBot
 ├── scripts/
 │   ├── airdrop/
 │   │   └── rclone-airdrop-prep.sh  # Dropbox OAuth for AirDrop
 │   └── server/
 │       ├── first-boot.sh          # Main provisioning script (19 modules)
 │       ├── operator-first-login.sh # Operator customization (LaunchAgent)
-│       ├── pf-test-user.sh        # PF user-keyword test utility
 │       ├── setup-apple-id.sh
 │       ├── setup-application-preparation.sh
 │       ├── setup-auto-updates.sh  # Homebrew/MAS/macOS auto-updates
@@ -202,7 +188,6 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
 │       ├── setup-terminal-profiles.sh
 │       ├── setup-timemachine.sh
 │       ├── setup-touchid-sudo.sh
-│       ├── setup-vpn-killswitch.sh  # VPN protection setup
 │       └── setup-wifi-network.sh
 ├── config/
 │   ├── config.conf.template      # Configuration template
@@ -217,8 +202,6 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
     ├── environment-variables.md  # Configuration reference
     ├── configuration.md          # Customization guide
     ├── operator.md               # Post-reboot operator setup
-    ├── vpn-transmission.md       # VPN architecture details
-    ├── pia-split-tunnel-bug.md   # PIA bug documentation
     ├── keychain-credential-management.md  # Credential system
     ├── setup/
     │   ├── prep-airdrop.md       # Package preparation details
@@ -226,8 +209,7 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
     │   └── apple-first-boot-dialogs.md  # macOS setup wizard notes
     └── apps/
         ├── plex-setup-README.md
-        ├── rclone-setup-README.md
-        └── transmission-setup-README.md
+        └── rclone-setup-README.md
 ```
 
 ## Configuration
@@ -294,9 +276,7 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 
 **1Password items not found**: Vault name and item titles in `config.conf` have to match exactly.
 
-**VPN monitor keeps restarting Transmission**: That means it's working. The VPN dropped, so the monitor killed Transmission. It'll restart once the tunnel is back. Check PIA's connection.
-
-**Plex not reachable remotely**: Check if the VPN bypass daemon is running: `launchctl list | grep plex-vpn-bypass`. If not, the PF rules aren't in place.
+**Transmission container not starting**: Check `podman machine list` and `podman logs transmission-vpn`. If the VPN can't connect, verify PIA credentials in the keychain.
 
 **App not starting on login**: `launchctl list | grep <app>` to check status. Also check `/Users/Shared/` directory permissions.
 
@@ -310,8 +290,6 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 | Building the deployment package | [Prep-AirDrop](docs/setup/prep-airdrop.md) |
 | Running system provisioning | [First Boot](docs/setup/first-boot.md) |
 | Post-reboot setup | [Operator Setup](docs/operator.md) |
-| VPN protection design | [VPN Architecture](docs/vpn-transmission.md) |
-| The PIA split tunnel bug | [PIA Bug](docs/pia-split-tunnel-bug.md) |
 | How credentials move between machines | [Keychain Management](docs/keychain-credential-management.md) |
 
 ## Contributing
