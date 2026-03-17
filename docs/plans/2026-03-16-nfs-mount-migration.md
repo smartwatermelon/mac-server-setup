@@ -22,7 +22,7 @@ Synology DSM: Enable NFS, create export rule for DSMedia:
 
 Before changing any code, confirm the Synology NFS export is accessible.
 
-**Step 1: Test NFS mount to a temp path**
+### Step 1: Test NFS mount to a temp path
 
 ```bash
 sudo mkdir -p /tmp/nfs-test
@@ -31,7 +31,7 @@ sudo mount -t nfs -o resvport,rw,soft romano.local:/volume1/DSMedia /tmp/nfs-tes
 
 Expected: Mount succeeds without error.
 
-**Step 2: Verify contents match SMB mount**
+### Step 2: Verify contents match SMB mount
 
 ```bash
 ls /tmp/nfs-test/Media/
@@ -39,7 +39,7 @@ ls /tmp/nfs-test/Media/
 
 Expected: Same directory listing as the current SMB mount (`Movies`, `TV Shows`, `Torrents`, etc.)
 
-**Step 3: Test file creation and deletion**
+### Step 3: Test file creation and deletion
 
 ```bash
 touch /tmp/nfs-test/Media/Torrents/nfs-test-file
@@ -48,7 +48,7 @@ rm /tmp/nfs-test/Media/Torrents/nfs-test-file
 
 Expected: Both succeed without error or `.smbdelete` remnants.
 
-**Step 4: Clean up test mount**
+### Step 4: Clean up test mount
 
 ```bash
 sudo umount /tmp/nfs-test
@@ -65,7 +65,7 @@ sudo rmdir /tmp/nfs-test
 
 - Modify: `config/config.conf.template:22-24`
 
-**Step 1: Add NAS_VOLUME variable**
+### Step 1: Add NAS_VOLUME variable
 
 After `NAS_SHARE_NAME="DSMedia"` (line 24), add:
 
@@ -73,7 +73,7 @@ After `NAS_SHARE_NAME="DSMedia"` (line 24), add:
 NAS_VOLUME="volume1"              # Synology volume name for NFS export path
 ```
 
-**Step 2: Commit**
+### Step 2: Commit config change
 
 ```bash
 git add config/config.conf.template
@@ -88,7 +88,7 @@ git commit -m "feat(config): add NAS_VOLUME for NFS export path"
 
 - Modify: `app-setup/templates/mount-nas-media.sh`
 
-**Step 1: Replace the entire template with the NFS version**
+### Step 1: Replace the entire template with the NFS version
 
 The new script keeps the same structure (set -euo pipefail, logging, wait_for_network, test_mount, main with numbered steps) but replaces the SMB-specific parts:
 
@@ -235,7 +235,7 @@ main "$@"
 exit 0
 ```
 
-**Step 2: Verify shellcheck passes**
+### Step 2: Verify shellcheck passes
 
 ```bash
 shellcheck app-setup/templates/mount-nas-media.sh
@@ -243,7 +243,7 @@ shellcheck app-setup/templates/mount-nas-media.sh
 
 Expected: No errors, warnings, or info.
 
-**Step 3: Commit**
+### Step 3: Commit mount script
 
 ```bash
 git add app-setup/templates/mount-nas-media.sh
@@ -262,7 +262,7 @@ ghost files when deleting torrents while Podman VM is running."
 - Modify: `app-setup/plex-setup.sh:378-549` (the `setup_persistent_smb_mount` function)
 - Modify: `app-setup/plex-setup.sh:1614-1622` (troubleshooting output)
 
-**Step 1: Rename function and strip credential logic**
+### Step 1: Rename function and strip credential logic
 
 Rename `setup_persistent_smb_mount` → `setup_persistent_nfs_mount`.
 
@@ -285,7 +285,7 @@ Replace SMB-specific hints with NFS equivalents:
 - Check mounts: `mount -t nfs`
 - Remove "Too many users" SMB error hint
 
-**Step 4: Commit**
+### Step 4: Commit plex-setup
 
 ```bash
 git add app-setup/plex-setup.sh
@@ -301,14 +301,14 @@ Adds NAS_VOLUME template substitution for export path."
 
 **This task is performed manually with human confirmation at each step.**
 
-**Step 1: Stop Transmission container and Podman VM**
+### Step 1: Stop Transmission container and Podman VM
 
 ```bash
 sudo -H -u operator podman stop transmission-vpn
 sudo -H -u operator podman machine stop transmission-vm
 ```
 
-**Step 2: Unmount existing SMB mounts for both users**
+### Step 2: Unmount existing SMB mounts for both users
 
 ```bash
 # Operator
@@ -318,7 +318,7 @@ sudo umount /Users/operator/.local/mnt/DSMedia 2>/dev/null || true
 umount ~/.local/mnt/DSMedia 2>/dev/null || true
 ```
 
-**Step 3: Deploy and run updated mount script for operator**
+### Step 3: Deploy and run updated mount script for operator
 
 ```bash
 # Copy the updated template and substitute values
@@ -338,7 +338,7 @@ sudo -u operator chmod 700 /Users/operator/.local/bin/mount-nas-media.sh
 sudo -iu operator /Users/operator/.local/bin/mount-nas-media.sh
 ```
 
-**Step 4: Verify NFS mount for operator**
+### Step 4: Verify NFS mount for operator
 
 ```bash
 mount -t nfs | grep DSMedia
@@ -347,7 +347,7 @@ sudo ls /Users/operator/.local/mnt/DSMedia/Media/
 
 Expected: NFS mount visible, Media directories listed.
 
-**Step 5: Deploy and run updated mount script for admin**
+### Step 5: Deploy and run updated mount script for admin
 
 ```bash
 sudo -u andrewrich cp /tmp/mount-nas-media-configured.sh ~/.local/bin/mount-nas-media.sh
@@ -355,27 +355,27 @@ chmod 700 ~/.local/bin/mount-nas-media.sh
 ~/.local/bin/mount-nas-media.sh
 ```
 
-**Step 6: Verify NFS mount for admin**
+### Step 6: Verify NFS mount for admin
 
 ```bash
 mount -t nfs | grep DSMedia
 ls ~/Media/
 ```
 
-**Step 7: Clean up**
+### Step 7: Clean up
 
 ```bash
 rm /tmp/mount-nas-media-configured.sh
 ```
 
-**Step 8: Restart Podman VM and Transmission**
+### Step 8: Restart Podman VM and Transmission
 
 ```bash
 sudo -H -u operator podman machine start transmission-vm
 sudo -H -u operator podman start transmission-vpn
 ```
 
-**Step 9: Verify the original problem is fixed**
+### Step 9: Verify the original problem is fixed
 
 ```bash
 # Create a test file
@@ -390,7 +390,7 @@ sudo ls -la /Users/operator/.local/mnt/DSMedia/Media/Torrents/pending-move/
 
 Expected: File deletes cleanly, no `.smbdelete*` files.
 
-**Step 10: Verify Plex still sees its libraries**
+### Step 10: Verify Plex still sees its libraries
 
 Open Plex web UI (<http://localhost:32400/web>) and confirm libraries are accessible with no re-scan triggered.
 

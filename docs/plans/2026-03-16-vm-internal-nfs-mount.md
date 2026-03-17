@@ -20,7 +20,7 @@ The torrent-remove RPC was a workaround for VirtioFS FD caching. With VirtioFS r
 
 - Modify: `app-setup/templates/transmission-post-done.sh`
 
-**Step 1: Revert to the simple trigger-only version**
+### Step 1: Revert to the simple trigger-only version
 
 Replace the entire file with:
 
@@ -82,7 +82,7 @@ printf '[%s] [transmission-post-done] Trigger written: %s (%s)\n' \
   "${TR_TORRENT_HASH}"
 ```
 
-**Step 2: Deploy to live container**
+### Step 2: Deploy to live container
 
 ```bash
 sudo -u operator cp app-setup/templates/transmission-post-done.sh \
@@ -90,7 +90,7 @@ sudo -u operator cp app-setup/templates/transmission-post-done.sh \
 sudo -u operator chmod 755 /Users/operator/containers/transmission/scripts/transmission-post-done.sh
 ```
 
-**Step 3: Commit**
+### Step 3: Commit post-done revert
 
 ```bash
 git add app-setup/templates/transmission-post-done.sh
@@ -111,11 +111,11 @@ Add a new section that SSHs into the VM and creates a persistent systemd mount u
 
 - Modify: `app-setup/podman-transmission-setup.sh` (insert new section after VM start, before compose deploy)
 
-**Step 1: Find the insertion point**
+### Step 1: Find the insertion point
 
 The new section goes after the VM is started (line ~320) and before the compose.yml is deployed. Look for the section after `podman machine start` and before `Section 5` or the compose template deployment.
 
-**Step 2: Add the NFS mount section**
+### Step 2: Add the NFS mount section
 
 Insert a new section that:
 
@@ -144,7 +144,7 @@ WantedBy=local-fs.target
 
 **Important:** The `What=` value must use template placeholders (`__NAS_HOSTNAME__`, `__NAS_VOLUME__`, `__NAS_SHARE_NAME__`) so the setup script substitutes the correct values. The mount unit file is written via `podman machine ssh` with heredoc, and placeholders are expanded by the shell at deploy time (not by systemd).
 
-**Step 3: Shellcheck and commit**
+### Step 3: Shellcheck and commit
 
 ```bash
 shellcheck app-setup/podman-transmission-setup.sh
@@ -164,7 +164,7 @@ the NAS share directly via a persistent systemd .mount unit."
 
 - Modify: `app-setup/containers/transmission/compose.yml:52`
 
-**Step 1: Change the volume**
+### Step 1: Change the volume
 
 ```yaml
 # Before:
@@ -180,7 +180,7 @@ Remove `__OPERATOR_HOME__` from the placeholder reference since it's no longer u
 
 Actually — `__OPERATOR_HOME__` is still used by the scripts, config, and watch volumes. Keep the comment. Just change the volume line.
 
-**Step 3: Commit**
+### Step 3: Commit compose change
 
 ```bash
 git add app-setup/containers/transmission/compose.yml
@@ -201,7 +201,7 @@ The login-time startup script needs to ensure the VM's NFS mount is active befor
 
 - Modify: `app-setup/podman-transmission-setup.sh` (the `podman-machine-start.sh` template at lines ~465-494)
 
-**Step 1: Add NFS mount check after machine start, before compose up**
+### Step 1: Add NFS mount check after machine start, before compose up
 
 After the Podman socket wait loop and before the `podman compose` line, add:
 
@@ -210,7 +210,7 @@ After the Podman socket wait loop and before the `podman compose` line, add:
 podman machine ssh transmission-vm -- "mountpoint -q /mnt/DSMedia || sudo systemctl start mnt-DSMedia.mount"
 ```
 
-**Step 2: Commit**
+### Step 2: Commit startup script
 
 ```bash
 git add app-setup/podman-transmission-setup.sh
@@ -221,14 +221,14 @@ git commit -m "feat(transmission): ensure VM NFS mount before compose up at logi
 
 ## Task 5: Live Cutover and Verification
 
-**Step 1: Stop container and recreate with new compose**
+### Step 1: Stop container and recreate with new compose
 
 ```bash
 sudo -H -u operator podman stop transmission-vpn
 sudo -H -u operator podman rm transmission-vpn
 ```
 
-**Step 2: Set up NFS mount inside VM**
+### Step 2: Set up NFS mount inside VM
 
 ```bash
 sudo -H -u operator podman machine ssh transmission-vm -- "sudo mkdir -p /mnt/DSMedia"
@@ -251,13 +251,13 @@ EOF
 sudo -H -u operator podman machine ssh transmission-vm -- "sudo systemctl daemon-reload && sudo systemctl enable --now mnt-DSMedia.mount"
 ```
 
-**Step 3: Verify NFS mount**
+### Step 3: Verify NFS mount
 
 ```bash
 sudo -H -u operator podman machine ssh transmission-vm -- "mountpoint /mnt/DSMedia && ls /mnt/DSMedia/Media/Torrents/"
 ```
 
-**Step 4: Deploy updated compose and start container**
+### Step 4: Deploy updated compose and start container
 
 ```bash
 # Copy updated compose.yml (with /mnt/DSMedia:/data)
@@ -267,13 +267,13 @@ sudo -H -u operator podman compose \
   --env-file /Users/operator/containers/transmission/.env up -d
 ```
 
-**Step 5: Verify container sees NFS mount**
+### Step 5: Verify container sees NFS mount
 
 ```bash
 sudo -H -u operator podman exec transmission-vpn ls /data/Media/Torrents/
 ```
 
-**Step 6: Test the full pipeline**
+### Step 6: Test the full pipeline
 
 Add a test torrent. Verify:
 
@@ -284,7 +284,7 @@ Add a test torrent. Verify:
 5. No `.nfs.*` silly-rename files remain
 6. Directory can be deleted from Finder without locks
 
-**Step 7: Clean up old Big Buck Bunny directory if still present**
+### Step 7: Clean up old Big Buck Bunny directory if still present
 
 ```bash
 sudo rm -rf "/Users/operator/.local/mnt/DSMedia/Media/Torrents/pending-move/Big Buck Bunny"
