@@ -20,7 +20,7 @@
 #   - Homebrew installed
 #   - config/config.conf configured (ONEPASSWORD_PIA_ITEM, PIA_VPN_REGION, LAN_SUBNET)
 #   - PIA credentials stored in keychain (run prep-airdrop.sh first)
-#   - NAS mounted at ~/.local/mnt/DSMedia
+#   - NAS NFS export configured (enable non-privileged ports for VM NAT traffic)
 #
 # Usage: ./podman-transmission-setup.sh [--force]
 #   --force: Skip all confirmation prompts
@@ -265,11 +265,6 @@ if ! command -v podman >/dev/null 2>&1; then
   brew install podman
 fi
 
-if ! command -v podman-compose >/dev/null 2>&1; then
-  log "Installing podman-compose via Homebrew (required compose provider for 'podman compose')..."
-  brew install podman-compose
-fi
-
 PODMAN_VERSION=$(podman --version | awk '{print $3}')
 PODMAN_MAJOR=$(cut -d. -f1 <<<"${PODMAN_VERSION}")
 PODMAN_MINOR=$(cut -d. -f2 <<<"${PODMAN_VERSION}")
@@ -324,6 +319,65 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Section 2b: NFS mount inside Podman VM
+# ---------------------------------------------------------------------------
+
+set_section "VM-Internal NFS Mount"
+
+# Validate required NAS config variables (safe characters only — used in SSH commands and systemd unit names)
+safe_pattern='^[a-zA-Z0-9._-]+$'
+if [[ -z "${NAS_HOSTNAME:-}" ]] || [[ -z "${NAS_SHARE_NAME:-}" ]]; then
+  collect_error "NAS_HOSTNAME and NAS_SHARE_NAME must be set in config.conf"
+  exit 1
+fi
+if [[ ! "${NAS_HOSTNAME}" =~ ${safe_pattern} ]] || [[ ! "${NAS_SHARE_NAME}" =~ ${safe_pattern} ]] || [[ ! "${NAS_VOLUME:-volume1}" =~ ${safe_pattern} ]]; then
+  collect_error "NAS_HOSTNAME, NAS_SHARE_NAME, and NAS_VOLUME must contain only alphanumeric, dot, hyphen, or underscore"
+  exit 1
+fi
+
+NFS_MOUNT_POINT="/var/mnt/${NAS_SHARE_NAME}"
+NFS_SOURCE="${NAS_HOSTNAME}:/${NAS_VOLUME:-volume1}/${NAS_SHARE_NAME}"
+
+log "Configuring NFS mount inside Podman VM: ${NFS_SOURCE} → ${NFS_MOUNT_POINT}"
+
+# Create mount point
+sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
+  "sudo mkdir -p '${NFS_MOUNT_POINT}'"
+
+# Write systemd mount unit (unit name must match canonical path: var-mnt-DSMedia.mount for /var/mnt/DSMedia)
+# Heredoc is unquoted so variables expand at deploy time; values are validated above
+MOUNT_UNIT_NAME="var-mnt-${NAS_SHARE_NAME}.mount"
+sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
+  "sudo tee '/etc/systemd/system/${MOUNT_UNIT_NAME}' > /dev/null" <<MOUNTUNIT
+[Unit]
+Description=NFS mount for ${NAS_SHARE_NAME} share
+After=network-online.target
+Wants=network-online.target
+
+[Mount]
+What=${NFS_SOURCE}
+Where=${NFS_MOUNT_POINT}
+Type=nfs
+Options=rw,soft,intr,actimeo=2,rsize=65536,wsize=65536
+
+[Install]
+WantedBy=local-fs.target
+MOUNTUNIT
+
+# Enable and start
+sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
+  "sudo systemctl daemon-reload && sudo systemctl enable --now '${MOUNT_UNIT_NAME}'"
+
+# Verify
+if sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
+  "mountpoint -q '${NFS_MOUNT_POINT}'"; then
+  log "✅ NFS mount active inside VM: ${NFS_MOUNT_POINT}"
+else
+  collect_error "NFS mount failed inside VM — check NAS NFS export allows non-privileged ports"
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # Section 3: Container directory structure
 # ---------------------------------------------------------------------------
 
@@ -335,10 +389,11 @@ log "Creating container directories under ${CONTAINER_DIR}"
 sudo -iu "${OPERATOR_USERNAME}" mkdir -p \
   "${CONTAINER_DIR}" \
   "${CONTAINER_DIR}/config" \
-  "${CONTAINER_DIR}/scripts"
+  "${CONTAINER_DIR}/scripts" \
+  "${CONTAINER_DIR}/watch"
 
 sudo chmod 700 "${CONTAINER_DIR}"
-sudo chmod 755 "${CONTAINER_DIR}/config" "${CONTAINER_DIR}/scripts"
+sudo chmod 755 "${CONTAINER_DIR}/config" "${CONTAINER_DIR}/scripts" "${CONTAINER_DIR}/watch"
 sudo chown -R "${OPERATOR_USERNAME}:staff" "${CONTAINER_DIR}"
 
 log "✅ Container directories created"
@@ -380,7 +435,13 @@ fi
 # Section 5: Deploy compose.yml
 # ---------------------------------------------------------------------------
 
-set_section "Deploy compose.yml"
+set_section "Deploy compose.yml (reference only)"
+
+# Gather container environment values (used by compose template AND podman run below)
+PUID=$(id -u "${OPERATOR_USERNAME}")
+PGID=$(id -g "${OPERATOR_USERNAME}")
+TZ_VALUE=$(readlink /etc/localtime | sed 's|.*/zoneinfo/||' || true)
+TZ_VALUE="${TZ_VALUE:-America/Los_Angeles}"
 
 COMPOSE_TEMPLATE="${SCRIPT_DIR}/containers/transmission/compose.yml"
 COMPOSE_DEST="${CONTAINER_DIR}/compose.yml"
@@ -388,13 +449,6 @@ COMPOSE_DEST="${CONTAINER_DIR}/compose.yml"
 if [[ ! -f "${COMPOSE_TEMPLATE}" ]]; then
   collect_error "Compose template not found: ${COMPOSE_TEMPLATE}"
 else
-  # Gather substitution values
-  PUID=$(id -u "${OPERATOR_USERNAME}")
-  PGID=$(id -g "${OPERATOR_USERNAME}")
-  # readlink /etc/localtime gives e.g. /var/db/timezone/zoneinfo/America/Los_Angeles
-  TZ_VALUE=$(readlink /etc/localtime | sed 's|.*/zoneinfo/||' || true)
-  TZ_VALUE="${TZ_VALUE:-America/Los_Angeles}"
-
   log "Deploying compose.yml (region: ${PIA_REGION}, LAN: ${LAN}, TZ: ${TZ_VALUE}, host port: ${HOST_PORT})"
 
   sudo sed \
@@ -403,6 +457,7 @@ else
     -e "s|__LAN_SUBNET__|${LAN}|g" \
     -e "s|__TRANSMISSION_HOST_PORT__|${HOST_PORT}|g" \
     -e "s|__OPERATOR_HOME__|${OPERATOR_HOME}|g" \
+    -e "s|__NFS_MOUNT_POINT__|${NFS_MOUNT_POINT}|g" \
     -e "s|__PUID__|${PUID}|g" \
     -e "s|__PGID__|${PGID}|g" \
     -e "s|__TZ__|${TZ_VALUE}|g" \
@@ -411,6 +466,8 @@ else
   sudo chown "${OPERATOR_USERNAME}:staff" "${COMPOSE_DEST}"
   sudo chmod 644 "${COMPOSE_DEST}"
   log "✅ compose.yml deployed to ${COMPOSE_DEST}"
+  log "   Note: compose.yml is for reference only — container is started via podman run"
+  log "   (podman-compose cannot handle VM-internal NFS mount paths)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -462,6 +519,8 @@ MACHINE_START_DEST="${OPERATOR_HOME}/.local/bin/podman-machine-start.sh"
 
 # Write the wrapper directly (values baked in at deploy time).
 # Variables prefixed with \ escape into the written script; bare ${...} expand now.
+# Required variables (all defined earlier): NAS_SHARE_NAME (config.conf), OPERATOR_HOME (line ~88),
+# HOST_PORT (line ~240), PIA_REGION (line ~238), LAN (line ~239), PUID/PGID (Section 5), TZ_VALUE (Section 5)
 sudo tee "${MACHINE_START_DEST}" >/dev/null <<WRAPPER
 #!/usr/bin/env bash
 set -euo pipefail
@@ -469,7 +528,7 @@ set -euo pipefail
 # podman-machine-start.sh - Start Podman machine and bring up transmission stack
 #
 # Invoked by com.${HOSTNAME_LOWER}.podman-transmission-vm LaunchAgent at login.
-# Ensures the machine is running, waits for the socket, then runs compose up.
+# Ensures the machine is running, waits for the socket, then starts the transmission container.
 # Separate from the setup script so it can be re-run safely at each login.
 
 # LaunchAgents run with a minimal PATH that does not include Homebrew.
@@ -489,8 +548,46 @@ for _ in {1..30}; do
     sleep 1
 done
 
-podman compose -f "${OPERATOR_HOME}/containers/transmission/compose.yml" \
-    --env-file "${OPERATOR_HOME}/containers/transmission/.env" up -d
+# Ensure NFS mount is active inside VM before starting containers
+# (this script runs as operator via LaunchAgent — no sudo -iu needed)
+podman machine ssh transmission-vm -- "mountpoint -q '/var/mnt/${NAS_SHARE_NAME}' || sudo systemctl start 'var-mnt-${NAS_SHARE_NAME}.mount'"
+
+# Remove old container if exists (idempotent restart)
+podman rm -f transmission-vpn 2>/dev/null || true
+
+podman run -d \\
+    --name transmission-vpn \\
+    --privileged \\
+    --device /dev/net/tun:/dev/net/tun \\
+    --sysctl net.ipv6.conf.all.disable_ipv6=0 \\
+    -v "/var/mnt/${NAS_SHARE_NAME}:/data" \\
+    -v "${OPERATOR_HOME}/containers/transmission/scripts:/scripts" \\
+    -v "${OPERATOR_HOME}/containers/transmission/config:/config" \\
+    -v "${OPERATOR_HOME}/containers/transmission/watch:/watch" \\
+    -p "${HOST_PORT}:9091" \\
+    --restart unless-stopped \\
+    --env-file "${OPERATOR_HOME}/containers/transmission/.env" \\
+    -e OPENVPN_PROVIDER=PIA \\
+    -e "OPENVPN_CONFIG=${PIA_REGION}" \\
+    -e "LOCAL_NETWORK=${LAN}" \\
+    -e "PUID=${PUID}" \\
+    -e "PGID=${PGID}" \\
+    -e "TZ=${TZ_VALUE}" \\
+    -e TRANSMISSION_DOWNLOAD_DIR=/data/Media/Torrents/pending-move \\
+    -e TRANSMISSION_INCOMPLETE_DIR=/data/Media/Torrents/incomplete \\
+    -e TRANSMISSION_WATCH_DIR=/watch \\
+    -e TRANSMISSION_WATCH_DIR_ENABLED=true \\
+    -e TRANSMISSION_RATIO_LIMIT_ENABLED=false \\
+    -e TRANSMISSION_ENCRYPTION=2 \\
+    -e TRANSMISSION_BLOCKLIST_ENABLED=true \\
+    -e "TRANSMISSION_BLOCKLIST_URL=https://github.com/Naunter/BT_BlockLists/raw/master/bt_blocklists.gz" \\
+    -e TRANSMISSION_RPC_AUTHENTICATION_REQUIRED=false \\
+    -e TRANSMISSION_RPC_WHITELIST_ENABLED=false \\
+    -e TRANSMISSION_SCRIPT_TORRENT_DONE_ENABLED=true \\
+    -e TRANSMISSION_SCRIPT_TORRENT_DONE_FILENAME=/scripts/transmission-post-done.sh \\
+    -e CREATE_TUN_DEVICE=false \\
+    -e LOG_TO_STDOUT=true \\
+    haugene/transmission-openvpn:latest
 WRAPPER
 
 sudo chmod 755 "${MACHINE_START_DEST}"
@@ -621,18 +718,52 @@ if [[ "${ERROR_COUNT}" -gt 0 ]]; then
 elif [[ "${ENV_WRITTEN}" == "false" ]]; then
   log "Skipping container start: .env not written (missing PIA credentials)"
 else
-  log "Starting container stack (podman compose up -d)..."
-  if sudo -iu "${OPERATOR_USERNAME}" \
-    podman compose -f "${CONTAINER_DIR}/compose.yml" \
-    --env-file "${CONTAINER_DIR}/.env" up -d; then
-    log "✅ Container stack started"
+  log "Starting container (podman run)..."
+
+  # Remove old container if exists (idempotent)
+  sudo -iu "${OPERATOR_USERNAME}" podman rm -f transmission-vpn 2>/dev/null || true
+
+  if sudo -iu "${OPERATOR_USERNAME}" podman run -d \
+    --name transmission-vpn \
+    --privileged \
+    --device /dev/net/tun:/dev/net/tun \
+    --sysctl net.ipv6.conf.all.disable_ipv6=0 \
+    -v "${NFS_MOUNT_POINT}:/data" \
+    -v "${CONTAINER_DIR}/scripts:/scripts" \
+    -v "${CONTAINER_DIR}/config:/config" \
+    -v "${CONTAINER_DIR}/watch:/watch" \
+    -p "${HOST_PORT}:9091" \
+    --restart unless-stopped \
+    --env-file "${CONTAINER_DIR}/.env" \
+    -e OPENVPN_PROVIDER=PIA \
+    -e "OPENVPN_CONFIG=${PIA_REGION}" \
+    -e "LOCAL_NETWORK=${LAN}" \
+    -e "PUID=${PUID}" \
+    -e "PGID=${PGID}" \
+    -e "TZ=${TZ_VALUE}" \
+    -e TRANSMISSION_DOWNLOAD_DIR=/data/Media/Torrents/pending-move \
+    -e TRANSMISSION_INCOMPLETE_DIR=/data/Media/Torrents/incomplete \
+    -e TRANSMISSION_WATCH_DIR=/watch \
+    -e TRANSMISSION_WATCH_DIR_ENABLED=true \
+    -e TRANSMISSION_RATIO_LIMIT_ENABLED=false \
+    -e TRANSMISSION_ENCRYPTION=2 \
+    -e TRANSMISSION_BLOCKLIST_ENABLED=true \
+    -e "TRANSMISSION_BLOCKLIST_URL=https://github.com/Naunter/BT_BlockLists/raw/master/bt_blocklists.gz" \
+    -e TRANSMISSION_RPC_AUTHENTICATION_REQUIRED=false \
+    -e TRANSMISSION_RPC_WHITELIST_ENABLED=false \
+    -e TRANSMISSION_SCRIPT_TORRENT_DONE_ENABLED=true \
+    -e TRANSMISSION_SCRIPT_TORRENT_DONE_FILENAME=/scripts/transmission-post-done.sh \
+    -e CREATE_TUN_DEVICE=false \
+    -e LOG_TO_STDOUT=true \
+    haugene/transmission-openvpn:latest; then
+    log "✅ Container started"
     log ""
     log "Verify with:"
     log "  podman logs transmission-vpn"
     log "  podman exec transmission-vpn curl -s ifconfig.io  (should return Panama PIA exit IP)"
     log "  Transmission web UI: http://${HOSTNAME_LOWER}.local:${HOST_PORT}"
   else
-    collect_error "podman compose up failed — check 'podman logs transmission-vpn' for details"
+    collect_error "podman run failed — check 'podman logs transmission-vpn' for details"
   fi
 fi
 

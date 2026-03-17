@@ -55,6 +55,7 @@ if [[ -f "${CONFIG_FILE}" ]]; then
   OPERATOR_USERNAME="${OPERATOR_USERNAME:-operator}"
   NAS_USERNAME="${NAS_USERNAME:-plex}"
   NAS_HOSTNAME="${NAS_HOSTNAME:-nas.local}"
+  NAS_VOLUME="${NAS_VOLUME:-volume1}"
   NAS_SHARE_NAME="${NAS_SHARE_NAME:-Media}"
 else
   echo "Error: Configuration file not found at ${CONFIG_FILE}"
@@ -375,9 +376,9 @@ discover_plex_servers() {
   fi
 }
 
-# Per-User SMB Mount Setup (LaunchAgent-based)
-setup_persistent_smb_mount() {
-  set_section "Setting Up Per-User SMB Mount for Media Storage"
+# Per-User NFS Mount Setup (LaunchAgent-based)
+setup_persistent_nfs_mount() {
+  set_section "Setting Up Per-User NFS Mount for Media Storage"
 
   # Critical safety checks for mount path
   if [[ -z "${NAS_SHARE_NAME}" ]]; then
@@ -395,40 +396,56 @@ setup_persistent_smb_mount() {
   log "   Admin mount: ${HOME}/.local/mnt/${NAS_SHARE_NAME}"
   log "   Operator mount: /Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
 
-  # Step 1: Retrieve NAS credentials from Keychain for embedding
-  log "Retrieving NAS credentials from Keychain for mount script embedding"
+  # Step 1: Create sudoers rule for passwordless NFS mount/umount
+  # NFS mount on macOS requires root (unlike mount_smbfs which has a user-level helper)
+  local sudoers_file="/etc/sudoers.d/nfs-mount"
+  log "Creating sudoers rule for passwordless NFS mount/umount..."
 
-  local keychain_service="plex-nas-${HOSTNAME_LOWER}"
-  local keychain_account="${HOSTNAME_LOWER}"
-  local combined_credential
-
-  if ! combined_credential=$(get_keychain_credential "${keychain_service}" "${keychain_account}"); then
-    collect_error "Failed to retrieve NAS credentials from Keychain"
-    collect_error "Service: ${keychain_service}, Account: ${keychain_account}"
-    collect_error "Ensure credentials were imported during first-boot.sh"
+  # Validate usernames contain only safe characters before writing to sudoers
+  local username_pattern='^[a-zA-Z0-9_.-]+$'
+  if [[ ! "${USER}" =~ ${username_pattern} ]] || [[ ! "${OPERATOR_USERNAME}" =~ ${username_pattern} ]]; then
+    collect_error "Username contains unsafe characters for sudoers: USER='${USER}', OPERATOR='${OPERATOR_USERNAME}'"
+    return 1
+  fi
+  if [[ ! "${NAS_SHARE_NAME}" =~ ${username_pattern} ]]; then
+    collect_error "NAS_SHARE_NAME contains unsafe characters for sudoers: '${NAS_SHARE_NAME}'"
     return 1
   fi
 
-  # Split combined credential (format: "username:password")
-  # Use %% and # to split only on first colon (handles passwords with colons)
-  local plex_nas_username="${combined_credential%%:*}"
-  local plex_nas_password="${combined_credential#*:}"
+  # Build mount point paths for sudoers restrictions
+  local admin_mount="/Users/${USER}/.local/mnt/${NAS_SHARE_NAME}"
+  local operator_mount="/Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
 
-  # Validate credentials were properly extracted
-  if [[ -z "${plex_nas_username}" || -z "${plex_nas_password}" ]]; then
-    collect_error "Failed to parse NAS credentials from Keychain"
-    unset combined_credential plex_nas_username plex_nas_password
+  # Write to temp file, validate, then move into place
+  local tmp_sudoers
+  tmp_sudoers=$(mktemp)
+  cat >"${tmp_sudoers}" <<SUDOERS
+# Allow operator and admin to mount/unmount NFS shares without password
+# Required because NFS mount on macOS requires root (unlike mount_smbfs)
+# Restricted to specific mount points; wildcard allows variable mount options
+# (NFS source not pinned — both users are admin, no privilege escalation possible)
+${USER} ALL=(root) NOPASSWD: /sbin/mount_nfs * ${admin_mount}
+${USER} ALL=(root) NOPASSWD: /sbin/umount ${admin_mount}
+${OPERATOR_USERNAME} ALL=(root) NOPASSWD: /sbin/mount_nfs * ${operator_mount}
+${OPERATOR_USERNAME} ALL=(root) NOPASSWD: /sbin/umount ${operator_mount}
+SUDOERS
+
+  chmod 440 "${tmp_sudoers}"
+  if sudo visudo -cf "${tmp_sudoers}" >/dev/null 2>&1; then
+    sudo chown root:wheel "${tmp_sudoers}"
+    sudo mv "${tmp_sudoers}" "${sudoers_file}"
+    log "✅ Sudoers rule created and validated: ${sudoers_file}"
+  else
+    collect_error "Invalid sudoers syntax in ${sudoers_file}"
+    rm -f "${tmp_sudoers}"
     return 1
   fi
 
-  unset combined_credential
-  log "✅ NAS credentials retrieved from Keychain (username: ${plex_nas_username})"
-
-  # Step 2: Configure the template with all values including credentials
+  # Step 2: Configure the template with all values
   local template_script="${SCRIPT_DIR}/templates/mount-nas-media.sh"
   local configured_script="${SCRIPT_DIR}/mount-nas-media-configured.sh"
 
-  log "Configuring mount script template with embedded credentials"
+  log "Configuring mount script template"
 
   # Verify template exists
   if [[ ! -f "${template_script}" ]]; then
@@ -439,26 +456,22 @@ setup_persistent_smb_mount() {
   # Create configured version
   cp "${template_script}" "${configured_script}"
 
-  # Replace placeholders with actual values (including sensitive credentials)
+  # Replace placeholders with actual values
   sed -i '' \
     -e "s|__NAS_HOSTNAME__|${NAS_HOSTNAME}|g" \
     -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
     -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
-    -e "s|__PLEX_NAS_USERNAME__|${plex_nas_username}|g" \
-    -e "s|__PLEX_NAS_PASSWORD__|${plex_nas_password}|g" \
+    -e "s|__NAS_VOLUME__|${NAS_VOLUME}|g" \
     "${configured_script}"
 
-  # Clear sensitive variables from memory
-  unset plex_nas_username plex_nas_password
-
-  log "✅ Mount script configured with embedded NAS credentials"
+  log "✅ Mount script configured"
 
   # Function to deploy configured script to a specific user
   deploy_user_mount() {
     local target_user="$1"
     local user_home="/Users/${target_user}"
 
-    log "Deploying SMB mount for user: ${target_user}"
+    log "Deploying NFS mount for user: ${target_user}"
 
     # Create user's script directory and copy configured script
     local user_script_dir="${user_home}/.local/bin"
@@ -527,20 +540,20 @@ EOF
   rm -f "${configured_script}"
 
   # Test immediate mount for current admin user
-  log "Testing immediate SMB mount for admin user..."
+  log "Testing immediate NFS mount for admin user..."
   local admin_mount_script="${HOME}/.local/bin/mount-nas-media.sh"
   if [[ -x "${admin_mount_script}" ]]; then
     if "${admin_mount_script}"; then
-      log "✅ Admin SMB mount successful"
+      log "✅ Admin NFS mount successful"
     else
-      log "⚠️  Admin SMB mount failed - check credentials and network connectivity"
+      log "⚠️  Admin NFS mount failed - check network connectivity and NFS exports"
     fi
   else
     log "❌ Admin mount script not found or not executable"
   fi
 
   log ""
-  log "✅ Per-User SMB Mount Configuration Complete"
+  log "✅ Per-User NFS Mount Configuration Complete"
   log "   Admin script: ${HOME}/.local/bin/mount-nas-media.sh"
   log "   Operator script: /Users/${OPERATOR_USERNAME}/.local/bin/mount-nas-media.sh"
   log "   Admin mount: ${HOME}/.local/mnt/${NAS_SHARE_NAME}"
@@ -1506,11 +1519,11 @@ main() {
     fi
   fi
 
-  # Setup SMB mount if not skipped
+  # Setup NFS mount if not skipped
   if [[ "${SKIP_MOUNT}" != "true" ]]; then
-    setup_persistent_smb_mount
+    setup_persistent_nfs_mount
   else
-    log "Skipping SMB mount setup (--skip-mount specified)"
+    log "Skipping NFS mount setup (--skip-mount specified)"
   fi
 
   # Install Plex
@@ -1613,18 +1626,13 @@ main() {
 
   if [[ "${SKIP_MOUNT}" != "true" ]]; then
     log ""
-    log "📂 SMB Mount Information:"
+    log "📂 NFS Mount Information:"
     log "  Media directory mounted for administrator"
     log "  Mount troubleshooting:"
-    log "    - Manual mount: mount_smbfs -o soft,nobrowse,noowners '//<username>:<password>@${NAS_HOSTNAME}/${NAS_SHARE_NAME}' '${PLEX_MEDIA_MOUNT}'"
-    log "    - Check mounts: mount | grep \$(whoami)"
+    log "    - Manual mount: mount -t nfs -o resvport,rw,soft ${NAS_HOSTNAME}:/${NAS_VOLUME}/${NAS_SHARE_NAME} '${PLEX_MEDIA_MOUNT}'"
+    log "    - Check mounts: mount -t nfs"
+    log "    - Show exports: showmount -e ${NAS_HOSTNAME}"
     log "    - Unmount: umount '${PLEX_MEDIA_MOUNT}'"
-    log "    - 'Too many users' error indicates SMB connection limit reached"
-    log ""
-    log "  ⚠️  Mount behavior:"
-    log "    - Each user has their own private mount in ~/.local/mnt/"
-    log "    - Mounts activate when users log in via LaunchAgent"
-    log "    - Both admin and operator share same SMB credentials"
   fi
 
   # Show migration-specific guidance if migration was performed
