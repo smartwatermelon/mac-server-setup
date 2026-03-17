@@ -97,7 +97,7 @@ main() {
 
   # Step 1: Unmount existing mount (ignore failures)
   log "Step 1: Unmounting any existing mount..."
-  sudo umount "${PLEX_MEDIA_MOUNT}" 2>/dev/null || true
+  sudo /sbin/umount "${PLEX_MEDIA_MOUNT}" 2>/dev/null || true
   log "✅ Unmount completed (or was not mounted)"
 
   # Step 2: Remove mount point (ignore failures)
@@ -114,7 +114,7 @@ main() {
 
   # Step 4: Mount the NFS share
   log "Step 4: Mounting NFS share..."
-  if sudo mount -t nfs -o resvport,rw,soft,bg,intr,rsize=65536,wsize=65536 "${nfs_source}" "${PLEX_MEDIA_MOUNT}"; then
+  if sudo /sbin/mount_nfs -o resvport,rw,soft,bg,intr,rsize=65536,wsize=65536 "${nfs_source}" "${PLEX_MEDIA_MOUNT}"; then
     log "✅ NFS mount successful"
   else
     log "❌ NFS mount failed"

@@ -396,7 +396,51 @@ setup_persistent_nfs_mount() {
   log "   Admin mount: ${HOME}/.local/mnt/${NAS_SHARE_NAME}"
   log "   Operator mount: /Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
 
-  # Step 1: Configure the template with all values
+  # Step 1: Create sudoers rule for passwordless NFS mount/umount
+  # NFS mount on macOS requires root (unlike mount_smbfs which has a user-level helper)
+  local sudoers_file="/etc/sudoers.d/nfs-mount"
+  log "Creating sudoers rule for passwordless NFS mount/umount..."
+
+  # Validate usernames contain only safe characters before writing to sudoers
+  local username_pattern='^[a-zA-Z0-9_.-]+$'
+  if [[ ! "${USER}" =~ ${username_pattern} ]] || [[ ! "${OPERATOR_USERNAME}" =~ ${username_pattern} ]]; then
+    collect_error "Username contains unsafe characters for sudoers: USER='${USER}', OPERATOR='${OPERATOR_USERNAME}'"
+    return 1
+  fi
+  if [[ ! "${NAS_SHARE_NAME}" =~ ${username_pattern} ]]; then
+    collect_error "NAS_SHARE_NAME contains unsafe characters for sudoers: '${NAS_SHARE_NAME}'"
+    return 1
+  fi
+
+  # Build mount point paths for sudoers restrictions
+  local admin_mount="/Users/${USER}/.local/mnt/${NAS_SHARE_NAME}"
+  local operator_mount="/Users/${OPERATOR_USERNAME}/.local/mnt/${NAS_SHARE_NAME}"
+
+  # Write to temp file, validate, then move into place
+  local tmp_sudoers
+  tmp_sudoers=$(mktemp)
+  cat >"${tmp_sudoers}" <<SUDOERS
+# Allow operator and admin to mount/unmount NFS shares without password
+# Required because NFS mount on macOS requires root (unlike mount_smbfs)
+# Restricted to specific mount points; wildcard allows variable mount options
+# (NFS source not pinned — both users are admin, no privilege escalation possible)
+${USER} ALL=(root) NOPASSWD: /sbin/mount_nfs * ${admin_mount}
+${USER} ALL=(root) NOPASSWD: /sbin/umount ${admin_mount}
+${OPERATOR_USERNAME} ALL=(root) NOPASSWD: /sbin/mount_nfs * ${operator_mount}
+${OPERATOR_USERNAME} ALL=(root) NOPASSWD: /sbin/umount ${operator_mount}
+SUDOERS
+
+  chmod 440 "${tmp_sudoers}"
+  if sudo visudo -cf "${tmp_sudoers}" >/dev/null 2>&1; then
+    sudo mv "${tmp_sudoers}" "${sudoers_file}"
+    log "✅ Sudoers rule created and validated: ${sudoers_file}"
+  else
+    collect_error "Invalid sudoers syntax in ${sudoers_file}"
+    rm -f "${tmp_sudoers}"
+    return 1
+  fi
+
+  # Step 2: Configure the template with all values
   local template_script="${SCRIPT_DIR}/templates/mount-nas-media.sh"
   local configured_script="${SCRIPT_DIR}/mount-nas-media-configured.sh"
 
