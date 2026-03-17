@@ -330,8 +330,8 @@ if [[ -z "${NAS_HOSTNAME:-}" ]] || [[ -z "${NAS_SHARE_NAME:-}" ]]; then
   collect_error "NAS_HOSTNAME and NAS_SHARE_NAME must be set in config.conf"
   exit 1
 fi
-if [[ ! "${NAS_HOSTNAME}" =~ ${safe_pattern} ]] || [[ ! "${NAS_SHARE_NAME}" =~ ${safe_pattern} ]]; then
-  collect_error "NAS_HOSTNAME and NAS_SHARE_NAME must contain only alphanumeric, dot, hyphen, or underscore"
+if [[ ! "${NAS_HOSTNAME}" =~ ${safe_pattern} ]] || [[ ! "${NAS_SHARE_NAME}" =~ ${safe_pattern} ]] || [[ ! "${NAS_VOLUME:-volume1}" =~ ${safe_pattern} ]]; then
+  collect_error "NAS_HOSTNAME, NAS_SHARE_NAME, and NAS_VOLUME must contain only alphanumeric, dot, hyphen, or underscore"
   exit 1
 fi
 
