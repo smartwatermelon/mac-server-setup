@@ -22,7 +22,7 @@ The system is configured to automatically log in as the operator user after rebo
 
 - Remove unnecessary applications (Messages, Mail, Maps, etc.)
 - Add essential server tools (iTerm, Plex Media Server, Passwords)
-- Add network media folder (if SMB mount is available)
+- Add network media folder (if NFS mount is available)
 
 You can monitor the setup progress in the logs:
 
@@ -68,7 +68,7 @@ The automatic setup adds iTerm to the dock. **Switch from Terminal to iTerm** fo
 - **Homebrew Access**: Full access to package management
 - **Application Access**: Access to shared application configurations via staff group membership
 - **Native Application Management**: Designed for running native macOS applications with shared configuration access
-- **Direct SMB Access**: Access to mounted network shares for media management
+- **NFS Mount Access**: Access to mounted network shares for media management
 
 ### Administrative Tasks
 

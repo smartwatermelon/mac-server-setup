@@ -43,7 +43,7 @@ Single-phase admin import process:
 
 1. **Admin Import** - Transfers credentials from external keychain to admin's keychain
 
-**Note**: Operator keychain population has been removed as it's no longer needed. The operator account is created before first login, meaning no login keychain exists yet. SMB credentials are embedded directly into service scripts during application setup, eliminating the need for operator keychain access.
+**Note**: Operator keychain population has been removed as it's no longer needed. The operator account is created before first login, meaning no login keychain exists yet. NFS mount scripts use host-based authentication (no embedded credentials), and other service scripts embed credentials as needed during application setup.
 
 ### Application Usage (app-setup/*.sh)
 
@@ -71,7 +71,7 @@ Services use embedded credentials that were securely inserted during application
 
 ### mount-nas-media.sh Template
 
-Uses embedded NAS credentials that were securely inserted during plex-setup.sh execution. Credentials are validated during script startup, URL-encoded for SMB mounting, and protected by restrictive file permissions (mode 700).
+Mounts the NAS media share via NFS. Unlike the previous SMB approach, NFS uses host-based authentication — no credentials are embedded in the script. The script is still deployed with restrictive permissions (mode 700) since it runs sudo for the mount command.
 
 ### Configuration Files
 

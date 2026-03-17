@@ -29,7 +29,7 @@ Required 1Password login items in your configured vault:
 3. **Plex NAS** (item name configurable via `ONEPASSWORD_PLEX_NAS_ITEM`)
    - Username: NAS username for media access
    - Password: NAS password
-   - URL field: NAS hostname or SMB URL (optional)
+   - URL field: NAS hostname (optional, for reference)
 
 4. **Apple ID** (item name configurable via `ONEPASSWORD_APPLEID_ITEM`)
    - Username: Apple ID email

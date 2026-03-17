@@ -7,7 +7,7 @@ This document describes the `plex-setup.sh` script for Mac Mini server Plex Medi
 The `plex-setup.sh` script automates native Plex Media Server deployment on macOS with:
 
 - Native Plex Media Server installation via official macOS installer
-- Direct SMB mounting for NAS media storage access
+- NFS mounting for NAS media storage access
 - Shared configuration directory accessible to both admin and operator users
 - LaunchAgent configuration for automatic startup with operator login
 - SSH-based remote migration from existing Plex servers with server discovery
@@ -21,7 +21,7 @@ The `plex-setup.sh` script automates native Plex Media Server deployment on macO
 
 - `--force`: Skip all confirmation prompts
 - `--skip-migration`: Skip Plex configuration migration
-- `--skip-mount`: Skip SMB mount setup
+- `--skip-mount`: Skip NFS mount setup
 - `--server-name NAME`: Set Plex server name (default: hostname)
 - `--migrate-from HOST`: Source hostname for Plex migration
 - `--custom-port PORT`: Set custom port for fresh installations (prevents conflicts)
@@ -56,7 +56,7 @@ The script uses variables from `config.conf`:
 ```bash
 SERVER_NAME="MEDIA"              # Primary server identifier
 OPERATOR_USERNAME="operator"     # Non-admin user account
-NAS_HOSTNAME="nas.local"         # NAS hostname for SMB
+NAS_HOSTNAME="nas.local"         # NAS hostname for NFS
 NAS_SHARE_NAME="Media"           # Media share name
 ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"  # 1Password item for NAS credentials
 ```
@@ -73,14 +73,14 @@ ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"  # 1Password item for NAS credentials
 
 1. **Admin setup**: `plex-setup.sh` runs as administrator
    - Installs Plex Media Server application
-   - Embeds NAS credentials directly into SMB mount scripts
+   - Configures NFS mount scripts (NFS uses host-based auth, no credentials embedded)
    - Creates shared configuration directory (`/Users/Shared/PlexMediaServer`)
    - Migrates existing Plex configuration if requested
    - Deploys LaunchAgent and mount scripts to operator account
 
 2. **Operator runtime**: Automatic on operator login
    - LaunchAgent starts Plex with shared configuration
-   - SMB mount uses embedded credentials for media access
+   - NFS mount provides media access (host-based auth, no credentials needed)
    - Plex runs under operator account
 
 ### File Locations
@@ -282,7 +282,7 @@ mount | grep ${NAS_SHARE_NAME}
 ls ~/.local/mnt/${NAS_SHARE_NAME}
 ```
 
-### SMB Mount Management
+### NFS Mount Management
 
 ```bash
 # Manual mount test
@@ -315,7 +315,7 @@ ERRORS:
   ❌ Installing Plex Media Server: Homebrew installation failed
 
 WARNINGS:
-  ⚠️ Setting Up Per-User SMB Mount: Admin SMB mount failed - check credentials
+  ⚠️ Setting Up Per-User NFS Mount: Admin NFS mount failed - check NAS NFS export
   ⚠️ Configuring Remote Migration: SSH connection to old-server.local failed
 
 Review the full log for details: ~/.local/state/macmini-apps.log
@@ -339,9 +339,11 @@ op whoami
 ping ${NAS_HOSTNAME}
 op item get ${ONEPASSWORD_NAS_ITEM}
 
-# Manual SMB mount test
-mkdir -p ~/.local/mnt/${NAS_SHARE_NAME}
-mount_smbfs //${NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME} ~/.local/mnt/${NAS_SHARE_NAME}
+# Manual NFS mount test
+sudo mount_nfs -o resvport,rw,soft romano.local:/volume2/DSMedia ~/.local/mnt/${NAS_SHARE_NAME}
+
+# Check NFS exports from NAS
+showmount -e ${NAS_HOSTNAME}
 ```
 
 **Shared Config Access Issues**:
