@@ -114,7 +114,7 @@ main() {
 
   # Step 4: Mount the NFS share
   log "Step 4: Mounting NFS share..."
-  if sudo /sbin/mount_nfs -o resvport,rw,soft,bg,intr,rsize=65536,wsize=65536 "${nfs_source}" "${PLEX_MEDIA_MOUNT}"; then
+  if sudo /sbin/mount_nfs -o resvport,rw,soft,bg,intr,actimeo=2,rsize=65536,wsize=65536 "${nfs_source}" "${PLEX_MEDIA_MOUNT}"; then
     log "✅ NFS mount successful"
   else
     log "❌ NFS mount failed"
