@@ -436,19 +436,18 @@ fi
 
 set_section "Deploy compose.yml (reference only)"
 
+# Gather container environment values (used by compose template AND podman run below)
+PUID=$(id -u "${OPERATOR_USERNAME}")
+PGID=$(id -g "${OPERATOR_USERNAME}")
+TZ_VALUE=$(readlink /etc/localtime | sed 's|.*/zoneinfo/||' || true)
+TZ_VALUE="${TZ_VALUE:-America/Los_Angeles}"
+
 COMPOSE_TEMPLATE="${SCRIPT_DIR}/containers/transmission/compose.yml"
 COMPOSE_DEST="${CONTAINER_DIR}/compose.yml"
 
 if [[ ! -f "${COMPOSE_TEMPLATE}" ]]; then
   collect_error "Compose template not found: ${COMPOSE_TEMPLATE}"
 else
-  # Gather substitution values
-  PUID=$(id -u "${OPERATOR_USERNAME}")
-  PGID=$(id -g "${OPERATOR_USERNAME}")
-  # readlink /etc/localtime gives e.g. /var/db/timezone/zoneinfo/America/Los_Angeles
-  TZ_VALUE=$(readlink /etc/localtime | sed 's|.*/zoneinfo/||' || true)
-  TZ_VALUE="${TZ_VALUE:-America/Los_Angeles}"
-
   log "Deploying compose.yml (region: ${PIA_REGION}, LAN: ${LAN}, TZ: ${TZ_VALUE}, host port: ${HOST_PORT})"
 
   sudo sed \
