@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-# mount-nas-media.sh - User-specific SMB mount script for NAS media access
+# mount-nas-media.sh - User-specific NFS mount script for NAS media access
 # This script is designed to be called by a per-user LaunchAgent
-# to provide persistent SMB mounting for individual users.
+# to provide persistent NFS mounting for individual users.
 
 set -euo pipefail
 
@@ -15,6 +15,7 @@ fi
 # Configuration - these will be set during installation
 NAS_HOSTNAME="__NAS_HOSTNAME__"
 NAS_SHARE_NAME="__NAS_SHARE_NAME__"
+NAS_VOLUME="__NAS_VOLUME__"
 PLEX_MEDIA_MOUNT="${HOME}/.local/mnt/__NAS_SHARE_NAME__"
 SERVER_NAME="__SERVER_NAME__"
 WHOAMI="$(whoami)"
@@ -41,10 +42,6 @@ log() {
   echo "${timestamp} [mount-nas-media] $*" | tee -a "${LOG_FILE}"
 }
 
-# SMB credentials - these will be set during installation
-PLEX_NAS_USERNAME="__PLEX_NAS_USERNAME__"
-PLEX_NAS_PASSWORD="__PLEX_NAS_PASSWORD__"
-
 # Wait for network connectivity
 wait_for_network() {
   local max_attempts=30
@@ -68,12 +65,12 @@ wait_for_network() {
 }
 
 test_mount() {
-  # Test basic mount verification using user-based pattern
-  if ! mount | grep "${WHOAMI}" | grep -q "${PLEX_MEDIA_MOUNT}"; then
-    log "⚠️  Mount not visible in system mount table for user ${WHOAMI}"
+  # Test basic mount verification using NFS mount type
+  if ! mount -t nfs | grep -q "${PLEX_MEDIA_MOUNT}"; then
+    log "⚠️  Mount not visible in system mount table for NFS mount"
     return 1
   fi
-  log "✅ Mount verification successful (active mount found for ${WHOAMI})"
+  log "✅ Mount verification successful (active NFS mount found)"
   return 0
 }
 
@@ -83,7 +80,8 @@ main() {
   log "Target: ${PLEX_MEDIA_MOUNT}"
   log "Running as: ${WHOAMI} (${IDU}:${IDG})"
 
-  log "Source: //${PLEX_NAS_USERNAME}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
+  local nfs_source="${NAS_HOSTNAME}:/${NAS_VOLUME}/${NAS_SHARE_NAME}"
+  log "Source: ${nfs_source}"
 
   # Wait for network connectivity first
   if ! wait_for_network; then
@@ -114,16 +112,12 @@ main() {
   chmod 755 "${PLEX_MEDIA_MOUNT}"
   log "✅ Mount point created: ${PLEX_MEDIA_MOUNT} (user-owned 755)"
 
-  # Step 4: Mount the SMB share
-  log "Step 4: Mounting SMB share..."
-  local encoded_password
-  encoded_password=$(printf '%s' "${PLEX_NAS_PASSWORD}" | sed 's/@/%40/g; s/:/%3A/g; s/ /%20/g; s/#/%23/g; s/?/%3F/g; s/&/%26/g')
-  local mount_url="//${PLEX_NAS_USERNAME}:${encoded_password}@${NAS_HOSTNAME}/${NAS_SHARE_NAME}"
-
-  if mount_smbfs -o soft,noowners,filemode=0664,dirmode=0775 -f 0664 -d 0775 "${mount_url}" "${PLEX_MEDIA_MOUNT}"; then
-    log "✅ SMB mount successful"
+  # Step 4: Mount the NFS share
+  log "Step 4: Mounting NFS share..."
+  if mount -t nfs -o resvport,rw,soft,bg,intr,rsize=65536,wsize=65536 "${nfs_source}" "${PLEX_MEDIA_MOUNT}"; then
+    log "✅ NFS mount successful"
   else
-    log "❌ SMB mount failed"
+    log "❌ NFS mount failed"
     exit 1
   fi
 
@@ -138,9 +132,6 @@ main() {
 
   # Step 6: Create or replace $HOME symlink to mount dir
   ln -fs "${PLEX_MEDIA_MOUNT}/Media/" "${HOME}"
-
-  # Clear sensitive credentials from memory
-  unset PLEX_NAS_USERNAME PLEX_NAS_PASSWORD
 
   log "✅ NAS media mount process completed successfully"
 }
