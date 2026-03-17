@@ -432,6 +432,7 @@ SUDOERS
 
   chmod 440 "${tmp_sudoers}"
   if sudo visudo -cf "${tmp_sudoers}" >/dev/null 2>&1; then
+    sudo chown root:wheel "${tmp_sudoers}"
     sudo mv "${tmp_sudoers}" "${sudoers_file}"
     log "✅ Sudoers rule created and validated: ${sudoers_file}"
   else

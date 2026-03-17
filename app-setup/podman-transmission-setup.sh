@@ -389,10 +389,11 @@ log "Creating container directories under ${CONTAINER_DIR}"
 sudo -iu "${OPERATOR_USERNAME}" mkdir -p \
   "${CONTAINER_DIR}" \
   "${CONTAINER_DIR}/config" \
-  "${CONTAINER_DIR}/scripts"
+  "${CONTAINER_DIR}/scripts" \
+  "${CONTAINER_DIR}/watch"
 
 sudo chmod 700 "${CONTAINER_DIR}"
-sudo chmod 755 "${CONTAINER_DIR}/config" "${CONTAINER_DIR}/scripts"
+sudo chmod 755 "${CONTAINER_DIR}/config" "${CONTAINER_DIR}/scripts" "${CONTAINER_DIR}/watch"
 sudo chown -R "${OPERATOR_USERNAME}:staff" "${CONTAINER_DIR}"
 
 log "✅ Container directories created"
