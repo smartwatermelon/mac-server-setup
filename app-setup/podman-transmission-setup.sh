@@ -20,7 +20,7 @@
 #   - Homebrew installed
 #   - config/config.conf configured (ONEPASSWORD_PIA_ITEM, PIA_VPN_REGION, LAN_SUBNET)
 #   - PIA credentials stored in keychain (run prep-airdrop.sh first)
-#   - NAS mounted at ~/.local/mnt/DSMedia
+#   - NAS NFS export configured (enable non-privileged ports for VM NAT traffic)
 #
 # Usage: ./podman-transmission-setup.sh [--force]
 #   --force: Skip all confirmation prompts
@@ -324,6 +324,65 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Section 2b: NFS mount inside Podman VM
+# ---------------------------------------------------------------------------
+
+set_section "VM-Internal NFS Mount"
+
+# Validate required NAS config variables (safe characters only — used in SSH commands and systemd unit names)
+safe_pattern='^[a-zA-Z0-9._-]+$'
+if [[ -z "${NAS_HOSTNAME:-}" ]] || [[ -z "${NAS_SHARE_NAME:-}" ]]; then
+  collect_error "NAS_HOSTNAME and NAS_SHARE_NAME must be set in config.conf"
+  exit 1
+fi
+if [[ ! "${NAS_HOSTNAME}" =~ ${safe_pattern} ]] || [[ ! "${NAS_SHARE_NAME}" =~ ${safe_pattern} ]]; then
+  collect_error "NAS_HOSTNAME and NAS_SHARE_NAME must contain only alphanumeric, dot, hyphen, or underscore"
+  exit 1
+fi
+
+NFS_MOUNT_POINT="/mnt/${NAS_SHARE_NAME}"
+NFS_SOURCE="${NAS_HOSTNAME}:/${NAS_VOLUME:-volume1}/${NAS_SHARE_NAME}"
+
+log "Configuring NFS mount inside Podman VM: ${NFS_SOURCE} → ${NFS_MOUNT_POINT}"
+
+# Create mount point
+sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
+  "sudo mkdir -p '${NFS_MOUNT_POINT}'"
+
+# Write systemd mount unit (unit name must match mount path: mnt-DSMedia.mount for /mnt/DSMedia)
+# Heredoc is unquoted so variables expand at deploy time; values are validated above
+MOUNT_UNIT_NAME="mnt-${NAS_SHARE_NAME}.mount"
+sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
+  "sudo tee '/etc/systemd/system/${MOUNT_UNIT_NAME}' > /dev/null" <<MOUNTUNIT
+[Unit]
+Description=NFS mount for ${NAS_SHARE_NAME} share
+After=network-online.target
+Wants=network-online.target
+
+[Mount]
+What=${NFS_SOURCE}
+Where=${NFS_MOUNT_POINT}
+Type=nfs
+Options=rw,soft,intr,actimeo=2,rsize=65536,wsize=65536
+
+[Install]
+WantedBy=local-fs.target
+MOUNTUNIT
+
+# Enable and start
+sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
+  "sudo systemctl daemon-reload && sudo systemctl enable --now '${MOUNT_UNIT_NAME}'"
+
+# Verify
+if sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
+  "mountpoint -q '${NFS_MOUNT_POINT}'"; then
+  log "✅ NFS mount active inside VM: ${NFS_MOUNT_POINT}"
+else
+  collect_error "NFS mount failed inside VM — check NAS NFS export allows non-privileged ports"
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # Section 3: Container directory structure
 # ---------------------------------------------------------------------------
 
@@ -403,6 +462,7 @@ else
     -e "s|__LAN_SUBNET__|${LAN}|g" \
     -e "s|__TRANSMISSION_HOST_PORT__|${HOST_PORT}|g" \
     -e "s|__OPERATOR_HOME__|${OPERATOR_HOME}|g" \
+    -e "s|__NFS_MOUNT_POINT__|${NFS_MOUNT_POINT}|g" \
     -e "s|__PUID__|${PUID}|g" \
     -e "s|__PGID__|${PGID}|g" \
     -e "s|__TZ__|${TZ_VALUE}|g" \
@@ -488,6 +548,10 @@ for _ in {1..30}; do
     fi
     sleep 1
 done
+
+# Ensure NFS mount is active inside VM before starting containers
+# (this script runs as operator via LaunchAgent — no sudo -iu needed)
+podman machine ssh transmission-vm -- "mountpoint -q '/mnt/${NAS_SHARE_NAME}' || sudo systemctl start 'mnt-${NAS_SHARE_NAME}.mount'"
 
 podman compose -f "${OPERATOR_HOME}/containers/transmission/compose.yml" \
     --env-file "${OPERATOR_HOME}/containers/transmission/.env" up -d

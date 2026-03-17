@@ -13,6 +13,7 @@
 #   __PUID__           → operator UID (e.g. 502)
 #   __PGID__           → operator primary GID (e.g. 20)
 #   __TZ__             → timezone (e.g. America/Los_Angeles)
+#   __NFS_MOUNT_POINT__     → VM-internal NFS mount path (e.g. /mnt/DSMedia)
 #
 # arm64 (Apple Silicon) support: verify before deploying:
 #   docker manifest inspect haugene/transmission-openvpn:latest | grep -A2 '"platform"' | grep arm64
@@ -49,7 +50,7 @@ services:
       - CREATE_TUN_DEVICE=false
       - LOG_TO_STDOUT=true
     volumes:
-      - __OPERATOR_HOME__/.local/mnt/DSMedia:/data
+      - __NFS_MOUNT_POINT__:/data
       - __OPERATOR_HOME__/containers/transmission/scripts:/scripts
       - __OPERATOR_HOME__/containers/transmission/config:/config
       - __OPERATOR_HOME__/containers/transmission/watch:/watch
