@@ -1474,7 +1474,7 @@ main() {
     fi
   fi
 
-  # Setup SMB mount if not skipped
+  # Setup NFS mount if not skipped
   if [[ "${SKIP_MOUNT}" != "true" ]]; then
     setup_persistent_nfs_mount
   else
