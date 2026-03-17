@@ -265,11 +265,6 @@ if ! command -v podman >/dev/null 2>&1; then
   brew install podman
 fi
 
-if ! command -v podman-compose >/dev/null 2>&1; then
-  log "Installing podman-compose via Homebrew (required compose provider for 'podman compose')..."
-  brew install podman-compose
-fi
-
 PODMAN_VERSION=$(podman --version | awk '{print $3}')
 PODMAN_MAJOR=$(cut -d. -f1 <<<"${PODMAN_VERSION}")
 PODMAN_MINOR=$(cut -d. -f2 <<<"${PODMAN_VERSION}")
@@ -340,7 +335,7 @@ if [[ ! "${NAS_HOSTNAME}" =~ ${safe_pattern} ]] || [[ ! "${NAS_SHARE_NAME}" =~ $
   exit 1
 fi
 
-NFS_MOUNT_POINT="/mnt/${NAS_SHARE_NAME}"
+NFS_MOUNT_POINT="/var/mnt/${NAS_SHARE_NAME}"
 NFS_SOURCE="${NAS_HOSTNAME}:/${NAS_VOLUME:-volume1}/${NAS_SHARE_NAME}"
 
 log "Configuring NFS mount inside Podman VM: ${NFS_SOURCE} → ${NFS_MOUNT_POINT}"
@@ -349,9 +344,9 @@ log "Configuring NFS mount inside Podman VM: ${NFS_SOURCE} → ${NFS_MOUNT_POINT
 sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
   "sudo mkdir -p '${NFS_MOUNT_POINT}'"
 
-# Write systemd mount unit (unit name must match mount path: mnt-DSMedia.mount for /mnt/DSMedia)
+# Write systemd mount unit (unit name must match canonical path: var-mnt-DSMedia.mount for /var/mnt/DSMedia)
 # Heredoc is unquoted so variables expand at deploy time; values are validated above
-MOUNT_UNIT_NAME="mnt-${NAS_SHARE_NAME}.mount"
+MOUNT_UNIT_NAME="var-mnt-${NAS_SHARE_NAME}.mount"
 sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
   "sudo tee '/etc/systemd/system/${MOUNT_UNIT_NAME}' > /dev/null" <<MOUNTUNIT
 [Unit]
@@ -439,7 +434,7 @@ fi
 # Section 5: Deploy compose.yml
 # ---------------------------------------------------------------------------
 
-set_section "Deploy compose.yml"
+set_section "Deploy compose.yml (reference only)"
 
 COMPOSE_TEMPLATE="${SCRIPT_DIR}/containers/transmission/compose.yml"
 COMPOSE_DEST="${CONTAINER_DIR}/compose.yml"
@@ -471,6 +466,8 @@ else
   sudo chown "${OPERATOR_USERNAME}:staff" "${COMPOSE_DEST}"
   sudo chmod 644 "${COMPOSE_DEST}"
   log "✅ compose.yml deployed to ${COMPOSE_DEST}"
+  log "   Note: compose.yml is for reference only — container is started via podman run"
+  log "   (podman-compose cannot handle VM-internal NFS mount paths)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -522,6 +519,8 @@ MACHINE_START_DEST="${OPERATOR_HOME}/.local/bin/podman-machine-start.sh"
 
 # Write the wrapper directly (values baked in at deploy time).
 # Variables prefixed with \ escape into the written script; bare ${...} expand now.
+# Required variables (all defined earlier): NAS_SHARE_NAME (config.conf), OPERATOR_HOME (line ~88),
+# HOST_PORT (line ~240), PIA_REGION (line ~238), LAN (line ~239), PUID/PGID (Section 5), TZ_VALUE (Section 5)
 sudo tee "${MACHINE_START_DEST}" >/dev/null <<WRAPPER
 #!/usr/bin/env bash
 set -euo pipefail
@@ -529,7 +528,7 @@ set -euo pipefail
 # podman-machine-start.sh - Start Podman machine and bring up transmission stack
 #
 # Invoked by com.${HOSTNAME_LOWER}.podman-transmission-vm LaunchAgent at login.
-# Ensures the machine is running, waits for the socket, then runs compose up.
+# Ensures the machine is running, waits for the socket, then starts the transmission container.
 # Separate from the setup script so it can be re-run safely at each login.
 
 # LaunchAgents run with a minimal PATH that does not include Homebrew.
@@ -551,10 +550,44 @@ done
 
 # Ensure NFS mount is active inside VM before starting containers
 # (this script runs as operator via LaunchAgent — no sudo -iu needed)
-podman machine ssh transmission-vm -- "mountpoint -q '/mnt/${NAS_SHARE_NAME}' || sudo systemctl start 'mnt-${NAS_SHARE_NAME}.mount'"
+podman machine ssh transmission-vm -- "mountpoint -q '/var/mnt/${NAS_SHARE_NAME}' || sudo systemctl start 'var-mnt-${NAS_SHARE_NAME}.mount'"
 
-podman compose -f "${OPERATOR_HOME}/containers/transmission/compose.yml" \
-    --env-file "${OPERATOR_HOME}/containers/transmission/.env" up -d
+# Remove old container if exists (idempotent restart)
+podman rm -f transmission-vpn 2>/dev/null || true
+
+podman run -d \\
+    --name transmission-vpn \\
+    --privileged \\
+    --device /dev/net/tun:/dev/net/tun \\
+    --sysctl net.ipv6.conf.all.disable_ipv6=0 \\
+    -v "/var/mnt/${NAS_SHARE_NAME}:/data" \\
+    -v "${OPERATOR_HOME}/containers/transmission/scripts:/scripts" \\
+    -v "${OPERATOR_HOME}/containers/transmission/config:/config" \\
+    -v "${OPERATOR_HOME}/containers/transmission/watch:/watch" \\
+    -p "${HOST_PORT}:9091" \\
+    --restart unless-stopped \\
+    --env-file "${OPERATOR_HOME}/containers/transmission/.env" \\
+    -e OPENVPN_PROVIDER=PIA \\
+    -e "OPENVPN_CONFIG=${PIA_REGION}" \\
+    -e "LOCAL_NETWORK=${LAN}" \\
+    -e "PUID=${PUID}" \\
+    -e "PGID=${PGID}" \\
+    -e "TZ=${TZ_VALUE}" \\
+    -e TRANSMISSION_DOWNLOAD_DIR=/data/Media/Torrents/pending-move \\
+    -e TRANSMISSION_INCOMPLETE_DIR=/data/Media/Torrents/incomplete \\
+    -e TRANSMISSION_WATCH_DIR=/watch \\
+    -e TRANSMISSION_WATCH_DIR_ENABLED=true \\
+    -e TRANSMISSION_RATIO_LIMIT_ENABLED=false \\
+    -e TRANSMISSION_ENCRYPTION=2 \\
+    -e TRANSMISSION_BLOCKLIST_ENABLED=true \\
+    -e "TRANSMISSION_BLOCKLIST_URL=https://github.com/Naunter/BT_BlockLists/raw/master/bt_blocklists.gz" \\
+    -e TRANSMISSION_RPC_AUTHENTICATION_REQUIRED=false \\
+    -e TRANSMISSION_RPC_WHITELIST_ENABLED=false \\
+    -e TRANSMISSION_SCRIPT_TORRENT_DONE_ENABLED=true \\
+    -e TRANSMISSION_SCRIPT_TORRENT_DONE_FILENAME=/scripts/transmission-post-done.sh \\
+    -e CREATE_TUN_DEVICE=false \\
+    -e LOG_TO_STDOUT=true \\
+    haugene/transmission-openvpn:latest
 WRAPPER
 
 sudo chmod 755 "${MACHINE_START_DEST}"
@@ -685,18 +718,52 @@ if [[ "${ERROR_COUNT}" -gt 0 ]]; then
 elif [[ "${ENV_WRITTEN}" == "false" ]]; then
   log "Skipping container start: .env not written (missing PIA credentials)"
 else
-  log "Starting container stack (podman compose up -d)..."
-  if sudo -iu "${OPERATOR_USERNAME}" \
-    podman compose -f "${CONTAINER_DIR}/compose.yml" \
-    --env-file "${CONTAINER_DIR}/.env" up -d; then
-    log "✅ Container stack started"
+  log "Starting container (podman run)..."
+
+  # Remove old container if exists (idempotent)
+  sudo -iu "${OPERATOR_USERNAME}" podman rm -f transmission-vpn 2>/dev/null || true
+
+  if sudo -iu "${OPERATOR_USERNAME}" podman run -d \
+    --name transmission-vpn \
+    --privileged \
+    --device /dev/net/tun:/dev/net/tun \
+    --sysctl net.ipv6.conf.all.disable_ipv6=0 \
+    -v "${NFS_MOUNT_POINT}:/data" \
+    -v "${CONTAINER_DIR}/scripts:/scripts" \
+    -v "${CONTAINER_DIR}/config:/config" \
+    -v "${CONTAINER_DIR}/watch:/watch" \
+    -p "${HOST_PORT}:9091" \
+    --restart unless-stopped \
+    --env-file "${CONTAINER_DIR}/.env" \
+    -e OPENVPN_PROVIDER=PIA \
+    -e "OPENVPN_CONFIG=${PIA_REGION}" \
+    -e "LOCAL_NETWORK=${LAN}" \
+    -e "PUID=${PUID}" \
+    -e "PGID=${PGID}" \
+    -e "TZ=${TZ_VALUE}" \
+    -e TRANSMISSION_DOWNLOAD_DIR=/data/Media/Torrents/pending-move \
+    -e TRANSMISSION_INCOMPLETE_DIR=/data/Media/Torrents/incomplete \
+    -e TRANSMISSION_WATCH_DIR=/watch \
+    -e TRANSMISSION_WATCH_DIR_ENABLED=true \
+    -e TRANSMISSION_RATIO_LIMIT_ENABLED=false \
+    -e TRANSMISSION_ENCRYPTION=2 \
+    -e TRANSMISSION_BLOCKLIST_ENABLED=true \
+    -e "TRANSMISSION_BLOCKLIST_URL=https://github.com/Naunter/BT_BlockLists/raw/master/bt_blocklists.gz" \
+    -e TRANSMISSION_RPC_AUTHENTICATION_REQUIRED=false \
+    -e TRANSMISSION_RPC_WHITELIST_ENABLED=false \
+    -e TRANSMISSION_SCRIPT_TORRENT_DONE_ENABLED=true \
+    -e TRANSMISSION_SCRIPT_TORRENT_DONE_FILENAME=/scripts/transmission-post-done.sh \
+    -e CREATE_TUN_DEVICE=false \
+    -e LOG_TO_STDOUT=true \
+    haugene/transmission-openvpn:latest; then
+    log "✅ Container started"
     log ""
     log "Verify with:"
     log "  podman logs transmission-vpn"
     log "  podman exec transmission-vpn curl -s ifconfig.io  (should return Panama PIA exit IP)"
     log "  Transmission web UI: http://${HOSTNAME_LOWER}.local:${HOST_PORT}"
   else
-    collect_error "podman compose up failed — check 'podman logs transmission-vpn' for details"
+    collect_error "podman run failed — check 'podman logs transmission-vpn' for details"
   fi
 fi
 
