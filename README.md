@@ -35,7 +35,7 @@ After setup, these all start automatically on login (LaunchAgents):
 | Catch | Polls ShowRSS feed, grabs new episodes |
 | FileBot | Renames and sorts downloads into the Plex library |
 | rclone | Syncs Dropbox torrent files to the Transmission watch directory |
-| NAS Mount | SMB mount to NAS on login |
+| NAS Mount | NFS mount to NAS on login |
 | Backblaze | Off-site backup |
 | Caddy | Reverse proxy with internal TLS and external HTTPS |
 
@@ -77,7 +77,7 @@ config/config.conf
   └── run-app-setup.sh sources it  (Phase 3)
 ```
 
-Key variables: `SERVER_NAME`, `OPERATOR_USERNAME`, `NAS_HOSTNAME`, `NAS_SHARE_NAME`, `ONEPASSWORD_VAULT`.
+Key variables: `SERVER_NAME`, `OPERATOR_USERNAME`, `NAS_HOSTNAME`, `NAS_SHARE_NAME`, `NAS_VOLUME`, `ONEPASSWORD_VAULT`.
 
 ### Credentials
 
@@ -157,9 +157,9 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
 │   ├── rclone-setup.sh           # Dropbox sync to watch directory
 │   ├── containers/
 │   │   └── transmission/
-│   │       └── compose.yml       # Podman compose template (haugene)
+│   │       └── compose.yml       # Container configuration reference (haugene)
 │   └── templates/                # Runtime script templates
-│       ├── mount-nas-media.sh    # SMB mount script
+│       ├── mount-nas-media.sh    # NFS mount script
 │       ├── start-plex.sh         # Plex startup wrapper
 │       ├── start-rclone.sh       # rclone sync script
 │       ├── transmission-post-done.sh    # Container-side completion trigger
@@ -261,7 +261,7 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 | `prep-airdrop.sh` | Console output only |
 | `first-boot.sh` | `~/.local/state/<hostname>-setup.log` |
 | App setup scripts | `~/.local/state/<hostname>-app-setup.log` |
-| SMB mount | `~/.local/state/<hostname>-mount.log` |
+| NFS mount | `~/.local/state/<hostname>-mount.log` |
 | Operator login | `~/.local/state/<hostname>-operator-login.log` |
 
 ## Troubleshooting

@@ -44,13 +44,14 @@ ONEPASSWORD_OPENSUBTITLES_ITEM="Opensubtitles"
 
 ### NAS Configuration
 
-**Location**: `config/config.conf` or app-setup scripts
+**Location**: `config/config.conf`
 
 ```bash
 # NAS connection details
 NAS_HOSTNAME="nas.local"
 NAS_SHARE_NAME="Media"
 NAS_USERNAME="plex"
+NAS_VOLUME="volume2"              # Synology volume for NFS export path
 ```
 
 ## Advanced Configuration Variables

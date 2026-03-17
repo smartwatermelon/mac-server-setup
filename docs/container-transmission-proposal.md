@@ -55,7 +55,7 @@ Replace the entire PIA Desktop + split tunnel + monitoring stack with:
 macOS host
   • Plex.app — unaffected, uses regular internet directly
   • rclone, FileBot, Catch — unaffected
-  • NAS SMB mount — still needed for Plex and trigger-watcher
+  • NAS NFS mount — used by Plex, FileBot, and Finder
   • trigger-watcher LaunchAgent — bridges container done-events to FileBot
 ```
 
@@ -85,7 +85,7 @@ There is no race condition and no "unguarded window."
   and `/dev/net/tun` access required by OpenVPN
 
 Podman uses QEMU for the Linux VM. The VM is named `transmission-vm` and is registered as
-the default Podman connection so `podman compose` targets it without extra flags.
+the default Podman connection so `podman run` targets it without extra flags.
 
 ### 3.2 haugene/transmission-openvpn
 
@@ -151,7 +151,7 @@ simplifies the system significantly and eliminates the only root-level daemon in
 - Plex Media Server (native macOS, uses regular internet — this was always the intent)
 - rclone (cloud backup, unaffected)
 - FileBot + Catch (post-processing pipeline, unaffected)
-- NAS SMB mount LaunchAgent (still needed for Plex's media access)
+- NAS NFS mount LaunchAgent (used by Plex, FileBot, and Finder)
 - All other setup scripts and infrastructure
 
 ---
@@ -163,34 +163,30 @@ simplifies the system significantly and eliminates the only root-level daemon in
 
 ### 5.1 NAS bind mount through Podman VM ✅ RESOLVED
 
-**Original question (OrbStack VirtioFS):** Does the container runtime expose the NAS SMB
-mount or the empty underlying directory?
+**Original question:** Does the container runtime expose the NAS mount through VirtioFS?
 
-**Resolution:** Podman uses QEMU (not Apple Virtualization.framework), so VirtioFS specifics
-don't apply. The macOS-mounted SMB path (`~/.local/mnt/DSMedia`) is bind-mounted directly into
-the Podman VM. `podman-transmission-setup.sh` validates this at deploy time:
+**Resolution (updated 2026-03-16):** VirtioFS pass-through of NFS mounts caused file
+descriptor caching issues — Apple's Virtualization framework holds FDs indefinitely,
+creating `.nfs.*` silly-rename files that block deletion. The solution mounts NFS directly
+inside the Podman VM via a systemd `.mount` unit, bypassing VirtioFS for the data path.
+The container sees the NAS as a native NFS mount (`type nfs4`), not a VirtioFS mount.
 
-```bash
-sudo -iu "${OPERATOR_USERNAME}" podman run --rm \
-  -v "${NAS_MOUNT}:/test:ro" alpine ls /test
-```
+The host-side NFS mount remains for Plex, FileBot, and Finder access. The container
+uses `podman run` (not `podman compose`) because `podman-compose` validates host paths
+and rejects VM-internal mount points.
 
-If the validation fails (NAS not mounted, empty listing), the setup script emits a warning and
-documents the fallback in `docs/container-transmission-proposal.md §5.1`. On reboot, the NAS
-LaunchAgent and the Podman machine start LaunchAgent both fire at login — the machine start
-wrapper does not explicitly wait for the NAS mount, so if the SMB mount is slow, the first
-`compose up` may see an empty `/data`. Recovery: `podman compose up -d` re-runs automatically
-on next login, or manually after confirming the NAS is mounted.
+On reboot, the VM's systemd mount unit starts the NFS mount before the container. The
+`podman-machine-start.sh` wrapper verifies the mount is active before starting the
+container.
 
 ### 5.2 Container startup ordering ✅ RESOLVED
 
 **Resolution:** The Podman machine start LaunchAgent (`com.<host>.podman-transmission-vm`)
 fires at operator login. The wrapper script waits for the Podman socket (up to 30 seconds)
-before running `podman compose up -d`. Both LaunchAgents (NAS mount and Podman machine start)
-run concurrently at login; there is no guaranteed ordering. If the NAS mount isn't ready when
-compose starts, Transmission may start with an empty `/data` bind — this is the same risk as
-§5.1 and has the same recovery path. `restart: unless-stopped` keeps the container running once
-it starts successfully.
+before starting the container. Both LaunchAgents (NAS mount and Podman machine start)
+run concurrently at login; there is no guaranteed ordering. The `podman-machine-start.sh`
+wrapper explicitly checks that the VM's NFS mount is active before starting the container
+with `podman run`, eliminating the startup race condition.
 
 ### 5.3 PIA credentials ✅ RESOLVED
 
@@ -199,7 +195,7 @@ from 1Password and stores them as a combined `username:password` string in the m
 keychain (service: `pia-account-${HOSTNAME_LOWER}`, account: `${HOSTNAME_LOWER}`).
 `podman-transmission-setup.sh` retrieves them at deploy time and writes a `.env` file at
 `~/containers/transmission/.env` (permissions 600, excluded from git). The compose file
-references `${PIA_USERNAME}` and `${PIA_PASSWORD}` from this `.env`.
+references `${PIA_USERNAME}` and `${PIA_PASSWORD}` from this `.env` via `--env-file`.
 
 ### 5.4 Port forwarding handoff mechanism ✅ RESOLVED
 
@@ -310,7 +306,7 @@ existing setup is fully preserved during Phase 1 and Phase 2.
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| NAS SMB mount not ready when Podman machine starts | Medium | High | `restart: unless-stopped` recovers; manual `podman compose up -d` after confirming NAS mount |
+| NAS NFS mount not ready when Podman machine starts | Medium | High | `podman-machine-start.sh` verifies VM NFS mount before starting container; manual recovery via `podman run` after confirming mount |
 | Podman machine updates break container networking | Low | Medium | Pin image versions; Podman is a Homebrew formula with pinnable versions |
 | PIA changes OpenVPN server config or API | Low | High | haugene is actively maintained for PIA; same risk exists with PIA Desktop |
 | haugene port forwarding script fails on PIA API change | Low | Medium | Transmission continues downloading; peering degrades until fixed |
