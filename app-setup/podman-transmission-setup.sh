@@ -378,6 +378,93 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Section 2c: NFS watchdog timer inside Podman VM
+# ---------------------------------------------------------------------------
+
+set_section "VM-Internal NFS Watchdog"
+
+log "Deploying NFS watchdog timer inside Podman VM..."
+
+# Write the watchdog service unit
+sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
+  "sudo tee '/etc/systemd/system/nfs-watchdog.service' > /dev/null" <<'WATCHDOG_SVC'
+[Unit]
+Description=NFS mount health watchdog
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/nfs-watchdog.sh
+WATCHDOG_SVC
+
+# Write the watchdog timer unit
+sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
+  "sudo tee '/etc/systemd/system/nfs-watchdog.timer' > /dev/null" <<'WATCHDOG_TMR'
+[Unit]
+Description=Run NFS mount health check every 2 minutes
+
+[Timer]
+OnBootSec=60
+OnUnitActiveSec=120
+
+[Install]
+WantedBy=timers.target
+WATCHDOG_TMR
+
+# Write the watchdog script itself
+# NFS_MOUNT_POINT and MOUNT_UNIT_NAME are expanded at deploy time;
+# everything else is escaped into the script
+sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
+  "sudo tee '/usr/local/bin/nfs-watchdog.sh' > /dev/null" <<WATCHDOG_SCRIPT
+#!/usr/bin/env bash
+set -u
+# nfs-watchdog.sh — Detect and recover stale NFS mounts inside the Podman VM.
+# Deployed by podman-transmission-setup.sh; runs via nfs-watchdog.timer.
+
+MOUNT_POINT="${NFS_MOUNT_POINT}"
+MOUNT_UNIT="${MOUNT_UNIT_NAME}"
+
+# Test if the mount responds within 5 seconds
+if timeout 5 stat "\${MOUNT_POINT}" >/dev/null 2>&1; then
+    exit 0
+fi
+
+echo "NFS mount \${MOUNT_POINT} is stale — attempting recovery"
+
+# Lazy unmount to release the stuck mount without blocking
+umount -l "\${MOUNT_POINT}" 2>/dev/null || true
+
+# Brief pause for unmount to take effect
+sleep 2
+
+# Remount via the systemd mount unit
+systemctl start "\${MOUNT_UNIT}"
+
+# Verify recovery
+if timeout 10 stat "\${MOUNT_POINT}" >/dev/null 2>&1; then
+    echo "NFS mount recovered successfully"
+else
+    echo "NFS mount recovery failed — NAS may be offline"
+    exit 1
+fi
+WATCHDOG_SCRIPT
+
+sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
+  "sudo chmod 755 /usr/local/bin/nfs-watchdog.sh"
+
+# Enable the timer (daemon-reload already happened, but reload again for new units)
+sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
+  "sudo systemctl daemon-reload && sudo systemctl enable --now nfs-watchdog.timer"
+
+# Verify timer is active
+if sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
+  "systemctl is-active nfs-watchdog.timer" | grep -q "active"; then
+  log "✅ NFS watchdog timer active inside VM (checks every 2 minutes)"
+else
+  collect_warning "NFS watchdog timer failed to activate — manual check recommended"
+fi
+
+# ---------------------------------------------------------------------------
 # Section 3: Container directory structure
 # ---------------------------------------------------------------------------
 
@@ -566,6 +653,11 @@ podman run -d \\
     -v "${OPERATOR_HOME}/containers/transmission/watch:/watch" \\
     -p "${HOST_PORT}:9091" \\
     --restart unless-stopped \\
+    --health-cmd "curl -sf --max-time 5 http://localhost:9091/transmission/web/" \\
+    --health-interval 60s \\
+    --health-start-period 120s \\
+    --health-retries 3 \\
+    --health-on-failure restart \\
     --env-file "${OPERATOR_HOME}/containers/transmission/.env" \\
     -e OPENVPN_PROVIDER=PIA \\
     -e "OPENVPN_CONFIG=${PIA_REGION}" \\
@@ -734,6 +826,11 @@ else
     -v "${CONTAINER_DIR}/watch:/watch" \
     -p "${HOST_PORT}:9091" \
     --restart unless-stopped \
+    --health-cmd "curl -sf --max-time 5 http://localhost:9091/transmission/web/" \
+    --health-interval 60s \
+    --health-start-period 120s \
+    --health-retries 3 \
+    --health-on-failure restart \
     --env-file "${CONTAINER_DIR}/.env" \
     -e OPENVPN_PROVIDER=PIA \
     -e "OPENVPN_CONFIG=${PIA_REGION}" \
