@@ -653,6 +653,11 @@ podman run -d \\
     -v "${OPERATOR_HOME}/containers/transmission/watch:/watch" \\
     -p "${HOST_PORT}:9091" \\
     --restart unless-stopped \\
+    --health-cmd "curl -sf --max-time 5 http://localhost:9091/transmission/web/" \\
+    --health-interval 60s \\
+    --health-start-period 120s \\
+    --health-retries 3 \\
+    --health-on-failure restart \\
     --env-file "${OPERATOR_HOME}/containers/transmission/.env" \\
     -e OPENVPN_PROVIDER=PIA \\
     -e "OPENVPN_CONFIG=${PIA_REGION}" \\
@@ -821,6 +826,11 @@ else
     -v "${CONTAINER_DIR}/watch:/watch" \
     -p "${HOST_PORT}:9091" \
     --restart unless-stopped \
+    --health-cmd "curl -sf --max-time 5 http://localhost:9091/transmission/web/" \
+    --health-interval 60s \
+    --health-start-period 120s \
+    --health-retries 3 \
+    --health-on-failure restart \
     --env-file "${CONTAINER_DIR}/.env" \
     -e OPENVPN_PROVIDER=PIA \
     -e "OPENVPN_CONFIG=${PIA_REGION}" \
