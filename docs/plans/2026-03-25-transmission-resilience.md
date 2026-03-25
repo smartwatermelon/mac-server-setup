@@ -16,7 +16,7 @@
 
 - Modify: `app-setup/podman-transmission-setup.sh:367-378` (after NFS mount verification in Section 2b)
 
-**Step 1: Add the NFS watchdog deployment after the existing NFS mount verification block**
+### Step 1: Add the NFS watchdog deployment after the existing NFS mount verification block
 
 Insert a new subsection after line 378 (the `fi` closing the NFS mount verification). This writes two systemd units into the VM and enables the timer.
 
@@ -126,12 +126,12 @@ else
 fi
 ```
 
-**Step 2: Verify the edit compiles**
+### Step 2: Verify the edit compiles
 
 Run: `bash -n app-setup/podman-transmission-setup.sh`
 Expected: No output (clean syntax)
 
-**Step 3: Commit**
+### Step 3: Commit
 
 ```bash
 git add app-setup/podman-transmission-setup.sh
@@ -149,7 +149,7 @@ git commit -m "feat(podman-transmission): add NFS watchdog timer inside VM"
 
 There are two `podman run` invocations — the one-time run in Section 11 (setup script) and the login-time run baked into `podman-machine-start.sh` (Section 8). Both need the health check flags.
 
-**Step 1: Add health check flags to the Section 11 `podman run` (lines 726-758)**
+### Step 1: Add health check flags to the Section 11 `podman run` (lines 726-758)
 
 Find this line inside the `podman run` block:
 
@@ -167,7 +167,7 @@ Add the following health check flags immediately after it:
     --health-on-failure restart \
 ```
 
-**Step 2: Add health check flags to the Section 8 `podman-machine-start.sh` wrapper (lines 558-590)**
+### Step 2: Add health check flags to the Section 8 `podman-machine-start.sh` wrapper (lines 558-590)
 
 Find this line inside the wrapper's `podman run` block:
 
@@ -185,12 +185,12 @@ Add the following health check flags immediately after it (note double backslash
     --health-on-failure restart \\
 ```
 
-**Step 3: Verify syntax**
+### Step 3: Verify syntax
 
 Run: `bash -n app-setup/podman-transmission-setup.sh`
 Expected: No output (clean syntax)
 
-**Step 4: Commit**
+### Step 4: Commit
 
 ```bash
 git add app-setup/podman-transmission-setup.sh
@@ -203,7 +203,7 @@ git commit -m "feat(podman-transmission): add health check with auto-restart on 
 
 This task deploys the new units to the live `transmission-vm` without re-running the full setup script.
 
-**Step 1: Deploy the NFS watchdog into the VM**
+### Step 1: Deploy the NFS watchdog into the VM
 
 ```bash
 # Write the watchdog script
@@ -269,17 +269,17 @@ sudo -u operator -i bash -c 'podman machine ssh transmission-vm -- \
   "sudo systemctl daemon-reload && sudo systemctl enable --now nfs-watchdog.timer"'
 ```
 
-**Step 2: Verify the watchdog timer is active**
+### Step 2: Verify the watchdog timer is active
 
 Run: `sudo -u operator -i bash -c 'podman machine ssh transmission-vm -- "systemctl list-timers nfs-watchdog.timer"'`
 Expected: Timer listed with next activation time
 
-**Step 3: Test the watchdog script manually**
+### Step 3: Test the watchdog script manually
 
 Run: `sudo -u operator -i bash -c 'podman machine ssh transmission-vm -- "sudo /usr/local/bin/nfs-watchdog.sh; echo exit=\$?"'`
 Expected: exit=0 (mount is healthy, script exits immediately)
 
-**Step 4: Recreate the container with health check flags**
+### Step 4: Recreate the container with health check flags
 
 ```bash
 sudo -u operator -i bash -c 'podman stop transmission-vpn && podman rm transmission-vpn'
@@ -311,17 +311,17 @@ Then run the startup script:
 sudo -u operator -i bash -c 'bash ~/.local/bin/podman-machine-start.sh'
 ```
 
-**Step 5: Verify health check is configured**
+### Step 5: Verify health check is configured
 
 Run: `sudo -u operator -i bash -c 'podman inspect transmission-vpn --format "{{.Config.Healthcheck}}"'`
 Expected: Shows the curl health check command
 
-**Step 6: Wait ~2 minutes and verify health status**
+### Step 6: Wait ~2 minutes and verify health status
 
 Run: `sudo -u operator -i bash -c 'podman inspect transmission-vpn --format "{{.State.Health.Status}}"'`
 Expected: `healthy`
 
-**Step 7: Verify Transmission web UI**
+### Step 7: Verify Transmission web UI
 
 Run: `curl -s -o /dev/null -w "%{http_code}" --max-time 5 -k https://localhost/transmission/web/`
 Expected: `200`
