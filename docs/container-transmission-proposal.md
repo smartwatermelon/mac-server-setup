@@ -306,7 +306,8 @@ existing setup is fully preserved during Phase 1 and Phase 2.
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| NAS NFS mount not ready when Podman machine starts | Medium | High | `podman-machine-start.sh` verifies VM NFS mount before starting container; manual recovery via `podman run` after confirming mount |
+| NAS NFS mount not ready when Podman machine starts | Medium | High | `podman-machine-start.sh` verifies VM NFS mount before starting container; NFS watchdog timer inside VM auto-remounts stale mounts every 2 minutes |
+| NFS mount goes stale while running | Medium | High | NFS watchdog (systemd timer) detects stale mount and remounts automatically; container health check restarts Transmission if it becomes unresponsive |
 | Podman machine updates break container networking | Low | Medium | Pin image versions; Podman is a Homebrew formula with pinnable versions |
 | PIA changes OpenVPN server config or API | Low | High | haugene is actively maintained for PIA; same risk exists with PIA Desktop |
 | haugene port forwarding script fails on PIA API change | Low | Medium | Transmission continues downloading; peering degrades until fixed |
