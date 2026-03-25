@@ -276,7 +276,7 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 
 **1Password items not found**: Vault name and item titles in `config.conf` have to match exactly.
 
-**Transmission container not starting**: Check `podman machine list` and `podman logs transmission-vpn`. If the VPN can't connect, verify PIA credentials in the keychain.
+**Transmission container not starting**: Check `podman machine list` and `podman logs transmission-vpn`. If the VPN can't connect, verify PIA credentials in the keychain. The container has a health check that auto-restarts it after 3 minutes of unresponsiveness, and an NFS watchdog inside the VM auto-remounts stale NFS mounts every 2 minutes. Check recovery logs with `sudo -u operator -i bash -c 'podman machine ssh transmission-vm -- journalctl -u nfs-watchdog.service --no-pager -n 20'` and health status with `sudo -u operator -i bash -c 'podman inspect transmission-vpn --format "{{.State.Health.Status}}"'`.
 
 **App not starting on login**: `launchctl list | grep <app>` to check status. Also check `/Users/Shared/` directory permissions.
 
