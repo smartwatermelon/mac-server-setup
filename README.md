@@ -226,7 +226,7 @@ Everything lives in `config/config.conf`:
 SERVER_NAME="YOUR_SERVER_NAME"
 OPERATOR_USERNAME="operator"
 NAS_HOSTNAME="your-nas.local"
-NAS_SHARE_NAME="DSMedia"
+NAS_SHARE_NAME="Media"
 ONEPASSWORD_VAULT="personal"
 ONEPASSWORD_OPERATOR_ITEM="server operator"
 ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
