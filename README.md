@@ -38,6 +38,7 @@ After setup, these all start automatically on login (LaunchAgents):
 | NAS Mount | NFS mount to NAS on login |
 | Backblaze | Off-site backup |
 | Caddy | Reverse proxy with internal TLS and external HTTPS |
+| Plex Watchdog | Monitors Plex settings against golden config, emails on drift |
 
 ### Media pipeline
 
@@ -152,7 +153,9 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
 │   ├── run-app-setup.sh          # Orchestrator (runs scripts in dependency order)
 │   ├── catch-setup.sh            # RSS feed monitor (ShowRSS)
 │   ├── filebot-setup.sh          # Media renaming and sorting
+│   ├── msmtp-setup.sh            # Shared email facility (Gmail SMTP)
 │   ├── plex-setup.sh             # Plex Media Server (with migration support)
+│   ├── plex-watchdog-setup.sh    # Plex settings drift monitor
 │   ├── podman-transmission-setup.sh  # Containerized Transmission + VPN
 │   ├── rclone-setup.sh           # Dropbox sync to watch directory
 │   ├── containers/
@@ -162,6 +165,9 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
 │       ├── mount-nas-media.sh    # NFS mount script
 │       ├── start-plex.sh         # Plex startup wrapper
 │       ├── start-rclone.sh       # rclone sync script
+│       ├── plex-golden.conf.template   # Plex settings golden config template
+│       ├── plex-watchdog.sh           # Plex settings poll daemon
+│       ├── plex-watchdog-ctl.sh       # Plex watchdog CLI (status/accept/revert)
 │       ├── transmission-post-done.sh    # Container-side completion trigger
 │       └── transmission-trigger-watcher.sh  # Host-side trigger → FileBot
 ├── scripts/
@@ -220,7 +226,7 @@ Everything lives in `config/config.conf`:
 SERVER_NAME="YOUR_SERVER_NAME"
 OPERATOR_USERNAME="operator"
 NAS_HOSTNAME="your-nas.local"
-NAS_SHARE_NAME="DSMedia"
+NAS_SHARE_NAME="Media"
 ONEPASSWORD_VAULT="personal"
 ONEPASSWORD_OPERATOR_ITEM="server operator"
 ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
@@ -263,6 +269,8 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 | App setup scripts | `~/.local/state/<hostname>-app-setup.log` |
 | NFS mount | `~/.local/state/<hostname>-mount.log` |
 | Operator login | `~/.local/state/<hostname>-operator-login.log` |
+| Plex watchdog | `~/.local/state/plex-watchdog.log` |
+| msmtp (email) | `~/.local/state/msmtp.log` |
 
 ## Troubleshooting
 
@@ -278,6 +286,8 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 
 **Transmission container not starting**: Check `podman machine list` and `podman logs transmission-vpn`. If the VPN can't connect, verify PIA credentials in the keychain. The container has a health check that auto-restarts it after 3 minutes of unresponsiveness, and an NFS watchdog inside the VM auto-remounts stale NFS mounts every 2 minutes. Check recovery logs with `sudo -u operator -i bash -c 'podman machine ssh transmission-vm -- journalctl -u nfs-watchdog.service --no-pager -n 20'` and health status with `sudo -u operator -i bash -c 'podman inspect transmission-vpn --format "{{.State.Health.Status}}"'`.
 
+**Plex watchdog not running**: The LaunchAgent only runs in GUI sessions. Verify with `sudo launchctl print gui/$(id -u operator)/com.<hostname>.plex-watchdog`. Check status with `sudo -iu operator plex-watchdog-ctl status`. If it's not loaded, bootstrap it: `sudo launchctl bootstrap gui/$(id -u operator) /Users/operator/Library/LaunchAgents/com.<hostname>.plex-watchdog.plist`.
+
 **App not starting on login**: `launchctl list | grep <app>` to check status. Also check `/Users/Shared/` directory permissions.
 
 ## Docs
@@ -291,6 +301,7 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 | Running system provisioning | [First Boot](docs/setup/first-boot.md) |
 | Post-reboot setup | [Operator Setup](docs/operator.md) |
 | How credentials move between machines | [Keychain Management](docs/keychain-credential-management.md) |
+| Plex settings watchdog | [Plex Watchdog](docs/apps/plex-watchdog-README.md) |
 
 ## Contributing
 
