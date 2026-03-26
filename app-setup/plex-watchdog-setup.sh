@@ -157,10 +157,20 @@ done
 
 set_section "Prerequisites"
 
-# Validate MONITORING_EMAIL
+# Validate MONITORING_EMAIL — prompt if not configured
 if [[ -z "${MONITORING_EMAIL:-}" ]] || [[ "${MONITORING_EMAIL}" == "your-email@example.com" ]]; then
-  collect_error "MONITORING_EMAIL is not configured in ${CONFIG_FILE}"
-  exit 1
+  echo ""
+  echo "MONITORING_EMAIL is not configured in ${CONFIG_FILE}"
+  read -r -p "Enter the email address for monitoring alerts: " MONITORING_EMAIL
+  echo ""
+
+  if [[ -z "${MONITORING_EMAIL}" ]]; then
+    collect_error "No email address provided"
+    exit 1
+  fi
+
+  sed -i '' "s|^MONITORING_EMAIL=.*|MONITORING_EMAIL=\"${MONITORING_EMAIL}\"|" "${CONFIG_FILE}"
+  log "Updated MONITORING_EMAIL in ${CONFIG_FILE}"
 fi
 log "MONITORING_EMAIL: ${MONITORING_EMAIL}"
 
