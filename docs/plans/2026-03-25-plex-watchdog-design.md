@@ -23,7 +23,7 @@
 
 ### In the repo (source)
 
-```
+```text
 app-setup/msmtp-setup.sh                      # shared email facility setup (standalone)
 app-setup/plex-watchdog-setup.sh               # watchdog setup script
 app-setup/templates/plex-watchdog.sh           # polling daemon template
@@ -33,7 +33,7 @@ app-setup/templates/plex-golden.conf.template  # golden config template
 
 ### On the server (deployed)
 
-```
+```text
 ~/.config/plex-watchdog/golden.conf            # active golden config
 ~/.config/plex-watchdog/state.json             # poll state, alert dedup, failure counter
 ~/.config/plex-watchdog/token                  # Plex token (mode 600, embedded at setup)
@@ -74,7 +74,7 @@ Skip if already installed. Use existing Homebrew patterns from the codebase.
   - Store in keychain: `security add-generic-password -a "$MONITORING_EMAIL" -s msmtp-gmail -w "$APP_PASSWORD"`
 - Write `~/.config/msmtp/config`:
 
-  ```
+  ```text
   defaults
   auth           on
   tls            on
@@ -210,7 +210,7 @@ The script runs once per invocation (LaunchAgent calls it every 5 minutes via `S
        - Subject: `[<HOSTNAME>] Plex setting drift detected`
        - Body: what changed, golden vs current value, and instructions:
 
-         ```
+         ```text
          The following Plex settings have drifted from the golden configuration:
 
            TranscoderCanOnlyRemuxVideo
@@ -271,7 +271,7 @@ All commands read the Plex token from macOS keychain (`plex-watchdog-token`) and
 
 Fetch current Plex prefs, load golden config, display a table:
 
-```
+```text
 Setting                       Golden    Current   Status
 TranscoderCanOnlyRemuxVideo   0         1         DRIFTED
 HardwareAcceleratedCodecs     1         1         OK
