@@ -65,8 +65,10 @@ if [[ -z "${MONITORING_EMAIL:-}" ]] || [[ "${MONITORING_EMAIL}" == "your-email@e
     exit 1
   fi
 
-  # Update config.conf with the provided email
-  sed -i '' "s|^MONITORING_EMAIL=.*|MONITORING_EMAIL=\"${MONITORING_EMAIL}\"|" "${CONFIG_FILE}"
+  # Update config.conf with the provided email (escape sed special chars in value)
+  local escaped_email
+  escaped_email=$(printf '%s\n' "${MONITORING_EMAIL}" | sed -e 's/[&\|/]/\\&/g')
+  sed -i '' "s|^MONITORING_EMAIL=.*|MONITORING_EMAIL=\"${escaped_email}\"|" "${CONFIG_FILE}"
   echo "Updated MONITORING_EMAIL in ${CONFIG_FILE}"
 fi
 
