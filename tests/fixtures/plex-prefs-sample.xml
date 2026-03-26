@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MediaContainer size="8">
+  <Setting id="TranscoderCanOnlyRemuxVideo" value="1" default="0" hidden="0" advanced="1" summary="Disable transcoding of the video stream" label="Disable video stream transcoding" />
+  <Setting id="HardwareAcceleratedCodecs" value="1" default="1" hidden="0" advanced="0" summary="" label="Use hardware acceleration when available" />
+  <Setting id="TranscoderQuality" value="0" default="0" hidden="0" advanced="0" summary="" label="Transcoder quality" />
+  <Setting id="WanPerStreamMaxUploadRate" value="0" default="0" hidden="1" advanced="0" summary="" label="Limit remote stream bitrate" />
+  <Setting id="FriendlyName" value="TILSIT" default="" hidden="0" advanced="0" summary="" label="Friendly name" />
+  <Setting id="allowMediaDeletion" value="1" default="1" hidden="0" advanced="1" summary="" label="Allow media deletion" />
+  <Setting id="TranscoderThrottleBuffer" value="120" default="60" hidden="0" advanced="1" summary="" label="Transcoder default throttle buffer" />
+  <Setting id="ValueWithSpecialChars" value="foo&amp;bar=baz&quot;test" default="" hidden="1" advanced="0" summary="" label="Special chars test" />
+</MediaContainer>
