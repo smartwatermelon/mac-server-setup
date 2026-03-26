@@ -286,7 +286,7 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 
 **Transmission container not starting**: Check `podman machine list` and `podman logs transmission-vpn`. If the VPN can't connect, verify PIA credentials in the keychain. The container has a health check that auto-restarts it after 3 minutes of unresponsiveness, and an NFS watchdog inside the VM auto-remounts stale NFS mounts every 2 minutes. Check recovery logs with `sudo -u operator -i bash -c 'podman machine ssh transmission-vm -- journalctl -u nfs-watchdog.service --no-pager -n 20'` and health status with `sudo -u operator -i bash -c 'podman inspect transmission-vpn --format "{{.State.Health.Status}}"'`.
 
-**Plex watchdog not running**: The LaunchAgent only runs in GUI sessions. Verify with `sudo launchctl print gui/$(id -u operator)/com.tilsit.plex-watchdog`. Check status with `sudo -iu operator plex-watchdog-ctl status`. If it's not loaded, bootstrap it: `sudo launchctl bootstrap gui/$(id -u operator) /Users/operator/Library/LaunchAgents/com.<hostname>.plex-watchdog.plist`.
+**Plex watchdog not running**: The LaunchAgent only runs in GUI sessions. Verify with `sudo launchctl print gui/$(id -u operator)/com.<hostname>.plex-watchdog`. Check status with `sudo -iu operator plex-watchdog-ctl status`. If it's not loaded, bootstrap it: `sudo launchctl bootstrap gui/$(id -u operator) /Users/operator/Library/LaunchAgents/com.<hostname>.plex-watchdog.plist`.
 
 **App not starting on login**: `launchctl list | grep <app>` to check status. Also check `/Users/Shared/` directory permissions.
 
