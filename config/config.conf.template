@@ -21,7 +21,7 @@ MONITORING_EMAIL="your-email@example.com"
 # Media NAS configuration
 NAS_HOSTNAME="nas.local"
 NAS_USERNAME="plex"
-NAS_SHARE_NAME="DSMedia"
+NAS_SHARE_NAME="Media"
 NAS_VOLUME="volume2"              # Synology volume name for NFS export path (use showmount -e to verify)
 
 # Plex migration configuration (optional)
