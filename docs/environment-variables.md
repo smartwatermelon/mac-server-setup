@@ -222,6 +222,16 @@ PLEX_NEW_CONFIG="/Users/Shared/PlexMediaServer"
 RPC_PASSWORD="${RPC_PASSWORD:-auto-generated}"
 ```
 
+### Monitoring
+
+**Location**: `config/config.conf`
+
+```bash
+# Email address for monitoring alerts (used by msmtp-setup.sh and plex-watchdog)
+# If not set, both setup scripts will prompt interactively and write it back
+MONITORING_EMAIL="your-email@example.com"
+```
+
 ## Error Collection Variables
 
 ### Error Tracking System
