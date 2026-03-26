@@ -36,13 +36,19 @@ app-setup/templates/plex-golden.conf.template  # golden config template
 ```
 ~/.config/plex-watchdog/golden.conf            # active golden config
 ~/.config/plex-watchdog/state.json             # poll state, alert dedup, failure counter
-~/.config/msmtp/config                         # SMTP config (shared facility)
+~/.config/plex-watchdog/token                  # Plex token (mode 600, embedded at setup)
+~/.config/msmtp/config                         # SMTP config with embedded password (mode 600)
 ~/.local/bin/plex-watchdog                     # polling script
 ~/.local/bin/plex-watchdog-ctl                 # CLI tool
 ~/.local/state/plex-watchdog.log               # log file (rotated by logrotate)
 ~/.local/state/msmtp.log                       # msmtp log (rotated by logrotate)
 ~/Library/LaunchAgents/com.<host>.plex-watchdog.plist
 ```
+
+> **Credential pattern:** This project embeds credentials in config files with
+> restrictive permissions (mode 600) rather than using macOS Keychain at runtime.
+> The operator keychain cannot be unlocked from non-interactive contexts
+> (LaunchAgents, `sudo -iu`). See `docs/keychain-credential-management.md`.
 
 ---
 
