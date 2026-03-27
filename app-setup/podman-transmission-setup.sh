@@ -424,12 +424,19 @@ set -u
 MOUNT_POINT="${NFS_MOUNT_POINT}"
 MOUNT_UNIT="${MOUNT_UNIT_NAME}"
 
-# Test if the mount responds within 5 seconds
-if timeout 5 stat "\${MOUNT_POINT}" >/dev/null 2>&1; then
+# Two failure modes to detect:
+# 1. Stale/hung mount: stat hangs (NAS disappeared while mounted)
+# 2. Not mounted: mount unit failed/timed out, leaving an empty directory
+if timeout 5 stat "\${MOUNT_POINT}" >/dev/null 2>&1 \
+   && mountpoint -q "\${MOUNT_POINT}"; then
     exit 0
 fi
 
-echo "NFS mount \${MOUNT_POINT} is stale — attempting recovery"
+if mountpoint -q "\${MOUNT_POINT}"; then
+    echo "NFS mount \${MOUNT_POINT} is stale — attempting recovery"
+else
+    echo "NFS mount \${MOUNT_POINT} is not mounted — attempting recovery"
+fi
 
 # Lazy unmount to release the stuck mount without blocking
 umount -l "\${MOUNT_POINT}" 2>/dev/null || true
@@ -440,8 +447,9 @@ sleep 2
 # Remount via the systemd mount unit
 systemctl start "\${MOUNT_UNIT}"
 
-# Verify recovery
-if timeout 10 stat "\${MOUNT_POINT}" >/dev/null 2>&1; then
+# Verify recovery (must check mountpoint, not just stat — empty dir fools stat)
+if timeout 10 stat "\${MOUNT_POINT}" >/dev/null 2>&1 \
+   && mountpoint -q "\${MOUNT_POINT}"; then
     echo "NFS mount recovered successfully"
 else
     echo "NFS mount recovery failed — NAS may be offline"
