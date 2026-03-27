@@ -18,7 +18,7 @@
 - Modify: `app-setup/templates/transmission-trigger-watcher.sh:64-65` (before `process_trigger`)
 - Modify: `app-setup/templates/transmission-trigger-watcher.sh:117` (after done script success)
 
-**Step 1: Add the RPC URL constant**
+### Step 1: Add the RPC URL constant
 
 After the existing constants block (line 34, after `MAX_RETRIES=5`), add the Transmission RPC URL constant using a template placeholder:
 
@@ -27,7 +27,7 @@ After the existing constants block (line 34, after `MAX_RETRIES=5`), add the Tra
 TRANSMISSION_RPC_URL="http://localhost:__TRANSMISSION_HOST_PORT__/transmission/rpc"
 ```
 
-**Step 2: Add the `remove_torrent_from_transmission()` function**
+### Step 2: Add the `remove_torrent_from_transmission()` function
 
 Insert before `process_trigger()` (before line 66). This follows the same RPC pattern used by `transmission-add-magnet.sh`:
 
@@ -70,7 +70,7 @@ remove_torrent_from_transmission() {
 }
 ```
 
-**Step 3: Call the removal function after done script success**
+### Step 3: Call the removal function after done script success
 
 In `process_trigger()`, after line 117 (`log "Done script succeeded for: ${name}"`), add the RPC removal call before the trigger file cleanup:
 
@@ -80,7 +80,7 @@ In `process_trigger()`, after line 117 (`log "Done script succeeded for: ${name}
     rm -f "${trigger_file}"
 ```
 
-**Step 4: Commit**
+### Step 4: Commit
 
 ```bash
 git add app-setup/templates/transmission-trigger-watcher.sh
@@ -100,7 +100,7 @@ non-fatal to avoid blocking trigger cleanup."
 
 - Modify: `app-setup/podman-transmission-setup.sh:600` (sed command for watcher deploy)
 
-**Step 1: Update the sed command to substitute both placeholders**
+### Step 1: Update the sed command to substitute both placeholders
 
 Change the single-substitution sed to a two-substitution sed, chaining the `__TRANSMISSION_HOST_PORT__` replacement alongside the existing `__SERVER_NAME__` one:
 
@@ -112,7 +112,7 @@ Change the single-substitution sed to a two-substitution sed, chaining the `__TR
 
 `HOST_PORT` is already defined earlier in the script (line 240: `HOST_PORT="${TRANSMISSION_HOST_PORT:-9091}"`).
 
-**Step 2: Commit**
+### Step 2: Commit
 
 ```bash
 git add app-setup/podman-transmission-setup.sh
@@ -126,7 +126,7 @@ processing. Add the placeholder substitution alongside SERVER_NAME."
 
 ## Task 3: Verify template placeholders are consistent
 
-**Step 1: Grep for all `__PLACEHOLDER__` patterns in both files**
+### Step 1: Grep for all `__PLACEHOLDER__` patterns in both files
 
 Run:
 
@@ -137,7 +137,7 @@ grep -n '__[A-Z_]*__' app-setup/podman-transmission-setup.sh | grep -i watcher
 
 Expected: `__SERVER_NAME__` and `__TRANSMISSION_HOST_PORT__` both appear in the template, and both have corresponding substitutions in the deploy script.
 
-**Step 2: Verify HOST_PORT is in scope at the deploy section**
+### Step 2: Verify HOST_PORT is in scope at the deploy section
 
 Run:
 
@@ -151,7 +151,7 @@ Expected: `HOST_PORT` is defined well before the watcher deploy section (line ~2
 
 ## Task 4: Test the RPC removal manually on the server
 
-**Step 1: Verify Transmission RPC is reachable**
+### Step 1: Verify Transmission RPC is reachable
 
 ```bash
 curl -s -D - http://localhost:9091/transmission/rpc 2>/dev/null | head -5
@@ -159,7 +159,7 @@ curl -s -D - http://localhost:9091/transmission/rpc 2>/dev/null | head -5
 
 Expected: HTTP 409 response with `X-Transmission-Session-Id` header.
 
-**Step 2: List current torrents to find the stale ones**
+### Step 2: List current torrents to find the stale ones
 
 ```bash
 SESSION_ID=$(curl -s -D - http://localhost:9091/transmission/rpc 2>/dev/null | \
@@ -173,7 +173,7 @@ curl -s http://localhost:9091/transmission/rpc \
 
 Expected: See the two stale "no data" torrents plus the ipleak detection torrent.
 
-**Step 3: Remove one stale torrent to verify the RPC call works**
+### Step 3: Remove one stale torrent to verify the RPC call works
 
 Pick one of the stale torrent hashes from Step 2 and remove it:
 
@@ -185,7 +185,7 @@ curl -s http://localhost:9091/transmission/rpc \
 
 Expected: `{"result":"success"}`
 
-**Step 4: Verify torrent is gone from Transmission UI**
+### Step 4: Verify torrent is gone from Transmission UI
 
 Refresh the Transmission web UI at `http://localhost:9091` — the removed torrent should no longer appear.
 
@@ -193,7 +193,7 @@ Refresh the Transmission web UI at `http://localhost:9091` — the removed torre
 
 ## Task 5: Deploy updated trigger watcher to the server
 
-**Step 1: Re-run the watcher deploy section**
+### Step 1: Re-run the watcher deploy section
 
 This requires running `podman-transmission-setup.sh` or manually deploying:
 
@@ -206,14 +206,14 @@ sudo chmod 755 /Users/operator/.local/bin/transmission-trigger-watcher.sh
 sudo chown operator:staff /Users/operator/.local/bin/transmission-trigger-watcher.sh
 ```
 
-**Step 2: Restart the trigger watcher LaunchAgent**
+### Step 2: Restart the trigger watcher LaunchAgent
 
 ```bash
 sudo -u operator launchctl bootout gui/$(id -u operator) ~/Library/LaunchAgents/com.tilsit.transmission-trigger-watcher.plist 2>/dev/null || true
 sudo -u operator launchctl bootstrap gui/$(id -u operator) ~/Library/LaunchAgents/com.tilsit.transmission-trigger-watcher.plist
 ```
 
-**Step 3: Verify the watcher is running with the new code**
+### Step 3: Verify the watcher is running with the new code
 
 ```bash
 grep 'remove_torrent_from_transmission' /Users/operator/.local/bin/transmission-trigger-watcher.sh
