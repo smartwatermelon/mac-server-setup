@@ -447,8 +447,9 @@ sleep 2
 # Remount via the systemd mount unit
 systemctl start "\${MOUNT_UNIT}"
 
-# Verify recovery
-if timeout 10 stat "\${MOUNT_POINT}" >/dev/null 2>&1; then
+# Verify recovery (must check mountpoint, not just stat — empty dir fools stat)
+if timeout 10 stat "\${MOUNT_POINT}" >/dev/null 2>&1 \
+   && mountpoint -q "\${MOUNT_POINT}"; then
     echo "NFS mount recovered successfully"
 else
     echo "NFS mount recovery failed — NAS may be offline"
