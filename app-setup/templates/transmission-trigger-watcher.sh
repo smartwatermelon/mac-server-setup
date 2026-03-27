@@ -17,7 +17,8 @@
 # Dead files accumulate in the .done directory for manual inspection.
 #
 # Template placeholders (replaced by podman-transmission-setup.sh at deploy time):
-#   __SERVER_NAME__ → server hostname for logging (e.g. TILSIT)
+#   __SERVER_NAME__              → server hostname for logging (e.g. TILSIT)
+#   __TRANSMISSION_HOST_PORT__   → Transmission RPC port for torrent removal (e.g. 9091)
 #
 # Author: Andrew Rich <andrew.rich@gmail.com>
 
@@ -32,6 +33,9 @@ LOG_FILE="${HOME}/.local/state/${HOSTNAME_LOWER}-transmission-trigger-watcher.lo
 MAX_LOG_SIZE=5242880 # 5MB
 POLL_INTERVAL=60
 MAX_RETRIES=5 # Trigger files retained up to this many poll cycles on failure
+
+# Transmission RPC for torrent removal after successful processing
+TRANSMISSION_RPC_URL="http://localhost:__TRANSMISSION_HOST_PORT__/transmission/rpc"
 
 # Container-to-macOS path prefix mapping
 # Container mounts NAS at /data; macOS mounts it at ~/.local/mnt/DSMedia
@@ -61,6 +65,49 @@ rotate_log() {
 map_container_path() {
   local container_path="$1"
   echo "${MACOS_NAS_PREFIX}${container_path#"${CONTAINER_DATA_PREFIX}"}"
+}
+
+# Remove a torrent from Transmission via RPC after successful processing.
+# Uses the same CSRF session-token dance as transmission-add-magnet.sh.
+# Non-fatal: logs a warning on failure but returns 0 so trigger cleanup proceeds.
+remove_torrent_from_transmission() {
+  local torrent_hash="$1"
+  local torrent_name="$2"
+
+  log "Removing torrent from Transmission: ${torrent_name} (${torrent_hash})"
+
+  # Validate hash is a 40-char hex string (defensive against malformed trigger files)
+  if [[ ! "${torrent_hash}" =~ ^[a-fA-F0-9]{40}$ ]]; then
+    log "WARNING: Invalid torrent hash, skipping removal: ${torrent_hash}"
+    return 0
+  fi
+
+  # Get CSRF session token from Transmission's 409 response
+  local session_id
+  session_id=$(curl -s -D - "${TRANSMISSION_RPC_URL}" 2>/dev/null \
+    | awk 'tolower($0) ~ /^x-transmission-session-id:/{gsub(/\r/,""); print $2; exit}')
+
+  if [[ -z "${session_id}" ]]; then
+    log "WARNING: Could not connect to Transmission RPC — torrent not removed: ${torrent_name}"
+    return 0
+  fi
+
+  # Call torrent-remove with delete-local-data (FileBot already moved the media)
+  local response
+  response=$(curl -s "${TRANSMISSION_RPC_URL}" \
+    -H "X-Transmission-Session-Id: ${session_id}" \
+    --data-raw "{\"method\":\"torrent-remove\",\"arguments\":{\"ids\":[\"${torrent_hash}\"],\"delete-local-data\":true}}" \
+    2>&1)
+
+  if [[ "${response}" == *'"result":"success"'* ]]; then
+    log "Torrent removed from Transmission: ${torrent_name}"
+  else
+    log "WARNING: Failed to remove torrent from Transmission: ${torrent_name}"
+    log "  RPC response: ${response}"
+  fi
+
+  # Always return 0 — removal failure should not block trigger cleanup
+  return 0
 }
 
 process_trigger() {
@@ -115,6 +162,7 @@ process_trigger() {
     TR_TORRENT_HASH="${hash}" \
     "${DONE_SCRIPT}"; then
     log "Done script succeeded for: ${name}"
+    remove_torrent_from_transmission "${hash}" "${name}"
     rm -f "${trigger_file}"
     find "${DONE_DIR}" -name "${hash}.retry.*" -delete 2>/dev/null || true
   else
@@ -135,6 +183,7 @@ log "Done dir:      ${DONE_DIR}"
 log "Done script:   ${DONE_SCRIPT}"
 log "Poll interval: ${POLL_INTERVAL}s"
 log "Max retries:   ${MAX_RETRIES}"
+log "RPC URL:       ${TRANSMISSION_RPC_URL}"
 
 loop_count=0
 while true; do
