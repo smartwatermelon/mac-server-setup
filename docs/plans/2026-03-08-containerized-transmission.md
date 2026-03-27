@@ -36,6 +36,7 @@ This is appropriate for a single-purpose server where intra-VM multi-user isolat
 a concern. The VM itself is isolated from macOS.
 
 **Why haugene/transmission-openvpn instead of gluetun + linuxserver/transmission:**
+
 - Single container instead of two
 - PIA port forwarding handled automatically (no companion script needed)
 - Battle-tested (4.5k stars, v5.3.2, active maintenance)
@@ -78,32 +79,33 @@ These tasks create and modify files in the repo. No server changes yet.
 **Purpose:** Mark the proposal as active with the haugene decision recorded.
 
 **Files:**
+
 - Modify: `docs/container-transmission-proposal.md` (header only)
 - Modify: `plan.md` (Next Priorities section)
 
-**Step 1: Update proposal status**
+- **Step 1:** Update proposal status
 
 Change the header of `docs/container-transmission-proposal.md`:
 
-```
+```text
 **Status:** Active — approved for implementation 2026-03-08
 **Decision:** haugene/transmission-openvpn (not gluetun + linuxserver/transmission)
   Rationale: single container, automatic PIA port forwarding, battle-tested.
   Server uses Panama PIA endpoint (non-US = port forwarding supported with OpenVPN).
 ```
 
-**Step 2: Update plan.md Next Priorities**
+- **Step 2:** Update plan.md Next Priorities
 
 In `plan.md`, under `## Next Priorities → Immediate`, add:
 
-```
+```text
 1. **Containerized Transmission (haugene + Podman)** — implementation plan at
    `docs/plans/2026-03-08-containerized-transmission.md`. Phase 1 = parallel validation.
 ```
 
-**Step 3: Shellcheck (nothing to check — no shell scripts modified)**
+- **Step 3:** Shellcheck (nothing to check — no shell scripts modified)
 
-**Step 4: Commit**
+- **Step 4:** Commit
 
 ```bash
 git add docs/container-transmission-proposal.md plan.md
@@ -118,6 +120,7 @@ git commit -m "docs: mark container-transmission proposal as active (haugene dec
 server so `podman-transmission-setup.sh` can write them to `.env`.
 
 **Files:**
+
 - Modify: `config/config.conf.template`
 - Modify: `prep-airdrop.sh`
 
@@ -128,7 +131,7 @@ credentials are stored as a combined `username:password` string, with the accoun
 to `${SERVER_NAME_LOWER}`. Currently PIA Desktop manages its own auth internally —
 haugene needs the raw account credentials.
 
-**Step 1: Add variables to config.conf.template**
+- **Step 1:** Add variables to config.conf.template
 
 In `config/config.conf.template`, find the `# VPN and Transmission configuration` section.
 Add after it:
@@ -141,7 +144,7 @@ PIA_VPN_REGION="panama"          # PIA server region for haugene (must support p
 LAN_SUBNET="192.168.1.0/24"      # Local network CIDR for Transmission web UI access
 ```
 
-**Step 2: Add PIA credential retrieval to prep-airdrop.sh**
+- **Step 2:** Add PIA credential retrieval to prep-airdrop.sh
 
 Find the credential retrieval block in `prep-airdrop.sh` (near the `OP_TIMEMACHINE_ENTRY`
 lines). Add PIA retrieval after the existing entries, guarded by the variable being set:
@@ -153,7 +156,7 @@ Use account field `${SERVER_NAME_LOWER}`, service name `pia-account-${SERVER_NAM
 
 Guard with: `if [[ -n "${ONEPASSWORD_PIA_ITEM}" ]]; then ... fi`
 
-**Step 3: Shellcheck**
+- **Step 3:** Shellcheck
 
 ```bash
 shellcheck prep-airdrop.sh config/config.conf.template
@@ -161,7 +164,7 @@ shellcheck prep-airdrop.sh config/config.conf.template
 
 Expected: zero warnings, zero errors.
 
-**Step 4: Commit**
+- **Step 4:** Commit
 
 ```bash
 git add config/config.conf.template prep-airdrop.sh
@@ -177,15 +180,16 @@ template with `__VARIABLE__` placeholders; deployed to `~/containers/transmissio
 server by `podman-transmission-setup.sh`.
 
 **Files:**
+
 - Create: `app-setup/containers/transmission/compose.yml`
 
-**Step 1: Create the directory**
+- **Step 1:** Create the directory
 
 ```bash
 mkdir -p app-setup/containers/transmission
 ```
 
-**Step 2: Verify the PIA config name for your region in haugene v5**
+- **Step 2:** Verify the PIA config name for your region in haugene v5
 
 Before writing the compose template, confirm the exact config identifier. Run:
 
@@ -206,10 +210,10 @@ docker manifest inspect haugene/transmission-openvpn:latest | grep -A2 '"platfor
 ```
 
 If arm64 is absent, pin to the last known arm64-capable tag (check
-https://github.com/haugene/docker-transmission-openvpn/releases). Document the finding
+<https://github.com/haugene/docker-transmission-openvpn/releases>). Document the finding
 in the compose.yml header comment.
 
-**Step 3: Create compose.yml**
+- **Step 3:** Create compose.yml
 
 ```yaml
 # ~/containers/transmission/compose.yml
@@ -263,6 +267,7 @@ services:
 ```
 
 **Notes on key settings:**
+
 - `TRANSMISSION_WATCH_DIR` replaces the current `~/.local/sync/dropbox` watch directory.
   The rclone sync target must be updated to point here (see Task 8).
 - `TRANSMISSION_RPC_AUTHENTICATION_REQUIRED=false` is safe because `LOCAL_NETWORK`
@@ -275,9 +280,9 @@ services:
   does NOT restart it after the machine itself restarts. The machine-start LaunchAgent
   handles that (see Task 6).
 
-**Step 4: Shellcheck (N/A — YAML file)**
+- **Step 4:** Shellcheck (N/A — YAML file)
 
-**Step 5: Commit**
+- **Step 5:** Commit
 
 ```bash
 git add app-setup/containers/transmission/compose.yml
@@ -293,9 +298,10 @@ file to the NAS (shared with macOS) containing torrent metadata. The macOS trigg
 (Task 5) picks this up and invokes the existing `transmission-done.sh`.
 
 **Files:**
+
 - Create: `app-setup/templates/transmission-post-done.sh`
 
-**Step 1: Create the script**
+- **Step 1:** Create the script
 
 ```bash
 #!/usr/bin/env bash
@@ -343,7 +349,7 @@ maps this to the NAS mount by replacing `/data` with `~/.local/mnt/DSMedia`. The
 path to the content is `${TR_TORRENT_DIR}/${TR_TORRENT_NAME}` — same semantics the
 existing `transmission-done.sh` already uses.
 
-**Step 2: Shellcheck**
+- **Step 2:** Shellcheck
 
 ```bash
 shellcheck app-setup/templates/transmission-post-done.sh
@@ -351,7 +357,7 @@ shellcheck app-setup/templates/transmission-post-done.sh
 
 Expected: zero warnings, zero errors.
 
-**Step 3: Commit**
+- **Step 3:** Commit
 
 ```bash
 git add app-setup/templates/transmission-post-done.sh
@@ -367,12 +373,14 @@ seconds, reads trigger files written by the container, maps container paths to m
 paths, and invokes the existing `transmission-done.sh` for each completed torrent.
 
 **Template placeholders:**
+
 - `__SERVER_NAME__` → server hostname for logging
 
 **Files:**
+
 - Create: `app-setup/templates/transmission-trigger-watcher.sh`
 
-**Step 1: Create the script**
+- **Step 1:** Create the script
 
 ```bash
 #!/usr/bin/env bash
@@ -523,7 +531,7 @@ while true; do
 done
 ```
 
-**Step 2: Shellcheck**
+- **Step 2:** Shellcheck
 
 ```bash
 shellcheck app-setup/templates/transmission-trigger-watcher.sh
@@ -531,7 +539,7 @@ shellcheck app-setup/templates/transmission-trigger-watcher.sh
 
 Expected: zero warnings, zero errors.
 
-**Step 3: Commit**
+- **Step 3:** Commit
 
 ```bash
 git add app-setup/templates/transmission-trigger-watcher.sh
@@ -551,6 +559,7 @@ This script follows the existing `app-setup/*-setup.sh` pattern exactly: reads c
 uses `log()` / `section()` / `collect_error()` / `check_success()`, supports `--force`.
 
 **Files:**
+
 - Create: `app-setup/podman-transmission-setup.sh`
 
 The script sections, in order:
@@ -561,6 +570,7 @@ The script sections, in order:
    (same boilerplate as other setup scripts — copy from `plex-setup.sh` or `catch-setup.sh`)
 
 2. **Install Podman** (if not present) and verify minimum version:
+
    ```bash
    section "Podman Installation"
    if ! command -v podman >/dev/null 2>&1; then
@@ -578,6 +588,7 @@ The script sections, in order:
    ```
 
 3. **Initialize the rootful Podman machine:**
+
    ```bash
    section "Podman Machine Setup"
    # Check if machine already exists
@@ -611,14 +622,17 @@ The script sections, in order:
    to make its purpose explicit and allow coexistence with any future machines.
 
 4. **Create container directory structure:**
-   ```
+
+   ```text
    ~/containers/transmission/
    ~/containers/transmission/config/
    ~/containers/transmission/scripts/
    ```
+
    With permissions 700 on the root, 755 on subdirectories.
 
 5. **Read PIA credentials from keychain and write .env file:**
+
    ```bash
    # Credentials stored as "username:password" combined string per project keychain convention.
    # Account field = ${HOSTNAME_LOWER}, service = pia-account-${HOSTNAME_LOWER}.
@@ -650,6 +664,7 @@ The script sections, in order:
    - `TZ` = `$(readlink /etc/localtime | sed 's|.*/zoneinfo/||')` — fallback to `America/Los_Angeles`
 
 7. **Deploy transmission-post-done.sh** (template → `~/containers/transmission/scripts/`):
+
    ```bash
    sudo cp "${SCRIPT_DIR}/templates/transmission-post-done.sh" \
        "${OPERATOR_HOME}/containers/transmission/scripts/transmission-post-done.sh"
@@ -658,8 +673,9 @@ The script sections, in order:
        "${OPERATOR_HOME}/containers/transmission/scripts/transmission-post-done.sh"
    ```
 
-8. **Deploy transmission-trigger-watcher.sh** (template → `~/.local/bin/` with __SERVER_NAME__
+8. **Deploy transmission-trigger-watcher.sh** (template → `~/.local/bin/` with **SERVER_NAME**
    substitution, same pattern as other template deployments):
+
    ```bash
    WATCHER_DEST="${OPERATOR_HOME}/.local/bin/transmission-trigger-watcher.sh"
    sed "s/__SERVER_NAME__/${SERVER_NAME}/g" \
@@ -713,6 +729,7 @@ The script sections, in order:
     - Runs independently of the Podman machine (it just polls NAS files)
 
 11. **Validate NAS bind mount** (critical check from proposal §5.1):
+
     ```bash
     section "Validating NAS bind mount through Podman VirtioFS"
     NAS_MOUNT="${OPERATOR_HOME}/.local/mnt/DSMedia"
@@ -734,6 +751,7 @@ The script sections, in order:
     ```
 
 12. **Start the container stack:**
+
     ```bash
     cd "${OPERATOR_HOME}/containers/transmission"
     podman compose --env-file .env up -d
@@ -743,7 +761,7 @@ The script sections, in order:
 
 **Step 1: Write the script** following the above specification.
 
-**Step 2: Shellcheck**
+- **Step 2:** Shellcheck
 
 ```bash
 shellcheck app-setup/podman-transmission-setup.sh
@@ -751,7 +769,7 @@ shellcheck app-setup/podman-transmission-setup.sh
 
 Expected: zero warnings, zero errors.
 
-**Step 3: Commit**
+- **Step 3:** Commit
 
 ```bash
 git add app-setup/podman-transmission-setup.sh
@@ -766,9 +784,10 @@ git commit -m "feat(container): add podman-transmission-setup.sh"
 sync target change needed for Phase 2 cutover.
 
 **Files:**
+
 - Modify: `app-setup/run-app-setup.sh`
 
-**Step 1: Add podman-transmission-setup.sh to SCRIPT_ORDER**
+- **Step 1:** Add podman-transmission-setup.sh to SCRIPT_ORDER
 
 In `run-app-setup.sh`, find the `SCRIPT_ORDER` associative array. Add:
 
@@ -781,13 +800,14 @@ The `2.5` ordering places it after `transmission-setup.sh` (2) and before `fileb
 
 Also update the comment block at the top of the file listing the scripts.
 
-**Step 2: Rclone watch directory note**
+- **Step 2:** Rclone watch directory note
 
 The current rclone sync writes torrent files to `~/.local/sync/dropbox/`. The native
 Transmission.app watches this directory (`AutoImport`). The haugene container watches
 `/data/Media/Torrents/watch/` (= `~/.local/mnt/DSMedia/Media/Torrents/watch/` on macOS).
 
 **Action for Phase 2 cutover** (not done now — document in script header):
+
 - Update rclone-setup.sh or rclone config to sync to the NAS watch path instead
 - OR add a second sync target
 - This is a Phase 2 prerequisite, flagged in the podman-transmission-setup.sh header comment
@@ -795,7 +815,7 @@ Transmission.app watches this directory (`AutoImport`). The haugene container wa
 For now, the container's watch dir is an additional watch location. During Phase 1 parallel
 run, torrent files can be manually copied to the NAS watch dir for testing.
 
-**Step 3: Shellcheck**
+- **Step 3:** Shellcheck
 
 ```bash
 shellcheck app-setup/run-app-setup.sh
@@ -803,7 +823,7 @@ shellcheck app-setup/run-app-setup.sh
 
 Expected: zero warnings, zero errors.
 
-**Step 4: Commit**
+- **Step 4:** Commit
 
 ```bash
 git add app-setup/run-app-setup.sh
@@ -817,23 +837,24 @@ git commit -m "feat(container): register podman-transmission-setup.sh in app orc
 **Purpose:** Close the loop on documentation.
 
 **Files:**
+
 - Modify: `plan.md`
 - Modify: `docs/container-transmission-proposal.md`
 
-**Step 1: Update plan.md**
+- **Step 1:** Update plan.md
 
 Move the container Transmission item from "Next Priorities → Immediate" to a new
 "In Progress" section. Add a table row in "Running Services" with status "Deploying (Phase 1)".
 Note the rclone watch directory change as a Phase 2 prerequisite.
 
-**Step 2: Update proposal doc**
+- **Step 2:** Update proposal doc
 
 Mark §5.1 (NAS bind mount), §5.3 (credentials), §5.4 (port forwarding) as resolved.
 Update §5.2 (startup ordering) as "handled — machine-start LaunchAgent runs compose up".
 Update §5.5 (config migration) with the approach: active torrents manually re-added via web UI.
 Update §5.6 (remote access) as resolved (Podman exposes port 9091 to host automatically).
 
-**Step 3: Commit**
+- **Step 3:** Commit
 
 ```bash
 git add plan.md docs/container-transmission-proposal.md
@@ -848,6 +869,7 @@ These steps are performed on the server after the repo changes are deployed.
 Not repo tasks, but documented here for completeness.
 
 **Before starting Phase 1:**
+
 - Ensure NAS is mounted: `ls ~/.local/mnt/DSMedia/Media/`
 - AirDrop the new package to tilsit (run `prep-airdrop.sh` with PIA credentials
   added to 1Password first)
@@ -867,6 +889,7 @@ Not repo tasks, but documented here for completeness.
 7. Run both stacks (native + container) in parallel for several days to build confidence
 
 **Phase 1 success criteria:**
+
 - Container Transmission downloads a test torrent to NAS path correctly
 - VPN kill switch stops traffic within 1 second of VPN drop
 - PIA port forwarding active and Transmission listening port matches
@@ -899,6 +922,7 @@ Not repo tasks, but documented here for completeness.
 ## Phase 3: Decommission (Repo changes — after Phase 2 stable)
 
 **In transmission-setup.sh:** Remove or gate behind `--legacy` flag the sections that deploy:
+
 - `com.<hostname>.vpn-monitor` LaunchAgent + `vpn-monitor.sh` script
 - `com.<hostname>.pia-proxy-consent` LaunchAgent + `pia-proxy-consent.sh` script
 - `com.<hostname>.pia-monitor` LaunchAgent + `pia-split-tunnel-monitor.sh` script
@@ -911,7 +935,8 @@ Not repo tasks, but documented here for completeness.
 ## Verification Checklist
 
 Before each commit:
-```
+
+```text
 □ shellcheck passes with zero warnings/errors on modified scripts
 □ Template placeholders follow __UPPER_SNAKE_CASE__ convention
 □ New LaunchAgent plists validated with plutil -lint
@@ -922,4 +947,4 @@ Before each commit:
 
 ---
 
-*Plan by Claude Sonnet 4.6 — 2026-03-08 (revised for code review findings)*
+> Plan by Claude Sonnet 4.6 — 2026-03-08 (revised for code review findings)
