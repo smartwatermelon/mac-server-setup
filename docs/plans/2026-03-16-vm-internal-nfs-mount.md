@@ -10,6 +10,8 @@
 
 **Prerequisite (already done):** Synology NFS export for `10.0.12.0/22` has "Allow connections from non-privileged ports" enabled (required because VM traffic is NAT'd and port-remapped by Apple's vzNAT).
 
+> **Known issue (2026-03-26):** Apple's vzNAT (user-mode networking) can intermittently lose the ability to forward TCP to LAN hosts — the VM can ping the NAS but all TCP ports are refused. A Podman machine restart (`podman machine stop/start`) re-initializes the vmnet and restores connectivity. ICMP working + TCP refused to a LAN host = restart the machine. See PR #98 for the full diagnosis.
+
 ---
 
 ## Task 1: Revert `transmission-post-done.sh` — Remove Torrent-Remove RPC

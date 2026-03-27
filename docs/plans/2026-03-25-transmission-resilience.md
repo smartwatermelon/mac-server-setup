@@ -2,9 +2,11 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Auto-recover Transmission when the NFS mount goes stale or the daemon becomes unresponsive, preventing the manual restart that was needed on 2026-03-25.
+**Goal:** Auto-recover Transmission when the NFS mount goes stale *or is not mounted* or the daemon becomes unresponsive, preventing the manual restart that was needed on 2026-03-25.
 
-**Architecture:** Two independent resilience layers. (1) A systemd timer inside the Podman VM that tests the NFS mount every 2 minutes and remounts if stale. (2) A Podman health check on the container that curls the Transmission RPC endpoint and auto-restarts the container after 3 consecutive failures. Both are deployed by `podman-transmission-setup.sh`.
+**Architecture:** Two independent resilience layers. (1) A systemd timer inside the Podman VM that tests the NFS mount every 2 minutes and recovers from two failure modes: stale/hung mounts (where `stat` hangs) and unmounted directories (where the mount unit failed but the empty directory remains). (2) A Podman health check on the container that curls the Transmission RPC endpoint and auto-restarts the container after 3 consecutive failures. Both are deployed by `podman-transmission-setup.sh`.
+
+> **Gotcha (2026-03-26):** `stat` succeeds on an empty directory — it only detects stale mounts where the NFS server disappeared mid-session. When the systemd mount unit times out or fails, the mount point reverts to a plain empty directory and `stat` returns instantly. You **must** pair `stat` with `mountpoint -q` to catch both failure modes. This applies to both the health check and the recovery verification. See PR #98.
 
 **Tech Stack:** systemd (timer + service units), Podman health check flags, bash
 
@@ -80,18 +82,26 @@ WATCHDOG_TMR
 sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
   "sudo tee '/usr/local/bin/nfs-watchdog.sh' > /dev/null" <<WATCHDOG_SCRIPT
 #!/usr/bin/env bash
+set -u
 # nfs-watchdog.sh — Detect and recover stale NFS mounts inside the Podman VM.
 # Deployed by podman-transmission-setup.sh; runs via nfs-watchdog.timer.
 
 MOUNT_POINT="${NFS_MOUNT_POINT}"
 MOUNT_UNIT="${MOUNT_UNIT_NAME}"
 
-# Test if the mount responds within 5 seconds
-if timeout 5 stat "\${MOUNT_POINT}" >/dev/null 2>&1; then
+# Two failure modes to detect:
+# 1. Stale/hung mount: stat hangs (NAS disappeared while mounted)
+# 2. Not mounted: mount unit failed/timed out, leaving an empty directory
+if timeout 5 stat "\${MOUNT_POINT}" >/dev/null 2>&1 \
+   && mountpoint -q "\${MOUNT_POINT}"; then
     exit 0
 fi
 
-echo "NFS mount \${MOUNT_POINT} is stale — attempting recovery"
+if mountpoint -q "\${MOUNT_POINT}"; then
+    echo "NFS mount \${MOUNT_POINT} is stale — attempting recovery"
+else
+    echo "NFS mount \${MOUNT_POINT} is not mounted — attempting recovery"
+fi
 
 # Lazy unmount to release the stuck mount without blocking
 umount -l "\${MOUNT_POINT}" 2>/dev/null || true
@@ -102,11 +112,13 @@ sleep 2
 # Remount via the systemd mount unit
 systemctl start "\${MOUNT_UNIT}"
 
-# Verify recovery
-if timeout 10 stat "\${MOUNT_POINT}" >/dev/null 2>&1; then
+# Verify recovery (must check mountpoint, not just stat — empty dir fools stat)
+if timeout 10 stat "\${MOUNT_POINT}" >/dev/null 2>&1 \
+   && mountpoint -q "\${MOUNT_POINT}"; then
     echo "NFS mount recovered successfully"
 else
     echo "NFS mount recovery failed — NAS may be offline"
+    exit 1
 fi
 WATCHDOG_SCRIPT
 
@@ -210,16 +222,24 @@ This task deploys the new units to the live `transmission-vm` without re-running
 sudo -u operator -i bash -c 'podman machine ssh transmission-vm -- \
   "sudo tee /usr/local/bin/nfs-watchdog.sh > /dev/null" <<'\''SCRIPT'\''
 #!/usr/bin/env bash
+set -u
 MOUNT_POINT="/var/mnt/DSMedia"
 MOUNT_UNIT="var-mnt-DSMedia.mount"
-if timeout 5 stat "${MOUNT_POINT}" >/dev/null 2>&1; then
+# Both checks required: stat detects stale/hung mounts, mountpoint detects unmounted dirs
+if timeout 5 stat "${MOUNT_POINT}" >/dev/null 2>&1 \
+   && mountpoint -q "${MOUNT_POINT}"; then
     exit 0
 fi
-echo "NFS mount ${MOUNT_POINT} is stale — attempting recovery"
+if mountpoint -q "${MOUNT_POINT}"; then
+    echo "NFS mount ${MOUNT_POINT} is stale — attempting recovery"
+else
+    echo "NFS mount ${MOUNT_POINT} is not mounted — attempting recovery"
+fi
 umount -l "${MOUNT_POINT}" 2>/dev/null || true
 sleep 2
 systemctl start "${MOUNT_UNIT}"
-if timeout 10 stat "${MOUNT_POINT}" >/dev/null 2>&1; then
+if timeout 10 stat "${MOUNT_POINT}" >/dev/null 2>&1 \
+   && mountpoint -q "${MOUNT_POINT}"; then
     echo "NFS mount recovered successfully"
 else
     echo "NFS mount recovery failed — NAS may be offline"
