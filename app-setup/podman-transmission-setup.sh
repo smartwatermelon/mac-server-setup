@@ -597,7 +597,8 @@ if [[ ! -f "${WATCHER_TEMPLATE}" ]]; then
 else
   sudo -iu "${OPERATOR_USERNAME}" mkdir -p "$(dirname "${WATCHER_DEST}")"
 
-  sudo sed "s|__SERVER_NAME__|${HOSTNAME}|g" \
+  sudo sed -e "s|__SERVER_NAME__|${HOSTNAME}|g" \
+    -e "s|__TRANSMISSION_HOST_PORT__|${HOST_PORT}|g" \
     "${WATCHER_TEMPLATE}" | sudo tee "${WATCHER_DEST}" >/dev/null
   sudo chmod 755 "${WATCHER_DEST}"
   sudo chown "${OPERATOR_USERNAME}:staff" "${WATCHER_DEST}"
