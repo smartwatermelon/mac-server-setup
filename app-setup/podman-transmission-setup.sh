@@ -318,12 +318,12 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Section 2b: NFS mount inside Podman VM
+# Section 2b: Data volume path (VirtioFS pass-through from host NFS mount)
 # ---------------------------------------------------------------------------
 
-set_section "VM-Internal NFS Mount"
+set_section "Data Volume Path"
 
-# Validate required NAS config variables (safe characters only — used in SSH commands and systemd unit names)
+# Validate required NAS config variables (safe characters only — used in mount path construction)
 safe_pattern='^[a-zA-Z0-9._-]+$'
 if [[ -z "${NAS_HOSTNAME:-}" ]] || [[ -z "${NAS_SHARE_NAME:-}" ]]; then
   collect_error "NAS_HOSTNAME and NAS_SHARE_NAME must be set in config.conf"
@@ -334,142 +334,9 @@ if [[ ! "${NAS_HOSTNAME}" =~ ${safe_pattern} ]] || [[ ! "${NAS_SHARE_NAME}" =~ $
   exit 1
 fi
 
-NFS_MOUNT_POINT="/var/mnt/${NAS_SHARE_NAME}"
-NFS_SOURCE="${NAS_HOSTNAME}:/${NAS_VOLUME:-volume1}/${NAS_SHARE_NAME}"
+NFS_MOUNT_POINT="${OPERATOR_HOME}/.local/mnt/${NAS_SHARE_NAME}"
 
-log "Configuring NFS mount inside Podman VM: ${NFS_SOURCE} → ${NFS_MOUNT_POINT}"
-
-# Create mount point
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo mkdir -p '${NFS_MOUNT_POINT}'"
-
-# Write systemd mount unit (unit name must match canonical path: var-mnt-DSMedia.mount for /var/mnt/DSMedia)
-# Heredoc is unquoted so variables expand at deploy time; values are validated above
-MOUNT_UNIT_NAME="var-mnt-${NAS_SHARE_NAME}.mount"
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo tee '/etc/systemd/system/${MOUNT_UNIT_NAME}' > /dev/null" <<MOUNTUNIT
-[Unit]
-Description=NFS mount for ${NAS_SHARE_NAME} share
-After=network-online.target
-Wants=network-online.target
-
-[Mount]
-What=${NFS_SOURCE}
-Where=${NFS_MOUNT_POINT}
-Type=nfs
-Options=rw,soft,intr,actimeo=2,rsize=65536,wsize=65536
-
-[Install]
-WantedBy=local-fs.target
-MOUNTUNIT
-
-# Enable and start
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo systemctl daemon-reload && sudo systemctl enable --now '${MOUNT_UNIT_NAME}'"
-
-# Verify
-if sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "mountpoint -q '${NFS_MOUNT_POINT}'"; then
-  log "✅ NFS mount active inside VM: ${NFS_MOUNT_POINT}"
-else
-  collect_error "NFS mount failed inside VM — check NAS NFS export allows non-privileged ports"
-  exit 1
-fi
-
-# ---------------------------------------------------------------------------
-# Section 2c: NFS watchdog timer inside Podman VM
-# ---------------------------------------------------------------------------
-
-set_section "VM-Internal NFS Watchdog"
-
-log "Deploying NFS watchdog timer inside Podman VM..."
-
-# Write the watchdog service unit
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo tee '/etc/systemd/system/nfs-watchdog.service' > /dev/null" <<'WATCHDOG_SVC'
-[Unit]
-Description=NFS mount health watchdog
-After=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/nfs-watchdog.sh
-WATCHDOG_SVC
-
-# Write the watchdog timer unit
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo tee '/etc/systemd/system/nfs-watchdog.timer' > /dev/null" <<'WATCHDOG_TMR'
-[Unit]
-Description=Run NFS mount health check every 2 minutes
-
-[Timer]
-OnBootSec=60
-OnUnitActiveSec=120
-
-[Install]
-WantedBy=timers.target
-WATCHDOG_TMR
-
-# Write the watchdog script itself
-# NFS_MOUNT_POINT and MOUNT_UNIT_NAME are expanded at deploy time;
-# everything else is escaped into the script
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo tee '/usr/local/bin/nfs-watchdog.sh' > /dev/null" <<WATCHDOG_SCRIPT
-#!/usr/bin/env bash
-set -u
-# nfs-watchdog.sh — Detect and recover stale NFS mounts inside the Podman VM.
-# Deployed by podman-transmission-setup.sh; runs via nfs-watchdog.timer.
-
-MOUNT_POINT="${NFS_MOUNT_POINT}"
-MOUNT_UNIT="${MOUNT_UNIT_NAME}"
-
-# Two failure modes to detect:
-# 1. Stale/hung mount: stat hangs (NAS disappeared while mounted)
-# 2. Not mounted: mount unit failed/timed out, leaving an empty directory
-if timeout 5 stat "\${MOUNT_POINT}" >/dev/null 2>&1 \
-   && mountpoint -q "\${MOUNT_POINT}"; then
-    exit 0
-fi
-
-if mountpoint -q "\${MOUNT_POINT}"; then
-    echo "NFS mount \${MOUNT_POINT} is stale — attempting recovery"
-else
-    echo "NFS mount \${MOUNT_POINT} is not mounted — attempting recovery"
-fi
-
-# Lazy unmount to release the stuck mount without blocking
-umount -l "\${MOUNT_POINT}" 2>/dev/null || true
-
-# Brief pause for unmount to take effect
-sleep 2
-
-# Remount via the systemd mount unit
-systemctl start "\${MOUNT_UNIT}"
-
-# Verify recovery (must check mountpoint, not just stat — empty dir fools stat)
-if timeout 10 stat "\${MOUNT_POINT}" >/dev/null 2>&1 \
-   && mountpoint -q "\${MOUNT_POINT}"; then
-    echo "NFS mount recovered successfully"
-else
-    echo "NFS mount recovery failed — NAS may be offline"
-    exit 1
-fi
-WATCHDOG_SCRIPT
-
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo chmod 755 /usr/local/bin/nfs-watchdog.sh"
-
-# Enable the timer (daemon-reload already happened, but reload again for new units)
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo systemctl daemon-reload && sudo systemctl enable --now nfs-watchdog.timer"
-
-# Verify timer is active
-if sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "systemctl is-active nfs-watchdog.timer" | grep -q "active"; then
-  log "✅ NFS watchdog timer active inside VM (checks every 2 minutes)"
-else
-  collect_warning "NFS watchdog timer failed to activate — manual check recommended"
-fi
+log "Data volume will use VirtioFS pass-through: ${NFS_MOUNT_POINT}"
 
 # ---------------------------------------------------------------------------
 # Section 3: Container directory structure
