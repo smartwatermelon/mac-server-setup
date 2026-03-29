@@ -18,6 +18,7 @@
 #   __SERVER_NAME__              → server hostname for logging (e.g. TILSIT)
 #   __TRANSMISSION_HOST_PORT__   → Transmission RPC port (e.g. 9091)
 #   __OPERATOR_HOME__            → operator home directory
+#   __NAS_SHARE_NAME__           → NAS share name (e.g. DSMedia)
 #
 # Author: Andrew Rich <andrew.rich@gmail.com>
 
@@ -26,7 +27,7 @@ set -euo pipefail
 SERVER_NAME="__SERVER_NAME__"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 
-PENDING_MOVE="${HOME}/.local/mnt/DSMedia/Media/Torrents/pending-move"
+PENDING_MOVE="${HOME}/.local/mnt/__NAS_SHARE_NAME__/Media/Torrents/pending-move"
 TRANSMISSION_RPC_URL="http://localhost:__TRANSMISSION_HOST_PORT__/transmission/rpc"
 LOG_FILE="${HOME}/.local/state/${HOSTNAME_LOWER}-pending-move-cleanup.log"
 MAX_LOG_SIZE=5242880 # 5MB
@@ -73,8 +74,13 @@ get_active_torrent_names() {
   fi
 
   # Extract torrent names from JSON response — one per line
-  # Matches "name":"<value>" pairs; handles escaped quotes in names
-  echo "${response}" | grep -o '"name":"[^"]*"' | sed 's/"name":"//;s/"$//'
+  # Uses python3 for reliable JSON parsing (grep/sed can't handle escaped quotes in names)
+  printf '%s' "${response}" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for t in data.get('arguments', {}).get('torrents', []):
+    print(t['name'])
+"
 }
 
 # --- Main ---

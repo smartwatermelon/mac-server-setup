@@ -461,6 +461,7 @@ else
     -e "s|__SERVER_NAME__|${HOSTNAME}|g" \
     -e "s|__TRANSMISSION_HOST_PORT__|${HOST_PORT}|g" \
     -e "s|__OPERATOR_HOME__|${OPERATOR_HOME}|g" \
+    -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
     "${CLEANUP_TEMPLATE}" | sudo tee "${CLEANUP_DEST}" >/dev/null
 
   sudo chown "${OPERATOR_USERNAME}:staff" "${CLEANUP_DEST}"
