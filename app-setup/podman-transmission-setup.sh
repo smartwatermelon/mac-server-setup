@@ -245,7 +245,7 @@ if [[ "${FORCE}" != "true" ]]; then
   echo "  • Podman machine:   transmission-vm (rootful)"
   echo "  • PIA VPN region:   ${PIA_REGION}"
   echo "  • LAN subnet:       ${LAN}"
-  echo "  • Data mount:       ${OPERATOR_HOME}/.local/mnt/DSMedia"
+  echo "  • Data mount:       ${OPERATOR_HOME}/.local/mnt/${NAS_SHARE_NAME}"
   echo ""
   if ! confirm "Continue with Podman Transmission setup?" "y"; then
     log "Setup cancelled by user"
@@ -318,12 +318,12 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Section 2b: NFS mount inside Podman VM
+# Section 2b: Data volume path (VirtioFS pass-through from host NFS mount)
 # ---------------------------------------------------------------------------
 
-set_section "VM-Internal NFS Mount"
+set_section "Data Volume Path"
 
-# Validate required NAS config variables (safe characters only — used in SSH commands and systemd unit names)
+# Validate required NAS config variables (safe characters only — used in mount path construction)
 safe_pattern='^[a-zA-Z0-9._-]+$'
 if [[ -z "${NAS_HOSTNAME:-}" ]] || [[ -z "${NAS_SHARE_NAME:-}" ]]; then
   collect_error "NAS_HOSTNAME and NAS_SHARE_NAME must be set in config.conf"
@@ -334,142 +334,9 @@ if [[ ! "${NAS_HOSTNAME}" =~ ${safe_pattern} ]] || [[ ! "${NAS_SHARE_NAME}" =~ $
   exit 1
 fi
 
-NFS_MOUNT_POINT="/var/mnt/${NAS_SHARE_NAME}"
-NFS_SOURCE="${NAS_HOSTNAME}:/${NAS_VOLUME:-volume1}/${NAS_SHARE_NAME}"
+NFS_MOUNT_POINT="${OPERATOR_HOME}/.local/mnt/${NAS_SHARE_NAME}"
 
-log "Configuring NFS mount inside Podman VM: ${NFS_SOURCE} → ${NFS_MOUNT_POINT}"
-
-# Create mount point
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo mkdir -p '${NFS_MOUNT_POINT}'"
-
-# Write systemd mount unit (unit name must match canonical path: var-mnt-DSMedia.mount for /var/mnt/DSMedia)
-# Heredoc is unquoted so variables expand at deploy time; values are validated above
-MOUNT_UNIT_NAME="var-mnt-${NAS_SHARE_NAME}.mount"
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo tee '/etc/systemd/system/${MOUNT_UNIT_NAME}' > /dev/null" <<MOUNTUNIT
-[Unit]
-Description=NFS mount for ${NAS_SHARE_NAME} share
-After=network-online.target
-Wants=network-online.target
-
-[Mount]
-What=${NFS_SOURCE}
-Where=${NFS_MOUNT_POINT}
-Type=nfs
-Options=rw,soft,intr,actimeo=2,rsize=65536,wsize=65536
-
-[Install]
-WantedBy=local-fs.target
-MOUNTUNIT
-
-# Enable and start
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo systemctl daemon-reload && sudo systemctl enable --now '${MOUNT_UNIT_NAME}'"
-
-# Verify
-if sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "mountpoint -q '${NFS_MOUNT_POINT}'"; then
-  log "✅ NFS mount active inside VM: ${NFS_MOUNT_POINT}"
-else
-  collect_error "NFS mount failed inside VM — check NAS NFS export allows non-privileged ports"
-  exit 1
-fi
-
-# ---------------------------------------------------------------------------
-# Section 2c: NFS watchdog timer inside Podman VM
-# ---------------------------------------------------------------------------
-
-set_section "VM-Internal NFS Watchdog"
-
-log "Deploying NFS watchdog timer inside Podman VM..."
-
-# Write the watchdog service unit
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo tee '/etc/systemd/system/nfs-watchdog.service' > /dev/null" <<'WATCHDOG_SVC'
-[Unit]
-Description=NFS mount health watchdog
-After=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/nfs-watchdog.sh
-WATCHDOG_SVC
-
-# Write the watchdog timer unit
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo tee '/etc/systemd/system/nfs-watchdog.timer' > /dev/null" <<'WATCHDOG_TMR'
-[Unit]
-Description=Run NFS mount health check every 2 minutes
-
-[Timer]
-OnBootSec=60
-OnUnitActiveSec=120
-
-[Install]
-WantedBy=timers.target
-WATCHDOG_TMR
-
-# Write the watchdog script itself
-# NFS_MOUNT_POINT and MOUNT_UNIT_NAME are expanded at deploy time;
-# everything else is escaped into the script
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo tee '/usr/local/bin/nfs-watchdog.sh' > /dev/null" <<WATCHDOG_SCRIPT
-#!/usr/bin/env bash
-set -u
-# nfs-watchdog.sh — Detect and recover stale NFS mounts inside the Podman VM.
-# Deployed by podman-transmission-setup.sh; runs via nfs-watchdog.timer.
-
-MOUNT_POINT="${NFS_MOUNT_POINT}"
-MOUNT_UNIT="${MOUNT_UNIT_NAME}"
-
-# Two failure modes to detect:
-# 1. Stale/hung mount: stat hangs (NAS disappeared while mounted)
-# 2. Not mounted: mount unit failed/timed out, leaving an empty directory
-if timeout 5 stat "\${MOUNT_POINT}" >/dev/null 2>&1 \
-   && mountpoint -q "\${MOUNT_POINT}"; then
-    exit 0
-fi
-
-if mountpoint -q "\${MOUNT_POINT}"; then
-    echo "NFS mount \${MOUNT_POINT} is stale — attempting recovery"
-else
-    echo "NFS mount \${MOUNT_POINT} is not mounted — attempting recovery"
-fi
-
-# Lazy unmount to release the stuck mount without blocking
-umount -l "\${MOUNT_POINT}" 2>/dev/null || true
-
-# Brief pause for unmount to take effect
-sleep 2
-
-# Remount via the systemd mount unit
-systemctl start "\${MOUNT_UNIT}"
-
-# Verify recovery (must check mountpoint, not just stat — empty dir fools stat)
-if timeout 10 stat "\${MOUNT_POINT}" >/dev/null 2>&1 \
-   && mountpoint -q "\${MOUNT_POINT}"; then
-    echo "NFS mount recovered successfully"
-else
-    echo "NFS mount recovery failed — NAS may be offline"
-    exit 1
-fi
-WATCHDOG_SCRIPT
-
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo chmod 755 /usr/local/bin/nfs-watchdog.sh"
-
-# Enable the timer (daemon-reload already happened, but reload again for new units)
-sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "sudo systemctl daemon-reload && sudo systemctl enable --now nfs-watchdog.timer"
-
-# Verify timer is active
-if sudo -iu "${OPERATOR_USERNAME}" podman machine ssh transmission-vm -- \
-  "systemctl is-active nfs-watchdog.timer" | grep -q "active"; then
-  log "✅ NFS watchdog timer active inside VM (checks every 2 minutes)"
-else
-  collect_warning "NFS watchdog timer failed to activate — manual check recommended"
-fi
+log "Data volume will use VirtioFS pass-through: ${NFS_MOUNT_POINT}"
 
 # ---------------------------------------------------------------------------
 # Section 3: Container directory structure
@@ -570,10 +437,37 @@ else
 
   sudo sed -e "s|__SERVER_NAME__|${HOSTNAME}|g" \
     -e "s|__TRANSMISSION_HOST_PORT__|${HOST_PORT}|g" \
+    -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
     "${WATCHER_TEMPLATE}" | sudo tee "${WATCHER_DEST}" >/dev/null
   sudo chmod 755 "${WATCHER_DEST}"
   sudo chown "${OPERATOR_USERNAME}:staff" "${WATCHER_DEST}"
   log "✅ transmission-trigger-watcher.sh deployed to ${WATCHER_DEST}"
+fi
+
+# ---------------------------------------------------------------------------
+# Section 7b: Deploy pending-move cleanup script
+# ---------------------------------------------------------------------------
+
+set_section "Deploy Pending-Move Cleanup Script"
+
+CLEANUP_TEMPLATE="${SCRIPT_DIR}/templates/pending-move-cleanup.sh"
+CLEANUP_DEST="${OPERATOR_HOME}/.local/bin/pending-move-cleanup.sh"
+
+if [[ ! -f "${CLEANUP_TEMPLATE}" ]]; then
+  collect_error "Cleanup template not found: ${CLEANUP_TEMPLATE}"
+else
+  log "Deploying pending-move-cleanup.sh"
+
+  sudo sed \
+    -e "s|__SERVER_NAME__|${HOSTNAME}|g" \
+    -e "s|__TRANSMISSION_HOST_PORT__|${HOST_PORT}|g" \
+    -e "s|__OPERATOR_HOME__|${OPERATOR_HOME}|g" \
+    -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
+    "${CLEANUP_TEMPLATE}" | sudo tee "${CLEANUP_DEST}" >/dev/null
+
+  sudo chown "${OPERATOR_USERNAME}:staff" "${CLEANUP_DEST}"
+  sudo chmod 755 "${CLEANUP_DEST}"
+  log "✅ pending-move-cleanup.sh deployed"
 fi
 
 # ---------------------------------------------------------------------------
@@ -586,7 +480,7 @@ MACHINE_START_DEST="${OPERATOR_HOME}/.local/bin/podman-machine-start.sh"
 
 # Write the wrapper directly (values baked in at deploy time).
 # Variables prefixed with \ escape into the written script; bare ${...} expand now.
-# Required variables (all defined earlier): NAS_SHARE_NAME (config.conf), OPERATOR_HOME (line ~88),
+# Required variables (all defined earlier): NFS_MOUNT_POINT (Section 2b), OPERATOR_HOME (line ~88),
 # HOST_PORT (line ~240), PIA_REGION (line ~238), LAN (line ~239), PUID/PGID (Section 5), TZ_VALUE (Section 5)
 sudo tee "${MACHINE_START_DEST}" >/dev/null <<WRAPPER
 #!/usr/bin/env bash
@@ -615,10 +509,6 @@ for _ in {1..30}; do
     sleep 1
 done
 
-# Ensure NFS mount is active inside VM before starting containers
-# (this script runs as operator via LaunchAgent — no sudo -iu needed)
-podman machine ssh transmission-vm -- "mountpoint -q '/var/mnt/${NAS_SHARE_NAME}' || sudo systemctl start 'var-mnt-${NAS_SHARE_NAME}.mount'"
-
 # Remove old container if exists (idempotent restart)
 podman rm -f transmission-vpn 2>/dev/null || true
 
@@ -627,7 +517,7 @@ podman run -d \\
     --privileged \\
     --device /dev/net/tun:/dev/net/tun \\
     --sysctl net.ipv6.conf.all.disable_ipv6=0 \\
-    -v "/var/mnt/${NAS_SHARE_NAME}:/data" \\
+    -v "${NFS_MOUNT_POINT}:/data" \\
     -v "${OPERATOR_HOME}/containers/transmission/scripts:/scripts" \\
     -v "${OPERATOR_HOME}/containers/transmission/config:/config" \\
     -v "${OPERATOR_HOME}/containers/transmission/watch:/watch" \\
@@ -752,13 +642,51 @@ else
   collect_error "Invalid plist syntax in ${WATCHER_PLIST} — launchd will reject this agent"
 fi
 
+# --- 9c: Pending-move cleanup timer ---
+
+CLEANUP_PLIST="${LAUNCHAGENT_DIR}/com.${HOSTNAME_LOWER}.pending-move-cleanup.plist"
+log "Creating LaunchAgent: ${CLEANUP_PLIST}"
+
+sudo -iu "${OPERATOR_USERNAME}" tee "${CLEANUP_PLIST}" >/dev/null <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.${HOSTNAME_LOWER}.pending-move-cleanup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${OPERATOR_HOME}/.local/bin/pending-move-cleanup.sh</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>3600</integer>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-pending-move-cleanup.log</string>
+  <key>StandardErrorPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-pending-move-cleanup.log</string>
+</dict>
+</plist>
+PLIST
+
+sudo chown "${OPERATOR_USERNAME}:staff" "${CLEANUP_PLIST}"
+sudo chmod 644 "${CLEANUP_PLIST}"
+
+if sudo plutil -lint "${CLEANUP_PLIST}" >/dev/null 2>&1; then
+  log "✅ pending-move-cleanup LaunchAgent created (hourly)"
+else
+  collect_error "Invalid plist syntax in ${CLEANUP_PLIST}"
+fi
+
 # ---------------------------------------------------------------------------
 # Section 10: Validate NAS bind mount through Podman VirtioFS
 # ---------------------------------------------------------------------------
 
 set_section "NAS Bind Mount Validation"
 
-NAS_MOUNT="${OPERATOR_HOME}/.local/mnt/DSMedia"
+NAS_MOUNT="${OPERATOR_HOME}/.local/mnt/${NAS_SHARE_NAME}"
 if [[ ! -d "${NAS_MOUNT}" ]]; then
   collect_warning "NAS mount not present at ${NAS_MOUNT} — ensure mount-nas-media LaunchAgent has run. Bind mount validation skipped."
 else

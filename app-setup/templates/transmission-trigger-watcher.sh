@@ -38,9 +38,9 @@ MAX_RETRIES=5 # Trigger files retained up to this many poll cycles on failure
 TRANSMISSION_RPC_URL="http://localhost:__TRANSMISSION_HOST_PORT__/transmission/rpc"
 
 # Container-to-macOS path prefix mapping
-# Container mounts NAS at /data; macOS mounts it at ~/.local/mnt/DSMedia
+# Container mounts NAS at /data; macOS mounts it at ~/.local/mnt/<share>
 CONTAINER_DATA_PREFIX="/data"
-MACOS_NAS_PREFIX="${HOME}/.local/mnt/DSMedia"
+MACOS_NAS_PREFIX="${HOME}/.local/mnt/__NAS_SHARE_NAME__"
 
 mkdir -p "$(dirname "${LOG_FILE}")"
 
@@ -92,15 +92,18 @@ remove_torrent_from_transmission() {
     return 0
   fi
 
-  # Call torrent-remove with delete-local-data (FileBot already moved the media)
+  # Call torrent-remove WITHOUT delete-local-data. VirtioFS caches file descriptors
+  # after Transmission closes them; deleting immediately causes .nfs.* silly-rename
+  # files. A separate periodic cleanup script handles pending-move/ deletion after
+  # verifying the torrent is no longer tracked.
   local response
   response=$(curl -s "${TRANSMISSION_RPC_URL}" \
     -H "X-Transmission-Session-Id: ${session_id}" \
-    --data-raw "{\"method\":\"torrent-remove\",\"arguments\":{\"ids\":[\"${torrent_hash}\"],\"delete-local-data\":true}}" \
+    --data-raw "{\"method\":\"torrent-remove\",\"arguments\":{\"ids\":[\"${torrent_hash}\"],\"delete-local-data\":false}}" \
     2>&1)
 
   if [[ "${response}" == *'"result":"success"'* ]]; then
-    log "Torrent removed from Transmission: ${torrent_name}"
+    log "Torrent removed from Transmission (files retained for deferred cleanup): ${torrent_name}"
   else
     log "WARNING: Failed to remove torrent from Transmission: ${torrent_name}"
     log "  RPC response: ${response}"
