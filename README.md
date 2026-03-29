@@ -158,9 +158,6 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
 │   ├── plex-watchdog-setup.sh    # Plex settings drift monitor
 │   ├── podman-transmission-setup.sh  # Containerized Transmission + VPN
 │   ├── rclone-setup.sh           # Dropbox sync to watch directory
-│   ├── containers/
-│   │   └── transmission/
-│   │       └── compose.yml       # Container configuration reference (haugene)
 │   └── templates/                # Runtime script templates
 │       ├── mount-nas-media.sh    # NFS mount script
 │       ├── start-plex.sh         # Plex startup wrapper
