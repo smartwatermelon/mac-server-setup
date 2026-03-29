@@ -453,7 +453,7 @@ MACHINE_START_DEST="${OPERATOR_HOME}/.local/bin/podman-machine-start.sh"
 
 # Write the wrapper directly (values baked in at deploy time).
 # Variables prefixed with \ escape into the written script; bare ${...} expand now.
-# Required variables (all defined earlier): NAS_SHARE_NAME (config.conf), OPERATOR_HOME (line ~88),
+# Required variables (all defined earlier): NFS_MOUNT_POINT (Section 2b), OPERATOR_HOME (line ~88),
 # HOST_PORT (line ~240), PIA_REGION (line ~238), LAN (line ~239), PUID/PGID (Section 5), TZ_VALUE (Section 5)
 sudo tee "${MACHINE_START_DEST}" >/dev/null <<WRAPPER
 #!/usr/bin/env bash
@@ -482,10 +482,6 @@ for _ in {1..30}; do
     sleep 1
 done
 
-# Ensure NFS mount is active inside VM before starting containers
-# (this script runs as operator via LaunchAgent — no sudo -iu needed)
-podman machine ssh transmission-vm -- "mountpoint -q '/var/mnt/${NAS_SHARE_NAME}' || sudo systemctl start 'var-mnt-${NAS_SHARE_NAME}.mount'"
-
 # Remove old container if exists (idempotent restart)
 podman rm -f transmission-vpn 2>/dev/null || true
 
@@ -494,7 +490,7 @@ podman run -d \\
     --privileged \\
     --device /dev/net/tun:/dev/net/tun \\
     --sysctl net.ipv6.conf.all.disable_ipv6=0 \\
-    -v "/var/mnt/${NAS_SHARE_NAME}:/data" \\
+    -v "${NFS_MOUNT_POINT}:/data" \\
     -v "${OPERATOR_HOME}/containers/transmission/scripts:/scripts" \\
     -v "${OPERATOR_HOME}/containers/transmission/config:/config" \\
     -v "${OPERATOR_HOME}/containers/transmission/watch:/watch" \\
