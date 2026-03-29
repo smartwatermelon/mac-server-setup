@@ -8,7 +8,6 @@
 # split tunnel stack with a kernel-level VPN-enforced container.
 #
 # Components deployed:
-#   ~/containers/transmission/compose.yml           — haugene container definition
 #   ~/containers/transmission/scripts/              — container-side scripts
 #   ~/containers/transmission/.env                  — PIA credentials (mode 600)
 #   ~/.local/bin/podman-machine-start.sh            — starts machine + compose at login
@@ -527,43 +526,15 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Section 5: Deploy compose.yml
+# Section 5: Gather container environment values
 # ---------------------------------------------------------------------------
 
-set_section "Deploy compose.yml (reference only)"
+set_section "Gather container environment values"
 
-# Gather container environment values (used by compose template AND podman run below)
 PUID=$(id -u "${OPERATOR_USERNAME}")
 PGID=$(id -g "${OPERATOR_USERNAME}")
 TZ_VALUE=$(readlink /etc/localtime | sed 's|.*/zoneinfo/||' || true)
 TZ_VALUE="${TZ_VALUE:-America/Los_Angeles}"
-
-COMPOSE_TEMPLATE="${SCRIPT_DIR}/containers/transmission/compose.yml"
-COMPOSE_DEST="${CONTAINER_DIR}/compose.yml"
-
-if [[ ! -f "${COMPOSE_TEMPLATE}" ]]; then
-  collect_error "Compose template not found: ${COMPOSE_TEMPLATE}"
-else
-  log "Deploying compose.yml (region: ${PIA_REGION}, LAN: ${LAN}, TZ: ${TZ_VALUE}, host port: ${HOST_PORT})"
-
-  sudo sed \
-    -e "s|__SERVER_NAME__|${HOSTNAME}|g" \
-    -e "s|__PIA_VPN_REGION__|${PIA_REGION}|g" \
-    -e "s|__LAN_SUBNET__|${LAN}|g" \
-    -e "s|__TRANSMISSION_HOST_PORT__|${HOST_PORT}|g" \
-    -e "s|__OPERATOR_HOME__|${OPERATOR_HOME}|g" \
-    -e "s|__NFS_MOUNT_POINT__|${NFS_MOUNT_POINT}|g" \
-    -e "s|__PUID__|${PUID}|g" \
-    -e "s|__PGID__|${PGID}|g" \
-    -e "s|__TZ__|${TZ_VALUE}|g" \
-    "${COMPOSE_TEMPLATE}" | sudo tee "${COMPOSE_DEST}" >/dev/null
-
-  sudo chown "${OPERATOR_USERNAME}:staff" "${COMPOSE_DEST}"
-  sudo chmod 644 "${COMPOSE_DEST}"
-  log "✅ compose.yml deployed to ${COMPOSE_DEST}"
-  log "   Note: compose.yml is for reference only — container is started via podman run"
-  log "   (podman-compose cannot handle VM-internal NFS mount paths)"
-fi
 
 # ---------------------------------------------------------------------------
 # Section 6: Deploy transmission-post-done.sh (container-side trigger)
