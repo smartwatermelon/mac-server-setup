@@ -245,7 +245,7 @@ if [[ "${FORCE}" != "true" ]]; then
   echo "  • Podman machine:   transmission-vm (rootful)"
   echo "  • PIA VPN region:   ${PIA_REGION}"
   echo "  • LAN subnet:       ${LAN}"
-  echo "  • Data mount:       ${OPERATOR_HOME}/.local/mnt/DSMedia"
+  echo "  • Data mount:       ${OPERATOR_HOME}/.local/mnt/${NAS_SHARE_NAME}"
   echo ""
   if ! confirm "Continue with Podman Transmission setup?" "y"; then
     log "Setup cancelled by user"
@@ -686,7 +686,7 @@ fi
 
 set_section "NAS Bind Mount Validation"
 
-NAS_MOUNT="${OPERATOR_HOME}/.local/mnt/DSMedia"
+NAS_MOUNT="${OPERATOR_HOME}/.local/mnt/${NAS_SHARE_NAME}"
 if [[ ! -d "${NAS_MOUNT}" ]]; then
   collect_warning "NAS mount not present at ${NAS_MOUNT} — ensure mount-nas-media LaunchAgent has run. Bind mount validation skipped."
 else
