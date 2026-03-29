@@ -444,6 +444,31 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Section 7b: Deploy pending-move cleanup script
+# ---------------------------------------------------------------------------
+
+set_section "Deploy Pending-Move Cleanup Script"
+
+CLEANUP_TEMPLATE="${SCRIPT_DIR}/templates/pending-move-cleanup.sh"
+CLEANUP_DEST="${OPERATOR_HOME}/.local/bin/pending-move-cleanup.sh"
+
+if [[ ! -f "${CLEANUP_TEMPLATE}" ]]; then
+  collect_error "Cleanup template not found: ${CLEANUP_TEMPLATE}"
+else
+  log "Deploying pending-move-cleanup.sh"
+
+  sudo sed \
+    -e "s|__SERVER_NAME__|${HOSTNAME}|g" \
+    -e "s|__TRANSMISSION_HOST_PORT__|${HOST_PORT}|g" \
+    -e "s|__OPERATOR_HOME__|${OPERATOR_HOME}|g" \
+    "${CLEANUP_TEMPLATE}" | sudo tee "${CLEANUP_DEST}" >/dev/null
+
+  sudo chown "${OPERATOR_USERNAME}:staff" "${CLEANUP_DEST}"
+  sudo chmod 755 "${CLEANUP_DEST}"
+  log "✅ pending-move-cleanup.sh deployed"
+fi
+
+# ---------------------------------------------------------------------------
 # Section 8: Deploy podman-machine-start.sh wrapper
 # ---------------------------------------------------------------------------
 
@@ -613,6 +638,44 @@ if sudo plutil -lint "${WATCHER_PLIST}" >/dev/null 2>&1; then
   log "✅ transmission-trigger-watcher LaunchAgent created and validated"
 else
   collect_error "Invalid plist syntax in ${WATCHER_PLIST} — launchd will reject this agent"
+fi
+
+# --- 9c: Pending-move cleanup timer ---
+
+CLEANUP_PLIST="${LAUNCHAGENT_DIR}/com.${HOSTNAME_LOWER}.pending-move-cleanup.plist"
+log "Creating LaunchAgent: ${CLEANUP_PLIST}"
+
+sudo -iu "${OPERATOR_USERNAME}" tee "${CLEANUP_PLIST}" >/dev/null <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.${HOSTNAME_LOWER}.pending-move-cleanup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${OPERATOR_HOME}/.local/bin/pending-move-cleanup.sh</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>3600</integer>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-pending-move-cleanup.log</string>
+  <key>StandardErrorPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-pending-move-cleanup.log</string>
+</dict>
+</plist>
+PLIST
+
+sudo chown "${OPERATOR_USERNAME}:staff" "${CLEANUP_PLIST}"
+sudo chmod 644 "${CLEANUP_PLIST}"
+
+if sudo plutil -lint "${CLEANUP_PLIST}" >/dev/null 2>&1; then
+  log "✅ pending-move-cleanup LaunchAgent created (hourly)"
+else
+  collect_error "Invalid plist syntax in ${CLEANUP_PLIST}"
 fi
 
 # ---------------------------------------------------------------------------
