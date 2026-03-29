@@ -437,6 +437,7 @@ else
 
   sudo sed -e "s|__SERVER_NAME__|${HOSTNAME}|g" \
     -e "s|__TRANSMISSION_HOST_PORT__|${HOST_PORT}|g" \
+    -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
     "${WATCHER_TEMPLATE}" | sudo tee "${WATCHER_DEST}" >/dev/null
   sudo chmod 755 "${WATCHER_DEST}"
   sudo chown "${OPERATOR_USERNAME}:staff" "${WATCHER_DEST}"

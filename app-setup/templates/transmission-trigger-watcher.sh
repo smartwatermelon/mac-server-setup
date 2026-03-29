@@ -38,9 +38,9 @@ MAX_RETRIES=5 # Trigger files retained up to this many poll cycles on failure
 TRANSMISSION_RPC_URL="http://localhost:__TRANSMISSION_HOST_PORT__/transmission/rpc"
 
 # Container-to-macOS path prefix mapping
-# Container mounts NAS at /data; macOS mounts it at ~/.local/mnt/DSMedia
+# Container mounts NAS at /data; macOS mounts it at ~/.local/mnt/<share>
 CONTAINER_DATA_PREFIX="/data"
-MACOS_NAS_PREFIX="${HOME}/.local/mnt/DSMedia"
+MACOS_NAS_PREFIX="${HOME}/.local/mnt/__NAS_SHARE_NAME__"
 
 mkdir -p "$(dirname "${LOG_FILE}")"
 
