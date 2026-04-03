@@ -286,7 +286,7 @@ run_setup_script() {
 
   # caddy-setup.sh requires root for LaunchDaemon and system directory operations
   if [[ "${script_name}" == "caddy-setup.sh" ]]; then
-    cmd=("sudo" "${script_path}" "--force")
+    cmd=("sudo" "-E" "${script_path}" "--force")
   fi
 
   # Add script-specific flags for safer automation
