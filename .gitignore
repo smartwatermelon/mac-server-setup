@@ -74,7 +74,7 @@ user_settings.yaml
 
 # Claude Code runtime files
 .claude/
-CLAUDE.md
+# Note: CLAUDE.md is tracked in this repo (not gitignored)
 
 # Compiled files
 *.o
