@@ -17,6 +17,8 @@ config/iterm2*
 *.key
 *.pem
 *.crt
+# Exception: Caddy internal CA root cert is public, meant for client distribution
+!app-setup/templates/caddy-root-ca.crt
 *.key.pub
 *.env
 .ssh/

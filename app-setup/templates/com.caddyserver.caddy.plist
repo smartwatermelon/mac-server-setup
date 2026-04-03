@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Service identification -->
+    <key>Label</key>
+    <string>com.caddyserver.caddy</string>
+
+    <!-- Run caddy-wrapper.sh which injects CF_API_TOKEN from System keychain -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/usr/local/bin/caddy-wrapper.sh</string>
+    </array>
+
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>/Users/__OPERATOR_USERNAME__/.config/caddy</string>
+
+    <!-- Environment variables (CF_API_TOKEN is injected by caddy-wrapper.sh) -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOSTNAME</key>
+        <string>__HOSTNAME__</string>
+        <key>HOME</key>
+        <string>/Users/__OPERATOR_USERNAME__</string>
+        <key>USER</key>
+        <string>__OPERATOR_USERNAME__</string>
+    </dict>
+
+    <!-- Run at system startup -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Keep alive and restart on failure -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+
+    <!-- Logging configuration -->
+    <key>StandardOutPath</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/state/caddy/caddy.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/state/caddy/caddy-error.log</string>
+
+    <!-- Throttle restart attempts -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <!-- Process management -->
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <!-- Exit timeout -->
+    <key>ExitTimeOut</key>
+    <integer>30</integer>
+</dict>
+</plist>

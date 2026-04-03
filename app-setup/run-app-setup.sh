@@ -8,6 +8,7 @@
 # 3. filebot-setup.sh             - Media file organization (processes downloads)
 # 4. catch-setup.sh               - RSS feed automation (monitors for new content)
 # 5. plex-setup.sh                - Media server (serves organized content)
+# 6. caddy-setup.sh               - Caddy reverse proxy (requires sudo)
 #
 # Unknown setup scripts are executed after the known ordered scripts.
 #
@@ -106,6 +107,7 @@ while [[ $# -gt 0 ]]; do
       echo "  3. filebot-setup.sh             (Media organization)"
       echo "  4. catch-setup.sh               (RSS automation)"
       echo "  5. plex-setup.sh                (Media server)"
+      echo "  6. caddy-setup.sh               (Caddy reverse proxy, requires sudo)"
       echo ""
       exit 0
       ;;
@@ -196,6 +198,7 @@ SCRIPT_ORDER["podman-transmission-setup.sh"]="2:Containerized Transmission + VPN
 SCRIPT_ORDER["filebot-setup.sh"]="3:Media file organization"
 SCRIPT_ORDER["catch-setup.sh"]="4:RSS feed automation"
 SCRIPT_ORDER["plex-setup.sh"]="5:Media server"
+SCRIPT_ORDER["caddy-setup.sh"]="6:Caddy reverse proxy (requires sudo)"
 # Function to get all setup scripts
 get_setup_scripts() {
   local scripts=()
@@ -280,6 +283,11 @@ run_setup_script() {
   # Build command with appropriate flags
   # Always pass --force to individual scripts to avoid multiple confirmation prompts
   local cmd=("${script_path}" "--force")
+
+  # caddy-setup.sh requires root for LaunchDaemon and system directory operations
+  if [[ "${script_name}" == "caddy-setup.sh" ]]; then
+    cmd=("sudo" "-E" "${script_path}" "--force")
+  fi
 
   # Add script-specific flags for safer automation
   if [[ "${script_name}" == "plex-setup.sh" ]]; then

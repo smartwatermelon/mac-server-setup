@@ -74,5 +74,12 @@ EXTERNAL_HOSTNAME=""               # Public hostname (e.g. tilsit.vip)
 CLOUDFLARE_ZONE_ID=""              # Cloudflare zone ID for external hostname
 CLOUDFLARE_RECORD_ID=""            # Cloudflare A record ID for external hostname
 
+# Caddy reverse proxy configuration
+SERVER_LAN_IP=""                   # Server's static LAN IP (e.g. 10.0.15.15)
+BASICAUTH_USERNAME=""              # Basic auth username for external access
+BASICAUTH_HASH=""                  # bcrypt hash of password (generate with: caddy hash-password)
+QUICKCONNECT_ROMANO=""             # QuickConnect URL for Romano NAS (e.g. https://quickconnect.to/user123)
+QUICKCONNECT_BERKSWELL=""          # QuickConnect URL for Berkswell NAS
+
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME
