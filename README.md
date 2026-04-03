@@ -65,7 +65,7 @@ Three phases, two machines.
 
 **Phase 2** (`first-boot.sh`, on the Mac Mini): Validates the hardware fingerprint, imports the keychain, creates the operator user account with auto-login, runs 19 setup modules (SSH, Homebrew, FileVault, Time Machine, etc). Has to be run from the local desktop, not SSH.
 
-**Phase 3** (`run-app-setup.sh`, on the Mac Mini): Discovers and runs all `*-setup.sh` scripts in dependency order: rclone, transmission, filebot, catch, plex. Each one installs the app, sets preferences, creates a LaunchAgent.
+**Phase 3** (`run-app-setup.sh`, on the Mac Mini): Discovers and runs all `*-setup.sh` scripts in dependency order: rclone, transmission, filebot, catch, plex, caddy. Each one installs the app, sets preferences, creates a LaunchAgent or LaunchDaemon, and deploys template files with placeholder substitution.
 
 ### Configuration flow
 
@@ -151,6 +151,7 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
 ├── prep-airdrop.sh                # Entry point: builds deployment package
 ├── app-setup/                     # Application setup scripts
 │   ├── run-app-setup.sh          # Orchestrator (runs scripts in dependency order)
+│   ├── caddy-setup.sh            # Caddy reverse proxy deployment
 │   ├── catch-setup.sh            # RSS feed monitor (ShowRSS)
 │   ├── filebot-setup.sh          # Media renaming and sorting
 │   ├── msmtp-setup.sh            # Shared email facility (Gmail SMTP)
@@ -158,15 +159,26 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
 │   ├── plex-watchdog-setup.sh    # Plex settings drift monitor
 │   ├── podman-transmission-setup.sh  # Containerized Transmission + VPN
 │   ├── rclone-setup.sh           # Dropbox sync to watch directory
+│   ├── transmission-filebot-setup.sh  # Media processing pipeline config wizard
 │   └── templates/                # Runtime script templates
-│       ├── mount-nas-media.sh    # NFS mount script
+│       ├── Caddyfile              # Caddy reverse proxy config
+│       ├── caddy-wrapper.sh       # CF_API_TOKEN injection wrapper
+│       ├── caddy-health.sh        # Caddy endpoint health checker
+│       ├── media-server.py        # Python file server for NFS media
+│       ├── com.caddyserver.caddy.plist  # Caddy LaunchDaemon
+│       ├── com.media-server.plist       # Media server LaunchDaemon
+│       ├── config.yml.template    # Transmission-FileBot pipeline config
+│       ├── mount-nas-media.sh     # NFS mount script
+│       ├── process-media.command  # Manual media processing wrapper
 │       ├── start-plex.sh         # Plex startup wrapper
 │       ├── start-rclone.sh       # rclone sync script
 │       ├── plex-golden.conf.template   # Plex settings golden config template
 │       ├── plex-watchdog.sh           # Plex settings poll daemon
 │       ├── plex-watchdog-ctl.sh       # Plex watchdog CLI (status/accept/revert)
-│       ├── transmission-post-done.sh    # Container-side completion trigger
-│       └── transmission-trigger-watcher.sh  # Host-side trigger → FileBot
+│       ├── transmission-done.sh       # Media processing: rename, sort, Plex scan
+│       ├── transmission-post-done.sh  # Container-side completion trigger
+│       ├── transmission-trigger-watcher.sh  # Host-side trigger → FileBot
+│       └── www/                   # Caddy dashboard static assets
 ├── scripts/
 │   ├── airdrop/
 │   │   └── rclone-airdrop-prep.sh  # Dropbox OAuth for AirDrop
@@ -211,8 +223,14 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
     │   ├── first-boot.md         # Provisioning details
     │   └── apple-first-boot-dialogs.md  # macOS setup wizard notes
     └── apps/
+        ├── caddy-README.md            # Caddy reverse proxy operations
+        ├── caddy-cloudflare-checklist.md  # Cloudflare migration checklist
+        ├── caddy-dns01-migration.md   # DNS-01 migration guide
         ├── plex-setup-README.md
-        └── rclone-setup-README.md
+        ├── plex-watchdog-README.md
+        ├── rclone-setup-README.md
+        ├── transmission-filebot-README.md  # Media processing pipeline
+        └── transmission-filebot-automator.md  # Automator drag-and-drop
 ```
 
 ## Configuration
@@ -268,6 +286,10 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 | Operator login | `~/.local/state/<hostname>-operator-login.log` |
 | Plex watchdog | `~/.local/state/plex-watchdog.log` |
 | msmtp (email) | `~/.local/state/msmtp.log` |
+| Media processing | `~/.local/state/transmission-processing.log` |
+| Caddy access | `/usr/local/var/log/caddy/access.log` |
+| Caddy errors | `~/.local/state/caddy/caddy-error.log` |
+| Media file server | `~/.local/state/caddy/media-server.log` |
 
 ## Troubleshooting
 
@@ -301,6 +323,23 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 | Post-reboot setup | [Operator Setup](docs/operator.md) |
 | How credentials move between machines | [Keychain Management](docs/keychain-credential-management.md) |
 | Plex settings watchdog | [Plex Watchdog](docs/apps/plex-watchdog-README.md) |
+| Caddy reverse proxy | [Caddy README](docs/apps/caddy-README.md) |
+| Media processing pipeline | [Transmission-FileBot](docs/apps/transmission-filebot-README.md) |
+
+## Testing
+
+141 BATS tests cover the media processing pipeline and Plex watchdog:
+
+```bash
+# Run all tests
+bats tests/plex-watchdog.bats
+bats tests/transmission-filebot/unit/*.bats tests/transmission-filebot/integration/*.bats
+
+# Or use the test runner
+./run_tests.sh
+```
+
+Tests run automatically in CI on every push and PR.
 
 ## Contributing
 
