@@ -6,6 +6,8 @@
 # These tests use sample XML fixtures and golden configs to exercise
 # core logic without requiring a live Plex server or msmtp.
 
+# BATS_TEST_FILENAME is provided by the BATS runtime
+BATS_TEST_FILENAME="${BATS_TEST_FILENAME:-}"
 REPO_DIR="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
 FIXTURES_DIR="${REPO_DIR}/tests/fixtures"
 WATCHDOG_TEMPLATE="${REPO_DIR}/app-setup/templates/plex-watchdog.sh"
@@ -39,10 +41,13 @@ source_watchdog_functions() {
   local tmp="${TEST_TMPDIR}/watchdog-functions.sh"
   # Replace placeholders, remove the main "$@" call at the bottom, and
   # stub out send_email so sourcing only defines functions.
+  # Also override CONFIG_DIR to use the test's temp directory (the template
+  # sets CONFIG_DIR=$HOME/.config/... which doesn't exist in CI).
   sed \
     -e 's/__HOSTNAME__/TESTHOST/g' \
     -e 's/__MONITORING_EMAIL__/test@example.com/g' \
     -e 's/^main "\$@"/# main "$@" — disabled for testing/' \
+    -e "s|^CONFIG_DIR=.*|CONFIG_DIR=\"${CONFIG_DIR}\"|" \
     "${WATCHDOG_TEMPLATE}" >"${tmp}"
   # Stub send_email
   echo 'send_email() { echo "MOCK_EMAIL: $1"; return 0; }' >>"${tmp}"

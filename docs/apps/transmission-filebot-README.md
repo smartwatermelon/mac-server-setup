@@ -51,7 +51,7 @@ Transmission-Plex Media Manager: A bash-based automation system that integrates 
 
 **Structure**:
 
-```
+```text
 test/
 ├── test_helper.bash           - Shared test utilities and assertions
 ├── unit/                      - Unit tests (84 tests)
@@ -75,7 +75,7 @@ test/
 
 ### Processing Flow
 
-```
+```text
 Transmission download completes
   ↓
 transmission-done.sh triggered with TR_TORRENT_* env vars
