@@ -284,6 +284,11 @@ run_setup_script() {
   # Always pass --force to individual scripts to avoid multiple confirmation prompts
   local cmd=("${script_path}" "--force")
 
+  # caddy-setup.sh requires root for LaunchDaemon and system directory operations
+  if [[ "${script_name}" == "caddy-setup.sh" ]]; then
+    cmd=("sudo" "${script_path}" "--force")
+  fi
+
   # Add script-specific flags for safer automation
   if [[ "${script_name}" == "plex-setup.sh" ]]; then
     if [[ "${MIGRATE_PLEX}" == true ]]; then

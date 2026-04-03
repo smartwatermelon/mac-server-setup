@@ -26,14 +26,20 @@ QUICKCONNECT_ROMANO="${QUICKCONNECT_ROMANO:-}"
 QUICKCONNECT_BERKSWELL="${QUICKCONNECT_BERKSWELL:-}"
 NAS_SHARE_NAME="${NAS_SHARE_NAME:-Media}"
 
-# Validate required variables for Caddy external access
-if [[ -n "${EXTERNAL_HOSTNAME}" ]]; then
-  for var in BASICAUTH_USERNAME BASICAUTH_HASH SERVER_LAN_IP; do
-    if [[ -z "${!var}" ]]; then
-      echo "⚠ ${var} is empty — Caddy external access will not work correctly"
-    fi
-  done
+# Validate required variables — empty values produce invalid Caddyfile syntax
+if [[ -z "${EXTERNAL_HOSTNAME}" ]]; then
+  echo "❌ EXTERNAL_HOSTNAME is required (e.g. tilsit.vip)"
+  exit 1
 fi
+if [[ -z "${SERVER_LAN_IP}" ]]; then
+  echo "❌ SERVER_LAN_IP is required (e.g. 10.0.15.15)"
+  exit 1
+fi
+for var in BASICAUTH_USERNAME BASICAUTH_HASH; do
+  if [[ -z "${!var}" ]]; then
+    echo "⚠ ${var} is empty — external basic auth will not work"
+  fi
+done
 
 DEPLOY_CONFIG_DIR="/Users/${OPERATOR_USERNAME}/.config/caddy"
 DEPLOY_WEB_ROOT="/usr/local/var/www"
@@ -153,19 +159,24 @@ else
 fi
 
 # Install Caddy if not present (drop privileges — Homebrew rejects root)
-if ! command -v caddy &>/dev/null; then
+# Apple Silicon only — this project targets M-series Mac Minis
+CADDY_BIN="/opt/homebrew/bin/caddy"
+if [[ ! -x "${CADDY_BIN}" ]]; then
   echo "Installing Caddy via Homebrew..."
   sudo -u "${SUDO_USER:-operator}" brew install caddy
-else
-  CADDY_VERSION=$(caddy version)
-  echo "✓ Caddy already installed (${CADDY_VERSION})"
+  if [[ ! -x "${CADDY_BIN}" ]]; then
+    echo "❌ Caddy installation failed"
+    exit 1
+  fi
 fi
+CADDY_VERSION=$("${CADDY_BIN}" version)
+echo "✓ Caddy installed (${CADDY_VERSION})"
 
 # Validate configuration — use a dummy token that looks real enough to pass the
 # cloudflare module's format check (it rejects obviously fake values like "placeholder")
 DUMMY_TOKEN="dummy0token0for0validation0only000000000"
 echo "Validating configuration..."
-if HOSTNAME="${HOSTNAME}" CF_API_TOKEN="${DUMMY_TOKEN}" caddy validate --config "${DEPLOY_CONFIG_DIR}/Caddyfile" 2>&1; then
+if HOSTNAME="${HOSTNAME}" CF_API_TOKEN="${DUMMY_TOKEN}" "${CADDY_BIN}" validate --config "${DEPLOY_CONFIG_DIR}/Caddyfile" 2>&1; then
   echo "✓ Configuration valid"
 else
   echo "❌ Configuration validation failed"
