@@ -16,7 +16,25 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEMPLATE_DIR="${SCRIPT_DIR}/templates"
 HOSTNAME=${HOSTNAME:-$(hostname -s)}
+HOSTNAME_LOWER="$(echo "${HOSTNAME}" | tr '[:upper:]' '[:lower:]')"
 OPERATOR_USERNAME="${OPERATOR_USERNAME:-operator}"
+EXTERNAL_HOSTNAME="${EXTERNAL_HOSTNAME:-}"
+SERVER_LAN_IP="${SERVER_LAN_IP:-}"
+BASICAUTH_USERNAME="${BASICAUTH_USERNAME:-}"
+BASICAUTH_HASH="${BASICAUTH_HASH:-}"
+QUICKCONNECT_ROMANO="${QUICKCONNECT_ROMANO:-}"
+QUICKCONNECT_BERKSWELL="${QUICKCONNECT_BERKSWELL:-}"
+NAS_SHARE_NAME="${NAS_SHARE_NAME:-Media}"
+
+# Validate required variables for Caddy external access
+if [[ -n "${EXTERNAL_HOSTNAME}" ]]; then
+  for var in BASICAUTH_USERNAME BASICAUTH_HASH SERVER_LAN_IP; do
+    if [[ -z "${!var}" ]]; then
+      echo "⚠ ${var} is empty — Caddy external access will not work correctly"
+    fi
+  done
+fi
+
 DEPLOY_CONFIG_DIR="/Users/${OPERATOR_USERNAME}/.config/caddy"
 DEPLOY_WEB_ROOT="/usr/local/var/www"
 DEPLOY_LOG_DIR="/usr/local/var/log/caddy"
@@ -24,8 +42,24 @@ DEPLOY_STATE_DIR="/Users/${OPERATOR_USERNAME}/.local/state/caddy"
 DEPLOY_WRAPPER="/usr/local/bin/caddy-wrapper.sh"
 DEPLOY_PLIST="/Library/LaunchDaemons/com.caddyserver.caddy.plist"
 DEPLOY_MEDIA_SERVER="/usr/local/bin/media-server.py"
-HOSTNAME_LOWER="$(echo "${HOSTNAME}" | tr '[:upper:]' '[:lower:]')"
 DEPLOY_MEDIA_PLIST="/Library/LaunchDaemons/com.${HOSTNAME_LOWER}.media-server.plist"
+
+# Template substitution helper — replaces __PLACEHOLDER__ tokens in a file.
+# Uses | as sed delimiter (safe: bcrypt hashes don't contain |).
+substitute_template() {
+  local src="$1" dst="$2"
+  sed -e "s|__HOSTNAME__|${HOSTNAME}|g" \
+    -e "s|__HOSTNAME_LOWER__|${HOSTNAME_LOWER}|g" \
+    -e "s|__OPERATOR_USERNAME__|${OPERATOR_USERNAME}|g" \
+    -e "s|__EXTERNAL_HOSTNAME__|${EXTERNAL_HOSTNAME}|g" \
+    -e "s|__SERVER_LAN_IP__|${SERVER_LAN_IP}|g" \
+    -e "s|__BASICAUTH_USERNAME__|${BASICAUTH_USERNAME}|g" \
+    -e "s|__BASICAUTH_HASH__|${BASICAUTH_HASH}|g" \
+    -e "s|__QUICKCONNECT_ROMANO__|${QUICKCONNECT_ROMANO}|g" \
+    -e "s|__QUICKCONNECT_BERKSWELL__|${QUICKCONNECT_BERKSWELL}|g" \
+    -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
+    "${src}" >"${dst}"
+}
 
 echo "🧀 Setting up Caddy home server for ${HOSTNAME}.local"
 echo "=================================================="
@@ -64,7 +98,7 @@ fi
 # Deploy Caddyfile
 echo "Deploying Caddyfile..."
 if [[ -f "${TEMPLATE_DIR}/Caddyfile" ]]; then
-  cp "${TEMPLATE_DIR}/Caddyfile" "${DEPLOY_CONFIG_DIR}/Caddyfile"
+  substitute_template "${TEMPLATE_DIR}/Caddyfile" "${DEPLOY_CONFIG_DIR}/Caddyfile"
   chown "${OPERATOR_USERNAME}:staff" "${DEPLOY_CONFIG_DIR}/Caddyfile"
   echo "✓ Copied Caddyfile to ${DEPLOY_CONFIG_DIR}/"
 else
@@ -75,7 +109,7 @@ fi
 # Deploy caddy-wrapper.sh
 echo "Deploying caddy-wrapper.sh..."
 if [[ -f "${TEMPLATE_DIR}/caddy-wrapper.sh" ]]; then
-  cp "${TEMPLATE_DIR}/caddy-wrapper.sh" "${DEPLOY_WRAPPER}"
+  substitute_template "${TEMPLATE_DIR}/caddy-wrapper.sh" "${DEPLOY_WRAPPER}"
   chmod +x "${DEPLOY_WRAPPER}"
   echo "✓ Copied caddy-wrapper.sh to ${DEPLOY_WRAPPER}"
 else
@@ -87,7 +121,7 @@ fi
 echo "Installing LaunchDaemon plist..."
 PLIST_SOURCE="${TEMPLATE_DIR}/com.caddyserver.caddy.plist"
 if [[ -f "${PLIST_SOURCE}" ]]; then
-  cp "${PLIST_SOURCE}" "${DEPLOY_PLIST}"
+  substitute_template "${PLIST_SOURCE}" "${DEPLOY_PLIST}"
   chown root:wheel "${DEPLOY_PLIST}"
   chmod 644 "${DEPLOY_PLIST}"
   echo "✓ Installed plist to ${DEPLOY_PLIST}"
@@ -98,7 +132,7 @@ fi
 # Deploy media-server.py
 echo "Deploying media-server.py..."
 if [[ -f "${TEMPLATE_DIR}/media-server.py" ]]; then
-  cp "${TEMPLATE_DIR}/media-server.py" "${DEPLOY_MEDIA_SERVER}"
+  substitute_template "${TEMPLATE_DIR}/media-server.py" "${DEPLOY_MEDIA_SERVER}"
   chmod +x "${DEPLOY_MEDIA_SERVER}"
   echo "✓ Copied media-server.py to ${DEPLOY_MEDIA_SERVER}"
 else
@@ -110,7 +144,7 @@ fi
 echo "Installing media-server LaunchDaemon plist..."
 MEDIA_PLIST_SOURCE="${TEMPLATE_DIR}/com.media-server.plist"
 if [[ -f "${MEDIA_PLIST_SOURCE}" ]]; then
-  cp "${MEDIA_PLIST_SOURCE}" "${DEPLOY_MEDIA_PLIST}"
+  substitute_template "${MEDIA_PLIST_SOURCE}" "${DEPLOY_MEDIA_PLIST}"
   chown root:wheel "${DEPLOY_MEDIA_PLIST}"
   chmod 644 "${DEPLOY_MEDIA_PLIST}"
   echo "✓ Installed plist to ${DEPLOY_MEDIA_PLIST}"
