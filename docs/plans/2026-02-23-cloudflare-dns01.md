@@ -32,7 +32,7 @@ Cloudflare DNS API, macOS System keychain (`security` CLI), bash shell scripts.
 | Caddy logs (TILSIT) | `~operator/.local/state/caddy/caddy-error.log` |
 | plex-vpn-bypass template | `mac-server-setup/app-setup/templates/plex-vpn-bypass.sh` |
 
-**Repos involved:**
+### Repos involved
 
 - Primary: `/Users/andrewrich/Developer/tilsit/tilsit-caddy-v1/`
 - Secondary: `/Users/andrewrich/Developer/mac-server-setup/`
@@ -47,7 +47,7 @@ deployed to TILSIT in one go.
 
 ⚙️ **TILSIT — manual step** (requires sudo password)
 
-**Step 1: SSH to TILSIT and add the token to System keychain**
+### Step 1: SSH to TILSIT and add the token to System keychain
 
 Retrieve the token from 1Password and store it in the System keychain so root-level
 daemons can read it without it ever appearing in a plist or script:
@@ -64,7 +64,7 @@ sudo security add-generic-password \
 unset CF_TOKEN
 ```
 
-**Step 2: Verify the token is readable by root**
+### Step 2: Verify the token is readable by root
 
 ```bash
 sudo security find-generic-password \
@@ -86,7 +86,7 @@ The stock Homebrew `caddy` does not include third-party DNS modules. xcaddy buil
 custom binary with the plugin compiled in. Homebrew caddy is then pinned so auto-upgrade
 (Stage 5 `brew upgrade`) doesn't silently overwrite the custom build.
 
-**Step 1: Install xcaddy**
+### Step 1: Install xcaddy
 
 ```bash
 ssh operator@tilsit.local
@@ -95,7 +95,7 @@ ssh operator@tilsit.local
 
 Expected: xcaddy installed at `/opt/homebrew/bin/xcaddy`.
 
-**Step 2: Build custom Caddy**
+### Step 2: Build custom Caddy
 
 ```bash
 cd /tmp
@@ -106,7 +106,7 @@ cd /tmp
 This takes 2–5 minutes (downloads Go, compiles caddy + plugin).
 Expected: `caddy` binary in `/tmp`.
 
-**Step 3: Verify the cloudflare module is present**
+### Step 3: Verify the cloudflare module is present
 
 ```bash
 /tmp/caddy list-modules | grep cloudflare
@@ -118,7 +118,7 @@ Expected output:
 dns.providers.cloudflare
 ```
 
-**Step 4: Back up the Homebrew binary and install the custom build**
+### Step 4: Back up the Homebrew binary and install the custom build
 
 ```bash
 sudo cp /opt/homebrew/bin/caddy /opt/homebrew/bin/caddy.homebrew-backup
@@ -130,7 +130,7 @@ sudo chmod +x /opt/homebrew/bin/caddy
 
 Expected: version string printed, `dns.providers.cloudflare` listed.
 
-**Step 5: Pin Caddy in Homebrew**
+### Step 5: Pin Caddy in Homebrew
 
 ```bash
 /opt/homebrew/bin/brew pin caddy
@@ -145,7 +145,7 @@ upgrade with Homebrew, then repeat this task.
 
 ## Task 3: Write caddy-wrapper.sh (tilsit-caddy-v1 repo)
 
-**Files:**
+### Files
 
 - Create: `caddy-wrapper.sh`
 
@@ -153,7 +153,7 @@ The wrapper reads CF_API_TOKEN from the System keychain and exports it before
 exec-ing Caddy. This keeps the token out of the plist (which is world-readable:
 `-rw-r--r-- 1 root wheel`).
 
-**Step 1: Create the wrapper script**
+### Step 1: Create the wrapper script
 
 ```bash
 # In tilsit-caddy-v1 repo
@@ -182,13 +182,13 @@ exec /opt/homebrew/bin/caddy run \
   --adapter caddyfile
 ```
 
-**Step 2: Make it executable**
+### Step 2: Make it executable
 
 ```bash
 chmod +x caddy-wrapper.sh
 ```
 
-**Step 3: Validate it (dev machine — will fail at keychain lookup, that's expected)**
+### Step 3: Validate it (dev machine — will fail at keychain lookup, that's expected)
 
 ```bash
 shellcheck caddy-wrapper.sh
@@ -196,7 +196,7 @@ shellcheck caddy-wrapper.sh
 
 Expected: no warnings or errors.
 
-**Step 4: Commit**
+### Step 4: Commit
 
 ```bash
 git -C /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1 add caddy-wrapper.sh
@@ -207,14 +207,14 @@ git -C /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1 commit -m "feat(caddy)
 
 ## Task 4: Update Caddyfile for tilsit.vip + DNS-01 TLS
 
-**Files:**
+### Files
 
 - Modify: `Caddyfile`
 
 Two changes: (1) replace `wellington.sytes.net` with `tilsit.vip` everywhere,
 (2) swap the ACME HTTP issuer for Cloudflare DNS-01.
 
-**Step 1: Update the security configuration comment**
+### Step 1: Update the security configuration comment
 
 Replace:
 
@@ -228,7 +228,7 @@ With:
 # External hostname: tilsit.vip
 ```
 
-**Step 2: Update the `@external_auth_required` matcher in `(common_config)`**
+### Step 2: Update the `@external_auth_required` matcher in `(common_config)`
 
 Replace:
 
@@ -252,7 +252,7 @@ With:
  }
 ```
 
-**Step 3: Replace the external site block**
+### Step 3: Replace the external site block
 
 Replace:
 
@@ -280,7 +280,7 @@ tilsit.vip {
 }
 ```
 
-**Step 4: Validate the Caddyfile**
+### Step 4: Validate the Caddyfile
 
 ```bash
 cd /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1
@@ -295,7 +295,7 @@ PATH on the dev machine, OR run the validate step on TILSIT after deploying.
 If the dev machine has stock Caddy, skip this step and validate on TILSIT in
 Task 6 instead.
 
-**Step 5: Commit**
+### Step 5: Commit
 
 ```bash
 git -C /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1 add Caddyfile
@@ -306,7 +306,7 @@ git -C /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1 commit -m "feat(caddy)
 
 ## Task 5: Update LaunchDaemon plist
 
-**Files:**
+### Files
 
 - Modify: `LaunchDaemons/com.caddyserver.caddy.plist`
 
@@ -314,7 +314,7 @@ The plist currently calls caddy directly. Update it to call `caddy-wrapper.sh`
 instead. Also update the path values to match TILSIT's actual layout (the repo
 plist still has dev-machine paths from `boursin`).
 
-**Step 1: Update `ProgramArguments` and `WorkingDirectory`**
+### Step 1: Update `ProgramArguments` and `WorkingDirectory`
 
 Replace the entire plist content with:
 
@@ -383,7 +383,7 @@ Replace the entire plist content with:
 </plist>
 ```
 
-**Step 2: Commit**
+### Step 2: Commit
 
 ```bash
 git -C /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1 add LaunchDaemons/com.caddyserver.caddy.plist
@@ -396,7 +396,7 @@ git -C /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1 commit -m "feat(caddy)
 
 ⚙️ **TILSIT — manual step** (requires sudo password)
 
-**Step 1: Copy caddy-wrapper.sh to /usr/local/bin**
+### Step 1: Copy caddy-wrapper.sh to /usr/local/bin
 
 ```bash
 scp /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1/caddy-wrapper.sh \
@@ -409,7 +409,7 @@ ssh operator@tilsit.local '
 '
 ```
 
-**Step 2: Test the wrapper reads the token correctly**
+### Step 2: Test the wrapper reads the token correctly
 
 ```bash
 ssh operator@tilsit.local 'sudo /usr/local/bin/caddy-wrapper.sh --help 2>&1 | head -3'
@@ -418,7 +418,7 @@ ssh operator@tilsit.local 'sudo /usr/local/bin/caddy-wrapper.sh --help 2>&1 | he
 Expected: Caddy's help text (not a keychain error). The `--help` flag makes Caddy
 exit immediately, so this is a safe smoke test.
 
-**Step 3: Copy the updated Caddyfile to TILSIT**
+### Step 3: Copy the updated Caddyfile to TILSIT
 
 Back up the existing one first:
 
@@ -430,7 +430,7 @@ scp /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1/Caddyfile \
     operator@tilsit.local:/tmp/Caddyfile.new
 ```
 
-**Step 4: Validate the new Caddyfile on TILSIT (with real token + custom caddy)**
+### Step 4: Validate the new Caddyfile on TILSIT (with real token + custom caddy)
 
 ```bash
 ssh operator@tilsit.local '
@@ -446,14 +446,14 @@ ssh operator@tilsit.local '
 
 Expected: `Valid configuration`
 
-**Step 5: Move validated Caddyfile into place**
+### Step 5: Move validated Caddyfile into place
 
 ```bash
 ssh operator@tilsit.local \
   'cp /tmp/Caddyfile.new ~/.config/caddy/Caddyfile'
 ```
 
-**Step 6: Deploy updated LaunchDaemon plist**
+### Step 6: Deploy updated LaunchDaemon plist
 
 ```bash
 scp /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1/LaunchDaemons/com.caddyserver.caddy.plist \
@@ -473,7 +473,7 @@ ssh operator@tilsit.local '
 
 ⚙️ **TILSIT — manual step**
 
-**Step 1: Remove stale ACME certificates for wellington.sytes.net**
+### Step 1: Remove stale ACME certificates for wellington.sytes.net
 
 ```bash
 ssh operator@tilsit.local '
@@ -485,7 +485,7 @@ ssh operator@tilsit.local '
 
 Expected: only `local/` directory remains (internal CA certs for tilsit.local etc).
 
-**Step 2: Reload the LaunchDaemon**
+### Step 2: Reload the LaunchDaemon
 
 ```bash
 ssh operator@tilsit.local '
@@ -494,7 +494,7 @@ ssh operator@tilsit.local '
 '
 ```
 
-**Step 3: Watch the error log for cert issuance**
+### Step 3: Watch the error log for cert issuance
 
 ```bash
 ssh operator@tilsit.local \
@@ -504,7 +504,7 @@ ssh operator@tilsit.local \
 
 Expected within ~30 seconds:
 
-```
+```text
 "msg":"obtaining certificate","identifier":"tilsit.vip"
 "msg":"certificate obtained successfully","identifier":"tilsit.vip"
 ```
@@ -514,7 +514,7 @@ If you see `dns.providers.cloudflare` error or `forbidden`, check:
 - Token has `Zone:DNS:Edit` permission for the `tilsit.vip` zone specifically
 - Nameservers have fully propagated (test: `dig NS tilsit.vip` should return Cloudflare NS)
 
-**Step 4: Verify the cert from outside**
+### Step 4: Verify the cert from outside
 
 From the dev machine:
 
@@ -529,7 +529,7 @@ the cert is valid and trusted).
 
 ## Task 8: Add DDNS to plex-vpn-bypass.sh template (mac-server-setup repo)
 
-**Files:**
+### Files
 
 - Modify: `mac-server-setup/app-setup/templates/plex-vpn-bypass.sh`
 
@@ -537,7 +537,7 @@ When the public IP changes, update the Cloudflare A record via API.
 The CF_API_TOKEN is read from System keychain at runtime (daemon runs as root).
 The Zone ID and external hostname are deploy-time template variables.
 
-**Step 1: Add new template variables to the configuration section**
+### Step 1: Add new template variables to the configuration section
 
 After the existing `OPERATOR_USERNAME="__OPERATOR_USERNAME__"` line, add:
 
@@ -546,7 +546,7 @@ EXTERNAL_HOSTNAME="__EXTERNAL_HOSTNAME__"
 CLOUDFLARE_ZONE_ID="__CLOUDFLARE_ZONE_ID__"
 ```
 
-**Step 2: Add the new placeholder entries to the header comment**
+### Step 2: Add the new placeholder entries to the header comment
 
 After the `__OPERATOR_USERNAME__` comment line, add:
 
@@ -555,7 +555,7 @@ After the `__OPERATOR_USERNAME__` comment line, add:
 #   - __CLOUDFLARE_ZONE_ID__: Cloudflare zone ID for the external hostname
 ```
 
-**Step 3: Add `update_cloudflare_dns()` function**
+### Step 3: Add `update_cloudflare_dns()` function
 
 Add this function in the "Plex Integration" section, after `update_plex_custom_connections()`:
 
@@ -607,7 +607,7 @@ And add to the header comment:
 #   - __CLOUDFLARE_RECORD_ID__: Cloudflare DNS record ID for the A record
 ```
 
-**Step 4: Update `update_plex_custom_connections()` to use hostname**
+### Step 4: Update `update_plex_custom_connections()` to use hostname
 
 Plex `customConnections` should use the stable hostname, not the raw IP. Update
 the function so the URL uses `EXTERNAL_HOSTNAME` instead of the IP argument:
@@ -633,7 +633,7 @@ argument (used for logging), but no longer needs to be called on every IP change
 — it just needs to be called once to set the hostname. The main loop logic can
 stay the same.
 
-**Step 5: Call `update_cloudflare_dns()` alongside Plex update in the main loop**
+### Step 5: Call `update_cloudflare_dns()` alongside Plex update in the main loop
 
 In the main polling loop, find:
 
@@ -671,7 +671,7 @@ daemon start even if no IP change is detected:
     || log "WARNING: Initial Plex update failed — will retry on next change"
 ```
 
-**Step 6: Update `transmission-setup.sh` to substitute new template variables**
+### Step 6: Update `transmission-setup.sh` to substitute new template variables
 
 In `app-setup/transmission-setup.sh`, after the existing `__OPERATOR_USERNAME__`
 sed line, add:
@@ -682,7 +682,7 @@ sed line, add:
   sudo sed -i '' "s|__CLOUDFLARE_RECORD_ID__|${CLOUDFLARE_RECORD_ID}|g" "${BYPASS_DEST}"
 ```
 
-**Step 7: Add new variables to `config/config.conf.template`**
+### Step 7: Add new variables to `config/config.conf.template`
 
 ```bash
 # External access
@@ -691,7 +691,7 @@ CLOUDFLARE_ZONE_ID=""              # Cloudflare zone ID for external hostname
 CLOUDFLARE_RECORD_ID=""            # Cloudflare A record ID for external hostname
 ```
 
-**Step 8: Run shellcheck on both modified files**
+### Step 8: Run shellcheck on both modified files
 
 ```bash
 shellcheck /Users/andrewrich/Developer/mac-server-setup/app-setup/templates/plex-vpn-bypass.sh
@@ -700,7 +700,7 @@ shellcheck /Users/andrewrich/Developer/mac-server-setup/app-setup/transmission-s
 
 Expected: zero warnings and errors.
 
-**Step 9: Commit**
+### Step 9: Commit
 
 ```bash
 cd /Users/andrewrich/Developer/mac-server-setup
@@ -719,7 +719,7 @@ git commit -m "feat(vpn): add Cloudflare DDNS to plex-vpn-bypass + use hostname 
 The live script at `/usr/local/bin/plex-vpn-bypass.sh` was deployed before this
 migration. Patch it by applying the template changes with the real values substituted.
 
-**Step 1: Prepare the patched script on the dev machine**
+### Step 1: Prepare the patched script on the dev machine
 
 ```bash
 cp /Users/andrewrich/Developer/mac-server-setup/app-setup/templates/plex-vpn-bypass.sh \
@@ -736,7 +736,7 @@ sed -i '' 's|__CLOUDFLARE_RECORD_ID__|591eb1b23bfb66508417a5d27f7f77d1|g'   /tmp
 grep '__[A-Z]' /tmp/plex-vpn-bypass-new.sh && echo "ERROR: unsubstituted placeholders" || echo "All substituted"
 ```
 
-**Step 2: Upload and deploy to TILSIT**
+### Step 2: Upload and deploy to TILSIT
 
 ```bash
 scp /tmp/plex-vpn-bypass-new.sh operator@tilsit.local:/tmp/plex-vpn-bypass-new.sh
@@ -748,14 +748,14 @@ ssh operator@tilsit.local '
 '
 ```
 
-**Step 3: Restart the daemon**
+### Step 3: Restart the daemon
 
 ```bash
 ssh operator@tilsit.local \
   'sudo launchctl kickstart -k system/com.tilsit.plex-vpn-bypass'
 ```
 
-**Step 4: Verify DDNS update in log**
+### Step 4: Verify DDNS update in log
 
 ```bash
 ssh operator@tilsit.local \
@@ -764,13 +764,13 @@ ssh operator@tilsit.local \
 
 Expected to see:
 
-```
+```text
 Cloudflare DNS updated: tilsit.vip -> 67.5.106.16
 Updating Plex customConnections to https://tilsit.vip:32400
 Plex customConnections updated successfully
 ```
 
-**Step 5: Verify the A record from outside**
+### Step 5: Verify the A record from outside
 
 ```bash
 dig +short tilsit.vip @1.1.1.1
@@ -784,13 +784,13 @@ Expected: `67.5.106.16`
 
 ⚙️ **TILSIT — manual step** (PIA GUI)
 
-**Step 1: Remove No-IP DUC from PIA split-tunnel bypass list**
+### Step 1: Remove No-IP DUC from PIA split-tunnel bypass list
 
 1. Open PIA → Settings → Split Tunnel
 2. Remove `/Applications/No-IP DUC.app` from the Bypass VPN list
 3. Save — PIA may reconnect briefly
 
-**Step 2: Quit and uninstall No-IP DUC**
+### Step 2: Quit and uninstall No-IP DUC
 
 ```bash
 ssh operator@tilsit.local 'osascript -e "quit app \"No-IP DUC\""'
@@ -798,7 +798,7 @@ ssh operator@tilsit.local 'osascript -e "quit app \"No-IP DUC\""'
 
 Then on TILSIT: drag `/Applications/No-IP DUC.app` to Trash, empty Trash.
 
-**Step 3: Verify PIA split-tunnel reference is clean**
+### Step 3: Verify PIA split-tunnel reference is clean
 
 ```bash
 ssh operator@tilsit.local \
@@ -819,24 +819,24 @@ the Stage 1.5 watchdog from reverting the removal.
 
 ## Task 11: Update CLAUDE.md and plan.md
 
-**Files:**
+### Files
 
 - Modify: `mac-server-setup/plan.md`
 - Modify: `tilsit-caddy-v1/CLAUDE.md`
 
-**Step 1: Update plan.md Known Issues and Next Priorities**
+### Step 1: Update plan.md Known Issues and Next Priorities
 
 Remove any remaining `wellington.sytes.net` references. Add note under Running Services
 that Caddy now uses DNS-01 via `tilsit.vip`.
 
-**Step 2: Update tilsit-caddy-v1/CLAUDE.md**
+### Step 2: Update tilsit-caddy-v1/CLAUDE.md
 
 - Update Architecture section: `wellington.sytes.net` → `tilsit.vip`
 - Update TLS Strategy: note DNS-01 via Cloudflare, CF_API_TOKEN injected by wrapper
 - Add note: caddy binary is a custom xcaddy build; run `brew info caddy` to check if
   pinned; rebuild procedure in `MIGRATE-TO-DNS01.md`
 
-**Step 3: Commit both repos**
+### Step 3: Commit both repos
 
 ```bash
 git -C /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1 add CLAUDE.md
