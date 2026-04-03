@@ -1,0 +1,136 @@
+# Caddyfile with secure remote access and authentication
+# Deploy: sudo ./caddy-setup.sh && sudo launchctl kickstart -k system/com.caddyserver.caddy
+
+# ============================================================================
+# SECURITY CONFIGURATION - Edit these values as needed
+# ============================================================================
+# Local network range: 10.0.15.0/24
+# External hostname: __EXTERNAL_HOSTNAME__
+# Basic auth username: __BASICAUTH_USERNAME__
+# Basic auth password: <1P>
+# ============================================================================
+{
+	# Configure local CA with longer certificate validity
+	pki {
+		ca local {
+			name "Home Server CA"
+			# Extend certificate validity to 90 days
+			intermediate_lifetime 90d
+		}
+	}
+}
+
+# Catch-all for unrecognized hostnames - handles direct IP access attempts
+:443 {
+	respond "Access Denied: Invalid hostname or direct IP access not permitted" 403
+}
+
+# Common configuration snippet
+(common_config) {
+	# Define network access matchers
+	@local_network {
+		remote_ip 10.0.15.0/24
+		remote_ip 127.0.0.1/8
+		remote_ip ::1/128
+		remote_ip fe80::/10
+		remote_ip fd00::/8
+	}
+
+	@external_network {
+		not remote_ip 10.0.15.0/24
+		not remote_ip 127.0.0.1/8
+		not remote_ip ::1/128
+		not remote_ip fe80::/10
+		not remote_ip fd00::/8
+	}
+
+	# Authentication for external access only
+	@external_auth_required {
+		not remote_ip 10.0.15.0/24
+		not remote_ip 127.0.0.1/8
+		not remote_ip ::1/128
+		not remote_ip fe80::/10
+		not remote_ip fd00::/8
+		host __EXTERNAL_HOSTNAME__
+	}
+
+	# Apply basic authentication for external access
+	basic_auth @external_auth_required {
+		__BASICAUTH_USERNAME__ __BASICAUTH_HASH__
+	}
+
+	# File browser for NAS media volume (local network only)
+	# Reverse-proxies to a Python file server running as operator, because
+	# the Caddy LaunchDaemon (root) gets EPERM from the NFS mount.
+	handle_path /media/* {
+		@not_local {
+			not remote_ip 10.0.15.0/24
+			not remote_ip 127.0.0.1/8
+			not remote_ip ::1/128
+			not remote_ip fe80::/10
+			not remote_ip fd00::/8
+		}
+		respond @not_local "Access Denied" 403
+		reverse_proxy localhost:9880
+	}
+
+	# Root landing page
+	root * /usr/local/var/www
+	file_server
+
+	# Transmission proxy - spoof localhost origin
+	reverse_proxy /transmission/* localhost:9091 {
+		# Tell Transmission we're coming from localhost
+		header_up Host localhost
+		header_up X-Real-IP 127.0.0.1
+		header_up X-Forwarded-For 127.0.0.1
+	}
+
+	# Redirect /transmission (no trailing slash) to /transmission/
+	@transmission_noslash path /transmission
+	redir @transmission_noslash /transmission/ 301
+
+	# NAS access via Synology QuickConnect (external tunnel)
+	redir /romano __QUICKCONNECT_ROMANO__ 302
+	redir /romano/ __QUICKCONNECT_ROMANO__ 302
+	redir /berkswell __QUICKCONNECT_BERKSWELL__ 302
+	redir /berkswell/ __QUICKCONNECT_BERKSWELL__ 302
+
+	# Standard access logging
+	log {
+		output file /usr/local/var/log/caddy/access.log {
+			roll_size 100MB
+			roll_keep 10
+		}
+		format json {
+			time_format "2006-01-02T15:04:05.000Z07:00"
+			message_key "msg"
+			level_key "level"
+			time_key "@timestamp"
+		}
+	}
+}
+
+# Internal access with internal certificates
+{$HOSTNAME}.local localhost __SERVER_LAN_IP__ {
+	tls internal
+	import common_config
+}
+
+# Redirect HTTP -> HTTPS
+http://__EXTERNAL_HOSTNAME__ {
+	redir https://{host}{uri} permanent
+}
+
+# External access with automatic HTTPS (Let's Encrypt via Cloudflare DNS-01)
+__EXTERNAL_HOSTNAME__ {
+	tls {
+		issuer acme {
+			dir https://acme-v02.api.letsencrypt.org/directory
+			dns cloudflare {$CF_API_TOKEN}
+			propagation_timeout -1
+			propagation_delay 30s
+		}
+	}
+	import common_config
+}

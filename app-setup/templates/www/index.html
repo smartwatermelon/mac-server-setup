@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home Server</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 3rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            width: 90%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+
+        .server-name {
+            font-size: clamp(.5rem, 5vw, 2.5rem);
+            font-weight: 700;
+            color: #4c51bf;
+            margin-bottom: 0.5rem;
+            word-break: break-all;
+            hyphens: auto;
+            line-height: 1.2;
+        }
+
+        .server-desc {
+            color: #6b7280;
+            font-size: 1.1rem;
+        }
+
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .service-section h3 {
+            color: #374151;
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 0.5rem;
+        }
+
+        .service-links {
+            list-style: none;
+        }
+
+        .service-links li {
+            margin-bottom: 0.75rem;
+        }
+
+        .service-links a {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #475569;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+
+        .service-links a:hover {
+            background: #4c51bf;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(76, 81, 191, 0.3);
+        }
+
+        .service-links a::before {
+            content: "→";
+            margin-right: 0.5rem;
+            font-weight: bold;
+        }
+
+        .cert-link {
+            background: #fef3c7 !important;
+            border-color: #f59e0b !important;
+            color: #92400e !important;
+        }
+
+        .cert-link:hover {
+            background: #f59e0b !important;
+            color: white !important;
+        }
+
+        .cert-link::before {
+            content: "🔒";
+            margin-right: 0.5rem;
+        }
+
+        .cert-instructions {
+            background: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: #0c4a6e;
+        }
+
+        .cert-instructions summary {
+            cursor: pointer;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #0369a1;
+        }
+
+        .cert-instructions ul {
+            margin-left: 1rem;
+            margin-top: 0.5rem;
+        }
+
+        .cert-instructions li {
+            margin-bottom: 0.5rem;
+        }
+
+        .footer {
+            text-align: center;
+            padding-top: 2rem;
+            border-top: 1px solid #e5e7eb;
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧀</h1>
+            <h1 class="server-name" id="hostname">Loading...</h1>
+            <p class="server-desc">Home Server Dashboard</p>
+        </div>
+
+        <div class="services-grid">
+            <div class="service-section">
+                <h3>Proxied Services</h3>
+                <ul class="service-links">
+                    <li><a href="/transmission/" target="transmission">Transmission</a></li>
+                    <li><a href="/media/" target="media">Media Files</a></li>
+                </ul>
+            </div>
+
+            <div class="service-section">
+                <h3>NAS</h3>
+                <ul class="service-links">
+                    <li><a href="__QUICKCONNECT_ROMANO__" target="romano">Romano</a></li>
+                    <li><a href="__QUICKCONNECT_BERKSWELL__" target="berkswell">Berkswell</a></li>
+                </ul>
+            </div>
+
+            <div class="service-section">
+                <h3>Local-only Services</h3>
+                <ul class="service-links">
+                    <li><a href="https://192.168.0.1/login.html" target="quantum">Quantum Fiber NID Configuration</a></li>
+                </ul>
+            </div>
+
+            <div class="service-section">
+                <h3>External Services</h3>
+                <ul class="service-links">
+                    <li><a href="https://dashboard.meraki.com" target="meraki">Meraki Dashboard</a></li>
+                    <li><a href="https://app.plex.tv/desktop/#!/" target="plex">Plex Media Server</a></li>
+                </ul>
+            </div>
+
+            <div class="service-section">
+                <h3>Security</h3>
+                <ul class="service-links">
+                    <li><a href="/caddy-root-ca.crt" download="caddy-root-ca.crt" class="cert-link">Download CA Certificate</a></li>
+                </ul>
+                <details class="cert-instructions">
+                    <summary>Installation Instructions</summary>
+                    <ul>
+                        <li><strong>macOS:</strong> Double-click the downloaded file, add to Keychain, mark as "Always Trust"</li>
+                        <li><strong>Windows:</strong> Right-click → "Install Certificate" → "Local Machine" → "Trusted Root Certification Authorities"</li>
+                        <li><strong>iOS:</strong> Tap the downloaded file, then go to Settings → General → VPN & Device Management to install the profile, then enable full trust in Settings → General → About → Certificate Trust Settings</li>
+                        <li><strong>Android:</strong> Settings → Security → Install certificates</li>
+                    </ul>
+                    <p><em>Restart your browser after installation to eliminate security warnings.</em></p>
+                </details>
+            </div>
+        </div>
+
+        <div class="footer">
+            <span class="status-indicator" aria-hidden="true">&#8203;</span>
+            Server Status: Online | Mac Mini Macmini7,1
+        </div>
+    </div>
+    <script>
+        // Get hostname dynamically from the browser
+        const hostname = window.location.hostname;
+        document.getElementById('hostname').textContent = `${hostname}`;
+
+        // Update page title with actual hostname
+        document.title = `Home Server - ${hostname}`;
+    </script>
+</body>
+</html>

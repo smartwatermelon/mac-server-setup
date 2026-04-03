@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Service identification -->
+    <key>Label</key>
+    <string>com.__HOSTNAME_LOWER__.media-server</string>
+
+    <!-- Run Python file server as operator (who owns the NFS mount) -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/usr/local/bin/media-server.py</string>
+    </array>
+
+    <!-- Run as operator — required because the NFS mount returns EPERM
+         for root processes spawned by launchd (macOS NFS credential issue) -->
+    <key>UserName</key>
+    <string>__OPERATOR_USERNAME__</string>
+    <key>GroupName</key>
+    <string>staff</string>
+
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/mnt/__NAS_SHARE_NAME__</string>
+
+    <!-- Environment -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/__OPERATOR_USERNAME__</string>
+    </dict>
+
+    <!-- Run at system startup -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Always restart — KeepAlive unconditionally relaunches on exit -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Logging -->
+    <key>StandardOutPath</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/state/caddy/media-server.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/state/caddy/media-server.log</string>
+
+    <!-- Throttle restart attempts (seconds) -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!-- Exit timeout -->
+    <key>ExitTimeOut</key>
+    <integer>5</integer>
+</dict>
+</plist>
