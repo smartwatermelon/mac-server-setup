@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       shell-scripts: ${{ steps.changes.outputs.shell-scripts }}
+      tests: ${{ steps.changes.outputs.tests }}
       markdown: ${{ steps.changes.outputs.markdown }}
       yaml: ${{ steps.changes.outputs.yaml }}
       python: ${{ steps.changes.outputs.python }}
@@ -27,6 +28,11 @@ jobs:
               - '**/*.sh'
               - 'scripts/**'
               - '.github/workflows/.shellcheckrc'
+            tests:
+              - '**/*.bats'
+              - 'tests/**'
+              - 'app-setup/templates/transmission-done.sh'
+              - 'app-setup/templates/plex-watchdog.sh'
             markdown:
               - '**/*.md'
             yaml:
@@ -247,6 +253,24 @@ jobs:
           echo "Validating HTML files with tidy..."
           find . -name "*.html" -type f -not -path './.git/*' -print0 | \
             xargs -0 -I {} tidy -q -e {}
+
+  bats:
+    name: BATS Tests
+    runs-on: macos-latest
+    needs: detect-changes
+    if: >-
+      needs.detect-changes.outputs.tests == 'true' ||
+      needs.detect-changes.outputs.shell-scripts == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install BATS
+        run: brew install bats-core
+
+      - name: Run all BATS tests
+        run: |
+          echo "=== Running all BATS tests ==="
+          find tests/ -name '*.bats' -print0 | xargs -0 bats
 
   # Future test placeholders
   configuration-validation:

@@ -1,0 +1,11 @@
+---
+version: 1.0
+paths:
+  default_home: /Users/__OPERATOR_USERNAME__
+plex:
+  server: http://localhost:32400
+  token: __PLEX_TOKEN__
+  media_path: __PLEX_MEDIA_PATH__
+logging:
+  file: .local/state/transmission-processing.log
+  max_size: 10485760
