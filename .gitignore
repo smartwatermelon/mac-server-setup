@@ -64,11 +64,13 @@ ENV/
 
 # Local configuration
 config/config.conf
+config.yml
 local_config.yaml
 user_settings.yaml
 
-# User-modified scripts
-app-setup/templates/transmission-done.sh
+# User-modified scripts (transmission-done.sh was previously gitignored as a
+# deployed copy; now tracked as a template after transmission-filebot merge)
+# app-setup/templates/transmission-done.sh
 
 # Claude Code runtime files
 .claude/
