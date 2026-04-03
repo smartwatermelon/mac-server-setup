@@ -258,7 +258,9 @@ jobs:
     name: BATS Tests
     runs-on: macos-latest
     needs: detect-changes
-    if: needs.detect-changes.outputs.tests == 'true'
+    if: >-
+      needs.detect-changes.outputs.tests == 'true' ||
+      needs.detect-changes.outputs.shell-scripts == 'true'
     steps:
       - uses: actions/checkout@v4
 
