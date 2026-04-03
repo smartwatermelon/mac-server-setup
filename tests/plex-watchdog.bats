@@ -57,11 +57,12 @@ source_watchdog_functions() {
 
 source_ctl_functions() {
   local tmp="${TEST_TMPDIR}/ctl-functions.sh"
-  # Replace placeholders, remove the case dispatch at the bottom so sourcing
-  # only defines functions without executing a command.
+  # Replace placeholders, override CONFIG_DIR for CI, remove the case dispatch
+  # at the bottom so sourcing only defines functions without executing a command.
   sed \
     -e 's/__HOSTNAME__/TESTHOST/g' \
     -e 's/__MONITORING_EMAIL__/test@example.com/g' \
+    -e "s|^CONFIG_DIR=.*|CONFIG_DIR=\"${CONFIG_DIR}\"|" \
     "${CTL_TEMPLATE}" | sed '/^case "\${1:-}"/,$ d' >"${tmp}"
   # shellcheck source=/dev/null
   source "${tmp}"
