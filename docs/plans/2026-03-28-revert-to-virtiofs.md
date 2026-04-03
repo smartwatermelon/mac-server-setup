@@ -113,7 +113,7 @@ done
 
 The setup script generates `podman-machine-start.sh` from an inline template. Find the template in `podman-transmission-setup.sh` (around Section 9a) and make the same changes — revert the volume path and remove the VM NFS mount check blocks.
 
-### Step 4: Commit
+### Step 4: Commit setup script revert
 
 ```bash
 git add app-setup/podman-transmission-setup.sh
@@ -177,7 +177,7 @@ sudo -u operator cp app-setup/templates/transmission-trigger-watcher.sh \
 
 Note: The trigger watcher is a long-running daemon. The deployed copy won't take effect until the daemon restarts (which happens naturally at next login, or manually via `launchctl kickstart`).
 
-### Step 4: Commit
+### Step 4: Commit trigger watcher change
 
 ```bash
 git add app-setup/templates/transmission-trigger-watcher.sh
