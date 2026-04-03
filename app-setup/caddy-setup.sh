@@ -37,7 +37,8 @@ if [[ -z "${SERVER_LAN_IP}" ]]; then
 fi
 for var in BASICAUTH_USERNAME BASICAUTH_HASH; do
   if [[ -z "${!var}" ]]; then
-    echo "⚠ ${var} is empty — external basic auth will not work"
+    echo "❌ ${var} is required (empty value produces invalid Caddyfile)"
+    exit 1
   fi
 done
 
