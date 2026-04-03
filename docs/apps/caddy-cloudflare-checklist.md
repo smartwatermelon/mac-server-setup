@@ -206,7 +206,7 @@ tail -f ~/.local/state/caddy/caddy-error.log | grep -i 'tilsit\|acme\|certif\|cl
 
 Expected within ~60 seconds (Let's Encrypt does its own propagation check from their servers):
 
-```
+```text
 "msg":"obtaining certificate","identifier":"tilsit.vip"
 "msg":"certificate obtained successfully","identifier":"tilsit.vip"
 ```
@@ -270,7 +270,7 @@ tail -20 /var/log/tilsit-plex-vpn-bypass.log
 
 Expected:
 
-```
+```text
 Cloudflare DNS updated: tilsit.vip -> 67.5.106.16
 Updating Plex customConnections to https://tilsit.vip:32400
 Plex customConnections updated successfully

@@ -114,7 +114,7 @@ Expected: `caddy` binary in `/tmp`.
 
 Expected output:
 
-```
+```text
 dns.providers.cloudflare
 ```
 
@@ -145,7 +145,7 @@ upgrade with Homebrew, then repeat this task.
 
 ## Task 3: Write caddy-wrapper.sh (tilsit-caddy-v1 repo)
 
-### Files
+### Files (Task 3)
 
 - Create: `caddy-wrapper.sh`
 
@@ -207,7 +207,7 @@ git -C /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1 commit -m "feat(caddy)
 
 ## Task 4: Update Caddyfile for tilsit.vip + DNS-01 TLS
 
-### Files
+### Files (Task 4)
 
 - Modify: `Caddyfile`
 
@@ -306,7 +306,7 @@ git -C /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1 commit -m "feat(caddy)
 
 ## Task 5: Update LaunchDaemon plist
 
-### Files
+### Files (Task 5)
 
 - Modify: `LaunchDaemons/com.caddyserver.caddy.plist`
 
@@ -529,7 +529,7 @@ the cert is valid and trusted).
 
 ## Task 8: Add DDNS to plex-vpn-bypass.sh template (mac-server-setup repo)
 
-### Files
+### Files (Task 8)
 
 - Modify: `mac-server-setup/app-setup/templates/plex-vpn-bypass.sh`
 
@@ -819,7 +819,7 @@ the Stage 1.5 watchdog from reverting the removal.
 
 ## Task 11: Update CLAUDE.md and plan.md
 
-### Files
+### Files (Task 11)
 
 - Modify: `mac-server-setup/plan.md`
 - Modify: `tilsit-caddy-v1/CLAUDE.md`

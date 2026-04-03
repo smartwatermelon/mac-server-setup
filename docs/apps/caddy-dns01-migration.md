@@ -332,7 +332,7 @@ tail -f /Users/operator/.local/state/caddy/caddy-error.log | grep -i 'wellington
 
 You should see:
 
-```
+```text
 "msg":"obtaining certificate","identifier":"yourdomain.com"
 "msg":"certificate obtained successfully","identifier":"yourdomain.com"
 ```
