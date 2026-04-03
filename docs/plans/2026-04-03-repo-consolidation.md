@@ -127,7 +127,7 @@ Existing jobs that auto-cover new files:
 
 ## Test Directory Structure (Post-Merge)
 
-```
+```text
 tests/
 ├── plex-watchdog.bats                      # Existing
 ├── fixtures/                               # Existing plex-watchdog fixtures
@@ -203,22 +203,22 @@ grep -rn '__[A-Z_]*__' app-setup/templates/
 
 ### Phase 2: transmission-filebot (3 commits)
 
-4. `feat: import transmission-filebot into mac-server-setup`
+1. `feat: import transmission-filebot into mac-server-setup`
    - Copy files per mapping, strip TEST_MODE
    - Reference: "Imported from smartwatermelon/transmission-filebot (archived)"
 
-5. `feat: integrate transmission-filebot into app-setup pipeline`
+2. `feat: integrate transmission-filebot into app-setup pipeline`
    - Fix all test paths and script references
    - Update main CLAUDE.md with transmission-filebot reference
 
-6. `test: verify transmission-filebot integration`
+3. `test: verify transmission-filebot integration`
    - Run and fix shellcheck/shfmt, run full BATS suite
 
 ### Phase 3: CI & cleanup (2 commits)
 
-7. `ci: add BATS job to CI workflow`
+1. `ci: add BATS job to CI workflow`
 
-8. `docs: update README and documentation for merged repos`
+2. `docs: update README and documentation for merged repos`
 
 ## Review Protocol
 
