@@ -1,10 +1,24 @@
+<!-- markdownlint-disable MD013 MD036 MD060 -->
 # Failure Triage Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **For Claude:** REQUIRED SUB-SKILL: Use
+> superpowers:executing-plans to implement this plan
+> task-by-task.
 
-**Goal:** When transmission-done cannot process a torrent, categorize the failure, move files to a triage directory, and remove the torrent from Transmission — keeping pending-move clean and giving the operator clear hints for manual resolution.
+**Goal:** When transmission-done cannot process a torrent,
+categorize the failure, move files to a triage directory,
+and remove the torrent from Transmission — keeping
+pending-move clean and giving the operator clear hints for
+manual resolution.
 
-**Architecture:** Add a `triage_failed_torrent()` function to `transmission-done.sh` that classifies failures from FileBot output, moves the torrent to a category-specific subdirectory under `Media/Torrents/triage/`, and returns 0 so the trigger watcher treats it as "handled" (cleaning up the trigger and removing from Transmission). The classification uses patterns already identified in `log_filebot_error()`.
+**Architecture:** Add a `triage_failed_torrent()` function
+to `transmission-done.sh` that classifies failures from
+FileBot output, moves the torrent to a category-specific
+subdirectory under `Media/Torrents/triage/`, and returns 0
+so the trigger watcher treats it as "handled" (cleaning up
+the trigger and removing from Transmission). The
+classification uses patterns already identified in
+`log_filebot_error()`.
 
 **Tech Stack:** Pure Bash 5.x, BATS tests, existing FileBot output parsing
 
@@ -14,20 +28,36 @@
 
 Based on observed FileBot output patterns:
 
-| Category | Directory | Detection Pattern | Operator Action |
-|----------|-----------|------------------|----------------|
-| Already in Plex | `triage/already-in-plex/` | `[AUTO] Skipped.*already exists` or `[IMPORT] Destination file already exists` | Delete duplicate or replace with higher quality |
-| No match | `triage/no-match/` | `Processed 0 files` without "already exists"; or `unable to identify`/`no match`/`no results` from log_filebot_error patterns | Rename and re-run, or process manually |
-| Other failure | `triage/failed/` | Anything else (network errors, license, permissions, disk) | Check logs, retry later |
+| Category | Directory |
+|---|---|
+| Already in Plex | `triage/already-in-plex/` |
+| No match | `triage/no-match/` |
+| Other failure | `triage/failed/` |
+
+Detection patterns:
+
+- **already-in-plex**: `[AUTO] Skipped.*already exists`
+  or `[IMPORT] Destination file already exists`
+- **no-match**: `Processed 0 files` without "already
+  exists"; or `unable to identify`/`no match`/`no results`
+- **failed**: Anything else (network, license, perms)
 
 ## Key Design Decisions
 
-1. **Triage happens in `process_media()`** after `process_media_with_fallback()` fails — this is where `LAST_FILEBOT_OUTPUT` is available for classification.
-2. **Triage returns 0** (success) so the trigger watcher cleans up the trigger file and removes the torrent from Transmission. The files are preserved in the triage directory for manual review.
-3. **`TRIAGE_BASE`** is derived from `TR_TORRENT_DIR` (the download parent directory, e.g., `.../Torrents/pending-move`), replacing `pending-move` with `triage/<category>`. This keeps triage dirs as siblings of pending-move.
-4. **Move uses `mv`** (NFS-safe, no opendir needed — just rename within the same filesystem).
-5. **Manual mode skips triage** — when a human is running the script interactively, they can see the error and decide what to do. Triage is only for automated mode where no one is watching.
-6. **Preview failures also get triaged** — when `preview_filebot_changes()` fails (FileBot can't even identify the media in dry-run), that's effectively "no match".
+1. **Triage happens in `process_media()`** after
+   `process_media_with_fallback()` fails — this is where
+   `LAST_FILEBOT_OUTPUT` is available for classification.
+2. **Triage returns 0** (success) so the trigger watcher
+   cleans up the trigger file and removes the torrent from
+   Transmission. Files preserved in triage for review.
+3. **`TRIAGE_BASE`** derived from `TR_TORRENT_DIR` (the
+   download parent, e.g., `.../Torrents/pending-move`),
+   replacing `pending-move` with `triage/<category>`.
+4. **Move uses `mv`** (NFS-safe, no opendir needed).
+5. **Manual mode skips triage** — interactive users can
+   see the error and decide. Triage is automated-only.
+6. **Preview failures also get triaged** — when
+   `preview_filebot_changes()` fails, that's "no match".
 
 ---
 
