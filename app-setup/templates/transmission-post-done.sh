@@ -22,6 +22,7 @@
 #   TR_TORRENT_NAME=<name>
 #   TR_TORRENT_DIR=<dir>
 #   TR_TORRENT_HASH=<hash>
+#   TR_TORRENT_FILES=<pipe-separated list of file paths relative to TR_TORRENT_DIR>
 #
 # Usage: Configured via TRANSMISSION_SCRIPT_TORRENT_DONE_FILENAME in compose.yml.
 #   Not intended for manual execution.
@@ -42,10 +43,31 @@ mkdir -p "${DONE_DIR}"
 # Write trigger file named by hash to avoid collisions between concurrent completions
 TRIGGER_FILE="${DONE_DIR}/${TR_TORRENT_HASH}"
 
-printf 'TR_TORRENT_NAME=%s\nTR_TORRENT_DIR=%s\nTR_TORRENT_HASH=%s\n' \
+# List all files in the torrent directory (relative paths with torrent name prefix).
+# The macOS host cannot opendir() NFS-mounted directories from LaunchAgent processes,
+# so including the file list here allows the host to access files by direct path.
+TORRENT_PATH="${TR_TORRENT_DIR}/${TR_TORRENT_NAME}"
+TORRENT_FILES=""
+if [[ -d "${TORRENT_PATH}" ]]; then
+  # Directory torrent: list all files, strip the absolute prefix to get paths
+  # relative to TR_TORRENT_DIR, then join with pipes for single-line storage
+  # in the KEY=VALUE trigger format. Pipe delimiter is chosen because it's
+  # illegal in most filesystems (NTFS, HFS+) though technically allowed on ext4.
+  # find(1) works here — this runs inside the container, not on macOS host.
+  TORRENT_FILES=$(find "${TORRENT_PATH}" -type f 2>/dev/null \
+    | while IFS= read -r f; do echo "${f#"${TR_TORRENT_DIR}"/}"; done \
+    | tr '\n' '|' \
+    | sed 's/|$//')
+elif [[ -f "${TORRENT_PATH}" ]]; then
+  # Single-file torrent
+  TORRENT_FILES="${TR_TORRENT_NAME}"
+fi
+
+printf 'TR_TORRENT_NAME=%s\nTR_TORRENT_DIR=%s\nTR_TORRENT_HASH=%s\nTR_TORRENT_FILES=%s\n' \
   "${TR_TORRENT_NAME}" \
   "${TR_TORRENT_DIR}" \
   "${TR_TORRENT_HASH}" \
+  "${TORRENT_FILES}" \
   >"${TRIGGER_FILE}"
 
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')

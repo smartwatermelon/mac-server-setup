@@ -28,6 +28,37 @@ IFS=$'\n\t'
 # Signal handling
 trap 'log "Script interrupted"; exit 1' INT TERM
 
+# NFS-safe file discovery using shell globbing.
+# On NFS mounts accessed from macOS LaunchAgent processes, find(1) fails with
+# "Operation not permitted" because it uses open(O_DIRECTORY) which macOS blocks.
+# Shell globbing uses opendir()/readdir() which is permitted.
+find_media_files() {
+  local dir="$1"
+  local media_extensions='mkv|mp4|avi|m4v'
+
+  # If TR_TORRENT_FILES is set (provided by trigger watcher via Transmission RPC),
+  # use it directly instead of listing the directory. This works around a macOS
+  # restriction where background LaunchAgent processes get EPERM from opendir()
+  # on NFS-mounted directories, even though stat() on individual files works.
+  if [[ -n "${TR_TORRENT_FILES:-}" ]]; then
+    echo "${TR_TORRENT_FILES}" | grep -iE "\.(${media_extensions})$" || true
+    return
+  fi
+
+  # Fallback: shell globbing for manual mode or when file list is unavailable.
+  # Searches 2 levels deep (covers typical torrent layouts: dir/file and dir/sub/file).
+  (
+    shopt -s nullglob nocaseglob
+    local -a files=()
+    for ext in mkv mp4 avi m4v; do
+      files+=("${dir}"/*."${ext}" "${dir}"/*/*."${ext}")
+    done
+    if [[ ${#files[@]} -gt 0 ]]; then
+      printf '%s\n' "${files[@]}"
+    fi
+  )
+}
+
 # Test mode flags
 TEST_MODE="${TEST_MODE:-false}"
 TEST_RUNNER="${TEST_RUNNER:-false}"
@@ -390,7 +421,10 @@ log_filebot_error() {
   log "Files in source directory:"
   if [[ -d "${source_dir}" ]]; then
     local file_list
-    file_list=$(find "${source_dir}" -type f 2>/dev/null || echo "Unable to list files")
+    # TR_TORRENT_FILES contains all files (not just media) — better for diagnostics.
+    # Fallback lists media files only (NFS-safe globbing), which is less complete but
+    # still useful for error reports when the full file list is unavailable.
+    file_list="${TR_TORRENT_FILES:-$(find_media_files "${source_dir}" 2>/dev/null || echo "Unable to list files")}"
     if [[ -n "${file_list}" ]]; then
       echo "${file_list}" | while IFS= read -r file; do
         log "  - $(basename "${file}")"
@@ -550,7 +584,8 @@ check_files_ready() {
     # Force NFS directory cache revalidation by reading the directory listing
     ls "${source_dir}" >/dev/null 2>&1 || true
 
-    media_files=$(find "${source_dir}" -type f \( -iname "*.mkv" -o -iname "*.mp4" -o -iname "*.avi" -o -iname "*.m4v" \) 2>/dev/null || true)
+    # Use globbing instead of find(1) for NFS compatibility — see find_media_files()
+    media_files=$(find_media_files "${source_dir}")
 
     if [[ -n "${media_files}" ]]; then
       break
@@ -667,9 +702,9 @@ discover_and_filter_media_files() {
 
   log "Discovering media files in ${search_dir}"
 
-  # Find all media files recursively with corrected syntax
+  # Find all media files using NFS-safe globbing
   local all_files
-  all_files=$(find "${search_dir}" -type f \( -iname "*.mkv" -o -iname "*.mp4" -o -iname "*.avi" -o -iname "*.m4v" \) 2>/dev/null)
+  all_files=$(find_media_files "${search_dir}")
 
   if [[ -z "${all_files}" ]]; then
     log "No media files found"
@@ -846,9 +881,9 @@ detect_media_type_heuristic() {
 
   log "Analyzing media type using filename patterns"
 
-  # Find all media files (get full paths)
+  # Find all media files using NFS-safe globbing
   local media_files
-  media_files=$(find "${source_dir}" -type f \( -iname "*.mkv" -o -iname "*.mp4" -o -iname "*.avi" -o -iname "*.m4v" \) 2>/dev/null)
+  media_files=$(find_media_files "${source_dir}")
 
   if [[ -z "${media_files}" ]]; then
     log "No media files found for type detection"
@@ -1225,26 +1260,57 @@ process_media() {
 
 cleanup_torrent() {
   local torrent_dir="$1"
-  local file_patterns=("*.nfo" "*.exe" "*.txt")
 
   log "Cleaning up extraneous files in ${torrent_dir}"
 
-  pushd "${torrent_dir}" &>/dev/null || {
-    log "Error: Could not change to directory ${torrent_dir}"
-    return 1
-  }
+  # When TR_TORRENT_FILES is available, derive junk file paths from the known
+  # file list (replacing media extensions with junk extensions). This avoids
+  # NFS opendir() which fails from LaunchAgent processes.
+  if [[ -n "${TR_TORRENT_FILES:-}" ]]; then
+    # TR_TORRENT_FILES contains ALL files (not just media), so we can clean
+    # junk files that match known patterns by direct path (stat works on NFS).
+    while IFS= read -r file_path; do
+      [[ -z "${file_path}" ]] && continue
+      # Safety: only delete files under the torrent directory
+      [[ "${file_path}" == "${torrent_dir}/"* ]] || continue
+      case "${file_path,,}" in
+        *.nfo | *.exe | *.txt)
+          rm -f "${file_path}" 2>/dev/null || true
+          ;;
+        *) ;;
+      esac
+    done <<<"${TR_TORRENT_FILES}"
+    return 0
+  fi
 
-  for pattern in "${file_patterns[@]}"; do
-    find . -type f -name "${pattern}" -delete
-  done
-
-  popd &>/dev/null || true
+  # Fallback: globbing for manual mode
+  (
+    shopt -s nullglob nocaseglob
+    for ext in nfo exe txt; do
+      for f in "${torrent_dir}"/*."${ext}" "${torrent_dir}"/*/*."${ext}"; do
+        rm -f "${f}"
+      done
+    done
+  )
 }
 
 cleanup_empty_dirs() {
   local dir="$1"
   log "Cleaning up empty directories in ${dir}"
-  find "${dir}" -type d -empty -delete 2>/dev/null || true
+  # Repeat rmdir passes until no more empty dirs are removed (fully recursive,
+  # NFS-safe — avoids find which gets EPERM from LaunchAgent processes).
+  local removed=1
+  while [[ "${removed}" -gt 0 ]]; do
+    removed=0
+    # Process deepest first: glob at increasing depth
+    local d
+    for d in "${dir}"/*/*/ "${dir}"/*/; do
+      [[ -d "${d}" ]] || continue
+      if rmdir "${d}" 2>/dev/null; then
+        ((removed += 1))
+      fi
+    done
+  done
 }
 
 rotate_log() {
