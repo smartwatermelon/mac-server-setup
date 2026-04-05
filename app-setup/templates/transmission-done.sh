@@ -1258,7 +1258,7 @@ process_media() {
     # In automated mode, triage the failure instead of leaving it in pending-move
     if [[ "${INVOCATION_MODE}" == "automated" ]]; then
       local category
-      category=$(classify_failure "${LAST_FILEBOT_OUTPUT:-}")
+      category=$(classify_failure "${LAST_PREVIEW_OUTPUT:-${LAST_FILEBOT_OUTPUT:-}}")
       local triage_base="${TR_TORRENT_DIR%/*}/triage"
       if triage_failed_torrent "${source_dir}" "${category}" "${triage_base}"; then
         return 0

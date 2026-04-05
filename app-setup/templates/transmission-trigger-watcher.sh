@@ -24,6 +24,15 @@
 
 set -euo pipefail
 
+# Ensure Homebrew bash is in PATH so child scripts with #!/usr/bin/env bash
+# resolve to Bash 5 (not macOS's /bin/bash 3.2 which lacks modern syntax).
+ARCH="$(arch)"
+case "${ARCH}" in
+  arm64) HOMEBREW_PREFIX="/opt/homebrew" ;;
+  *) HOMEBREW_PREFIX="/usr/local" ;;
+esac
+export PATH="${HOMEBREW_PREFIX}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
 SERVER_NAME="__SERVER_NAME__"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 
