@@ -214,3 +214,112 @@ load ../test_helper
   run cat "${LOG_FILE}"
   assert_output_contains "no files found or unable to list" "${output}"
 }
+
+# --- Failure classification tests ---
+
+@test "classify_failure: detects already-in-plex from Skipped pattern" {
+  local fb_output='[AUTO] Skipped [/path/to/file.mkv] because [/dest/file.mkv] already exists
+Processed 0 files'
+  run classify_failure "${fb_output}"
+  assert_success
+  assert_equal "already-in-plex" "${output}"
+}
+
+@test "classify_failure: detects already-in-plex from IMPORT pattern" {
+  local fb_output='[IMPORT] Destination file already exists: /dest/file.mkv (/src/file.mkv)
+Processed 0 files'
+  run classify_failure "${fb_output}"
+  assert_success
+  assert_equal "already-in-plex" "${output}"
+}
+
+@test "classify_failure: detects no-match from zero processed" {
+  local fb_output='Rename episodes using [TheMovieDB]
+Lookup via [SomeShow]
+Processed 0 files'
+  run classify_failure "${fb_output}"
+  assert_success
+  assert_equal "no-match" "${output}"
+}
+
+@test "classify_failure: detects no-match from identification failure" {
+  local fb_output='unable to identify media files'
+  run classify_failure "${fb_output}"
+  assert_success
+  assert_equal "no-match" "${output}"
+}
+
+@test "classify_failure: returns failed for empty output" {
+  run classify_failure ""
+  assert_success
+  assert_equal "failed" "${output}"
+}
+
+@test "classify_failure: returns failed for network errors" {
+  local fb_output='connection timeout reaching TheTVDB'
+  run classify_failure "${fb_output}"
+  assert_success
+  assert_equal "failed" "${output}"
+}
+
+# --- Triage function tests ---
+
+@test "triage_failed_torrent: moves directory to correct triage category" {
+  local triage_base="${BATS_TEST_TMPDIR}/triage"
+  local source="${BATS_TEST_TMPDIR}/pending-move/TestTorrent"
+  mkdir -p "${source}"
+  touch "${source}/video.mkv"
+
+  run triage_failed_torrent "${source}" "no-match" "${triage_base}"
+  assert_success
+  assert_dir_exists "${triage_base}/no-match/TestTorrent"
+  assert_file_exists "${triage_base}/no-match/TestTorrent/video.mkv"
+  assert_file_not_exists "${source}/video.mkv"
+}
+
+@test "triage_failed_torrent: moves single file to triage category" {
+  local triage_base="${BATS_TEST_TMPDIR}/triage"
+  local source="${BATS_TEST_TMPDIR}/pending-move/Movie.2024.mkv"
+  mkdir -p "${BATS_TEST_TMPDIR}/pending-move"
+  touch "${source}"
+
+  run triage_failed_torrent "${source}" "already-in-plex" "${triage_base}"
+  assert_success
+  assert_file_exists "${triage_base}/already-in-plex/Movie.2024.mkv"
+  assert_file_not_exists "${source}"
+}
+
+@test "triage_failed_torrent: creates triage directory if missing" {
+  local triage_base="${BATS_TEST_TMPDIR}/triage"
+  local source="${BATS_TEST_TMPDIR}/pending-move/Test"
+  mkdir -p "${source}"
+  touch "${source}/file.mkv"
+
+  run triage_failed_torrent "${source}" "failed" "${triage_base}"
+  assert_success
+  assert_dir_exists "${triage_base}/failed/Test"
+}
+
+@test "triage_failed_torrent: handles name collision by appending timestamp" {
+  local triage_base="${BATS_TEST_TMPDIR}/triage"
+  local source="${BATS_TEST_TMPDIR}/pending-move/TestTorrent"
+  mkdir -p "${source}" "${triage_base}/no-match/TestTorrent"
+  touch "${source}/video.mkv"
+
+  run triage_failed_torrent "${source}" "no-match" "${triage_base}"
+  assert_success
+  # Original source should be gone
+  assert_file_not_exists "${source}/video.mkv"
+}
+
+@test "triage_failed_torrent: logs the triage action" {
+  local triage_base="${BATS_TEST_TMPDIR}/triage"
+  local source="${BATS_TEST_TMPDIR}/pending-move/TestTorrent"
+  mkdir -p "${source}"
+  touch "${source}/video.mkv"
+
+  triage_failed_torrent "${source}" "no-match" "${triage_base}"
+  assert_file_exists "${LOG_FILE}"
+  run grep "Triaged to" "${LOG_FILE}"
+  assert_success
+}

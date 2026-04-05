@@ -24,6 +24,15 @@
 
 set -euo pipefail
 
+# Ensure Homebrew bash is in PATH so child scripts with #!/usr/bin/env bash
+# resolve to Bash 5 (not macOS's /bin/bash 3.2 which lacks modern syntax).
+ARCH="$(arch)"
+case "${ARCH}" in
+  arm64) HOMEBREW_PREFIX="/opt/homebrew" ;;
+  *) HOMEBREW_PREFIX="/usr/local" ;;
+esac
+export PATH="${HOMEBREW_PREFIX}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
 SERVER_NAME="__SERVER_NAME__"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 
@@ -67,6 +76,52 @@ map_container_path() {
   echo "${MACOS_NAS_PREFIX}${container_path#"${CONTAINER_DATA_PREFIX}"}"
 }
 
+# Get a Transmission RPC session token (CSRF protection).
+# Returns the token on stdout; empty string on failure.
+get_rpc_session_id() {
+  curl -s -D - "${TRANSMISSION_RPC_URL}" 2>/dev/null \
+    | awk 'tolower($0) ~ /^x-transmission-session-id:/{gsub(/\r/,""); print $2; exit}'
+}
+
+# Query Transmission RPC for the list of files in a torrent.
+# Returns newline-separated macOS file paths (container paths mapped to host).
+# Falls back to empty string if RPC is unavailable or torrent not found.
+get_torrent_files() {
+  local torrent_hash="$1"
+  local macos_dir="$2"
+
+  # Validate hash before injecting into JSON (40-char hex)
+  if [[ ! "${torrent_hash}" =~ ^[a-fA-F0-9]{40}$ ]]; then
+    return 1
+  fi
+
+  local session_id
+  session_id=$(get_rpc_session_id)
+  if [[ -z "${session_id}" ]]; then
+    return 1
+  fi
+
+  local response
+  response=$(curl -s "${TRANSMISSION_RPC_URL}" \
+    -H "X-Transmission-Session-Id: ${session_id}" \
+    -d '{"method":"torrent-get","arguments":{"ids":["'"${torrent_hash}"'"],"fields":["files"]}}' \
+    2>/dev/null)
+
+  # Extract file names from JSON response.
+  # files[].name gives paths relative to downloadDir (e.g., "TorrentName/video.mkv")
+  /usr/bin/python3 -c "
+import sys, json
+d = json.loads(sys.stdin.read())
+torrents = d.get('arguments', {}).get('torrents', [])
+if not torrents:
+    sys.exit(0)
+for f in torrents[0].get('files', []):
+    print(f['name'])
+" <<<"${response}" 2>/dev/null | while IFS= read -r name; do
+    echo "${macos_dir}/${name}"
+  done
+}
+
 # Remove a torrent from Transmission via RPC after successful processing.
 # Uses the same CSRF session-token dance as transmission-add-magnet.sh.
 # Non-fatal: logs a warning on failure but returns 0 so trigger cleanup proceeds.
@@ -84,8 +139,7 @@ remove_torrent_from_transmission() {
 
   # Get CSRF session token from Transmission's 409 response
   local session_id
-  session_id=$(curl -s -D - "${TRANSMISSION_RPC_URL}" 2>/dev/null \
-    | awk 'tolower($0) ~ /^x-transmission-session-id:/{gsub(/\r/,""); print $2; exit}')
+  session_id=$(get_rpc_session_id)
 
   if [[ -z "${session_id}" ]]; then
     log "WARNING: Could not connect to Transmission RPC — torrent not removed: ${torrent_name}"
@@ -159,10 +213,43 @@ process_trigger() {
     return 1
   fi
 
-  # Invoke the existing macOS done script with Transmission's standard env vars
+  # Query Transmission RPC for the torrent's file list. On macOS, background
+  # LaunchAgent processes cannot opendir() NFS-mounted directories (EPERM),
+  # so the done script needs pre-resolved file paths instead of discovering
+  # them via find/ls/glob.
+  local torrent_files=""
+  torrent_files=$(get_torrent_files "${hash}" "${macos_dir}" 2>/dev/null || true)
+  if [[ -n "${torrent_files}" ]]; then
+    local file_count
+    file_count=$(printf '%s' "${torrent_files}" | grep -c . || true)
+    log "  File list from RPC: ${file_count} files"
+  else
+    # Fallback: read TR_TORRENT_FILES from the trigger file (written by the container's
+    # post-done script). This handles the case where a torrent was removed from
+    # Transmission before the trigger watcher processed it.
+    local trigger_files
+    trigger_files=$(grep '^TR_TORRENT_FILES=' "${trigger_file}" | cut -d= -f2- || true)
+    if [[ -n "${trigger_files}" ]]; then
+      # Trigger file stores pipe-separated paths relative to TR_TORRENT_DIR;
+      # convert to newline-separated macOS absolute paths
+      torrent_files=$(echo "${trigger_files}" | tr '|' '\n' | while IFS= read -r rel_path; do
+        [[ -n "${rel_path}" ]] && echo "${macos_dir}/${rel_path}"
+      done)
+      local file_count
+      file_count=$(printf '%s' "${torrent_files}" | grep -c . || true)
+      log "  File list from trigger file: ${file_count} files"
+    else
+      log "  WARNING: No file list from RPC or trigger — done script will attempt discovery"
+    fi
+  fi
+
+  # Invoke the existing macOS done script with Transmission's standard env vars.
+  # TR_TORRENT_FILES provides pre-resolved macOS file paths (newline-separated)
+  # so the done script can skip NFS directory listing.
   if TR_TORRENT_NAME="${name}" \
     TR_TORRENT_DIR="${macos_dir}" \
     TR_TORRENT_HASH="${hash}" \
+    TR_TORRENT_FILES="${torrent_files}" \
     "${DONE_SCRIPT}"; then
     log "Done script succeeded for: ${name}"
     remove_torrent_from_transmission "${hash}" "${name}"

@@ -28,6 +28,37 @@ IFS=$'\n\t'
 # Signal handling
 trap 'log "Script interrupted"; exit 1' INT TERM
 
+# NFS-safe file discovery using shell globbing.
+# On NFS mounts accessed from macOS LaunchAgent processes, find(1) fails with
+# "Operation not permitted" because it uses open(O_DIRECTORY) which macOS blocks.
+# Shell globbing uses opendir()/readdir() which is permitted.
+find_media_files() {
+  local dir="$1"
+  local media_extensions='mkv|mp4|avi|m4v'
+
+  # If TR_TORRENT_FILES is set (provided by trigger watcher via Transmission RPC),
+  # use it directly instead of listing the directory. This works around a macOS
+  # restriction where background LaunchAgent processes get EPERM from opendir()
+  # on NFS-mounted directories, even though stat() on individual files works.
+  if [[ -n "${TR_TORRENT_FILES:-}" ]]; then
+    echo "${TR_TORRENT_FILES}" | grep -iE "\.(${media_extensions})$" || true
+    return
+  fi
+
+  # Fallback: shell globbing for manual mode or when file list is unavailable.
+  # Searches 2 levels deep (covers typical torrent layouts: dir/file and dir/sub/file).
+  (
+    shopt -s nullglob nocaseglob
+    local -a files=()
+    for ext in mkv mp4 avi m4v; do
+      files+=("${dir}"/*."${ext}" "${dir}"/*/*."${ext}")
+    done
+    if [[ ${#files[@]} -gt 0 ]]; then
+      printf '%s\n' "${files[@]}"
+    fi
+  )
+}
+
 # Test mode flags
 TEST_MODE="${TEST_MODE:-false}"
 TEST_RUNNER="${TEST_RUNNER:-false}"
@@ -79,6 +110,9 @@ MAX_LOG_SIZE=0
 
 # Invocation mode tracking
 INVOCATION_MODE=""
+
+# Triage tracking — set to true by triage_failed_torrent(), read by main()
+TRIAGE_PERFORMED=false
 
 # Preview output storage
 LAST_PREVIEW_OUTPUT=""
@@ -390,7 +424,10 @@ log_filebot_error() {
   log "Files in source directory:"
   if [[ -d "${source_dir}" ]]; then
     local file_list
-    file_list=$(find "${source_dir}" -type f 2>/dev/null || echo "Unable to list files")
+    # TR_TORRENT_FILES contains all files (not just media) — better for diagnostics.
+    # Fallback lists media files only (NFS-safe globbing), which is less complete but
+    # still useful for error reports when the full file list is unavailable.
+    file_list="${TR_TORRENT_FILES:-$(find_media_files "${source_dir}" 2>/dev/null || echo "Unable to list files")}"
     if [[ -n "${file_list}" ]]; then
       echo "${file_list}" | while IFS= read -r file; do
         log "  - $(basename "${file}")"
@@ -484,6 +521,35 @@ log_filebot_error() {
   return 0
 }
 
+# Classify a FileBot failure into a triage category.
+# Reads the combined FileBot output from all fallback strategies.
+# Returns one of: "already-in-plex", "no-match", "failed"
+classify_failure() {
+  local filebot_output="$1"
+
+  # Already in Plex: FileBot found a match but the destination file exists
+  if echo "${filebot_output}" | grep -qiE "already exists|Skipped.*already exists"; then
+    echo "already-in-plex"
+    return 0
+  fi
+
+  # No match: FileBot couldn't identify the media at all
+  if echo "${filebot_output}" | grep -qiE "unable to identify|no match|no results|failed to fetch"; then
+    echo "no-match"
+    return 0
+  fi
+
+  # No match: FileBot found candidates but processed 0 files (ambiguous match)
+  if echo "${filebot_output}" | grep -q "Processed 0 files"; then
+    echo "no-match"
+    return 0
+  fi
+
+  # Everything else: network errors, license issues, permissions, etc.
+  echo "failed"
+  return 0
+}
+
 check_disk_space() {
   local required_space=1000000 # 1GB in KB
 
@@ -550,7 +616,8 @@ check_files_ready() {
     # Force NFS directory cache revalidation by reading the directory listing
     ls "${source_dir}" >/dev/null 2>&1 || true
 
-    media_files=$(find "${source_dir}" -type f \( -iname "*.mkv" -o -iname "*.mp4" -o -iname "*.avi" -o -iname "*.m4v" \) 2>/dev/null || true)
+    # Use globbing instead of find(1) for NFS compatibility — see find_media_files()
+    media_files=$(find_media_files "${source_dir}")
 
     if [[ -n "${media_files}" ]]; then
       break
@@ -667,9 +734,9 @@ discover_and_filter_media_files() {
 
   log "Discovering media files in ${search_dir}"
 
-  # Find all media files recursively with corrected syntax
+  # Find all media files using NFS-safe globbing
   local all_files
-  all_files=$(find "${search_dir}" -type f \( -iname "*.mkv" -o -iname "*.mp4" -o -iname "*.avi" -o -iname "*.m4v" \) 2>/dev/null)
+  all_files=$(find_media_files "${search_dir}")
 
   if [[ -z "${all_files}" ]]; then
     log "No media files found"
@@ -846,9 +913,9 @@ detect_media_type_heuristic() {
 
   log "Analyzing media type using filename patterns"
 
-  # Find all media files (get full paths)
+  # Find all media files using NFS-safe globbing
   local media_files
-  media_files=$(find "${source_dir}" -type f \( -iname "*.mkv" -o -iname "*.mp4" -o -iname "*.avi" -o -iname "*.m4v" \) 2>/dev/null)
+  media_files=$(find_media_files "${source_dir}")
 
   if [[ -z "${media_files}" ]]; then
     log "No media files found for type detection"
@@ -1187,6 +1254,16 @@ process_media() {
   # Step 3: Preview changes with dry-run
   if ! preview_filebot_changes "${source_dir}"; then
     log "Error: Preview failed - cannot determine what changes would be made"
+
+    # In automated mode, triage the failure instead of leaving it in pending-move
+    if [[ "${INVOCATION_MODE}" == "automated" ]]; then
+      local category
+      category=$(classify_failure "${LAST_PREVIEW_OUTPUT:-${LAST_FILEBOT_OUTPUT:-}}")
+      local triage_base="${TR_TORRENT_DIR%/*}/triage"
+      if triage_failed_torrent "${source_dir}" "${category}" "${triage_base}"; then
+        return 0
+      fi
+    fi
     return 1
   fi
 
@@ -1203,6 +1280,18 @@ process_media() {
   if ! process_media_with_fallback "${source_dir}"; then
     log "Error: All FileBot strategies failed"
     log_filebot_error 1 "${LAST_FILEBOT_OUTPUT}" "${source_dir}" "fallback-chain"
+
+    # In automated mode, triage the failure instead of leaving it in pending-move
+    if [[ "${INVOCATION_MODE}" == "automated" ]]; then
+      local category
+      category=$(classify_failure "${LAST_FILEBOT_OUTPUT}")
+      local triage_base="${TR_TORRENT_DIR%/*}/triage"
+      if triage_failed_torrent "${source_dir}" "${category}" "${triage_base}"; then
+        # Return 0: the torrent is "handled" (triaged), trigger watcher should
+        # clean up the trigger and remove from Transmission
+        return 0
+      fi
+    fi
     return 1
   fi
 
@@ -1225,26 +1314,89 @@ process_media() {
 
 cleanup_torrent() {
   local torrent_dir="$1"
-  local file_patterns=("*.nfo" "*.exe" "*.txt")
 
   log "Cleaning up extraneous files in ${torrent_dir}"
 
-  pushd "${torrent_dir}" &>/dev/null || {
-    log "Error: Could not change to directory ${torrent_dir}"
-    return 1
-  }
+  # When TR_TORRENT_FILES is available, derive junk file paths from the known
+  # file list (replacing media extensions with junk extensions). This avoids
+  # NFS opendir() which fails from LaunchAgent processes.
+  if [[ -n "${TR_TORRENT_FILES:-}" ]]; then
+    # TR_TORRENT_FILES contains ALL files (not just media), so we can clean
+    # junk files that match known patterns by direct path (stat works on NFS).
+    while IFS= read -r file_path; do
+      [[ -z "${file_path}" ]] && continue
+      # Safety: only delete files under the torrent directory
+      [[ "${file_path}" == "${torrent_dir}/"* ]] || continue
+      case "${file_path,,}" in
+        *.nfo | *.exe | *.txt)
+          rm -f "${file_path}" 2>/dev/null || true
+          ;;
+        *) ;;
+      esac
+    done <<<"${TR_TORRENT_FILES}"
+    return 0
+  fi
 
-  for pattern in "${file_patterns[@]}"; do
-    find . -type f -name "${pattern}" -delete
-  done
-
-  popd &>/dev/null || true
+  # Fallback: globbing for manual mode
+  (
+    shopt -s nullglob nocaseglob
+    for ext in nfo exe txt; do
+      for f in "${torrent_dir}"/*."${ext}" "${torrent_dir}"/*/*."${ext}"; do
+        rm -f "${f}"
+      done
+    done
+  )
 }
 
 cleanup_empty_dirs() {
   local dir="$1"
   log "Cleaning up empty directories in ${dir}"
-  find "${dir}" -type d -empty -delete 2>/dev/null || true
+  # Repeat rmdir passes until no more empty dirs are removed (fully recursive,
+  # NFS-safe — avoids find which gets EPERM from LaunchAgent processes).
+  local removed=1
+  while [[ "${removed}" -gt 0 ]]; do
+    removed=0
+    # Process deepest first: glob at increasing depth
+    local d
+    for d in "${dir}"/*/*/ "${dir}"/*/; do
+      [[ -d "${d}" ]] || continue
+      if rmdir "${d}" 2>/dev/null; then
+        ((removed += 1))
+      fi
+    done
+  done
+}
+
+# Move a failed torrent to a triage directory based on failure category.
+# Args: $1=torrent_path, $2=category (from classify_failure), $3=triage_base_dir
+# The triage directory structure is:
+#   triage/already-in-plex/  — FileBot matched but destination exists
+#   triage/no-match/         — FileBot couldn't identify the media
+#   triage/failed/           — other errors (network, license, permissions)
+triage_failed_torrent() {
+  local torrent_path="$1"
+  local category="$2"
+  local triage_base="$3"
+  local torrent_name
+  torrent_name=$(basename "${torrent_path}")
+
+  local dest_dir="${triage_base}/${category}"
+  mkdir -p "${dest_dir}" 2>/dev/null || true
+
+  # Handle name collision: append timestamp if destination already exists
+  local dest="${dest_dir}/${torrent_name}"
+  if [[ -e "${dest}" ]]; then
+    dest="${dest_dir}/${torrent_name}.$(date +%Y%m%d-%H%M%S)"
+  fi
+
+  if mv "${torrent_path}" "${dest}" 2>/dev/null; then
+    log "Triaged to ${category}: ${torrent_name} → ${dest}"
+    TRIAGE_PERFORMED=true
+    return 0
+  else
+    log "Warning: Failed to move ${torrent_name} to triage/${category}"
+    return 1
+  fi
 }
 
 rotate_log() {
@@ -1391,9 +1543,12 @@ main() {
         fi
       fi
 
+      TRIAGE_PERFORMED=false
       if ! process_media "${torrent_path}"; then
         log "Error: Media processing failed"
         main_exit_code=1
+      elif [[ "${TRIAGE_PERFORMED}" == "true" ]]; then
+        log "Torrent triaged (not processed) — see triage directory"
       else
         log "Processing completed successfully"
       fi
