@@ -111,6 +111,9 @@ MAX_LOG_SIZE=0
 # Invocation mode tracking
 INVOCATION_MODE=""
 
+# Triage tracking — set to true by triage_failed_torrent(), read by main()
+TRIAGE_PERFORMED=false
+
 # Preview output storage
 LAST_PREVIEW_OUTPUT=""
 
@@ -515,6 +518,35 @@ log_filebot_error() {
   fi
 
   log "=== END ERROR REPORT ==="
+  return 0
+}
+
+# Classify a FileBot failure into a triage category.
+# Reads the combined FileBot output from all fallback strategies.
+# Returns one of: "already-in-plex", "no-match", "failed"
+classify_failure() {
+  local filebot_output="$1"
+
+  # Already in Plex: FileBot found a match but the destination file exists
+  if echo "${filebot_output}" | grep -qiE "already exists|Skipped.*already exists"; then
+    echo "already-in-plex"
+    return 0
+  fi
+
+  # No match: FileBot couldn't identify the media at all
+  if echo "${filebot_output}" | grep -qiE "unable to identify|no match|no results|failed to fetch"; then
+    echo "no-match"
+    return 0
+  fi
+
+  # No match: FileBot found candidates but processed 0 files (ambiguous match)
+  if echo "${filebot_output}" | grep -q "Processed 0 files"; then
+    echo "no-match"
+    return 0
+  fi
+
+  # Everything else: network errors, license issues, permissions, etc.
+  echo "failed"
   return 0
 }
 
@@ -1222,6 +1254,16 @@ process_media() {
   # Step 3: Preview changes with dry-run
   if ! preview_filebot_changes "${source_dir}"; then
     log "Error: Preview failed - cannot determine what changes would be made"
+
+    # In automated mode, triage the failure instead of leaving it in pending-move
+    if [[ "${INVOCATION_MODE}" == "automated" ]]; then
+      local category
+      category=$(classify_failure "${LAST_FILEBOT_OUTPUT:-}")
+      local triage_base="${TR_TORRENT_DIR%/*}/triage"
+      if triage_failed_torrent "${source_dir}" "${category}" "${triage_base}"; then
+        return 0
+      fi
+    fi
     return 1
   fi
 
@@ -1238,6 +1280,18 @@ process_media() {
   if ! process_media_with_fallback "${source_dir}"; then
     log "Error: All FileBot strategies failed"
     log_filebot_error 1 "${LAST_FILEBOT_OUTPUT}" "${source_dir}" "fallback-chain"
+
+    # In automated mode, triage the failure instead of leaving it in pending-move
+    if [[ "${INVOCATION_MODE}" == "automated" ]]; then
+      local category
+      category=$(classify_failure "${LAST_FILEBOT_OUTPUT}")
+      local triage_base="${TR_TORRENT_DIR%/*}/triage"
+      if triage_failed_torrent "${source_dir}" "${category}" "${triage_base}"; then
+        # Return 0: the torrent is "handled" (triaged), trigger watcher should
+        # clean up the trigger and remove from Transmission
+        return 0
+      fi
+    fi
     return 1
   fi
 
@@ -1311,6 +1365,38 @@ cleanup_empty_dirs() {
       fi
     done
   done
+}
+
+# Move a failed torrent to a triage directory based on failure category.
+# Args: $1=torrent_path, $2=category (from classify_failure), $3=triage_base_dir
+# The triage directory structure is:
+#   triage/already-in-plex/  — FileBot matched but destination exists
+#   triage/no-match/         — FileBot couldn't identify the media
+#   triage/failed/           — other errors (network, license, permissions)
+triage_failed_torrent() {
+  local torrent_path="$1"
+  local category="$2"
+  local triage_base="$3"
+  local torrent_name
+  torrent_name=$(basename "${torrent_path}")
+
+  local dest_dir="${triage_base}/${category}"
+  mkdir -p "${dest_dir}" 2>/dev/null || true
+
+  # Handle name collision: append timestamp if destination already exists
+  local dest="${dest_dir}/${torrent_name}"
+  if [[ -e "${dest}" ]]; then
+    dest="${dest_dir}/${torrent_name}.$(date +%Y%m%d-%H%M%S)"
+  fi
+
+  if mv "${torrent_path}" "${dest}" 2>/dev/null; then
+    log "Triaged to ${category}: ${torrent_name} → ${dest}"
+    TRIAGE_PERFORMED=true
+    return 0
+  else
+    log "Warning: Failed to move ${torrent_name} to triage/${category}"
+    return 1
+  fi
 }
 
 rotate_log() {
@@ -1457,9 +1543,12 @@ main() {
         fi
       fi
 
+      TRIAGE_PERFORMED=false
       if ! process_media "${torrent_path}"; then
         log "Error: Media processing failed"
         main_exit_code=1
+      elif [[ "${TRIAGE_PERFORMED}" == "true" ]]; then
+        log "Torrent triaged (not processed) — see triage directory"
       else
         log "Processing completed successfully"
       fi
