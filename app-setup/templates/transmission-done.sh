@@ -23,6 +23,7 @@ export PATH
 
 # Strict mode (without -e to allow error logging instead of immediate exit)
 set -uo pipefail
+# nosemgrep: bash.lang.security.ifs-tampering.ifs-tampering -- safe strict-mode idiom
 IFS=$'\n\t'
 
 # Signal handling

@@ -262,6 +262,7 @@ copy_dir_with_manifest() {
   local dest_dir_full="${OUTPUT_PATH}/${dest_dir_relative}"
 
   # Prepare array of exception dirs if except_dirs_string is non-empty
+  # nosemgrep: bash.lang.security.ifs-tampering.ifs-tampering -- locally scoped, intentional
   local IFS='|'
   read -r -a except_dirs <<<"${except_dirs_string}"
 

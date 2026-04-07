@@ -2,6 +2,7 @@
 
 # Strict mode
 set -euo pipefail
+# nosemgrep: bash.lang.security.ifs-tampering.ifs-tampering -- safe strict-mode idiom
 IFS=$'\n\t'
 
 # Debug mode: Set DEBUG_MODE=1 to enable verbose logging including credentials
