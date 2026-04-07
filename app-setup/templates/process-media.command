@@ -2,6 +2,7 @@
 
 # Strict mode
 set -euo pipefail
+# nosemgrep: bash.lang.security.ifs-tampering.ifs-tampering -- safe strict-mode idiom
 IFS=$'\n\t'
 
 # Change to script directory
