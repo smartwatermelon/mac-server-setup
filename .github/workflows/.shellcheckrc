@@ -1,9 +1,0 @@
-# https://github.com/koalaman/shellcheck/wiki/Directive#shellcheckrc-file
-external-sources=true
-check-sourced=true
-extended-analysis=true
-enable=all
-
-# Disable SC2310: Functions invoked in conditional contexts
-# This is informational only and doesn't indicate actual issues
-disable=SC2310

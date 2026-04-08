@@ -348,5 +348,3 @@ Scripts must be idempotent (re-runnable without breaking things). Use `log()`/`s
 ## License
 
 MIT; see [LICENSE](license.md)
-
-[![CI Tests](https://github.com/smartwatermelon/mac-server-setup/actions/workflows/ci.yml/badge.svg)](https://github.com/smartwatermelon/mac-server-setup/actions)
