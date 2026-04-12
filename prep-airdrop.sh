@@ -98,6 +98,17 @@ if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
   exit 0
 fi
 
+# Guard: this script requires interactive 1Password authentication to access
+# the Personal vault. The service account token (set in ~/.config/bash/1password.sh)
+# only has access to the Automation vault.
+# Use 'opp' as a drop-in replacement: opp item get "TimeMachine" --vault personal
+if [[ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]]; then
+  echo "ERROR: OP_SERVICE_ACCOUNT_TOKEN is set — this script requires interactive 1Password auth." >&2
+  echo "Run with 'opp' prefix for personal vault access, or use a subshell:" >&2
+  echo "  ( unset OP_SERVICE_ACCOUNT_TOKEN; ./$(basename "$0") )" >&2
+  exit 1
+fi
+
 # Error and warning collection system
 COLLECTED_ERRORS=()
 COLLECTED_WARNINGS=()
