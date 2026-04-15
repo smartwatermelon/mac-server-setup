@@ -3,6 +3,7 @@
 Commands run in your SSH session on TILSIT unless marked **Dev machine**.
 
 **Status as of 2026-02-23:** Tasks 1, 2, 6, 7-1, 7-2 complete. Resume at **Task 7 retry**.
+**Skip Tasks 9 & 10** — they target the retired host-level PIA stack (see obsolescence notice below).
 
 > **⚠️ Historical — PIA sections obsolete (2026-04-15)**
 >
