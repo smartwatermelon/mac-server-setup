@@ -3,6 +3,18 @@
 Commands run in your SSH session on TILSIT unless marked **Dev machine**.
 
 **Status as of 2026-02-23:** Tasks 1, 2, 6, 7-1, 7-2 complete. Resume at **Task 7 retry**.
+**Skip Tasks 9 & 10** — they target the retired host-level PIA stack (see obsolescence notice below).
+
+> **⚠️ Historical — PIA sections obsolete (2026-04-15)**
+>
+> Tasks 9 (`plex-vpn-bypass.sh` live patch) and 10 (removing NoIP DUC from the
+> PIA split-tunnel bypass list) refer to the host-level PIA Desktop + split-
+> tunnel stack that was retired when Transmission moved inside the
+> haugene/transmission-openvpn container. PIA Desktop, the `plex-vpn-bypass`
+> LaunchDaemon, the PF anchor, and the split-tunnel reference files have all
+> been removed from TILSIT. Do not follow those tasks. Cloudflare DNS-01,
+> DDNS, and Caddy TLS tasks (1–8) remain accurate. VPN now runs entirely
+> inside the Transmission container.
 
 ---
 
