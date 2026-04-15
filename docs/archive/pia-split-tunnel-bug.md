@@ -7,6 +7,15 @@
 > no longer installed. The container runs OpenVPN at the kernel namespace level
 > with no bypass needed. This document is retained as a historical reference
 > only.
+>
+> **Known residue:** the PIA split-tunnel system extension
+> (`com.privateinternetaccess.vpn.splittunnel`, team `5357M5NW9W`) remains
+> registered as `activated enabled` in `systemextensionsctl list` on TILSIT.
+> `systemextensionsctl uninstall` requires SIP disabled; the extension is
+> inert (no running proxy host process, parent app is uninstalled) and macOS
+> generally garbage-collects orphaned system extensions after reboots. Not
+> worth disabling SIP to chase. If a future operator sees this entry and
+> wonders why — this is the reason.
 
 ## Summary
 
