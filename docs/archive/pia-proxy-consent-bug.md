@@ -1,5 +1,13 @@
 # PIA macOS Proxy Consent Bug — NE Signature Lost After Reboot
 
+> **⚠️ OBSOLETE (2026-04-15)** — This bug applied only to the host-level PIA
+> Desktop + split-tunnel stack, which was retired when Transmission moved
+> inside the haugene/transmission-openvpn container. PIA Desktop is no longer
+> installed on TILSIT; the `pia-proxy-consent` LaunchAgent, its helper script,
+> and the associated workaround have been removed. VPN now runs entirely inside
+> the Transmission container via OpenVPN (no macOS NE proxy involved). This
+> document is retained as a historical reference only.
+
 ## Summary
 
 After reboot, macOS intermittently loses the Network Extension (NE) proxy consent signature for PIA's split tunnel. When `NETransparentProxyManager.saveToPreferences()` finds `existing signature (null)`, macOS presents a "Would Like to Add Proxy Configurations" dialog requiring user interaction. On a headless server, no one is present to click "Allow", so split tunnel activation is blocked indefinitely.

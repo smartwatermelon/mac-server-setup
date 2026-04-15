@@ -1,5 +1,13 @@
 # PIA macOS Split Tunnel Bug — Transparent Proxy Failure
 
+> **⚠️ OBSOLETE (2026-04-15)** — This bug only affected the host-level PIA
+> Desktop split-tunnel stack, which was retired when Transmission moved inside
+> the haugene/transmission-openvpn container. The `plex-vpn-bypass` LaunchDaemon
+> and its PF-anchor workaround have been removed from TILSIT; PIA Desktop is
+> no longer installed. The container runs OpenVPN at the kernel namespace level
+> with no bypass needed. This document is retained as a historical reference
+> only.
+
 ## Summary
 
 PIA's macOS split tunnel transparent proxy is broken on macOS 26.3 (Apple Silicon). The proxy correctly identifies bypass apps and binds outbound sockets to the physical interface IP, but data forwarding between the app's network flow and the outbound socket fails for **all** bypass apps. Every proxied session closes with zero bytes transferred.
