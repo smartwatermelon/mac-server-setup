@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Service identification -->
+    <key>Label</key>
+    <string>com.__HOSTNAME_LOWER__.cloudflare-ddns</string>
+
+    <!-- Runs as root (default for LaunchDaemon) so it can read CF_API_TOKEN
+         from the System keychain via `security find-generic-password`.
+         Invoked via /bin/bash explicitly (same pattern as caddy-wrapper).
+         launchd's default PATH excludes /opt/homebrew/bin, so shebang-based
+         bash-5 resolution can't be relied on here; the script is written to
+         be bash 3.2 compatible (no associative arrays, no mapfile, etc). -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/usr/local/bin/cloudflare-ddns</string>
+    </array>
+
+    <!-- Run one cycle every 5 minutes -->
+    <key>StartInterval</key>
+    <integer>300</integer>
+
+    <!-- Also run immediately when the daemon is first loaded -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Logging — stdout/stderr redirected to the same file the script uses,
+         so any unexpected output still ends up alongside structured log lines.
+         The parent directory and log file are pre-created with operator:staff
+         ownership by cloudflare-ddns-setup.sh, so root appends leave the file
+         operator-readable (operator can tail/rotate without sudo). -->
+    <key>StandardOutPath</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/state/cloudflare-ddns.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/state/cloudflare-ddns.log</string>
+
+    <!-- Throttle restart attempts (seconds) -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <!-- Exit timeout -->
+    <key>ExitTimeOut</key>
+    <integer>30</integer>
+</dict>
+</plist>

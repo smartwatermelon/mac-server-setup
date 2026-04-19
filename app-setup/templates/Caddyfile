@@ -74,6 +74,10 @@
 		reverse_proxy localhost:9880
 	}
 
+	# Redirect /media (no trailing slash) to /media/
+	@media_noslash path /media
+	redir @media_noslash /media/ 301
+
 	# Root landing page
 	root * /usr/local/var/www
 	file_server

@@ -43,6 +43,20 @@ with cloudflare module, CF_API_TOKEN injection chain, media file server
 architecture (why Python not Caddy), DNS propagation timing, certmagic
 environment variable syntax (`{$VAR}` vs `{env.VAR}`), ACME state management
 
+### Cloudflare DDNS (public A-record updater)
+
+**Files**: `app-setup/cloudflare-ddns-setup.sh`,
+`app-setup/templates/cloudflare-ddns.sh`,
+`app-setup/templates/com.cloudflare-ddns.plist`,
+`tests/cloudflare-ddns.bats`
+
+**Documentation**: `docs/apps/cloudflare-ddns-README.md`
+
+**Covers**: Why the PIA-era DDNS was retired and how the standalone daemon
+replaces it, System keychain token reuse (same entry Caddy reads), public-IP
+provider fallback chain, change-detection vs heartbeat log cadence, Cloudflare
+API error modes, and the `TEST_RUNNER` hook that lets BATS mock network calls.
+
 ### Transmission-FileBot (media processing pipeline)
 
 **Files**: `app-setup/templates/transmission-done.sh`,
@@ -60,6 +74,7 @@ test architecture (BATS, TEST_RUNNER mode), file stability checks
 ```bash
 # Run all BATS tests
 bats tests/plex-watchdog.bats
+bats tests/cloudflare-ddns.bats
 bats tests/transmission-filebot/**/*.bats
 
 # Lint all shell scripts

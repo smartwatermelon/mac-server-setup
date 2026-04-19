@@ -38,6 +38,7 @@ After setup, these all start automatically on login (LaunchAgents):
 | NAS Mount | NFS mount to NAS on login |
 | Backblaze | Off-site backup |
 | Caddy | Reverse proxy with internal TLS and external HTTPS |
+| Cloudflare DDNS | Keeps the public A record in sync with the WAN IP |
 | Plex Watchdog | Monitors Plex settings against golden config, emails on drift |
 
 ### Media pipeline
@@ -152,6 +153,7 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
 ├── app-setup/                     # Application setup scripts
 │   ├── run-app-setup.sh          # Orchestrator (runs scripts in dependency order)
 │   ├── caddy-setup.sh            # Caddy reverse proxy deployment
+│   ├── cloudflare-ddns-setup.sh  # Cloudflare A-record DDNS updater
 │   ├── catch-setup.sh            # RSS feed monitor (ShowRSS)
 │   ├── filebot-setup.sh          # Media renaming and sorting
 │   ├── msmtp-setup.sh            # Shared email facility (Gmail SMTP)
@@ -166,6 +168,8 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
 │       ├── caddy-health.sh        # Caddy endpoint health checker
 │       ├── media-server.py        # Python file server for NFS media
 │       ├── com.caddyserver.caddy.plist  # Caddy LaunchDaemon
+│       ├── com.cloudflare-ddns.plist    # Cloudflare DDNS LaunchDaemon
+│       ├── cloudflare-ddns.sh           # Cloudflare DDNS updater script
 │       ├── com.media-server.plist       # Media server LaunchDaemon
 │       ├── config.yml.template    # Transmission-FileBot pipeline config
 │       ├── mount-nas-media.sh     # NFS mount script

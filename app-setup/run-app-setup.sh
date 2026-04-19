@@ -9,6 +9,7 @@
 # 4. catch-setup.sh               - RSS feed automation (monitors for new content)
 # 5. plex-setup.sh                - Media server (serves organized content)
 # 6. caddy-setup.sh               - Caddy reverse proxy (requires sudo)
+# 7. cloudflare-ddns-setup.sh     - Cloudflare A-record DDNS updater (requires sudo, depends on caddy token)
 #
 # Unknown setup scripts are executed after the known ordered scripts.
 #
@@ -108,6 +109,7 @@ while [[ $# -gt 0 ]]; do
       echo "  4. catch-setup.sh               (RSS automation)"
       echo "  5. plex-setup.sh                (Media server)"
       echo "  6. caddy-setup.sh               (Caddy reverse proxy, requires sudo)"
+      echo "  7. cloudflare-ddns-setup.sh     (Cloudflare DDNS updater, requires sudo)"
       echo ""
       exit 0
       ;;
@@ -199,6 +201,7 @@ SCRIPT_ORDER["filebot-setup.sh"]="3:Media file organization"
 SCRIPT_ORDER["catch-setup.sh"]="4:RSS feed automation"
 SCRIPT_ORDER["plex-setup.sh"]="5:Media server"
 SCRIPT_ORDER["caddy-setup.sh"]="6:Caddy reverse proxy (requires sudo)"
+SCRIPT_ORDER["cloudflare-ddns-setup.sh"]="7:Cloudflare DDNS updater (requires sudo; reads keychain token installed by caddy-setup.sh)"
 # Function to get all setup scripts
 get_setup_scripts() {
   local scripts=()
@@ -284,8 +287,9 @@ run_setup_script() {
   # Always pass --force to individual scripts to avoid multiple confirmation prompts
   local cmd=("${script_path}" "--force")
 
-  # caddy-setup.sh requires root for LaunchDaemon and system directory operations
-  if [[ "${script_name}" == "caddy-setup.sh" ]]; then
+  # Scripts that must run as root (LaunchDaemon + /Library writes + System keychain reads)
+  if [[ "${script_name}" == "caddy-setup.sh" ]] \
+    || [[ "${script_name}" == "cloudflare-ddns-setup.sh" ]]; then
     cmd=("sudo" "-E" "${script_path}" "--force")
   fi
 
