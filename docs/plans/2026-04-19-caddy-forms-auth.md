@@ -345,13 +345,23 @@ caddy-security's local store wants a JSON file. Create it as a template alongsid
 }
 ```
 
-Add to `caddy-setup.sh`'s `substitute_template` invocations:
+**Two edits to `caddy-setup.sh`:**
 
-```bash
-substitute_template "${TEMPLATE_DIR}/caddy-users.json" "${DEPLOY_CONFIG_DIR}/users.json"
-chown "${OPERATOR_USERNAME}:staff" "${DEPLOY_CONFIG_DIR}/users.json"
-chmod 600 "${DEPLOY_CONFIG_DIR}/users.json"
-```
+1. Extend the `substitute_template()` function body to cover the new placeholder. The existing sed list does not include `__MONITORING_EMAIL__`, so add it:
+
+    ```bash
+    -e "s|__MONITORING_EMAIL__|${MONITORING_EMAIL}|g" \
+    ```
+
+    and load `MONITORING_EMAIL` from `config.conf` near the top of the script (same pattern the existing vars use): `MONITORING_EMAIL="${MONITORING_EMAIL:-}"`.
+
+2. Add the invocation that deploys `users.json`:
+
+    ```bash
+    substitute_template "${TEMPLATE_DIR}/caddy-users.json" "${DEPLOY_CONFIG_DIR}/users.json"
+    chown "${OPERATOR_USERNAME}:staff" "${DEPLOY_CONFIG_DIR}/users.json"
+    chmod 600 "${DEPLOY_CONFIG_DIR}/users.json"
+    ```
 
 **Mode 0600 is mandatory** — the file contains the bcrypt password hash.
 
@@ -379,13 +389,25 @@ git commit -m "feat(caddy): replace basic_auth with caddy-security form-based po
 
 ## Task 6: Update `caddy-setup.sh` to require the new token
 
-Add a preflight check mirroring the existing Cloudflare token check.
+Add preflight checks mirroring the existing Cloudflare token check.
 
 **Files:**
 
 - Modify: `app-setup/caddy-setup.sh`
 
-### Step 1: Add keychain check
+### Step 1: Add preflight check for `MONITORING_EMAIL`
+
+The `users.json` template (Task 5 Step 3) uses `__MONITORING_EMAIL__`, so the value must be non-empty before substitution or the deployed file would contain a literal placeholder.
+
+```bash
+if [[ -z "${MONITORING_EMAIL:-}" ]]; then
+  echo "❌ MONITORING_EMAIL is required (used for caddy-security user identity)"
+  echo "   Set MONITORING_EMAIL in config/config.conf"
+  exit 1
+fi
+```
+
+### Step 2: Add keychain check
 
 Near the existing keychain-entry check for `cloudflare-api-token`, add:
 
@@ -406,7 +428,7 @@ if ! security find-generic-password \
 fi
 ```
 
-### Step 2: Update the `caddy validate` invocation with a dummy JWT key
+### Step 3: Update the `caddy validate` invocation with a dummy JWT key
 
 The existing `DUMMY_TOKEN` pattern lets `caddy validate` run without real credentials. Extend it:
 
@@ -424,18 +446,18 @@ else
 fi
 ```
 
-### Step 3: shellcheck + shfmt
+### Step 4: shellcheck + shfmt
 
 ```bash
 shellcheck --severity=warning --exclude=SC2312 app-setup/caddy-setup.sh
 shfmt -d -i 2 -ci -bn app-setup/caddy-setup.sh
 ```
 
-### Step 4: Commit
+### Step 5: Commit
 
 ```bash
 git add app-setup/caddy-setup.sh
-git commit -m "feat(caddy-setup): require JWT signing key before deploy"
+git commit -m "feat(caddy-setup): require JWT signing key + email before deploy"
 ```
 
 ---
