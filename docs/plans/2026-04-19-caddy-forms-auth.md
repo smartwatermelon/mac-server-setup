@@ -96,9 +96,9 @@ sudo cp /tmp/caddy-forms /opt/homebrew/bin/caddy
 
 **Do not restart Caddy yet.** The deployed Caddyfile still uses `basic_auth`; the new binary is backward compatible with that directive, so Caddy will keep running — but you want to sequence the binary swap and Caddyfile swap so each can be tested independently.
 
-### Step 3: Re-pin in Homebrew
+### Step 3: Re-pin in Homebrew **on TILSIT**
 
-As `andrewrich`:
+The pin prevents TILSIT's `brew upgrade caddy` from stomping the custom binary we just installed; pinning on the dev machine is irrelevant since we build via the Caddy download API there, not through brew. Run as `andrewrich` on TILSIT (Homebrew refuses root):
 
 ```bash
 /opt/homebrew/bin/brew unpin caddy || true
@@ -136,10 +136,10 @@ Create 1Password item `Caddy JWT signing key - tilsit.vip`, Password field = the
 
 ### Step 3: Install into System keychain on TILSIT
 
-From the dev machine:
+From the dev machine. **Use the `andrewrich` account, not `operator`** — non-interactive SSH as `operator` cannot run `sudo` without a TTY and the System keychain requires root:
 
 ```bash
-ssh operator@tilsit.local "sudo security add-generic-password -U \
+ssh -t andrewrich@tilsit.local "sudo security add-generic-password -U \
   -s 'caddy-jwt-signing-key' \
   -a 'tilsit.vip' \
   -w '${JWT_KEY}' \
@@ -345,40 +345,34 @@ caddy-security's local store wants a JSON file. Create it as a template alongsid
 }
 ```
 
-**Two edits to `caddy-setup.sh`:**
+**Three edits to `caddy-setup.sh`, placement matters:**
 
-1. Extend the `substitute_template()` function body to cover the new placeholder. The existing sed list does not include `__MONITORING_EMAIL__`, so add it:
+1. **Near the top of the script**, where the other config vars are read (around caddy-setup.sh:21–27), add:
+
+    ```bash
+    MONITORING_EMAIL="${MONITORING_EMAIL:-}"
+    ```
+
+    This must come **before** the preflight check added in Task 6 Step 1.
+
+2. **Inside the `substitute_template()` function body** (caddy-setup.sh:57–69), add one more `-e` line to the sed chain — insert it immediately before the final `"${src}" >"${dst}"` line so the backslash continuations stay valid:
 
     ```bash
     -e "s|__MONITORING_EMAIL__|${MONITORING_EMAIL}|g" \
     ```
 
-    and load `MONITORING_EMAIL` from `config.conf` near the top of the script (same pattern the existing vars use): `MONITORING_EMAIL="${MONITORING_EMAIL:-}"`.
-
-2. Add the invocation that deploys `users.json`:
+3. **Between the Caddyfile deploy and the `caddy validate` block** (after caddy-setup.sh:114, before line ~180), add the users.json deploy. This ordering is load-bearing: caddy-security's `local identity store` directive references the `users.json` path at validate time, so the file must exist before `caddy validate` runs.
 
     ```bash
     substitute_template "${TEMPLATE_DIR}/caddy-users.json" "${DEPLOY_CONFIG_DIR}/users.json"
     chown "${OPERATOR_USERNAME}:staff" "${DEPLOY_CONFIG_DIR}/users.json"
     chmod 600 "${DEPLOY_CONFIG_DIR}/users.json"
+    echo "✓ Copied users.json to ${DEPLOY_CONFIG_DIR}/ (mode 600)"
     ```
 
 **Mode 0600 is mandatory** — the file contains the bcrypt password hash.
 
-### Step 4: Validate locally
-
-On the dev machine (requires caddy-security binary, not the Homebrew stock one):
-
-```bash
-export HOSTNAME=TILSIT
-export CF_API_TOKEN=dummy0token0for0validation0only000000000
-export JWT_SIGNING_KEY=dummy0jwt0signing0key0for0validation0only00000000000000000000000
-/tmp/caddy-forms validate --config /tmp/Caddyfile.substituted --adapter caddyfile
-```
-
-Expected: `Valid configuration`.
-
-### Step 5: Commit
+### Step 4: Commit
 
 ```bash
 git add app-setup/templates/Caddyfile app-setup/templates/caddy-users.json app-setup/caddy-setup.sh
@@ -499,10 +493,10 @@ set -a; source config/config.conf; set +a
 sudo -E ./caddy-setup.sh
 ```
 
-Expected:
+Expected (string match exactly what `caddy-setup.sh` emits):
 
-- `✓ Installed /Users/operator/.config/caddy/Caddyfile`
-- `✓ Installed /Users/operator/.config/caddy/users.json` (mode 600)
+- `✓ Copied Caddyfile to /Users/operator/.config/caddy/`
+- `✓ Copied users.json to /Users/operator/.config/caddy/ (mode 600)`
 - `✓ Configuration valid`
 
 ### Step 4: Restart Caddy
@@ -517,21 +511,32 @@ Expected: `state = running`, `last exit code = 0`.
 
 ### Step 5: Functional tests
 
-```bash
-# LAN access still bypasses auth
-curl -ksI https://tilsit.local/ | head -3
-# expect HTTP/2 200
+**Run the external-path tests from the dev machine (not from TILSIT).** TILSIT's own source IP matches the `@local_network` matcher, so the `curl` would hit the LAN bypass and every assertion would pass for the wrong reason. The LAN test is the only one that belongs on TILSIT itself.
 
-# External path: unauthenticated hit redirects to /auth/
-curl -ksI https://tilsit.vip:443/ | grep -E "HTTP|location"
+On **TILSIT** — verify LAN bypass still works:
+
+```bash
+curl -ksI https://tilsit.local/ | head -3
+# expect HTTP/2 200, no WWW-Authenticate header
+```
+
+On the **dev machine** (off the TILSIT LAN) — verify the form-auth path:
+
+```bash
+# Unauthenticated hit redirects to /auth/
+curl -ksI https://tilsit.vip/ | grep -iE "^HTTP|^location"
 # expect HTTP/2 302 + location: /auth/
 
-# External path: /auth/ serves the login form
-curl -ks https://tilsit.vip:443/auth/ | grep -qi '<form' && echo "form present"
+# /auth/ serves a login form (not a 401 with basic-auth realm)
+curl -ks https://tilsit.vip/auth/ | grep -qi '<form' && echo "form present"
 
-# The old basic_auth WWW-Authenticate header must NOT appear
-curl -ksI https://tilsit.vip:443/ | grep -i "www-authenticate" && echo "BUG: still sending basic_auth" || echo "basic_auth gone"
+# No WWW-Authenticate header (would indicate basic_auth regression)
+curl -ksI https://tilsit.vip/ | grep -qi "^www-authenticate" \
+  && echo "BUG: still sending basic_auth" \
+  || echo "basic_auth gone"
 ```
+
+If the dev machine happens to share the `10.0.15.0/24` subnet with TILSIT, run the external tests from cellular (phone hotspot) or any VPN tunneling through a non-LAN address instead.
 
 ### Step 6: Browser test
 
@@ -550,9 +555,17 @@ If any step fails, proceed to rollback.
 
 Relies on the backups created in Task 1 Step 2 (`/opt/homebrew/bin/caddy.pre-forms-auth`) and Task 7 Step 2 (`~/.config/caddy/Caddyfile.pre-forms-auth.YYYYMMDD`). Both must exist before you hit this step.
 
+The Caddyfile restore uses `ls -t ... | head -1` rather than `$(date +%Y%m%d)` — if the cutover rolls past midnight, a fresh `date` call would reconstruct the wrong filename and `cp` would fail exactly when you need it. Picking the most-recent backup works regardless of the clock and also DTRT when multiple backups exist from retried cutovers.
+
 ```bash
 sudo cp /opt/homebrew/bin/caddy.pre-forms-auth /opt/homebrew/bin/caddy
-sudo -iu operator cp ~/.config/caddy/Caddyfile.pre-forms-auth.$(date +%Y%m%d) ~/.config/caddy/Caddyfile
+# Confirm what you're about to restore BEFORE copying
+ls -t /Users/operator/.config/caddy/Caddyfile.pre-forms-auth.*
+sudo -iu operator bash -c '
+  latest=$(ls -t ~/.config/caddy/Caddyfile.pre-forms-auth.* | head -1)
+  [[ -f "${latest}" ]] || { echo "no backup found" >&2; exit 1; }
+  cp "${latest}" ~/.config/caddy/Caddyfile
+'
 sudo launchctl kickstart -k system/com.caddyserver.caddy
 ```
 
