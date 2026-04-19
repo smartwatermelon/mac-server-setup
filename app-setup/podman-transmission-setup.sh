@@ -484,72 +484,113 @@ MACHINE_START_DEST="${OPERATOR_HOME}/.local/bin/podman-machine-start.sh"
 # HOST_PORT (line ~240), PIA_REGION (line ~238), LAN (line ~239), PUID/PGID (Section 5), TZ_VALUE (Section 5)
 sudo tee "${MACHINE_START_DEST}" >/dev/null <<WRAPPER
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 #
-# podman-machine-start.sh - Start Podman machine and bring up transmission stack
+# podman-machine-start.sh - Start Podman machine and supervise the transmission stack
 #
 # Invoked by com.${HOSTNAME_LOWER}.podman-transmission-vm LaunchAgent at login.
-# Ensures the machine is running, waits for the socket, then starts the transmission container.
-# Separate from the setup script so it can be re-run safely at each login.
+#
+# This script DOES NOT EXIT under normal operation. After starting the VM and
+# creating the container, it enters a supervision loop that sleeps between
+# health checks. Exiting would make launchd dissolve the LaunchAgent's resource
+# coalition, which in turn causes vfkit (the Apple-hypervisor VM process) to
+# receive XPC_ERROR_CONNECTION_INTERRUPTED and cleanly shut down about 5
+# seconds later. Observed on TILSIT after the 2026-04-18 reboot.
+#
+# Maintenance:
+#   launchctl bootout gui/\$(id -u)/com.${HOSTNAME_LOWER}.podman-transmission-vm
+#   podman machine stop transmission-vm
+# Reverse with 'launchctl bootstrap gui/<uid> <plist>' or reboot.
 
-# LaunchAgents run with a minimal PATH that does not include Homebrew.
-# Bake in the Homebrew prefix determined at deploy time.
 export PATH="${HOMEBREW_PREFIX}/bin:${HOMEBREW_PREFIX}/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-MACHINE_STATE=\$(podman machine inspect transmission-vm --format '{{.State}}' 2>/dev/null || echo "unknown")
-if [[ "\${MACHINE_STATE}" != "running" ]]; then
-    podman machine start transmission-vm
-fi
+SUPERVISE_INTERVAL=\${SUPERVISE_INTERVAL:-300}
 
-# Wait for the Podman socket to become ready (up to 30 seconds)
-for _ in {1..30}; do
-    if podman info >/dev/null 2>&1; then
-        break
+log_ts() {
+    local ts
+    ts=\$(date '+%F %T' 2>/dev/null || echo "-")
+    echo "[\${ts}] \$*"
+}
+
+ensure_machine() {
+    local state
+    state=\$(podman machine inspect transmission-vm --format '{{.State}}' 2>/dev/null || echo unknown)
+    if [[ "\${state}" != "running" ]]; then
+        log_ts "machine state=\${state}, starting transmission-vm"
+        podman machine start transmission-vm || return 1
     fi
-    sleep 1
+    for _ in {1..30}; do
+        if podman info >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+    log_ts "podman socket did not become ready within 30s"
+    return 1
+}
+
+ensure_container() {
+    local running=false
+    if podman container exists transmission-vpn 2>/dev/null; then
+        running=\$(podman inspect transmission-vpn --format '{{.State.Running}}' 2>/dev/null || echo false)
+    fi
+    if [[ "\${running}" == "true" ]]; then
+        return 0
+    fi
+    log_ts "container transmission-vpn not running — (re)creating"
+    podman rm -f transmission-vpn >/dev/null 2>&1 || true
+    podman run -d \\
+        --name transmission-vpn \\
+        --privileged \\
+        --device /dev/net/tun:/dev/net/tun \\
+        --sysctl net.ipv6.conf.all.disable_ipv6=0 \\
+        -v "${NFS_MOUNT_POINT}:/data" \\
+        -v "${OPERATOR_HOME}/containers/transmission/scripts:/scripts" \\
+        -v "${OPERATOR_HOME}/containers/transmission/config:/config" \\
+        -v "${OPERATOR_HOME}/containers/transmission/watch:/watch" \\
+        -p "${HOST_PORT}:9091" \\
+        --restart unless-stopped \\
+        --health-cmd "curl -sf --max-time 5 http://localhost:9091/transmission/web/" \\
+        --health-interval 60s \\
+        --health-start-period 120s \\
+        --health-retries 3 \\
+        --health-on-failure restart \\
+        --env-file "${OPERATOR_HOME}/containers/transmission/.env" \\
+        -e OPENVPN_PROVIDER=PIA \\
+        -e "OPENVPN_CONFIG=${PIA_REGION}" \\
+        -e "LOCAL_NETWORK=${LAN}" \\
+        -e "PUID=${PUID}" \\
+        -e "PGID=${PGID}" \\
+        -e "TZ=${TZ_VALUE}" \\
+        -e TRANSMISSION_DOWNLOAD_DIR=/data/Media/Torrents/pending-move \\
+        -e TRANSMISSION_INCOMPLETE_DIR=/data/Media/Torrents/incomplete \\
+        -e TRANSMISSION_WATCH_DIR=/watch \\
+        -e TRANSMISSION_WATCH_DIR_ENABLED=true \\
+        -e TRANSMISSION_RATIO_LIMIT_ENABLED=false \\
+        -e TRANSMISSION_ENCRYPTION=2 \\
+        -e TRANSMISSION_BLOCKLIST_ENABLED=true \\
+        -e "TRANSMISSION_BLOCKLIST_URL=https://github.com/Naunter/BT_BlockLists/raw/master/bt_blocklists.gz" \\
+        -e TRANSMISSION_RPC_AUTHENTICATION_REQUIRED=false \\
+        -e TRANSMISSION_RPC_WHITELIST_ENABLED=false \\
+        -e TRANSMISSION_SCRIPT_TORRENT_DONE_ENABLED=true \\
+        -e TRANSMISSION_SCRIPT_TORRENT_DONE_FILENAME=/scripts/transmission-post-done.sh \\
+        -e CREATE_TUN_DEVICE=false \\
+        -e LOG_TO_STDOUT=true \\
+        haugene/transmission-openvpn:latest
+}
+
+ensure_machine
+ensure_container
+
+log_ts "entering supervision loop (interval=\${SUPERVISE_INTERVAL}s)"
+while true; do
+    sleep "\${SUPERVISE_INTERVAL}"
+    if ensure_machine; then
+        ensure_container || log_ts "ensure_container failed — will retry next cycle"
+    else
+        log_ts "ensure_machine failed — will retry next cycle"
+    fi
 done
-
-# Remove old container if exists (idempotent restart)
-podman rm -f transmission-vpn 2>/dev/null || true
-
-podman run -d \\
-    --name transmission-vpn \\
-    --privileged \\
-    --device /dev/net/tun:/dev/net/tun \\
-    --sysctl net.ipv6.conf.all.disable_ipv6=0 \\
-    -v "${NFS_MOUNT_POINT}:/data" \\
-    -v "${OPERATOR_HOME}/containers/transmission/scripts:/scripts" \\
-    -v "${OPERATOR_HOME}/containers/transmission/config:/config" \\
-    -v "${OPERATOR_HOME}/containers/transmission/watch:/watch" \\
-    -p "${HOST_PORT}:9091" \\
-    --restart unless-stopped \\
-    --health-cmd "curl -sf --max-time 5 http://localhost:9091/transmission/web/" \\
-    --health-interval 60s \\
-    --health-start-period 120s \\
-    --health-retries 3 \\
-    --health-on-failure restart \\
-    --env-file "${OPERATOR_HOME}/containers/transmission/.env" \\
-    -e OPENVPN_PROVIDER=PIA \\
-    -e "OPENVPN_CONFIG=${PIA_REGION}" \\
-    -e "LOCAL_NETWORK=${LAN}" \\
-    -e "PUID=${PUID}" \\
-    -e "PGID=${PGID}" \\
-    -e "TZ=${TZ_VALUE}" \\
-    -e TRANSMISSION_DOWNLOAD_DIR=/data/Media/Torrents/pending-move \\
-    -e TRANSMISSION_INCOMPLETE_DIR=/data/Media/Torrents/incomplete \\
-    -e TRANSMISSION_WATCH_DIR=/watch \\
-    -e TRANSMISSION_WATCH_DIR_ENABLED=true \\
-    -e TRANSMISSION_RATIO_LIMIT_ENABLED=false \\
-    -e TRANSMISSION_ENCRYPTION=2 \\
-    -e TRANSMISSION_BLOCKLIST_ENABLED=true \\
-    -e "TRANSMISSION_BLOCKLIST_URL=https://github.com/Naunter/BT_BlockLists/raw/master/bt_blocklists.gz" \\
-    -e TRANSMISSION_RPC_AUTHENTICATION_REQUIRED=false \\
-    -e TRANSMISSION_RPC_WHITELIST_ENABLED=false \\
-    -e TRANSMISSION_SCRIPT_TORRENT_DONE_ENABLED=true \\
-    -e TRANSMISSION_SCRIPT_TORRENT_DONE_FILENAME=/scripts/transmission-post-done.sh \\
-    -e CREATE_TUN_DEVICE=false \\
-    -e LOG_TO_STDOUT=true \\
-    haugene/transmission-openvpn:latest
 WRAPPER
 
 sudo chmod 755 "${MACHINE_START_DEST}"
@@ -586,7 +627,9 @@ sudo -iu "${OPERATOR_USERNAME}" tee "${MACHINE_PLIST}" >/dev/null <<PLIST
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
-  <false/>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
   <key>StandardOutPath</key>
   <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-podman-vm-stdout.log</string>
   <key>StandardErrorPath</key>
