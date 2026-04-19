@@ -476,7 +476,20 @@ Verify:
 ls -l /opt/homebrew/bin/caddy.pre-forms-auth  # rollback binary exists
 ```
 
-### Step 2: Deploy the new Caddyfile
+### Step 2: Back up the current deployed Caddyfile
+
+**Do this before running `caddy-setup.sh` in the next step — otherwise the rollback in Step 7 has nothing to restore from.**
+
+```bash
+sudo -iu operator cp \
+  ~/.config/caddy/Caddyfile \
+  ~/.config/caddy/Caddyfile.pre-forms-auth.$(date +%Y%m%d)
+ls -l /Users/operator/.config/caddy/Caddyfile.pre-forms-auth.*
+```
+
+Expected: one backup file listed with today's date.
+
+### Step 3: Deploy the new Caddyfile
 
 On TILSIT, from the repo:
 
@@ -492,7 +505,7 @@ Expected:
 - `✓ Installed /Users/operator/.config/caddy/users.json` (mode 600)
 - `✓ Configuration valid`
 
-### Step 3: Restart Caddy
+### Step 4: Restart Caddy
 
 ```bash
 sudo launchctl kickstart -k system/com.caddyserver.caddy
@@ -502,7 +515,7 @@ sudo launchctl print system/com.caddyserver.caddy | grep -E "state|last exit cod
 
 Expected: `state = running`, `last exit code = 0`.
 
-### Step 4: Functional tests
+### Step 5: Functional tests
 
 ```bash
 # LAN access still bypasses auth
@@ -520,7 +533,7 @@ curl -ks https://tilsit.vip:443/auth/ | grep -qi '<form' && echo "form present"
 curl -ksI https://tilsit.vip:443/ | grep -i "www-authenticate" && echo "BUG: still sending basic_auth" || echo "basic_auth gone"
 ```
 
-### Step 5: Browser test
+### Step 6: Browser test
 
 From a device **off the LAN** (cellular, VPN off):
 
@@ -533,7 +546,9 @@ From a device **off the LAN** (cellular, VPN off):
 
 If any step fails, proceed to rollback.
 
-### Step 6: Rollback plan (if anything is broken)
+### Step 7: Rollback plan (if anything is broken)
+
+Relies on the backups created in Task 1 Step 2 (`/opt/homebrew/bin/caddy.pre-forms-auth`) and Task 7 Step 2 (`~/.config/caddy/Caddyfile.pre-forms-auth.YYYYMMDD`). Both must exist before you hit this step.
 
 ```bash
 sudo cp /opt/homebrew/bin/caddy.pre-forms-auth /opt/homebrew/bin/caddy
@@ -541,9 +556,7 @@ sudo -iu operator cp ~/.config/caddy/Caddyfile.pre-forms-auth.$(date +%Y%m%d) ~/
 sudo launchctl kickstart -k system/com.caddyserver.caddy
 ```
 
-(Take the backup at the start of Task 7.1 before overwriting: `cp Caddyfile Caddyfile.pre-forms-auth.YYYYMMDD`.)
-
-### Step 7: Announce completion in commit
+### Step 8: Announce completion in commit
 
 ```bash
 git add -A   # only the docs/templates that changed, no secrets
@@ -568,7 +581,7 @@ Add a new service-README alongside `docs/apps/caddy-README.md`.
 - How to change the password (regenerate bcrypt hash, edit `users.json` in place, `kickstart` Caddy)
 - Why `BASICAUTH_USERNAME`/`BASICAUTH_HASH` kept their names even though basic-auth is gone (deliberate — avoids a config migration)
 - How to temporarily disable auth for debugging (comment the `authorize` line, restart Caddy, never leave it that way)
-- Rollback procedure from Task 7 Step 6
+- Rollback procedure from Task 7 Step 7
 
 ### Step 2: Add `CLAUDE.md` entry
 
