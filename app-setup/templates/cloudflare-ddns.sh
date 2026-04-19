@@ -193,7 +193,9 @@ maybe_heartbeat() {
   local last_heartbeat=0
   if [[ -f "${STATE_FILE}" ]]; then
     last_heartbeat=$(awk -F= '$1=="last_heartbeat" {print $2}' "${STATE_FILE}" 2>/dev/null || echo 0)
-    [[ -z "${last_heartbeat}" ]] && last_heartbeat=0
+    # Guard against a manually-edited state file with a non-numeric value:
+    # `$((now_epoch - garbage))` would hit `set -e` and crash the daemon.
+    [[ "${last_heartbeat}" =~ ^[0-9]+$ ]] || last_heartbeat=0
   fi
   local now_epoch
   now_epoch=$(date +%s)

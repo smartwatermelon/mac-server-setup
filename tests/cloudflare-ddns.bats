@@ -396,3 +396,15 @@ teardown() {
   run grep -c "heartbeat ok" "${LOG_FILE}"
   [ "$output" = "0" ]
 }
+
+@test "maybe_heartbeat: treats non-numeric last_heartbeat as 0 (no crash)" {
+  # Simulate a hand-edited or corrupt state file — the arithmetic path used
+  # to hit set -e and crash the daemon. It must now degrade to "first run".
+  printf 'last_ip=203.0.113.10\nlast_heartbeat=garbage\n' >"${STATE_FILE}"
+
+  run maybe_heartbeat "203.0.113.10"
+  [ "$status" -eq 0 ]
+  # Non-numeric → treated as 0 → elapsed ≫ 3600 → heartbeat should fire
+  run grep -c "heartbeat ok" "${LOG_FILE}"
+  [ "$output" = "1" ]
+}
