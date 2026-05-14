@@ -512,6 +512,22 @@ log_ts() {
     echo "[\${ts}] \$*"
 }
 
+wait_for_nfs() {
+    local mount_point="${NFS_MOUNT_POINT}"
+    local max_wait=120
+    local elapsed=0
+    while ! /sbin/mount | grep -q " on \${mount_point} "; do
+        log_ts "waiting for NFS mount at \${mount_point} (\${elapsed}/\${max_wait}s)..."
+        sleep 5
+        elapsed=\$((elapsed + 5))
+        if (( elapsed >= max_wait )); then
+            log_ts "FATAL: NFS mount not available at \${mount_point} after \${max_wait}s"
+            return 1
+        fi
+    done
+    log_ts "NFS mount ready at \${mount_point}"
+}
+
 ensure_machine() {
     local state
     state=\$(podman machine inspect transmission-vm --format '{{.State}}' 2>/dev/null || echo unknown)
@@ -563,7 +579,7 @@ ensure_container() {
         -e "PGID=${PGID}" \\
         -e "TZ=${TZ_VALUE}" \\
         -e TRANSMISSION_DOWNLOAD_DIR=/data/Media/Torrents/pending-move \\
-        -e TRANSMISSION_INCOMPLETE_DIR=/data/Media/Torrents/incomplete \\
+        -e TRANSMISSION_INCOMPLETE_DIR_ENABLED=false \\
         -e TRANSMISSION_WATCH_DIR=/watch \\
         -e TRANSMISSION_WATCH_DIR_ENABLED=true \\
         -e TRANSMISSION_RATIO_LIMIT_ENABLED=false \\
@@ -579,6 +595,7 @@ ensure_container() {
         haugene/transmission-openvpn:latest
 }
 
+wait_for_nfs || exit 1
 ensure_machine
 ensure_container
 
@@ -790,7 +807,7 @@ else
     -e "PGID=${PGID}" \
     -e "TZ=${TZ_VALUE}" \
     -e TRANSMISSION_DOWNLOAD_DIR=/data/Media/Torrents/pending-move \
-    -e TRANSMISSION_INCOMPLETE_DIR=/data/Media/Torrents/incomplete \
+    -e TRANSMISSION_INCOMPLETE_DIR_ENABLED=false \
     -e TRANSMISSION_WATCH_DIR=/watch \
     -e TRANSMISSION_WATCH_DIR_ENABLED=true \
     -e TRANSMISSION_RATIO_LIMIT_ENABLED=false \
