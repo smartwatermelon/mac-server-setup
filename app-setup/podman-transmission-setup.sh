@@ -608,12 +608,11 @@ check_data_access() {
             podman rm -f transmission-vpn 2>/dev/null || true
             podman machine stop transmission-vm 2>/dev/null || true
             sleep 5
-            if ensure_machine; then
-                ensure_container
+            if ensure_machine && ensure_container; then
                 DATA_CHECK_FAILURES=0
                 log_ts "RECOVERY: VM and container restarted successfully"
             else
-                log_ts "RECOVERY: VM restart failed — will retry next cycle"
+                log_ts "RECOVERY: restart failed — will retry next cycle"
             fi
         fi
         return 1
