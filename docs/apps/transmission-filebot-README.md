@@ -305,6 +305,41 @@ When Transmission runs in a container (e.g., podman/haugene), it cannot directly
 4. It invokes `transmission-done.sh` with the correct `TR_TORRENT_*` environment variables
 5. Dead-letter handling: after 5 failures, triggers are moved to `.dead` for manual inspection
 
+### VirtioFS NFS Access and Full Disk Access
+
+The Podman VM shares host directories into the container via VirtioFS. For NFS-backed
+paths (like `/Users/operator/.local/mnt/DSMedia`), macOS enforces TCC/sandbox
+restrictions on the `com.apple.Virtualization.VirtualMachine` XPC service that
+handles VirtioFS I/O.
+
+**Symptom:** Container shows "Operation not permitted" on `/data/` while the
+host NFS mount works fine. `stat()` succeeds but `opendir()` fails (EPERM).
+Other VirtioFS mounts to local paths (`/scripts`, `/config`, `/watch`) work.
+
+**Root cause:** The Virtualization.framework XPC service lacks Full Disk Access
+(FDA). On startup, VirtioFS opens directory handles that work for days/weeks.
+When the NFS server's idle timeout expires those handles, the XPC service
+must re-open them — and gets blocked by the sandbox.
+
+**Fix:** Grant FDA to the Virtualization.framework binary via System Settings >
+Privacy & Security > Full Disk Access:
+
+```text
+/System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/
+  com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/
+  com.apple.Virtualization.VirtualMachine
+```
+
+**Defense in depth:** The supervision loop in `podman-machine-start.sh` includes
+a `/data/` read health check. If `/data/` is inaccessible for 3 consecutive
+checks (15 minutes at 300s intervals), the loop automatically cycles the Podman
+VM and recreates the container to obtain fresh VirtioFS handles.
+
+> **Note:** This is the same class of issue as the LaunchAgent NFS `opendir()`
+> EPERM (fixed 2026-04-04 by granting FDA to `/bin/bash`). macOS Tahoe
+> enforces NFS access restrictions at the kernel level for any process
+> without FDA, including system XPC services.
+
 ## Common Gotchas
 
 1. **PATH issues**: Transmission runs scripts with minimal PATH (`/usr/bin:/bin:/usr/sbin:/sbin`). Script adds `/usr/local/bin:/opt/homebrew/bin` explicitly for Homebrew tools.

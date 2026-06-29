@@ -595,6 +595,36 @@ ensure_container() {
         haugene/transmission-openvpn:latest
 }
 
+DATA_CHECK_FAILURES=0
+MAX_DATA_FAILURES=3
+
+check_data_access() {
+    if ! podman exec transmission-vpn ls /data/ >/dev/null 2>&1; then
+        DATA_CHECK_FAILURES=\$((DATA_CHECK_FAILURES + 1))
+        log_ts "WARNING: /data/ inaccessible inside container (failure \${DATA_CHECK_FAILURES}/\${MAX_DATA_FAILURES})"
+        if (( DATA_CHECK_FAILURES >= MAX_DATA_FAILURES )); then
+            log_ts "RECOVERY: cycling VM to refresh VirtioFS NFS handles"
+            podman stop transmission-vpn 2>/dev/null || true
+            podman rm -f transmission-vpn 2>/dev/null || true
+            podman machine stop transmission-vm 2>/dev/null || true
+            sleep 5
+            if ensure_machine; then
+                ensure_container
+                DATA_CHECK_FAILURES=0
+                log_ts "RECOVERY: VM and container restarted successfully"
+            else
+                log_ts "RECOVERY: VM restart failed — will retry next cycle"
+            fi
+        fi
+        return 1
+    fi
+    if (( DATA_CHECK_FAILURES > 0 )); then
+        log_ts "data access restored after \${DATA_CHECK_FAILURES} failure(s)"
+    fi
+    DATA_CHECK_FAILURES=0
+    return 0
+}
+
 wait_for_nfs || exit 1
 ensure_machine
 ensure_container
@@ -603,7 +633,11 @@ log_ts "entering supervision loop (interval=\${SUPERVISE_INTERVAL}s)"
 while true; do
     sleep "\${SUPERVISE_INTERVAL}"
     if ensure_machine; then
-        ensure_container || log_ts "ensure_container failed — will retry next cycle"
+        if ensure_container; then
+            check_data_access || log_ts "data access check failed — will retry next cycle"
+        else
+            log_ts "ensure_container failed — will retry next cycle"
+        fi
     else
         log_ts "ensure_machine failed — will retry next cycle"
     fi
