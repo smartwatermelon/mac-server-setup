@@ -8,10 +8,10 @@ The watchdog polls the Plex REST API every 5 minutes, comparing current settings
 
 Two setup scripts deploy four components:
 
-| Script | What it deploys |
-|--------|----------------|
-| `msmtp-setup.sh` | Shared email facility (Gmail SMTP via msmtp) |
-| `plex-watchdog-setup.sh` | Polling daemon, CLI tool, golden config, LaunchAgent |
+| Script                   | What it deploys                                       |
+|--------------------------|-------------------------------------------------------|
+| `msmtp-setup.sh`         | Shared email facility (Gmail SMTP via msmtp)          |
+| `plex-watchdog-setup.sh` | Polling daemon, CLI tool, golden config, LaunchAgent  |
 
 ## Setup
 
@@ -101,7 +101,9 @@ This sends a PUT to the Plex API for each drifted setting and verifies the chang
 
 ### Refreshing after Plex updates
 
-After a Plex update, new settings may appear. Refresh the golden config to pick them up:
+Plex Media Server updates are applied manually (server version updates are
+set to "Ask me" — see `docs/apps/plex-setup-README.md#server-update-policy`).
+After you install one, new settings may appear. Refresh the golden config to pick them up:
 
 ```bash
 sudo -iu operator plex-watchdog-ctl refresh
@@ -162,14 +164,14 @@ The watchdog tracks which drifts have been emailed in `state.json`. It only emai
 Credentials are embedded in config files with restrictive permissions (mode 600, owned by operator) rather than stored in macOS Keychain. This is because the operator keychain cannot be unlocked from non-interactive contexts like LaunchAgents. See [Keychain Management](../keychain-credential-management.md) for details on this project-wide pattern.
 
 | Credential | Location | Protection |
-|-----------|----------|------------|
+| ----------- | ---------- | ------------ |
 | Plex token | `~/.config/plex-watchdog/token` | mode 600, operator:staff |
 | Gmail App Password | `~/.config/msmtp/config` | mode 600, operator:staff |
 
 ## Configuration reference
 
 | Variable | Source | Description |
-|----------|--------|-------------|
+| ---------- | -------- | ------------- |
 | `MONITORING_EMAIL` | `config/config.conf` | Email address for alert delivery |
 | `SERVER_NAME` | `config/config.conf` | Used in email subject prefix (e.g., `[TILSIT]`) |
 | `OPERATOR_USERNAME` | `config/config.conf` | User account that runs the watchdog |
@@ -177,7 +179,7 @@ Credentials are embedded in config files with restrictive permissions (mode 600,
 ## Logs
 
 | Log | Location | Contents |
-|-----|----------|----------|
+| ----- | ---------- | ---------- |
 | Watchdog | `~/.local/state/plex-watchdog.log` | Drift events, heartbeats, errors |
 | msmtp | `~/.local/state/msmtp.log` | Email send attempts and results |
 | Setup | `~/.local/state/<host>-msmtp-setup.log` | msmtp installation log |
