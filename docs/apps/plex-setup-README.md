@@ -260,6 +260,25 @@ Even in `--force` mode, these elements remain interactive:
 - **Server discovery**: When migration is manually specified via `--migrate-from`
 - **Plex application launch**: GUI application startup requires user session
 
+## Server Update Policy
+
+Plex Media Server's built-in updater (Settings → General → Server version)
+is set to **"Ask me"**, not automatic install. This is intentional, not an
+oversight:
+
+- On headless macOS, "Automatically download and install updates" still
+  relies on a GUI installer step. With no one logged into Plex Web to
+  approve/acknowledge it, an update can hang indefinitely mid-install,
+  taking the server down until someone logs in as `operator` to clear it.
+- "Ask me" avoids that failure mode. The tradeoff is that PMS version
+  updates are applied manually — see "Common Issues" below or update via
+  the Plex Web GUI when convenient.
+
+There is no scripted/headless PMS updater in this repo (the auto-update
+tooling in `scripts/server/setup-auto-updates.sh` covers Homebrew, the Mac
+App Store, and macOS Software Update only — it does not touch Plex). If
+that changes in the future, update this section.
+
 ## Manual Operations
 
 ### Service Management
