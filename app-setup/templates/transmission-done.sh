@@ -554,7 +554,18 @@ classify_failure() {
 check_disk_space() {
   local required_space=1000000 # 1GB in KB
 
-  if ! df -P "${PLEX_MEDIA_PATH}" | awk -v space="${required_space}" 'NR==2 {exit($4<space)}'; then
+  local df_output
+  df_output=$(df -P "${PLEX_MEDIA_PATH}" 2>&1)
+  local df_exit=$?
+
+  if [[ ${df_exit} -ne 0 ]]; then
+    log "Error: Unable to check disk space (df failed, exit code ${df_exit})"
+    log "Path may be inaccessible: ${PLEX_MEDIA_PATH}"
+    log "df output: ${df_output}"
+    return 1
+  fi
+
+  if ! echo "${df_output}" | awk -v space="${required_space}" 'NR==2 {exit($4<space)}'; then
     log "Error: Insufficient space on target filesystem (need ${required_space}KB)"
     return 1
   fi
