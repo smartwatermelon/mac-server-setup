@@ -1401,10 +1401,12 @@ triage_failed_torrent() {
 }
 
 rotate_log() {
-  local log_file_stat
-  log_file_stat="$(stat -f%z "${LOG_FILE}")"
-  if [[ -f "${LOG_FILE}" ]] && [[ "${log_file_stat}" -gt ${MAX_LOG_SIZE} ]]; then
-    mv "${LOG_FILE}" "${LOG_FILE}.old"
+  if [[ -f "${LOG_FILE}" ]]; then
+    local log_file_stat
+    log_file_stat="$(stat -f%z "${LOG_FILE}")"
+    if [[ "${log_file_stat}" -gt ${MAX_LOG_SIZE} ]]; then
+      mv "${LOG_FILE}" "${LOG_FILE}.old"
+    fi
   fi
 }
 
