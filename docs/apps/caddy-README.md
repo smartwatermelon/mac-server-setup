@@ -29,7 +29,7 @@ sudo launchctl kickstart -k system/com.caddyserver.caddy
 sudo launchctl bootout system/com.caddyserver.caddy
 
 # Health check all endpoints
-./caddy-health.sh
+caddy-health.sh
 
 # Generate a bcrypt password hash for basic_auth
 caddy hash-password
@@ -69,7 +69,7 @@ The `(common_config)` snippet contains all shared logic:
 - `app-setup/caddy-setup.sh` — Full deployment script: copies web assets, Caddyfile, wrapper script, and LaunchDaemon plists to their deployed locations, then validates config
 - `app-setup/templates/Caddyfile` — Production config (the main file you'll edit)
 - `app-setup/templates/caddy-wrapper.sh` — Reads `CF_API_TOKEN` from System keychain, exports it, then `exec`s Caddy. Deployed to `/usr/local/bin/caddy-wrapper.sh`
-- `app-setup/templates/caddy-health.sh` — Tests landing page, proxies, certs, and process status
+- `app-setup/templates/caddy-health.sh` — Tests landing page, proxies, certs, and process status. Deployed to `/usr/local/bin/caddy-health.sh`
 - `app-setup/templates/media-server.py` — Python HTTP file server for NFS media volume (binds to `127.0.0.1:9880`)
 - `app-setup/templates/www/` — Static web root (dashboard `index.html`, favicons, manifest)
 - `app-setup/templates/com.caddyserver.caddy.plist` — Caddy LaunchDaemon
@@ -83,6 +83,7 @@ Files are not served directly from the repo. `caddy-setup.sh` deploys everything
 - `www/*` → `/usr/local/var/www/` (web root)
 - `Caddyfile` → `/Users/operator/.config/caddy/Caddyfile` (runtime config)
 - `caddy-wrapper.sh` → `/usr/local/bin/caddy-wrapper.sh` (token injection wrapper)
+- `caddy-health.sh` → `/usr/local/bin/caddy-health.sh` (health check script)
 - `media-server.py` → `/usr/local/bin/media-server.py` (NFS media file server)
 - `LaunchDaemons/*.plist` → `/Library/LaunchDaemons/` (system services)
 
@@ -206,7 +207,7 @@ The `caddy-dns/cloudflare` module uses certmagic internally. certmagic has two s
 **Critical:** There are two env var syntaxes in Caddy and they are NOT interchangeable in all contexts.
 
 | Syntax | Processed by | When | Result in JSON config |
-|--------|-------------|------|-----------------------|
+| -------- | ------------- | ------ | ----------------------- |
 | `{$CF_API_TOKEN}` | Caddyfile adapter | At parse time | Actual token value baked in |
 | `{env.CF_API_TOKEN}` | Caddy runtime | At request time (HTTP handlers) | Literal string passed to module |
 

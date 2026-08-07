@@ -47,6 +47,7 @@ DEPLOY_WEB_ROOT="/usr/local/var/www"
 DEPLOY_LOG_DIR="/usr/local/var/log/caddy"
 DEPLOY_STATE_DIR="/Users/${OPERATOR_USERNAME}/.local/state/caddy"
 DEPLOY_WRAPPER="/usr/local/bin/caddy-wrapper.sh"
+DEPLOY_HEALTH="/usr/local/bin/caddy-health.sh"
 DEPLOY_PLIST="/Library/LaunchDaemons/com.caddyserver.caddy.plist"
 DEPLOY_MEDIA_SERVER="/usr/local/bin/media-server.py"
 DEPLOY_MEDIA_PLIST="/Library/LaunchDaemons/com.${HOSTNAME_LOWER}.media-server.plist"
@@ -124,6 +125,17 @@ else
   exit 1
 fi
 
+# Deploy caddy-health.sh
+echo "Deploying caddy-health.sh..."
+if [[ -f "${TEMPLATE_DIR}/caddy-health.sh" ]]; then
+  substitute_template "${TEMPLATE_DIR}/caddy-health.sh" "${DEPLOY_HEALTH}"
+  chmod +x "${DEPLOY_HEALTH}"
+  echo "✓ Copied caddy-health.sh to ${DEPLOY_HEALTH}"
+else
+  echo "❌ No caddy-health.sh found in ${TEMPLATE_DIR}"
+  exit 1
+fi
+
 # Install LaunchDaemon plist
 echo "Installing LaunchDaemon plist..."
 PLIST_SOURCE="${TEMPLATE_DIR}/com.caddyserver.caddy.plist"
@@ -193,6 +205,7 @@ echo "  Server URL: https://${HOSTNAME}.local"
 echo "  Web root: ${DEPLOY_WEB_ROOT}"
 echo "  Config: ${DEPLOY_CONFIG_DIR}/Caddyfile"
 echo "  Wrapper: ${DEPLOY_WRAPPER}"
+echo "  Health check: ${DEPLOY_HEALTH}"
 echo "  Media server: ${DEPLOY_MEDIA_SERVER}"
 echo "  Logs: ${DEPLOY_LOG_DIR}/"
 echo ""
@@ -200,7 +213,7 @@ echo "Commands:"
 echo "  Start:   sudo launchctl bootstrap system ${DEPLOY_PLIST}"
 echo "  Restart: sudo launchctl kickstart -k system/com.caddyserver.caddy"
 echo "  Stop:    sudo launchctl bootout system/com.caddyserver.caddy"
-echo "  Health:  ./caddy-health.sh"
+echo "  Health:  ${DEPLOY_HEALTH}"
 echo ""
 echo "Certificate installation:"
 echo "  Download: https://${HOSTNAME}.local/caddy-root-ca.crt"
