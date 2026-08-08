@@ -83,6 +83,18 @@ considers_file() {
   considers_file "${f}"
 }
 
+@test "matches *-rclone.log (#95: tilsit-rclone was not rotating, no pattern covered it)" {
+  local f="${STATE_DIR}/tilsit-rclone.log"
+  touch "${f}"
+  considers_file "${f}"
+}
+
+@test "matches com.<host>.operator-first-login.log (dot-form label, #95)" {
+  local f="${STATE_DIR}/com.tilsit.operator-first-login.log"
+  touch "${f}"
+  considers_file "${f}"
+}
+
 # ---------------------------------------------------------------------------
 # Regression guard: the old hyphen-form glob would miss the dot-form label.
 # This is a local sanity check on glob semantics, not a test of our config.
@@ -99,6 +111,24 @@ ${STATE_DIR}/com.*-mount-nas-media.log {
 }
 EOF
   local f="${STATE_DIR}/com.tilsit.mount-nas-media.log"
+  touch "${f}"
+  run sh -c "logrotate -d '${bad_conf}' 2>&1 | grep -Fq 'considering log ${f}'"
+  [ "${status}" -ne 0 ]
+}
+
+@test "regression: com.*-operator-first-login.log does NOT match com.tilsit.operator-first-login.log (#95)" {
+  # The pattern this repo shipped before #95 (com.*-operator-first-login.log,
+  # hyphen before "operator") never matched the actual LaunchAgent-produced
+  # filename (com.<host>.operator-first-login.log, dot before "operator") --
+  # the same class of bug already fixed once for mount-nas-media.log.
+  local bad_conf="${TEST_TMPDIR}/bad.conf"
+  cat >"${bad_conf}" <<EOF
+${STATE_DIR}/com.*-operator-first-login.log {
+    weekly
+    missingok
+}
+EOF
+  local f="${STATE_DIR}/com.tilsit.operator-first-login.log"
   touch "${f}"
   run sh -c "logrotate -d '${bad_conf}' 2>&1 | grep -Fq 'considering log ${f}'"
   [ "${status}" -ne 0 ]
