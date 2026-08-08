@@ -279,5 +279,4 @@ EOF
   run "${YQ}" eval '.plex.movie_section_id' "${config_file}"
   assert_success
   assert_equal "" "${output}"
-  [[ -z "${output}" ]] || return 1
 }
