@@ -474,8 +474,12 @@ get_plex_section_ids() {
     fi
   done
 
-  # Return both values (space-separated) for the caller to split.
-  printf '%s %s\n' "${movie_section_id}" "${tv_section_id}"
+  # Return both values as key=value lines (Plex section IDs are always
+  # small integers, but this format avoids any ambiguity from
+  # whitespace-splitting a single line, and is easy for the caller to
+  # parse without relying on positional field order).
+  printf 'movie_section_id=%s\n' "${movie_section_id}"
+  printf 'tv_section_id=%s\n' "${tv_section_id}"
   return 0
 }
 
@@ -770,7 +774,13 @@ main() {
   local tv_section_id=""
   local section_ids
   if section_ids=$(get_plex_section_ids "${plex_server}" "${token}"); then
-    read -r movie_section_id tv_section_id <<<"${section_ids}"
+    while IFS='=' read -r key value; do
+      case "${key}" in
+        movie_section_id) movie_section_id="${value}" ;;
+        tv_section_id) tv_section_id="${value}" ;;
+        *) ;;
+      esac
+    done <<<"${section_ids}"
   fi
 
   if [[ -n "${movie_section_id}" ]] || [[ -n "${tv_section_id}" ]]; then
