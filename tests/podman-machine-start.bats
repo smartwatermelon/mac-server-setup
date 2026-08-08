@@ -117,6 +117,10 @@ RENDER_EOF" >"${WRAPPER_SCRIPT}"
   # (placed first in PATH) is used instead, without touching the real
   # /sbin/mount logic covered elsewhere. This is the only line altered from
   # what deploy actually writes.
+  if ! grep -q '/sbin/mount' "${WRAPPER_SCRIPT}"; then
+    echo "Expected /sbin/mount in rendered wrapper -- extraction may be stale" >&2
+    return 1
+  fi
   sed -i.bak 's#/sbin/mount#mount#' "${WRAPPER_SCRIPT}"
   rm -f "${WRAPPER_SCRIPT}.bak"
 
@@ -249,7 +253,7 @@ run_wrapper_briefly() {
   run run_wrapper_briefly
 
   local run_calls
-  run_calls=$(grep -c '^run -d' "${CALLS_FILE}")
+  run_calls=$(grep -c '^run -d' "${CALLS_FILE}" || true)
   [ "${run_calls}" -eq 1 ]
 }
 
