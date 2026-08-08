@@ -433,6 +433,56 @@ find_common_root() {
   fi
 }
 
+get_plex_section_ids() {
+  local plex_server="$1"
+  local token="$2"
+
+  local response
+  if ! response=$(curl -sf -m 10 -H "X-Plex-Token: ${token}" "${plex_server}/library/sections" 2>&1); then
+    printf 'Warning: Could not retrieve library sections for scan IDs\n' >&2
+    return 1
+  fi
+
+  local section_count
+  if ! section_count=$(echo "${response}" | xmlstarlet sel -t -v "count(//Directory)" 2>/dev/null); then
+    printf 'Warning: Could not parse library sections XML for scan IDs\n' >&2
+    return 1
+  fi
+
+  if [[ -z "${section_count}" ]] || [[ "${section_count}" -eq 0 ]]; then
+    printf 'Warning: No library sections found for scan IDs\n' >&2
+    return 1
+  fi
+
+  local movie_section_id=""
+  local tv_section_id=""
+
+  local i
+  for ((i = 1; i <= section_count; i++)); do
+    local id type
+    id=$(echo "${response}" | xmlstarlet sel -t -v "//Directory[${i}]/@key" 2>/dev/null)
+    type=$(echo "${response}" | xmlstarlet sel -t -v "//Directory[${i}]/@type" 2>/dev/null)
+
+    [[ -z "${id}" ]] && continue
+
+    # Use the first section found of each type. Plex's library section
+    # "type" attribute is "movie" for movie libraries and "show" for TV.
+    if [[ "${type}" == "movie" ]] && [[ -z "${movie_section_id}" ]]; then
+      movie_section_id="${id}"
+    elif [[ "${type}" == "show" ]] && [[ -z "${tv_section_id}" ]]; then
+      tv_section_id="${id}"
+    fi
+  done
+
+  # Return both values as key=value lines (Plex section IDs are always
+  # small integers, but this format avoids any ambiguity from
+  # whitespace-splitting a single line, and is easy for the caller to
+  # parse without relying on positional field order).
+  printf 'movie_section_id=%s\n' "${movie_section_id}"
+  printf 'tv_section_id=%s\n' "${tv_section_id}"
+  return 0
+}
+
 get_media_path() {
   local plex_server="$1"
   local token="$2"
@@ -573,6 +623,8 @@ write_config() {
   local plex_server="$1"
   local plex_token="$2"
   local media_path="$3"
+  local movie_section_id="${4:-}"
+  local tv_section_id="${5:-}"
 
   # Create config directory if it doesn't exist
   if [[ ! -d "${USER_CONFIG_DIR}" ]]; then
@@ -600,6 +652,8 @@ plex:
   server: ${plex_server}
   token: ${plex_token}
   media_path: ${media_path}
+  movie_section_id: ${movie_section_id}
+  tv_section_id: ${tv_section_id}
 logging:
   file: .local/state/transmission-processing.log
   max_size: 10485760  # 10MB
@@ -713,8 +767,32 @@ main() {
   local media_path
   media_path=$(get_media_path "${plex_server}" "${token}") || exit 1
 
+  # Discover movie/TV library section IDs for runtime Plex scan triggers.
+  # Non-fatal if this fails — transmission-done.sh falls back to legacy
+  # hardcoded IDs (1/2) when these are blank.
+  local movie_section_id=""
+  local tv_section_id=""
+  local section_ids
+  if section_ids=$(get_plex_section_ids "${plex_server}" "${token}"); then
+    while IFS='=' read -r key value; do
+      case "${key}" in
+        movie_section_id) movie_section_id="${value}" ;;
+        tv_section_id) tv_section_id="${value}" ;;
+        *) ;;
+      esac
+    done <<<"${section_ids}"
+  fi
+
+  if [[ -n "${movie_section_id}" ]] || [[ -n "${tv_section_id}" ]]; then
+    printf '\nDetected library section IDs: movie=%s tv=%s\n' \
+      "${movie_section_id:-none}" "${tv_section_id:-none}" >&2
+  else
+    printf '\nWarning: Could not determine library section IDs automatically.\n' >&2
+    printf 'transmission-done will fall back to legacy hardcoded section IDs (movie=1, tv=2).\n' >&2
+  fi
+
   # Write configuration file
-  if ! write_config "${plex_server}" "${token}" "${media_path}"; then
+  if ! write_config "${plex_server}" "${token}" "${media_path}" "${movie_section_id}" "${tv_section_id}"; then
     printf 'Error: Failed to write configuration\n' >&2
     exit 1
   fi
