@@ -257,3 +257,27 @@ EOF
   assert_success
   assert_equal "null" "${output}"
 }
+
+@test "read_config: yq returns empty string (not 'null') for a blank scalar section ID -- both are handled by the same guard" {
+  # Covers the case where transmission-filebot-setup.sh's write_config()
+  # wrote the key but discovery found no value (movie_section_id: <blank>),
+  # as opposed to the key being absent entirely (previous test, yq -> "null").
+  # read_config()'s guard is `[[ -n "$v" ]] && [[ "$v" != "null" ]]`, which
+  # must reject both an empty string AND the literal "null".
+  local config_file="${TEST_TEMP_DIR}/config.yml"
+  cat >"${config_file}" <<EOF
+---
+version: 1.0
+plex:
+  server: http://localhost:32400
+  token: test_token
+  media_path: ${PLEX_MEDIA_PATH}
+  movie_section_id:
+  tv_section_id:
+EOF
+
+  run "${YQ}" eval '.plex.movie_section_id' "${config_file}"
+  assert_success
+  assert_equal "" "${output}"
+  [[ -z "${output}" ]] || return 1
+}

@@ -188,9 +188,13 @@ read_config() {
     return 1
   fi
 
-  # Library section IDs are optional: older configs won't have them, and
-  # yq prints the literal string "null" for a missing/empty scalar key.
-  # Fall back to the pre-existing hardcoded defaults (1/2) in that case.
+  # Library section IDs are optional: older configs won't have them at all
+  # (yq prints the literal string "null" for a missing key), and configs
+  # written by an installer run where discovery failed will have a blank
+  # scalar (yq prints "" -- empty string -- for that case, not "null").
+  # The `-n` check handles the blank-scalar case; the `!= "null"` check
+  # handles the missing-key case. Both fall back to the pre-existing
+  # hardcoded defaults (1/2) set at script scope above.
   local movie_section_id tv_section_id
   movie_section_id=$("${YQ}" eval '.plex.movie_section_id' "${config_file}")
   tv_section_id=$("${YQ}" eval '.plex.tv_section_id' "${config_file}")
