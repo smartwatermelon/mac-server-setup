@@ -6,6 +6,8 @@ plex:
   server: http://localhost:32400
   token: __PLEX_TOKEN__
   media_path: __PLEX_MEDIA_PATH__
+  movie_section_id: __PLEX_MOVIE_SECTION_ID__
+  tv_section_id: __PLEX_TV_SECTION_ID__
 logging:
   file: .local/state/transmission-processing.log
   max_size: 10485760

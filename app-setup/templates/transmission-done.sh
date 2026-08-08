@@ -106,6 +106,11 @@ readonly FILEBOT="${HOMEBREW_PREFIX}/bin/filebot"
 PLEX_SERVER=""
 PLEX_TOKEN=""
 PLEX_MEDIA_PATH="${PLEX_MEDIA_PATH:-}"
+# Legacy hardcoded fallbacks retained for configs written before section IDs
+# were discovered/stored (see #110). New installs get real values from
+# config.yml via read_config().
+PLEX_MOVIE_SECTION_ID="${PLEX_MOVIE_SECTION_ID:-1}"
+PLEX_TV_SECTION_ID="${PLEX_TV_SECTION_ID:-2}"
 LOG_FILE=""
 MAX_LOG_SIZE=0
 
@@ -181,6 +186,19 @@ read_config() {
   if ((${#missing_values[@]} > 0)); then
     printf 'Error: Missing required config values: %s\n' "${missing_values[*]}" >&2
     return 1
+  fi
+
+  # Library section IDs are optional: older configs won't have them, and
+  # yq prints the literal string "null" for a missing/empty scalar key.
+  # Fall back to the pre-existing hardcoded defaults (1/2) in that case.
+  local movie_section_id tv_section_id
+  movie_section_id=$("${YQ}" eval '.plex.movie_section_id' "${config_file}")
+  tv_section_id=$("${YQ}" eval '.plex.tv_section_id' "${config_file}")
+  if [[ -n "${movie_section_id}" ]] && [[ "${movie_section_id}" != "null" ]]; then
+    PLEX_MOVIE_SECTION_ID="${movie_section_id}"
+  fi
+  if [[ -n "${tv_section_id}" ]] && [[ "${tv_section_id}" != "null" ]]; then
+    PLEX_TV_SECTION_ID="${tv_section_id}"
   fi
 
   local log_path
@@ -354,8 +372,8 @@ trigger_plex_scan() {
   local section_id
 
   case "${section_type}" in
-    "show") section_id="2" ;;
-    "movie") section_id="1" ;;
+    "show") section_id="${PLEX_TV_SECTION_ID}" ;;
+    "movie") section_id="${PLEX_MOVIE_SECTION_ID}" ;;
     *)
       log "Error: Unknown media type for Plex scan: ${section_type}"
       return 1

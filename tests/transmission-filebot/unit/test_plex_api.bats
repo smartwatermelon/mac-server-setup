@@ -167,3 +167,93 @@ load ../test_helper
   run cat "${LOG_FILE}"
   assert_output_contains "/custom/endpoint" "${output}"
 }
+
+# --- Dynamic library section ID tests (#110) ---
+# These verify trigger_plex_scan() uses PLEX_MOVIE_SECTION_ID /
+# PLEX_TV_SECTION_ID when set (e.g. via read_config() from config.yml),
+# rather than the legacy hardcoded 1/2. Defaults are covered by the
+# "uses section ID 1/2" tests above, which rely on the fallback values
+# set at script scope when config doesn't provide overrides.
+
+@test "trigger_plex_scan: uses configured movie section ID instead of hardcoded default" {
+  export TEST_MODE=true
+  export LOG_FILE="${TEST_TEMP_DIR}/test.log"
+  export PLEX_MOVIE_SECTION_ID=7
+  : >"${LOG_FILE}"
+
+  trigger_plex_scan "movie"
+
+  run cat "${LOG_FILE}"
+  assert_output_contains "/library/sections/7/refresh" "${output}"
+  [[ "${output}" != *"/library/sections/1/refresh"* ]] || return 1
+}
+
+@test "trigger_plex_scan: uses configured tv section ID instead of hardcoded default" {
+  export TEST_MODE=true
+  export LOG_FILE="${TEST_TEMP_DIR}/test.log"
+  export PLEX_TV_SECTION_ID=9
+  : >"${LOG_FILE}"
+
+  trigger_plex_scan "show"
+
+  run cat "${LOG_FILE}"
+  assert_output_contains "/library/sections/9/refresh" "${output}"
+  [[ "${output}" != *"/library/sections/2/refresh"* ]] || return 1
+}
+
+@test "trigger_plex_scan: falls back to legacy hardcoded ID when config value is unset" {
+  export TEST_MODE=true
+  export LOG_FILE="${TEST_TEMP_DIR}/test.log"
+  # PLEX_MOVIE_SECTION_ID defaults to "1" at script scope (see
+  # `PLEX_MOVIE_SECTION_ID="${PLEX_MOVIE_SECTION_ID:-1}"` near the top of
+  # transmission-done.sh) when config.yml doesn't provide an override.
+  : >"${LOG_FILE}"
+
+  trigger_plex_scan "movie"
+
+  run cat "${LOG_FILE}"
+  assert_output_contains "/library/sections/1/refresh" "${output}"
+}
+
+@test "read_config: parses movie_section_id and tv_section_id via yq the same way as other plex.* fields" {
+  # read_config() reads from LOCAL_CONFIG/USER_CONFIG, both readonly paths
+  # fixed at script-source time, so it can't be redirected to a per-test
+  # fixture here. Instead, verify the same yq parsing expression read_config
+  # uses behaves as expected against a standalone fixture — this is the
+  # same technique read_config relies on for every other plex.* field.
+  local config_file="${TEST_TEMP_DIR}/config.yml"
+  cat >"${config_file}" <<EOF
+---
+version: 1.0
+plex:
+  server: http://localhost:32400
+  token: test_token
+  media_path: ${PLEX_MEDIA_PATH}
+  movie_section_id: 5
+  tv_section_id: 6
+EOF
+
+  run "${YQ}" eval '.plex.movie_section_id' "${config_file}"
+  assert_success
+  assert_equal "5" "${output}"
+
+  run "${YQ}" eval '.plex.tv_section_id' "${config_file}"
+  assert_success
+  assert_equal "6" "${output}"
+}
+
+@test "read_config: yq returns 'null' string for missing section ID keys (read_config's fallback trigger)" {
+  local config_file="${TEST_TEMP_DIR}/config.yml"
+  cat >"${config_file}" <<EOF
+---
+version: 1.0
+plex:
+  server: http://localhost:32400
+  token: test_token
+  media_path: ${PLEX_MEDIA_PATH}
+EOF
+
+  run "${YQ}" eval '.plex.movie_section_id' "${config_file}"
+  assert_success
+  assert_equal "null" "${output}"
+}
