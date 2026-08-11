@@ -32,6 +32,8 @@ SETUP_SCRIPT="${BATS_TEST_DIRNAME}/../../../app-setup/transmission-filebot-setup
 FIXTURES_DIR="${BATS_TEST_DIRNAME}/../fixtures/plex"
 
 setup() {
+  command -v xmlstarlet &>/dev/null || skip "xmlstarlet not installed"
+
   TEST_TMPDIR="$(mktemp -d)"
   export TEST_TMPDIR
 
@@ -48,6 +50,14 @@ setup() {
 
   # shellcheck source=/dev/null
   source "${func_file}"
+
+  # Fail loudly (not vacuously) if the awk extraction above ever produces a
+  # non-empty file that doesn't actually define the function -- e.g. after
+  # a future reformat of the source script changes the brace layout.
+  if ! declare -f get_plex_section_ids &>/dev/null; then
+    echo "Extracted file did not define get_plex_section_ids() -- awk pattern in this file may be stale" >&2
+    return 1
+  fi
 }
 
 teardown() {
@@ -63,10 +73,9 @@ teardown() {
   run get_plex_section_ids "http://localhost:32400" "test_token"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"movie_section_id=1"* ]]
-  # tv_section_id must be empty, not populated from the movie section
-  [[ "$output" == *$'\n'"tv_section_id=" ]]
-  [[ "$output" != *"tv_section_id=1"* ]]
+  # Exact two-line output: movie_section_id populated, tv_section_id blank
+  # (not populated from the movie section).
+  [ "$output" = "$(printf 'movie_section_id=1\ntv_section_id=')" ]
 }
 
 # --- Multi-library case: multiple sections of different types ---
@@ -118,8 +127,9 @@ teardown() {
   run get_plex_section_ids "http://localhost:32400" "test_token"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"movie_section_id="$'\n'* ]]
-  [[ "$output" == *"tv_section_id="* ]]
+  # Both IDs must be blank: exact two-line output, neither field populated
+  # from the unrelated artist/photo sections in the fixture.
+  [ "$output" = "$(printf 'movie_section_id=\ntv_section_id=')" ]
 }
 
 # --- curl failure / empty response handling (bonus, covers closed duplicate #153) ---
