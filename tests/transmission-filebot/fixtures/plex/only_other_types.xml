@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MediaContainer size="2" allowSync="1" title1="Plex Library">
+  <Directory allowSync="1" key="1" type="artist" title="Music" agent="tv.plex.agents.music" scanner="Plex Music" language="en-US" uuid="dddddddd-1111-2222-3333-444444444444" updatedAt="1700000000" createdAt="1600000000">
+    <Location id="1" path="/data/media/music" />
+  </Directory>
+  <Directory allowSync="1" key="2" type="photo" title="Photos" agent="tv.plex.agents.none" scanner="Plex Photo Scanner" language="en-US" uuid="eeeeeeee-1111-2222-3333-444444444444" updatedAt="1700000000" createdAt="1600000000">
+    <Location id="2" path="/data/media/photos" />
+  </Directory>
+</MediaContainer>

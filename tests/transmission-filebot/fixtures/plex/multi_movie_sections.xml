@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MediaContainer size="3" allowSync="1" title1="Plex Library">
+  <Directory allowSync="1" key="1" type="movie" title="Movies" agent="tv.plex.agents.movie" scanner="Plex Movie" language="en-US" uuid="aaaaaaaa-1111-2222-3333-444444444444" updatedAt="1700000000" createdAt="1600000000">
+    <Location id="1" path="/data/media/movies" />
+  </Directory>
+  <Directory allowSync="1" key="2" type="show" title="TV Shows" agent="tv.plex.agents.series" scanner="Plex TV Series" language="en-US" uuid="bbbbbbbb-1111-2222-3333-444444444444" updatedAt="1700000000" createdAt="1600000000">
+    <Location id="2" path="/data/media/tv" />
+  </Directory>
+  <Directory allowSync="1" key="4" type="movie" title="4K Movies" agent="tv.plex.agents.movie" scanner="Plex Movie" language="en-US" uuid="cccccccc-1111-2222-3333-444444444444" updatedAt="1700000000" createdAt="1600000000">
+    <Location id="3" path="/data/media/movies_4k" />
+  </Directory>
+</MediaContainer>
