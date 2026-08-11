@@ -138,16 +138,19 @@ write_podman_mock() {
 #!/usr/bin/env bash
 echo "$*" >>"${CALLS_FILE}"
 
-case "$1 $2" in
-  "machine inspect")
+# Dispatch on the full argument list (not just "$1 $2") so callers that pass
+# extra flags -- e.g. `machine inspect transmission-vm --format '{{.State}}'`
+# -- are matched by pattern rather than having those flags silently ignored.
+case "$*" in
+  "machine inspect"*)
     cat "${MACHINE_STATE_FILE}"
     exit 0
     ;;
-  "machine start")
+  "machine start"*)
     echo "running" >"${MACHINE_STATE_FILE}"
     exit 0
     ;;
-  "machine stop")
+  "machine stop"*)
     echo "stopped" >"${MACHINE_STATE_FILE}"
     exit 0
     ;;
