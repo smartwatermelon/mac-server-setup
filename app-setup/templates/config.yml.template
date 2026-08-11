@@ -1,3 +1,6 @@
+# NOTE: This template is for reference/documentation only. The authoritative
+# generator is write_config() in app-setup/transmission-filebot-setup.sh —
+# update that function first, then mirror the change here to keep them in sync.
 ---
 version: 1.0
 paths:
