@@ -640,6 +640,17 @@ write_config() {
     cp "${USER_CONFIG}" "${backup}"
   fi
 
+  # Build optional section-id lines only when a value is present, to avoid
+  # emitting trailing whitespace after the colon (e.g. "movie_section_id: ")
+  # when discovery fails and the variable is empty.
+  local movie_section_line="" tv_section_line=""
+  if [[ -n "${movie_section_id}" ]]; then
+    movie_section_line="  movie_section_id: ${movie_section_id}"$'\n'
+  fi
+  if [[ -n "${tv_section_id}" ]]; then
+    tv_section_line="  tv_section_id: ${tv_section_id}"$'\n'
+  fi
+
   # Write new config (mode 600 — contains Plex auth token)
   printf 'Writing config to: %s\n' "${USER_CONFIG}" >&2
   (
@@ -652,9 +663,7 @@ plex:
   server: ${plex_server}
   token: ${plex_token}
   media_path: ${media_path}
-  movie_section_id: ${movie_section_id}
-  tv_section_id: ${tv_section_id}
-logging:
+${movie_section_line}${tv_section_line}logging:
   file: .local/state/transmission-processing.log
   max_size: 10485760  # 10MB
 EOF

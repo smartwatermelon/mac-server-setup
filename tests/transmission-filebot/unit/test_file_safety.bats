@@ -136,7 +136,7 @@ stub_df() {
 }
 
 @test "check_disk_space: succeeds when df reports sufficient space" {
-  stub_df 'printf "Filesystem 512-blocks Used Available Capacity Mounted on\n"
+  stub_df 'printf "Filesystem 1024-blocks Used Available Capacity Mounted on\n"
 printf "/dev/disk1  976490568 1000 976489568   1%% %s\n" "'"${PLEX_MEDIA_PATH}"'"'
 
   run check_disk_space
@@ -145,7 +145,7 @@ printf "/dev/disk1  976490568 1000 976489568   1%% %s\n" "'"${PLEX_MEDIA_PATH}"'
 }
 
 @test "check_disk_space: fails and logs error when df reports insufficient space" {
-  stub_df 'printf "Filesystem 512-blocks Used Available Capacity Mounted on\n"
+  stub_df 'printf "Filesystem 1024-blocks Used Available Capacity Mounted on\n"
 printf "/dev/disk1  976490568 976489568 100   99%% %s\n" "'"${PLEX_MEDIA_PATH}"'"'
 
   run check_disk_space
