@@ -38,9 +38,14 @@ setup() {
   export TEST_TMPDIR
 
   # Extract only the get_plex_section_ids() function definition so sourcing
-  # it does not also run main() at the bottom of the real script.
+  # it does not also run main() at the bottom of the real script. Extraction
+  # is keyed on the "# BEGIN/END get_plex_section_ids" marker comments
+  # surrounding the function in the source script (rather than matching its
+  # exact signature), so reformatting the function body or brace style does
+  # not silently break this test -- see the markers in
+  # app-setup/transmission-filebot-setup.sh if this ever needs updating.
   local func_file="${TEST_TMPDIR}/get_plex_section_ids.sh"
-  awk '/^get_plex_section_ids\(\) \{$/{flag=1} flag{print} flag && /^}$/{exit}' \
+  awk '/^# BEGIN get_plex_section_ids$/{flag=1; next} /^# END get_plex_section_ids$/{exit} flag' \
     "${SETUP_SCRIPT}" >"${func_file}"
 
   if [[ ! -s "${func_file}" ]]; then
