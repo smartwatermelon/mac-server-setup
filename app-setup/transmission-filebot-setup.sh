@@ -433,6 +433,11 @@ find_common_root() {
   fi
 }
 
+# BEGIN get_plex_section_ids
+# Marker comments above/below this function are relied on by
+# tests/transmission-filebot/unit/test_plex_section_ids.bats to extract the
+# function body for isolated sourcing. Keep them adjacent to the function if
+# it is ever moved, and update the test's awk pattern if this changes.
 get_plex_section_ids() {
   local plex_server="$1"
   local token="$2"
@@ -482,6 +487,7 @@ get_plex_section_ids() {
   printf 'tv_section_id=%s\n' "${tv_section_id}"
   return 0
 }
+# END get_plex_section_ids
 
 get_media_path() {
   local plex_server="$1"
