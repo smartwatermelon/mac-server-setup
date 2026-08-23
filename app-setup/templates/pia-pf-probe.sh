@@ -138,7 +138,10 @@ probe_region() {
   # --cap-add NET_ADMIN and /dev/net/tun are what OpenVPN needs to build the
   # tunnel. No ports are published: the probe never needs inbound access, and
   # publishing 9091 would collide with the live container.
-  if ! podman run -d --rm \
+  # No --rm: it races with the explicit cleanup below, and a SIGKILLed script
+  # would leave the container behind either way. cleanup_probe_container plus
+  # the EXIT trap is the single cleanup path.
+  if ! podman run -d \
     --name "${PROBE_CONTAINER}" \
     --cap-add NET_ADMIN \
     --device /dev/net/tun \

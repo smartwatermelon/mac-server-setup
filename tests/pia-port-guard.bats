@@ -166,3 +166,15 @@ teardown() {
   [ "$status" -eq 0 ]
   ! grep -q -- "--auth" "${CALL_LOG}"
 }
+
+# --- idempotency ------------------------------------------------------------
+
+@test "guard can be sourced twice without error" {
+  # update-port.sh retries in an infinite loop and may re-source the guard.
+  # readonly constants here would abort the caller under `set -e`.
+  run bash -c "set -euo pipefail
+    source '${GUARD}'
+    source '${GUARD}'
+    is_valid_port 54321"
+  [ "$status" -eq 0 ]
+}

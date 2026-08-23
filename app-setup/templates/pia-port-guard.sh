@@ -31,8 +31,12 @@
 
 # Valid TCP/UDP port for peer traffic. Ports below 1024 are privileged and PIA
 # never assigns them, so anything in that range signals a malformed response.
-readonly PORT_MIN=1024
-readonly PORT_MAX=65535
+#
+# Deliberately not `readonly`: update-port.sh runs an infinite retry loop and
+# may source this file more than once, which would abort under `set -e` if
+# these were immutable.
+PIA_GUARD_PORT_MIN=1024
+PIA_GUARD_PORT_MAX=65535
 
 guard_log() {
   local now
@@ -52,8 +56,8 @@ is_valid_port() {
 
   # Guard against values like 00080 that are numeric but not a real port, and
   # against anything outside the unprivileged range.
-  [[ "${port}" -ge "${PORT_MIN}" ]] || return 1
-  [[ "${port}" -le "${PORT_MAX}" ]] || return 1
+  [[ "${port}" -ge "${PIA_GUARD_PORT_MIN}" ]] || return 1
+  [[ "${port}" -le "${PIA_GUARD_PORT_MAX}" ]] || return 1
 
   return 0
 }
