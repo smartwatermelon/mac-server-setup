@@ -57,6 +57,20 @@ replaces it, System keychain token reuse (same entry Caddy reads), public-IP
 provider fallback chain, change-detection vs heartbeat log cadence, Cloudflare
 API error modes, and the `TEST_RUNNER` hook that lets BATS mock network calls.
 
+### PIA VPN (credentials, port forwarding, region selection)
+
+**Files**: `app-setup/podman-transmission-setup.sh`,
+`app-setup/templates/pia-pf-probe.sh`,
+`app-setup/templates/pia-port-guard.sh`, `tests/pia-port-guard.bats`
+
+**Documentation**: `docs/apps/pia-vpn-README.md`
+
+**Covers**: PIA credential chain (1Password → keychain → .env → container) and
+the password rotation procedure, next-generation port-forwarding flow, why
+PIA's `port_forward` region flag cannot be trusted, the upstream
+`update-port.sh` bug that zeroes Transmission's listen port on PF failure, and
+diagnosing tunnel-vs-port-forwarding failures
+
 ### Transmission-FileBot (media processing pipeline)
 
 **Files**: `app-setup/templates/transmission-done.sh`,
