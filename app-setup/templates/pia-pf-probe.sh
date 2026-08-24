@@ -18,7 +18,7 @@
 #
 # Usage:
 #   ./pia-pf-probe.sh                     # probe the default shortlist
-#   ./pia-pf-probe.sh ca_toronto nl_amsterdam
+#   ./pia-pf-probe.sh ca_toronto netherlands
 #   ./pia-pf-probe.sh --all               # every region advertising PF
 #
 # Region arguments are the image's OpenVPN config names, not PIA's API region

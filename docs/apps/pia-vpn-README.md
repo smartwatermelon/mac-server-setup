@@ -142,7 +142,7 @@ does:
 sudo -u operator ./app-setup/templates/pia-pf-probe.sh
 
 # Probe specific regions
-sudo -u operator ./app-setup/templates/pia-pf-probe.sh ca_toronto nl_amsterdam
+sudo -u operator ./app-setup/templates/pia-pf-probe.sh ca_toronto netherlands
 
 # Sweep everything advertising PF (slow — roughly 90s per region)
 sudo -u operator ./app-setup/templates/pia-pf-probe.sh --all --out results.csv
