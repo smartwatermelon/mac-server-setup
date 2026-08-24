@@ -20,6 +20,10 @@
 #   ./pia-pf-probe.sh                     # probe the default shortlist
 #   ./pia-pf-probe.sh ca_toronto nl_amsterdam
 #   ./pia-pf-probe.sh --all               # every region advertising PF
+#
+# Region arguments are the image's OpenVPN config names, not PIA's API region
+# ids; the two do not always agree. --all enumerates API ids and will report
+# tunnel_timeout for any region whose config name differs (issue #159).
 #   ./pia-pf-probe.sh --out results.csv
 #
 # Author: Andrew Rich <andrew.rich@gmail.com>
@@ -40,15 +44,22 @@ PF_PORT=19999
 PROBE_IMAGE="docker.io/haugene/transmission-openvpn:latest"
 PROBE_CONTAINER="pia-pf-probe"
 
-# Regions worth testing first. Ordered by a mix of geographic proximity to the
-# server and PIA's historical port-forward reliability.
+# Regions worth testing first, all verified working 2026-08-23.
+#
+# These are the IMAGE's OpenVPN config names, which are not always PIA's API
+# region ids: the API calls them nl_amsterdam / ch_switzerland / sweden, while
+# the image ships netherlands / switzerland / se_stockholm. An unknown name
+# does not fail loudly — the container prints its config list and exits, which
+# this script can only observe as a tunnel timeout. See issue #159.
+#
+# `podman run --rm <image> ls /etc/openvpn/pia/` lists the valid names.
 DEFAULT_REGIONS=(
   ca_toronto
   ca_vancouver
-  nl_amsterdam
-  de_germany-so
-  ch_switzerland
-  sweden
+  netherlands
+  de_frankfurt
+  switzerland
+  se_stockholm
   romania
 )
 
@@ -135,20 +146,30 @@ probe_region() {
 
   cleanup_probe_container
 
-  # --cap-add NET_ADMIN and /dev/net/tun are what OpenVPN needs to build the
-  # tunnel. No ports are published: the probe never needs inbound access, and
-  # publishing 9091 would collide with the live container.
+  # Flags mirror the live transmission-vpn container, which is the known-working
+  # configuration on this host.
+  #
+  # CREATE_TUN_DEVICE=false is load-bearing: Podman already supplies
+  # /dev/net/tun via --device, and without this the image tries to create it
+  # itself, fails with "cannot remove '/dev/net/tun': Device or resource busy",
+  # and the container exits before a tunnel is ever attempted.
+  #
+  # No ports are published: the probe needs no inbound access, and publishing
+  # 9091 would collide with the live container.
+  #
   # No --rm: it races with the explicit cleanup below, and a SIGKILLed script
   # would leave the container behind either way. cleanup_probe_container plus
   # the EXIT trap is the single cleanup path.
   if ! podman run -d \
     --name "${PROBE_CONTAINER}" \
-    --cap-add NET_ADMIN \
-    --device /dev/net/tun \
+    --privileged \
+    --device /dev/net/tun:/dev/net/tun \
     -e "OPENVPN_PROVIDER=PIA" \
     -e "OPENVPN_CONFIG=${region}" \
     -e "OPENVPN_USERNAME=${PIA_USERNAME}" \
     -e "OPENVPN_PASSWORD=${PIA_PASSWORD}" \
+    -e "CREATE_TUN_DEVICE=false" \
+    -e "LOG_TO_STDOUT=true" \
     -e "TRANSMISSION_DOWNLOAD_DIR=/tmp" \
     "${PROBE_IMAGE}" >/dev/null 2>&1; then
     printf '%s,no,container_failed,,,could not start probe container\n' "${region}"
