@@ -422,6 +422,40 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Section 6b: Deploy PIA port forwarding manager (container-side)
+# ---------------------------------------------------------------------------
+
+set_section "Deploy PIA Port Forwarding Manager"
+
+# Replaces the image's bundled update-port.sh, which zeroes Transmission's
+# listen port when PIA's port-forwarding API is unavailable (issue #159). The
+# bundled script cannot be patched in place: it sits in /etc/openvpn/pia/
+# alongside the 167 .ovpn region configs, so mounting over that directory to
+# swap one file would hide the configs. DISABLE_PORT_UPDATER=true keeps it
+# dormant while our version runs from the already-mounted /scripts volume.
+PORT_GUARD_TEMPLATE="${SCRIPT_DIR}/templates/pia-port-guard.sh"
+PORT_GUARD_DEST="${CONTAINER_DIR}/scripts/pia-port-guard.sh"
+POST_START_TEMPLATE="${SCRIPT_DIR}/templates/transmission-post-start.sh"
+POST_START_DEST="${CONTAINER_DIR}/scripts/transmission-post-start.sh"
+
+if [[ ! -f "${PORT_GUARD_TEMPLATE}" ]]; then
+  collect_error "Template not found: ${PORT_GUARD_TEMPLATE}"
+elif [[ ! -f "${POST_START_TEMPLATE}" ]]; then
+  collect_error "Template not found: ${POST_START_TEMPLATE}"
+else
+  # The guard is sourced, not executed, so it does not need the execute bit.
+  sudo cp "${PORT_GUARD_TEMPLATE}" "${PORT_GUARD_DEST}"
+  sudo chmod 644 "${PORT_GUARD_DEST}"
+  sudo chown "${OPERATOR_USERNAME}:staff" "${PORT_GUARD_DEST}"
+
+  sudo cp "${POST_START_TEMPLATE}" "${POST_START_DEST}"
+  sudo chmod 755 "${POST_START_DEST}"
+  sudo chown "${OPERATOR_USERNAME}:staff" "${POST_START_DEST}"
+
+  log "✅ PIA port forwarding manager deployed (guard + post-start hook)"
+fi
+
+# ---------------------------------------------------------------------------
 # Section 7: Deploy transmission-trigger-watcher.sh (macOS LaunchAgent daemon)
 # ---------------------------------------------------------------------------
 
@@ -574,6 +608,8 @@ ensure_container() {
         --env-file "${OPERATOR_HOME}/containers/transmission/.env" \\
         -e OPENVPN_PROVIDER=PIA \\
         -e "OPENVPN_CONFIG=${PIA_REGION}" \\
+        -e "DISABLE_PORT_UPDATER=true" \\
+        -e "TRANSMISSION_PEER_PORT_RANDOM_ON_START=false" \\
         -e "LOCAL_NETWORK=${LAN}" \\
         -e "PUID=${PUID}" \\
         -e "PGID=${PGID}" \\
@@ -835,6 +871,8 @@ else
     --env-file "${CONTAINER_DIR}/.env" \
     -e OPENVPN_PROVIDER=PIA \
     -e "OPENVPN_CONFIG=${PIA_REGION}" \
+    -e "DISABLE_PORT_UPDATER=true" \
+    -e "TRANSMISSION_PEER_PORT_RANDOM_ON_START=false" \
     -e "LOCAL_NETWORK=${LAN}" \
     -e "PUID=${PUID}" \
     -e "PGID=${PGID}" \

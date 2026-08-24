@@ -282,13 +282,48 @@ metadata over DHT, so downloads never start. The retry loop repeats this every
 This is strictly worse than doing nothing: an unforwarded Transmission on a
 valid port still downloads from seeders, just more slowly.
 
-[`app-setup/templates/pia-port-guard.sh`](../../app-setup/templates/pia-port-guard.sh)
-is the validation the upstream script lacks. Source it from a patched
-`update-port.sh` and call `apply_port`, which refuses empty, non-numeric,
-`null`, zero, privileged, and out-of-range values, leaving the existing port
-intact instead.
+### How this is fixed here
 
-Covered by `tests/pia-port-guard.bats`.
+The bundled updater cannot be patched in place: it lives at
+`/etc/openvpn/pia/update-port.sh` inside the image, alongside the 167 `.ovpn`
+region configs, so mounting over that directory to swap one file would hide
+the configs and break region selection.
+
+Instead `DISABLE_PORT_UPDATER=true` keeps it dormant, and
+[`transmission-post-start.sh`](../../app-setup/templates/transmission-post-start.sh)
+runs our own port-forwarding manager from the already-mounted `/scripts`
+volume. It performs the same token → getSignature → bindPort flow, but hands
+the result to
+[`pia-port-guard.sh`](../../app-setup/templates/pia-port-guard.sh), which
+refuses empty, non-numeric, `null`, zero, privileged, and out-of-range values
+and leaves the existing port intact instead.
+
+If the guard library is missing the manager exits rather than running
+unguarded — an unforwarded Transmission beats a zeroed one.
+
+Covered by `tests/pia-port-guard.bats` and
+`tests/transmission-post-start.bats`.
+
+#### Two container quirks worth knowing
+
+**The post-start hook is called synchronously.** The image backgrounds its own
+updater with `&` but invokes `/scripts/transmission-post-start.sh` inline. A
+hook that blocks — as any lifetime loop does — hangs the rest of the startup
+chain, leaving the tunnel negotiated but passing no traffic at all: DNS fails,
+`curl` to a bare IP fails, and `Transmission startup script complete` never
+appears in the log. The manager therefore backgrounds itself immediately and
+returns. Diagnose by counting that line:
+
+```bash
+sudo -u operator podman logs transmission-vpn | grep -c "startup script complete"
+# 0 means something in the startup chain is blocking
+```
+
+**Peer port randomization fights port forwarding.** The image defaults
+`peer-port-random-on-start` to true, which picks a random port at each start
+and silently replaces the one PIA assigned. `settings.json` and the running
+listen port then disagree. The setup script now pins
+`TRANSMISSION_PEER_PORT_RANDOM_ON_START=false`.
 
 ## Monitoring note
 
