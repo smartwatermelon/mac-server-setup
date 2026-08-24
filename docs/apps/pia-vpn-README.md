@@ -204,8 +204,51 @@ point is that each region returned one.
 | `se_stockholm` | 43172 | 10.80.192.1 |
 
 `panama` — the region this server was pinned to until 2026-08-23 — remains the
-only one observed serving no port forwarding at all. **TILSIT now runs
-`ca_toronto`**, which reserved port 50454 on first connect and verified open.
+only one observed serving no port forwarding at all.
+
+### Region choice: measure, don't assume
+
+**TILSIT runs `ca_vancouver`**, the physically closest endpoint.
+
+Working port forwarding is a prerequisite, not a ranking. All eight regions
+above pass that test equally, and the probe deliberately says nothing about
+speed. Picking among them by intuition produced a bad answer once already:
+`ca_toronto` was chosen because it was first in a hand-written shortlist and
+its probe passed, then measured 4x slower on both metrics.
+
+Measured 2026-08-23, from TILSIT:
+
+| Region | Latency | Throughput (10 MB) |
+| --- | --- | --- |
+| `ca_vancouver` | **14.4 ms** | **8.6 MB/s** |
+| `ca_toronto` | 63.2 ms | 2.4 MB/s |
+
+Real-world effect on a well-seeded torrent was the same order: a control magnet
+that managed 278 kB/s on Toronto pulled 1.83 MB/s on Vancouver.
+
+To compare regions yourself, run a throwaway container on each and measure —
+the same flags the probe uses:
+
+```bash
+sudo -u operator podman run -d --name pia-lat-test \
+  --privileged --device /dev/net/tun:/dev/net/tun \
+  -e OPENVPN_PROVIDER=PIA -e OPENVPN_CONFIG=<region> \
+  -e OPENVPN_USERNAME=... -e OPENVPN_PASSWORD=... \
+  -e CREATE_TUN_DEVICE=false -e LOG_TO_STDOUT=true \
+  -e TRANSMISSION_DOWNLOAD_DIR=/tmp \
+  docker.io/haugene/transmission-openvpn:latest
+
+# then, once the tunnel is up:
+sudo -u operator podman exec pia-lat-test sh -c '
+  gw=$(ip route | grep tun | grep -v src | head -1 | awk "{print \$3}")
+  ping -c 20 -q "$gw" | tail -2
+  curl -s -o /dev/null -w "%{speed_download} B/s\n" \
+    https://speed.cloudflare.com/__down?bytes=10000000'
+```
+
+Automating this ranking is what issue #159 is for. Note the jurisdiction
+constraint recorded there: exclude US endpoints, rank everything else on
+measured performance.
 
 ### On the hardcoded PF port
 
@@ -282,13 +325,48 @@ metadata over DHT, so downloads never start. The retry loop repeats this every
 This is strictly worse than doing nothing: an unforwarded Transmission on a
 valid port still downloads from seeders, just more slowly.
 
-[`app-setup/templates/pia-port-guard.sh`](../../app-setup/templates/pia-port-guard.sh)
-is the validation the upstream script lacks. Source it from a patched
-`update-port.sh` and call `apply_port`, which refuses empty, non-numeric,
-`null`, zero, privileged, and out-of-range values, leaving the existing port
-intact instead.
+### How this is fixed here
 
-Covered by `tests/pia-port-guard.bats`.
+The bundled updater cannot be patched in place: it lives at
+`/etc/openvpn/pia/update-port.sh` inside the image, alongside the 167 `.ovpn`
+region configs, so mounting over that directory to swap one file would hide
+the configs and break region selection.
+
+Instead `DISABLE_PORT_UPDATER=true` keeps it dormant, and
+[`transmission-post-start.sh`](../../app-setup/templates/transmission-post-start.sh)
+runs our own port-forwarding manager from the already-mounted `/scripts`
+volume. It performs the same token → getSignature → bindPort flow, but hands
+the result to
+[`pia-port-guard.sh`](../../app-setup/templates/pia-port-guard.sh), which
+refuses empty, non-numeric, `null`, zero, privileged, and out-of-range values
+and leaves the existing port intact instead.
+
+If the guard library is missing the manager exits rather than running
+unguarded — an unforwarded Transmission beats a zeroed one.
+
+Covered by `tests/pia-port-guard.bats` and
+`tests/transmission-post-start.bats`.
+
+#### Two container quirks worth knowing
+
+**The post-start hook is called synchronously.** The image backgrounds its own
+updater with `&` but invokes `/scripts/transmission-post-start.sh` inline. A
+hook that blocks — as any lifetime loop does — hangs the rest of the startup
+chain, leaving the tunnel negotiated but passing no traffic at all: DNS fails,
+`curl` to a bare IP fails, and `Transmission startup script complete` never
+appears in the log. The manager therefore backgrounds itself immediately and
+returns. Diagnose by counting that line:
+
+```bash
+sudo -u operator podman logs transmission-vpn | grep -c "startup script complete"
+# 0 means something in the startup chain is blocking
+```
+
+**Peer port randomization fights port forwarding.** The image defaults
+`peer-port-random-on-start` to true, which picks a random port at each start
+and silently replaces the one PIA assigned. `settings.json` and the running
+listen port then disagree. The setup script now pins
+`TRANSMISSION_PEER_PORT_RANDOM_ON_START=false`.
 
 ## Monitoring note
 
