@@ -142,7 +142,7 @@ does:
 sudo -u operator ./app-setup/templates/pia-pf-probe.sh
 
 # Probe specific regions
-sudo -u operator ./app-setup/templates/pia-pf-probe.sh ca_toronto nl_amsterdam
+sudo -u operator ./app-setup/templates/pia-pf-probe.sh ca_toronto netherlands
 
 # Sweep everything advertising PF (slow — roughly 90s per region)
 sudo -u operator ./app-setup/templates/pia-pf-probe.sh --all --out results.csv
@@ -156,8 +156,55 @@ them into the probe container as environment variables on the `podman exec`
 rather than interpolating them into command strings — so they stay out of the
 process table, matching the `--env-file` protection described above.
 
+The probe container runs with `--privileged`, `--device /dev/net/tun`, and
+`CREATE_TUN_DEVICE=false`, mirroring the live container. That last one is
+load-bearing: Podman already provides the TUN device, and without it the image
+tries to create its own, fails with `cannot remove '/dev/net/tun': Device or
+resource busy`, and exits before attempting a tunnel.
+
 Changing regions means setting `PIA_VPN_REGION` (default `panama`) and
 recreating the container.
+
+### Region names: image config vs PIA API
+
+`OPENVPN_CONFIG` takes the name of a bundled `.ovpn` file in the image, which
+is **not always PIA's API region id**. The API calls them `nl_amsterdam`,
+`ch_switzerland`, and `sweden`; the image ships `netherlands`, `switzerland`,
+and `se_stockholm`.
+
+An unknown name fails quietly from the outside — the container prints its
+167-line config list and exits, so anything watching only tunnel state sees a
+timeout indistinguishable from a dead endpoint. This cost a full survey run on
+2026-08-23; five regions reported as failures were fine under their real names.
+
+List the valid names with:
+
+```bash
+sudo -u operator podman run --rm \
+  docker.io/haugene/transmission-openvpn:latest ls /etc/openvpn/pia/
+```
+
+Reconciling the two namespaces, and detecting drift as PIA adds or removes
+endpoints, is tracked in issue #159.
+
+### Verified working regions
+
+Probed 2026-08-23. Ports are per-session and will differ on reconnect; the
+point is that each region returned one.
+
+| Region (image config name) | Port | Gateway |
+| --- | --- | --- |
+| `ca_toronto` | 27251 | 10.17.112.1 |
+| `ca_vancouver` | 28284 | 10.7.112.1 |
+| `netherlands` | 34475 | 10.13.112.1 |
+| `de_frankfurt` | 46014 | 10.135.192.1 |
+| `de_berlin` | 32697 | 10.34.192.1 |
+| `switzerland` | 47931 | 10.116.192.1 |
+| `romania` | 47898 | 10.107.192.1 |
+| `se_stockholm` | 43172 | 10.80.192.1 |
+
+`panama` — the region this server has been pinned to — remains the only one
+observed serving no port forwarding at all.
 
 ## Diagnosing "torrents won't start"
 
