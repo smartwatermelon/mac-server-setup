@@ -203,8 +203,22 @@ point is that each region returned one.
 | `romania` | 47898 | 10.107.192.1 |
 | `se_stockholm` | 43172 | 10.80.192.1 |
 
-`panama` — the region this server has been pinned to — remains the only one
-observed serving no port forwarding at all.
+`panama` — the region this server was pinned to until 2026-08-23 — remains the
+only one observed serving no port forwarding at all. **TILSIT now runs
+`ca_toronto`**, which reserved port 50454 on first connect and verified open.
+
+### On the hardcoded PF port
+
+`update-port.sh` targets port 19999 on the tunnel gateway. That number is a
+convention from PIA's reference implementation, not something PIA advertises:
+their server list publishes ports for every other service (`wg` 1337, `meta`
+443/8080, `ovpnudp` 8080/853/123/53) but nothing for port forwarding.
+
+So a refused connection on 19999 proves only that nothing is listening *there*.
+Panama failing while eight other regions succeeded makes "Panama serves no PF"
+the overwhelmingly likely reading — but if PIA ever moves the service, every
+region would look dead to this script and the probe would report a false
+negative across the board. Tracked on issue #159.
 
 ## Diagnosing "torrents won't start"
 
