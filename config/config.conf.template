@@ -59,8 +59,9 @@ USE_ITERM2="false"        # Set to "true" to copy complete iTerm2 preferences fr
 # VPN and Transmission configuration (optional)
 # Used by podman-transmission-setup.sh to configure the containerized Transmission stack
 ONEPASSWORD_PIA_ITEM=""          # 1Password item name holding PIA account credentials
-PIA_VPN_REGION="ca_toronto"      # PIA region for haugene (must match /etc/openvpn/pia/ stem, NOT the API region id)
+PIA_VPN_REGION="ca_vancouver"    # PIA region for haugene (must match /etc/openvpn/pia/ stem, NOT the API region id)
                                  # Must support port forwarding — panama advertises it but serves none (issue #159)
+                                 # Measured 2026-08-23: vancouver 14.6ms/17.2MB/s vs toronto 63.2ms/2.4MB/s
 LAN_SUBNET="192.168.1.0/24"      # Local network CIDR for Transmission web UI access
 TRANSMISSION_HOST_PORT="9091"    # Host port for Transmission web UI
 

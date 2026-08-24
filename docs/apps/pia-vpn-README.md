@@ -204,8 +204,51 @@ point is that each region returned one.
 | `se_stockholm` | 43172 | 10.80.192.1 |
 
 `panama` — the region this server was pinned to until 2026-08-23 — remains the
-only one observed serving no port forwarding at all. **TILSIT now runs
-`ca_toronto`**, which reserved port 50454 on first connect and verified open.
+only one observed serving no port forwarding at all.
+
+### Region choice: measure, don't assume
+
+**TILSIT runs `ca_vancouver`**, the physically closest endpoint.
+
+Working port forwarding is a prerequisite, not a ranking. All eight regions
+above pass that test equally, and the probe deliberately says nothing about
+speed. Picking among them by intuition produced a bad answer once already:
+`ca_toronto` was chosen because it was first in a hand-written shortlist and
+its probe passed, then measured 4x slower on both metrics.
+
+Measured 2026-08-23, from TILSIT:
+
+| Region | Latency | Throughput (10 MB) |
+| --- | --- | --- |
+| `ca_vancouver` | **14.4 ms** | **8.6 MB/s** |
+| `ca_toronto` | 63.2 ms | 2.4 MB/s |
+
+Real-world effect on a well-seeded torrent was the same order: a control magnet
+that managed 278 kB/s on Toronto pulled 1.83 MB/s on Vancouver.
+
+To compare regions yourself, run a throwaway container on each and measure —
+the same flags the probe uses:
+
+```bash
+sudo -u operator podman run -d --name pia-lat-test \
+  --privileged --device /dev/net/tun:/dev/net/tun \
+  -e OPENVPN_PROVIDER=PIA -e OPENVPN_CONFIG=<region> \
+  -e OPENVPN_USERNAME=... -e OPENVPN_PASSWORD=... \
+  -e CREATE_TUN_DEVICE=false -e LOG_TO_STDOUT=true \
+  -e TRANSMISSION_DOWNLOAD_DIR=/tmp \
+  docker.io/haugene/transmission-openvpn:latest
+
+# then, once the tunnel is up:
+sudo -u operator podman exec pia-lat-test sh -c '
+  gw=$(ip route | grep tun | grep -v src | head -1 | awk "{print \$3}")
+  ping -c 20 -q "$gw" | tail -2
+  curl -s -o /dev/null -w "%{speed_download} B/s\n" \
+    https://speed.cloudflare.com/__down?bytes=10000000'
+```
+
+Automating this ranking is what issue #159 is for. Note the jurisdiction
+constraint recorded there: exclude US endpoints, rank everything else on
+measured performance.
 
 ### On the hardcoded PF port
 
