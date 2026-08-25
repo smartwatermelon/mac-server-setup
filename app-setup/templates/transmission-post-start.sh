@@ -146,6 +146,13 @@ pf_gateway() {
   ip route 2>/dev/null | grep tun | grep -v src | head -1 | awk '{print $3}'
 }
 
+# Same value, but safe to interpolate into a log line before the tunnel is up.
+pf_gateway_or_unknown() {
+  local gateway
+  gateway="$(pf_gateway)"
+  printf '%s' "${gateway:-not yet established}"
+}
+
 # Populates pf_token. Returns non-zero if PIA would not issue one.
 get_auth_token() {
   local response
@@ -208,6 +215,11 @@ get_signature() {
   pf_port="$(jq -r '.port // empty' <<<"${decoded}" 2>/dev/null)"
   local expiry_raw
   expiry_raw="$(jq -r '.expires_at // empty' <<<"${decoded}" 2>/dev/null)"
+  # GNU date only: --date is rejected by BSD/macOS date. This script always runs
+  # inside the Linux container, so that is correct here — but anyone sourcing it
+  # on macOS (a future BATS test exercising get_signature, say) gets expiry 0
+  # from the fallback, which forces a full token renewal every cycle instead of
+  # a cheap re-bind. Degraded but safe, and silent, so it is worth knowing.
   pf_token_expiry="$(date --date="${expiry_raw}" +%s 2>/dev/null || echo 0)"
 }
 
@@ -257,7 +269,18 @@ pf_signature=""
 pf_port=""
 pf_token_expiry=0
 
-log "Starting PIA port forwarding manager (region: ${OPENVPN_CONFIG:-unknown})"
+# The image invokes this hook from /etc/transmission/start.sh without exporting
+# the container environment, so OPENVPN_CONFIG (and every other `podman run -e`
+# variable) is absent here — a previous version of this line logged
+# "region: unknown" on every start and cost real debugging time during the
+# 2026-08-23 incident by looking like a misconfiguration (issue #182).
+#
+# The tunnel gateway is derived from the routing table rather than the
+# environment, so it is always available, and it is the more useful value: it
+# is the endpoint the port-forwarding API is queried against, and it reflects
+# what actually connected rather than what was requested.
+startup_gateway="$(pf_gateway_or_unknown)"
+log "Starting PIA port forwarding manager (tunnel gateway: ${startup_gateway})"
 
 # Transmission has to be accepting RPC before a port can be set.
 until transmission-remote "${TRANSMISSION_HOST}" "${TR_AUTH[@]}" -si >/dev/null 2>&1; do

@@ -81,6 +81,16 @@ fi
 # shellcheck source=config/config.conf
 source "${CONFIG_FILE}"
 
+# SERVER_NAME comes from the sourced config. Validate it before deriving
+# anything: SERVER_NAME_LOWER names the keychain service the PIA credentials
+# are stored under, so an empty value would look up "pia-account-" and report a
+# missing-credentials error that points nowhere near the real cause.
+SERVER_NAME="${SERVER_NAME:-}"
+if [[ -z "${SERVER_NAME}" ]]; then
+  echo "❌ SERVER_NAME not set in ${CONFIG_FILE}"
+  exit 1
+fi
+
 SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
@@ -233,8 +243,11 @@ if [[ -z "${OPERATOR_USERNAME}" ]]; then
   exit 1
 fi
 
-# PIA_VPN_REGION and LAN_SUBNET default gracefully if missing from config
-PIA_REGION="${PIA_VPN_REGION:-panama}"
+# PIA_VPN_REGION and LAN_SUBNET default gracefully if missing from config.
+# The PIA_VPN_REGION fallback must stay in step with config.conf.template:
+# panama (the pre-2026-08-23 default) serves no port forwarding at all, so
+# falling back to it would silently deploy a non-working region.
+PIA_REGION="${PIA_VPN_REGION:-ca_vancouver}"
 LAN="${LAN_SUBNET:-192.168.1.0/24}"
 HOST_PORT="${TRANSMISSION_HOST_PORT:-9091}"
 

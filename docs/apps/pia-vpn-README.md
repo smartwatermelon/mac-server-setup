@@ -162,7 +162,7 @@ load-bearing: Podman already provides the TUN device, and without it the image
 tries to create its own, fails with `cannot remove '/dev/net/tun': Device or
 resource busy`, and exits before attempting a tunnel.
 
-Changing regions means setting `PIA_VPN_REGION` (default `panama`) and
+Changing regions means setting `PIA_VPN_REGION` (default `ca_vancouver`) and
 recreating the container.
 
 ### Region names: image config vs PIA API

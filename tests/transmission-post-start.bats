@@ -157,3 +157,43 @@ teardown() {
   run grep -E 'PIA_PORT_DETACHED=1 setsid' "${POST_START}"
   [ "$status" -eq 0 ]
 }
+
+# --- startup log accuracy (#182) --------------------------------------------
+
+@test "the startup log does not report a region it cannot see" {
+  # The image's start.sh invokes this hook without exporting the container
+  # environment, so OPENVPN_CONFIG is never set here. Logging
+  # "region: ${OPENVPN_CONFIG:-unknown}" therefore printed "region: unknown" on
+  # every start and read as a misconfiguration during the 2026-08-23 incident.
+  # Strip comments first: OPENVPN_CONFIG is still named in the prose explaining
+  # why it cannot be used, and that mention should not fail the test.
+  run bash -c "grep -v '^[[:space:]]*#' \"${POST_START}\" | grep -c 'OPENVPN_CONFIG'"
+  [ "$output" -eq 0 ]
+}
+
+@test "the startup log reports the tunnel gateway, which is derived not inherited" {
+  run grep -E 'Starting PIA port forwarding manager \(tunnel gateway:' "${POST_START}"
+  [ "$status" -eq 0 ]
+
+  # The value must come from the routing table via pf_gateway, not from the
+  # environment — that is the whole point of the change.
+  run grep -E '^pf_gateway_or_unknown\(\)' "${POST_START}"
+  [ "$status" -eq 0 ]
+}
+
+@test "pf_gateway_or_unknown yields a placeholder before the tunnel exists" {
+  local script="${TEST_TMPDIR}/gw.sh"
+  # Extract just the two gateway helpers and exercise them with no tun route.
+  {
+    printf '%s\n' '#!/usr/bin/env bash'
+    printf '%s\n' 'set -uo pipefail'
+    sed -n '/^pf_gateway() {/,/^}/p' "${POST_START}"
+    sed -n '/^pf_gateway_or_unknown() {/,/^}/p' "${POST_START}"
+    printf '%s\n' 'pf_gateway_or_unknown'
+  } >"${script}"
+
+  # `ip` is absent on macOS and returns no tun route in the sandbox either way.
+  run bash "${script}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "not yet established" ]
+}
