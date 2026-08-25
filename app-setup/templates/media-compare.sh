@@ -366,6 +366,21 @@ replace_media_file() {
   incumbent_name="$(basename "${incumbent}")"
   quarantined="${quarantine_dir}/${incumbent_name}.$(date +%Y%m%d-%H%M%S)"
 
+  # A second-granularity timestamp is not unique on its own: an episode pack
+  # replacing several files named alike can land twice in the same second, and
+  # the second move would overwrite the first copy in quarantine -- destroying
+  # the very file quarantine exists to preserve. Step aside if the name is
+  # taken rather than clobbering it.
+  local attempt=1
+  while [[ -e "${quarantined}" ]]; do
+    quarantined="${quarantine_dir}/${incumbent_name}.$(date +%Y%m%d-%H%M%S).${attempt}"
+    attempt=$((attempt + 1))
+    if [[ "${attempt}" -gt 100 ]]; then
+      media_compare_log "Replace aborted: cannot find a free quarantine name for ${incumbent_name}"
+      return 1
+    fi
+  done
+
   if ! mv "${incumbent}" "${quarantined}" 2>/dev/null; then
     media_compare_log "Replace aborted: could not quarantine ${incumbent}"
     return 1

@@ -742,3 +742,41 @@ Rename episodes using [TheTVDB] to TV Shows"
   [ "$status" -eq 0 ]
   [ "$output" -gt 0 ]
 }
+
+@test "an IMPORT conflict whose paths end in a close paren still pairs correctly" {
+  # Only one trailing ")" is stripped before the split points are walked, so a
+  # path that genuinely ends in ")" -- a season or edition folder, say -- looks
+  # like it should lose a character. It does not: the walk keeps whichever
+  # split leaves both halves naming real files, which repairs the strip.
+  mkdir -p "${TEST_TMPDIR}/plex" "${TEST_TMPDIR}/dl"
+  local dest="${TEST_TMPDIR}/plex/Movie (2024)"
+  local src="${TEST_TMPDIR}/dl/Movie (2024)"
+  : >"${dest}"
+  : >"${src}"
+
+  local out
+  out="$(parse_filebot_conflicts "[IMPORT] Destination file already exists: ${dest} (${src})")"
+  [ "${out}" = "$(printf '%s\t%s' "${src}" "${dest}")" ]
+}
+
+@test "two replacements in the same second do not overwrite each other in quarantine" {
+  # An episode pack can replace several like-named files inside one second. A
+  # bare timestamp would make the second quarantined copy overwrite the first,
+  # destroying the file quarantine exists to preserve.
+  local q="${TEST_TMPDIR}/quarantine"
+  local libdir="${TEST_TMPDIR}/library"
+  mkdir -p "${libdir}"
+
+  local i
+  for i in 1 2; do
+    local inc="${libdir}/Show.mp4"
+    cp "$(make_media "sd${i}.mp4" "640x360" "200k" 2)" "${inc}"
+    local cand
+    cand="$(make_media "hd${i}.mp4" "1920x1080" "2000k" 2)"
+    run replace_media_file "${cand}" "${inc}" "${q}"
+    [ "$status" -eq 0 ]
+  done
+
+  # Both displaced copies survive.
+  [ "$(find "${q}" -type f | wc -l | tr -d ' ')" -eq 2 ]
+}
