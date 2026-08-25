@@ -110,6 +110,69 @@ Cleanup empty directories
 - **Pattern-based media type detection**: Filename analysis before attempting FileBot processing
 - **stdout/stderr separation**: All user messages to stderr, only data to stdout
 
+### Duplicate handling and quality upgrades
+
+FileBot runs with `--conflict auto`, which **skips** rather than overwrites when
+a download renames onto a path that already holds a file. The download is then
+classified `already-in-plex` by `classify_failure()` and moved to
+`triage/already-in-plex/`. Nothing is overwritten and nothing is lost.
+
+`media-compare.sh` decides which of the two copies is better, so that the
+download is not left sitting in triage waiting for someone to compare them by
+hand (issue #178). It is a sourced library, like `pia-port-guard.sh`, and is
+optional: when the file is absent, `transmission-done.sh` keeps its previous
+behaviour of triaging every duplicate.
+
+**Pairing.** The download and the library file it collides with are read from
+FileBot's own conflict message, which names both paths:
+
+```text
+[AUTO] Skipped [SOURCE] because [DEST] already exists
+[IMPORT] Destination file already exists: DEST (SOURCE)
+```
+
+FileBot has already matched the download to a title and worked out the exact
+destination, so taking the pair from its output is authoritative. Guessing it
+back from filenames is not. Anything unparsable yields no pair, and the
+download goes to triage as before.
+
+**Comparison ladder.** `ffprobe` (from the `ffmpeg` formula, already in
+`config/formulae.txt`) reads the attributes. The first rule that separates the
+two files decides:
+
+1. Identical bytes → keep (a size check first, then `cmp`)
+2. Video resolution, as width × height → more pixels wins
+3. Video bitrate → higher wins, past a 10% noise margin
+4. Audio channels → more wins
+5. File size → larger wins, as a last resort only
+
+**Everything uncertain resolves to keep.** A wrong "replace" destroys the better
+copy; a wrong "keep" costs disk space and a triage entry. Those are not
+symmetric, so an unreadable file, a probe timeout, or a tie on every rule all
+leave the library alone.
+
+**Replacement** is ordered so the library is never short an episode: the
+incumbent moves to `triage/quarantine/` first, then the candidate moves into its
+place, and a failure of the second move restores the first. Quarantined files
+are pruned after `MEDIA_COMPARE_RETENTION_DAYS` (default 14).
+
+A Plex rescan fires only when something was actually replaced — this code runs
+on every duplicate, and a scan with nothing to find is wasted work.
+
+**Configuration** (environment variables, all with working defaults):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `MEDIA_COMPARE_DRY_RUN` | `false` | Log decisions, change nothing |
+| `MEDIA_COMPARE_RETENTION_DAYS` | `14` | Quarantine lifetime |
+| `MEDIA_COMPARE_BITRATE_MARGIN` | `10` | Percent difference before bitrate decides |
+| `MEDIA_COMPARE_TIMEOUT` | `30` | Seconds before an ffprobe read is abandoned |
+| `MEDIA_COMPARE_FFPROBE` | `${HOMEBREW_PREFIX}/bin/ffprobe` | Probe binary |
+
+Tests live in `tests/media-compare.bats` and probe real media synthesised by
+`ffmpeg` rather than mocking `ffprobe`, so a wrong `-show_entries` spec or a
+misread field name fails the suite instead of passing it.
+
 ### Critical Environment Variables
 
 When Transmission invokes the script, it provides:
