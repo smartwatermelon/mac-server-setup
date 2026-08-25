@@ -518,6 +518,46 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Section 7b: Deploy PIA port forwarding watchdog
+# ---------------------------------------------------------------------------
+
+set_section "Deploy PIA Port Watchdog"
+
+PORT_WATCHDOG_TEMPLATE="${SCRIPT_DIR}/templates/pia-port-watchdog.sh"
+PORT_WATCHDOG_DEST="${OPERATOR_HOME}/.local/bin/pia-port-watchdog.sh"
+PORT_WATCHDOG_MSMTP="${OPERATOR_HOME}/.config/msmtp/config"
+
+# The watchdog alerts by email, so it needs both a destination address and a
+# configured msmtp. Neither is set up by this script — msmtp-setup.sh owns
+# that — so skip rather than deploying an agent that can only log failures to
+# send mail. This script also runs unattended, so prompting is not an option.
+PORT_WATCHDOG_DEPLOY=true
+if [[ -z "${MONITORING_EMAIL:-}" ]] || [[ "${MONITORING_EMAIL}" == "your-email@example.com" ]]; then
+  log "⏭️  Skipping PIA port watchdog: MONITORING_EMAIL not configured in ${CONFIG_FILE}"
+  PORT_WATCHDOG_DEPLOY=false
+elif [[ ! -f "${PORT_WATCHDOG_MSMTP}" ]]; then
+  log "⏭️  Skipping PIA port watchdog: msmtp not configured. Run msmtp-setup.sh, then re-run this script."
+  PORT_WATCHDOG_DEPLOY=false
+elif [[ ! -f "${PORT_WATCHDOG_TEMPLATE}" ]]; then
+  collect_error "PIA port watchdog template not found: ${PORT_WATCHDOG_TEMPLATE}"
+  PORT_WATCHDOG_DEPLOY=false
+fi
+
+if [[ "${PORT_WATCHDOG_DEPLOY}" == "true" ]]; then
+  log "Deploying pia-port-watchdog.sh"
+
+  sudo sed \
+    -e "s|__SERVER_NAME__|${HOSTNAME}|g" \
+    -e "s|__MONITORING_EMAIL__|${MONITORING_EMAIL}|g" \
+    -e "s|__TRANSMISSION_HOST_PORT__|${HOST_PORT}|g" \
+    "${PORT_WATCHDOG_TEMPLATE}" | sudo tee "${PORT_WATCHDOG_DEST}" >/dev/null
+
+  sudo chown "${OPERATOR_USERNAME}:staff" "${PORT_WATCHDOG_DEST}"
+  sudo chmod 755 "${PORT_WATCHDOG_DEST}"
+  log "✅ pia-port-watchdog.sh deployed"
+fi
+
+# ---------------------------------------------------------------------------
 # Section 8: Deploy podman-machine-start.sh wrapper
 # ---------------------------------------------------------------------------
 
@@ -923,6 +963,50 @@ if sudo plutil -lint "${CLEANUP_PLIST}" >/dev/null 2>&1; then
   log "✅ pending-move-cleanup LaunchAgent created (hourly)"
 else
   collect_error "Invalid plist syntax in ${CLEANUP_PLIST}"
+fi
+
+# --- 9d: PIA port forwarding watchdog timer ---
+
+if [[ "${PORT_WATCHDOG_DEPLOY}" == "true" ]]; then
+  PORT_WATCHDOG_PLIST="${LAUNCHAGENT_DIR}/com.${HOSTNAME_LOWER}.pia-port-watchdog.plist"
+  log "Creating LaunchAgent: ${PORT_WATCHDOG_PLIST}"
+
+  # 15 minutes matches the port forwarding manager's own refresh cadence, so a
+  # loss is noticed within roughly one refresh cycle. With the 3-poll threshold
+  # that is a 45-minute worst case before alerting — against the 47 hours the
+  # August outage went unnoticed.
+  sudo -iu "${OPERATOR_USERNAME}" tee "${PORT_WATCHDOG_PLIST}" >/dev/null <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.${HOSTNAME_LOWER}.pia-port-watchdog</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${OPERATOR_HOME}/.local/bin/pia-port-watchdog.sh</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>900</integer>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-pia-port-watchdog.log</string>
+  <key>StandardErrorPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-pia-port-watchdog.log</string>
+</dict>
+</plist>
+PLIST
+
+  sudo chown "${OPERATOR_USERNAME}:staff" "${PORT_WATCHDOG_PLIST}"
+  sudo chmod 644 "${PORT_WATCHDOG_PLIST}"
+
+  if sudo plutil -lint "${PORT_WATCHDOG_PLIST}" >/dev/null 2>&1; then
+    log "✅ pia-port-watchdog LaunchAgent created (every 15 minutes)"
+  else
+    collect_error "Invalid plist syntax in ${PORT_WATCHDOG_PLIST}"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
