@@ -362,3 +362,33 @@ watchdog_log() {
   run grep -A 20 'pia-port-watchdog.plist' "${REPO_DIR}/app-setup/podman-transmission-setup.sh"
   [[ "$output" == *"<integer>900</integer>"* ]]
 }
+
+@test "the remediation path in the alert is a path that actually gets deployed" {
+  # The alert tells an operator to run pia-pf-probe.sh at a specific path. If
+  # nothing deploys it there the advice is worse than none: it sends someone
+  # mid-incident to a file that does not exist. The repo checkout is not an
+  # answer — the operator account does not have one.
+  # Build the tilde from its character code rather than writing one: a literal
+  # ~ inside quotes trips SC2088, which is a false positive here (this is a
+  # grep pattern, not a path being expanded).
+  local tilde
+  tilde="$(printf '\176')"
+
+  local referenced
+  referenced="$(grep -oE "${tilde}/[a-zA-Z0-9_./-]*pia-pf-probe\.sh" "${TEMPLATE}" | head -1)"
+  [ -n "${referenced}" ]
+
+  # Reduce the referenced path to the part below the container directory, which
+  # is what the setup script's destination is expressed relative to.
+  local suffix="${referenced#"${tilde}"/containers/transmission/}"
+  [ "${suffix}" = "scripts/pia-pf-probe.sh" ]
+
+  run grep -q 'PF_PROBE_DEST="\${CONTAINER_DIR}/scripts/pia-pf-probe.sh"' \
+    "${REPO_DIR}/app-setup/podman-transmission-setup.sh"
+  [ "$status" -eq 0 ]
+
+  # And it must actually be copied, not just have a variable defined for it.
+  run grep -q 'sudo cp "\${PF_PROBE_TEMPLATE}" "\${PF_PROBE_DEST}"' \
+    "${REPO_DIR}/app-setup/podman-transmission-setup.sh"
+  [ "$status" -eq 0 ]
+}

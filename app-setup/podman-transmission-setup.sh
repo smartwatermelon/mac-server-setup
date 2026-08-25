@@ -451,10 +451,21 @@ PORT_GUARD_DEST="${CONTAINER_DIR}/scripts/pia-port-guard.sh"
 POST_START_TEMPLATE="${SCRIPT_DIR}/templates/transmission-post-start.sh"
 POST_START_DEST="${CONTAINER_DIR}/scripts/transmission-post-start.sh"
 
+# The region survey runs on the host, not in the container, but it belongs with
+# the scripts it diagnoses and it needs the same .env credentials, which live
+# one directory up. Deploying it matters: the port watchdog's alert email and
+# the PIA README both tell an operator to run it when port forwarding is lost,
+# and until now nothing put it anywhere the operator account could reach — the
+# only copy was in the repo checkout, which operator does not have.
+PF_PROBE_TEMPLATE="${SCRIPT_DIR}/templates/pia-pf-probe.sh"
+PF_PROBE_DEST="${CONTAINER_DIR}/scripts/pia-pf-probe.sh"
+
 if [[ ! -f "${PORT_GUARD_TEMPLATE}" ]]; then
   collect_error "Template not found: ${PORT_GUARD_TEMPLATE}"
 elif [[ ! -f "${POST_START_TEMPLATE}" ]]; then
   collect_error "Template not found: ${POST_START_TEMPLATE}"
+elif [[ ! -f "${PF_PROBE_TEMPLATE}" ]]; then
+  collect_error "Template not found: ${PF_PROBE_TEMPLATE}"
 else
   # The guard is sourced, not executed, so it does not need the execute bit.
   sudo cp "${PORT_GUARD_TEMPLATE}" "${PORT_GUARD_DEST}"
@@ -465,7 +476,11 @@ else
   sudo chmod 755 "${POST_START_DEST}"
   sudo chown "${OPERATOR_USERNAME}:staff" "${POST_START_DEST}"
 
-  log "✅ PIA port forwarding manager deployed (guard + post-start hook)"
+  sudo cp "${PF_PROBE_TEMPLATE}" "${PF_PROBE_DEST}"
+  sudo chmod 755 "${PF_PROBE_DEST}"
+  sudo chown "${OPERATOR_USERNAME}:staff" "${PF_PROBE_DEST}"
+
+  log "✅ PIA port forwarding manager deployed (guard + post-start hook + region probe)"
 fi
 
 # ---------------------------------------------------------------------------

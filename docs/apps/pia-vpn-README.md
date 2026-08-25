@@ -137,16 +137,26 @@ The only reliable test is to establish a tunnel and ask. That is what
 [`app-setup/templates/pia-pf-probe.sh`](../../app-setup/templates/pia-pf-probe.sh)
 does:
 
+`podman-transmission-setup.sh` deploys it to
+`~operator/containers/transmission/scripts/pia-pf-probe.sh`, next to the port
+guard and the post-start hook. Run it from there on the server — that copy
+reads the PIA credentials from the sibling `.env` the container uses, and the
+operator account has no repo checkout:
+
 ```bash
 # Probe the default shortlist
-sudo -u operator ./app-setup/templates/pia-pf-probe.sh
+ssh operator@tilsit ~/containers/transmission/scripts/pia-pf-probe.sh
 
 # Probe specific regions
-sudo -u operator ./app-setup/templates/pia-pf-probe.sh ca_toronto netherlands
+ssh operator@tilsit ~/containers/transmission/scripts/pia-pf-probe.sh ca_vancouver netherlands
 
 # Sweep everything advertising PF (slow — roughly 90s per region)
-sudo -u operator ./app-setup/templates/pia-pf-probe.sh --all --out results.csv
+ssh operator@tilsit ~/containers/transmission/scripts/pia-pf-probe.sh --all --out results.csv
 ```
+
+From a repo checkout on the server, `sudo -u operator
+./app-setup/templates/pia-pf-probe.sh` works too, provided `PIA_ENV_FILE`
+points at the operator's `.env`.
 
 The probe runs in its own throwaway container and does not disturb the live
 `transmission-vpn` container or any download in progress.
