@@ -93,6 +93,27 @@ else
 fi
 echo
 
+# Run top-level component tests
+# These live at tests/*.bats rather than under tests/transmission-filebot/, so
+# neither glob above reaches them. Discovered with nullglob so an empty match
+# is reported as "none found" instead of bats being handed a literal '*'.
+echo -e "${YELLOW}Running Component Tests...${NC}"
+echo -e "${BLUE}────────────────────────────────────────${NC}"
+shopt -s nullglob
+COMPONENT_TESTS=(tests/*.bats)
+shopt -u nullglob
+if [[ ${#COMPONENT_TESTS[@]} -eq 0 ]]; then
+  echo "No component tests found at tests/*.bats"
+  COMPONENT_RESULT=0
+elif bats "${COMPONENT_TESTS[@]}"; then
+  echo -e "${GREEN}✓ Component tests passed${NC}"
+  COMPONENT_RESULT=0
+else
+  echo -e "${RED}✗ Component tests failed${NC}"
+  COMPONENT_RESULT=1
+fi
+echo
+
 # Summary
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}Test Summary${NC}"
@@ -110,10 +131,16 @@ else
   echo -e "Integration Tests: ${RED}✗ FAILED${NC}"
 fi
 
+if [[ ${COMPONENT_RESULT} -eq 0 ]]; then
+  echo -e "Component Tests:   ${GREEN}✓ PASSED${NC}"
+else
+  echo -e "Component Tests:   ${RED}✗ FAILED${NC}"
+fi
+
 echo -e "${BLUE}========================================${NC}"
 
 # Exit with failure if any tests failed
-if [[ ${UNIT_RESULT} -ne 0 ]] || [[ ${INTEGRATION_RESULT} -ne 0 ]]; then
+if [[ ${UNIT_RESULT} -ne 0 ]] || [[ ${INTEGRATION_RESULT} -ne 0 ]] || [[ ${COMPONENT_RESULT} -ne 0 ]]; then
   echo -e "${RED}Some tests failed${NC}"
   exit 1
 else

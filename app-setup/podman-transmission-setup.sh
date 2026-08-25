@@ -81,6 +81,16 @@ fi
 # shellcheck source=config/config.conf
 source "${CONFIG_FILE}"
 
+# SERVER_NAME comes from the sourced config. Validate it before deriving
+# anything: SERVER_NAME_LOWER names the keychain service the PIA credentials
+# are stored under, so an empty value would look up "pia-account-" and report a
+# missing-credentials error that points nowhere near the real cause.
+SERVER_NAME="${SERVER_NAME:-}"
+if [[ -z "${SERVER_NAME}" ]]; then
+  echo "❌ SERVER_NAME not set in ${CONFIG_FILE}"
+  exit 1
+fi
+
 SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
@@ -233,8 +243,11 @@ if [[ -z "${OPERATOR_USERNAME}" ]]; then
   exit 1
 fi
 
-# PIA_VPN_REGION and LAN_SUBNET default gracefully if missing from config
-PIA_REGION="${PIA_VPN_REGION:-panama}"
+# PIA_VPN_REGION and LAN_SUBNET default gracefully if missing from config.
+# The PIA_VPN_REGION fallback must stay in step with config.conf.template:
+# panama (the pre-2026-08-23 default) serves no port forwarding at all, so
+# falling back to it would silently deploy a non-working region.
+PIA_REGION="${PIA_VPN_REGION:-ca_vancouver}"
 LAN="${LAN_SUBNET:-192.168.1.0/24}"
 HOST_PORT="${TRANSMISSION_HOST_PORT:-9091}"
 
@@ -438,10 +451,21 @@ PORT_GUARD_DEST="${CONTAINER_DIR}/scripts/pia-port-guard.sh"
 POST_START_TEMPLATE="${SCRIPT_DIR}/templates/transmission-post-start.sh"
 POST_START_DEST="${CONTAINER_DIR}/scripts/transmission-post-start.sh"
 
+# The region survey runs on the host, not in the container, but it belongs with
+# the scripts it diagnoses and it needs the same .env credentials, which live
+# one directory up. Deploying it matters: the port watchdog's alert email and
+# the PIA README both tell an operator to run it when port forwarding is lost,
+# and until now nothing put it anywhere the operator account could reach — the
+# only copy was in the repo checkout, which operator does not have.
+PF_PROBE_TEMPLATE="${SCRIPT_DIR}/templates/pia-pf-probe.sh"
+PF_PROBE_DEST="${CONTAINER_DIR}/scripts/pia-pf-probe.sh"
+
 if [[ ! -f "${PORT_GUARD_TEMPLATE}" ]]; then
   collect_error "Template not found: ${PORT_GUARD_TEMPLATE}"
 elif [[ ! -f "${POST_START_TEMPLATE}" ]]; then
   collect_error "Template not found: ${POST_START_TEMPLATE}"
+elif [[ ! -f "${PF_PROBE_TEMPLATE}" ]]; then
+  collect_error "Template not found: ${PF_PROBE_TEMPLATE}"
 else
   # The guard is sourced, not executed, so it does not need the execute bit.
   sudo cp "${PORT_GUARD_TEMPLATE}" "${PORT_GUARD_DEST}"
@@ -452,7 +476,11 @@ else
   sudo chmod 755 "${POST_START_DEST}"
   sudo chown "${OPERATOR_USERNAME}:staff" "${POST_START_DEST}"
 
-  log "✅ PIA port forwarding manager deployed (guard + post-start hook)"
+  sudo cp "${PF_PROBE_TEMPLATE}" "${PF_PROBE_DEST}"
+  sudo chmod 755 "${PF_PROBE_DEST}"
+  sudo chown "${OPERATOR_USERNAME}:staff" "${PF_PROBE_DEST}"
+
+  log "✅ PIA port forwarding manager deployed (guard + post-start hook + region probe)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -505,6 +533,46 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Section 7b: Deploy PIA port forwarding watchdog
+# ---------------------------------------------------------------------------
+
+set_section "Deploy PIA Port Watchdog"
+
+PORT_WATCHDOG_TEMPLATE="${SCRIPT_DIR}/templates/pia-port-watchdog.sh"
+PORT_WATCHDOG_DEST="${OPERATOR_HOME}/.local/bin/pia-port-watchdog.sh"
+PORT_WATCHDOG_MSMTP="${OPERATOR_HOME}/.config/msmtp/config"
+
+# The watchdog alerts by email, so it needs both a destination address and a
+# configured msmtp. Neither is set up by this script — msmtp-setup.sh owns
+# that — so skip rather than deploying an agent that can only log failures to
+# send mail. This script also runs unattended, so prompting is not an option.
+PORT_WATCHDOG_DEPLOY=true
+if [[ -z "${MONITORING_EMAIL:-}" ]] || [[ "${MONITORING_EMAIL}" == "your-email@example.com" ]]; then
+  log "⏭️  Skipping PIA port watchdog: MONITORING_EMAIL not configured in ${CONFIG_FILE}"
+  PORT_WATCHDOG_DEPLOY=false
+elif [[ ! -f "${PORT_WATCHDOG_MSMTP}" ]]; then
+  log "⏭️  Skipping PIA port watchdog: msmtp not configured. Run msmtp-setup.sh, then re-run this script."
+  PORT_WATCHDOG_DEPLOY=false
+elif [[ ! -f "${PORT_WATCHDOG_TEMPLATE}" ]]; then
+  collect_error "PIA port watchdog template not found: ${PORT_WATCHDOG_TEMPLATE}"
+  PORT_WATCHDOG_DEPLOY=false
+fi
+
+if [[ "${PORT_WATCHDOG_DEPLOY}" == "true" ]]; then
+  log "Deploying pia-port-watchdog.sh"
+
+  sudo sed \
+    -e "s|__SERVER_NAME__|${HOSTNAME}|g" \
+    -e "s|__MONITORING_EMAIL__|${MONITORING_EMAIL}|g" \
+    -e "s|__TRANSMISSION_HOST_PORT__|${HOST_PORT}|g" \
+    "${PORT_WATCHDOG_TEMPLATE}" | sudo tee "${PORT_WATCHDOG_DEST}" >/dev/null
+
+  sudo chown "${OPERATOR_USERNAME}:staff" "${PORT_WATCHDOG_DEST}"
+  sudo chmod 755 "${PORT_WATCHDOG_DEST}"
+  log "✅ pia-port-watchdog.sh deployed"
+fi
+
+# ---------------------------------------------------------------------------
 # Section 8: Deploy podman-machine-start.sh wrapper
 # ---------------------------------------------------------------------------
 
@@ -546,6 +614,96 @@ log_ts() {
     echo "[\${ts}] \$*"
 }
 
+# Every podman call in this script goes through podman_t (issue #168).
+#
+# On 2026-08-16 a routine VirtioFS recovery issued \`podman run -d\` through a
+# freshly Homebrew-upgraded 6.1.0 CLI while a leftover 6.0.2 gvproxy still held
+# the machine's socket paths. That podman run hung indefinitely — it was still
+# running 27 hours later. Because this supervision loop is single-threaded and
+# calls ensure_container synchronously, the hang froze the whole loop: no
+# further log lines, no container, nothing listening on the web UI port, and no
+# self-recovery, which is precisely what the loop exists to provide.
+#
+# A hung subprocess must never be able to do that again. Any podman invocation
+# that exceeds its timeout is killed and reported as a distinct failure, which
+# the callers treat like any other failure: retry next cycle.
+PODMAN_CMD_TIMEOUT=\${PODMAN_CMD_TIMEOUT:-60}
+PODMAN_MACHINE_TIMEOUT=\${PODMAN_MACHINE_TIMEOUT:-180}
+
+# timeout(1) exits 124 when it had to kill the command.
+TIMEOUT_RC=124
+
+# timeout(1) comes from coreutils, which config/formulae.txt installs, and it
+# is required rather than optional. Two considered fallbacks were rejected:
+#
+#   - Running unbounded when it is missing reintroduces exactly the hang this
+#     section exists to prevent, and does so silently.
+#   - perl's \`alarm shift; exec @ARGV\` does not work here. SIGALRM kills the
+#     perl process but leaves the command's own children running, so they hold
+#     the command-substitution pipe open and \`state=\$(podman_t ... inspect)\`
+#     blocks forever anyway — the original bug, wearing a timeout.
+#
+# So: fail loudly at startup instead of supervising with a supervision loop
+# that cannot actually recover.
+if ! command -v timeout >/dev/null 2>&1; then
+    log_ts "FATAL: timeout(1) not found on PATH."
+    log_ts "It is required to bound podman calls; without it a hung podman"
+    log_ts "command freezes this supervision loop indefinitely (issue #168)."
+    log_ts "Install it with: brew install coreutils"
+    exit 1
+fi
+
+# Run podman under a timeout. First argument is the timeout in seconds.
+# A timeout is logged distinctly from an ordinary non-zero exit so an operator
+# reading the log can tell a hang from a failure — not being able to make that
+# distinction is what let the August outage run for 27 hours.
+podman_t() {
+    local limit="\$1"
+    shift
+    # Just the subcommand for the log. \`podman run\` carries forty-odd flags and
+    # printing all of them buries the one fact that matters.
+    local what="\$1 \${2:-}"
+    local rc=0
+    # --kill-after: if podman ignores SIGTERM, SIGKILL follows. Without it a
+    # podman that traps TERM keeps the pipe open and the loop stays stuck.
+    timeout --kill-after=10 "\${limit}" podman "\$@" || rc=\$?
+    if [[ \${rc} -eq \${TIMEOUT_RC} ]]; then
+        log_ts "TIMEOUT: 'podman \${what}' exceeded \${limit}s and was killed"
+    fi
+    return \${rc}
+}
+
+# \`podman machine stop\` returning 0 does not mean the machine's helper
+# processes are gone. The 6.0.2 gvproxy orphaned by the August incident was
+# still running 7 days after the upgrade, holding the socket paths the new CLI
+# then tried to reuse. Verify the processes actually exited, and kill whatever
+# is left before anything tries to start the machine again.
+reap_machine_helpers() {
+    local pids
+    # Match on the machine name, which appears in both helpers' socket paths
+    # (transmission-vm-gvproxy.sock, transmission-vm-api.sock).
+    pids=\$(pgrep -f 'gvproxy|vfkit' 2>/dev/null | while read -r pid; do
+        if ps -o args= -p "\${pid}" 2>/dev/null | grep -q 'transmission-vm'; then
+            echo "\${pid}"
+        fi
+    done)
+
+    [[ -n "\${pids}" ]] || return 0
+
+    log_ts "stale machine helpers still running after stop: \${pids//\$'\\n'/ }"
+    local pid
+    for pid in \${pids}; do
+        kill "\${pid}" 2>/dev/null || true
+    done
+    sleep 3
+    for pid in \${pids}; do
+        if kill -0 "\${pid}" 2>/dev/null; then
+            log_ts "helper \${pid} ignored SIGTERM — sending SIGKILL"
+            kill -9 "\${pid}" 2>/dev/null || true
+        fi
+    done
+}
+
 wait_for_nfs() {
     local mount_point="${NFS_MOUNT_POINT}"
     local max_wait=120
@@ -564,13 +722,17 @@ wait_for_nfs() {
 
 ensure_machine() {
     local state
-    state=\$(podman machine inspect transmission-vm --format '{{.State}}' 2>/dev/null || echo unknown)
+    state=\$(podman_t "\${PODMAN_CMD_TIMEOUT}" machine inspect transmission-vm --format '{{.State}}' 2>/dev/null || echo unknown)
     if [[ "\${state}" != "running" ]]; then
         log_ts "machine state=\${state}, starting transmission-vm"
-        podman machine start transmission-vm || return 1
+        # A machine that is not running may still have orphaned helpers holding
+        # its sockets — that is exactly the state the August incident started
+        # from. Clear them before asking podman to start it.
+        reap_machine_helpers
+        podman_t "\${PODMAN_MACHINE_TIMEOUT}" machine start transmission-vm || return 1
     fi
     for _ in {1..30}; do
-        if podman info >/dev/null 2>&1; then
+        if podman_t "\${PODMAN_CMD_TIMEOUT}" info >/dev/null 2>&1; then
             return 0
         fi
         sleep 1
@@ -581,15 +743,15 @@ ensure_machine() {
 
 ensure_container() {
     local running=false
-    if podman container exists transmission-vpn 2>/dev/null; then
-        running=\$(podman inspect transmission-vpn --format '{{.State.Running}}' 2>/dev/null || echo false)
+    if podman_t "\${PODMAN_CMD_TIMEOUT}" container exists transmission-vpn 2>/dev/null; then
+        running=\$(podman_t "\${PODMAN_CMD_TIMEOUT}" inspect transmission-vpn --format '{{.State.Running}}' 2>/dev/null || echo false)
     fi
     if [[ "\${running}" == "true" ]]; then
         return 0
     fi
     log_ts "container transmission-vpn not running — (re)creating"
-    podman rm -f transmission-vpn >/dev/null 2>&1 || true
-    podman run -d \\
+    podman_t "\${PODMAN_CMD_TIMEOUT}" rm -f transmission-vpn >/dev/null 2>&1 || true
+    podman_t "\${PODMAN_MACHINE_TIMEOUT}" run -d \\
         --name transmission-vpn \\
         --privileged \\
         --device /dev/net/tun:/dev/net/tun \\
@@ -634,15 +796,18 @@ DATA_CHECK_FAILURES=0
 MAX_DATA_FAILURES=3
 
 check_data_access() {
-    if ! podman exec transmission-vpn ls /data/ >/dev/null 2>&1; then
+    if ! podman_t "\${PODMAN_CMD_TIMEOUT}" exec transmission-vpn ls /data/ >/dev/null 2>&1; then
         DATA_CHECK_FAILURES=\$((DATA_CHECK_FAILURES + 1))
         log_ts "WARNING: /data/ inaccessible inside container (failure \${DATA_CHECK_FAILURES}/\${MAX_DATA_FAILURES})"
         if (( DATA_CHECK_FAILURES >= MAX_DATA_FAILURES )); then
             log_ts "RECOVERY: cycling VM to refresh VirtioFS NFS handles"
-            podman stop transmission-vpn 2>/dev/null || true
-            podman rm -f transmission-vpn 2>/dev/null || true
-            podman machine stop transmission-vm 2>/dev/null || true
+            podman_t "\${PODMAN_CMD_TIMEOUT}" stop transmission-vpn 2>/dev/null || true
+            podman_t "\${PODMAN_CMD_TIMEOUT}" rm -f transmission-vpn 2>/dev/null || true
+            podman_t "\${PODMAN_MACHINE_TIMEOUT}" machine stop transmission-vm 2>/dev/null || true
             sleep 5
+            # A clean exit status from machine stop is not proof the helpers
+            # exited; confirm before restarting into the same socket paths.
+            reap_machine_helpers
             if ensure_machine && ensure_container; then
                 log_ts "RECOVERY: VM and container restarted successfully"
             else
@@ -660,8 +825,15 @@ check_data_access() {
 }
 
 wait_for_nfs || exit 1
-ensure_machine
-ensure_container
+
+# Check these on the way in rather than pressing on regardless. A failed
+# machine start followed by an attempted container create produces a confusing
+# log — the container error looks like the problem when the machine was.
+if ensure_machine; then
+    ensure_container || log_ts "initial ensure_container failed — supervision loop will retry"
+else
+    log_ts "initial ensure_machine failed — supervision loop will retry"
+fi
 
 log_ts "entering supervision loop (interval=\${SUPERVISE_INTERVAL}s)"
 while true; do
@@ -806,6 +978,50 @@ if sudo plutil -lint "${CLEANUP_PLIST}" >/dev/null 2>&1; then
   log "✅ pending-move-cleanup LaunchAgent created (hourly)"
 else
   collect_error "Invalid plist syntax in ${CLEANUP_PLIST}"
+fi
+
+# --- 9d: PIA port forwarding watchdog timer ---
+
+if [[ "${PORT_WATCHDOG_DEPLOY}" == "true" ]]; then
+  PORT_WATCHDOG_PLIST="${LAUNCHAGENT_DIR}/com.${HOSTNAME_LOWER}.pia-port-watchdog.plist"
+  log "Creating LaunchAgent: ${PORT_WATCHDOG_PLIST}"
+
+  # 15 minutes matches the port forwarding manager's own refresh cadence, so a
+  # loss is noticed within roughly one refresh cycle. With the 3-poll threshold
+  # that is a 45-minute worst case before alerting — against the 47 hours the
+  # August outage went unnoticed.
+  sudo -iu "${OPERATOR_USERNAME}" tee "${PORT_WATCHDOG_PLIST}" >/dev/null <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.${HOSTNAME_LOWER}.pia-port-watchdog</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${OPERATOR_HOME}/.local/bin/pia-port-watchdog.sh</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>900</integer>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-pia-port-watchdog.log</string>
+  <key>StandardErrorPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-pia-port-watchdog.log</string>
+</dict>
+</plist>
+PLIST
+
+  sudo chown "${OPERATOR_USERNAME}:staff" "${PORT_WATCHDOG_PLIST}"
+  sudo chmod 644 "${PORT_WATCHDOG_PLIST}"
+
+  if sudo plutil -lint "${PORT_WATCHDOG_PLIST}" >/dev/null 2>&1; then
+    log "✅ pia-port-watchdog LaunchAgent created (every 15 minutes)"
+  else
+    collect_error "Invalid plist syntax in ${PORT_WATCHDOG_PLIST}"
+  fi
 fi
 
 # ---------------------------------------------------------------------------

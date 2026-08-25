@@ -340,6 +340,54 @@ VM and recreates the container to obtain fresh VirtioFS handles.
 > enforces NFS access restrictions at the kernel level for any process
 > without FDA, including system XPC services.
 
+### Every podman call is bounded by a timeout
+
+The supervision loop is single-threaded: it calls `ensure_machine`,
+`ensure_container`, and `check_data_access` synchronously. A podman command
+that never returns therefore freezes the whole loop — no health checks, no
+recovery, no log output.
+
+That is not hypothetical. On 2026-08-16 the `/data/` health check correctly
+detected a VirtioFS failure and triggered its documented recovery. The
+recovery's `podman run -d` was issued through a Homebrew-upgraded 6.1.0 CLI
+while a leftover 6.0.2 `gvproxy`, orphaned by the upgrade seven days earlier,
+still held the machine's socket paths. That `podman run` hung and was still
+running 27 hours later. Nothing was listening on port 9091 the entire time.
+
+Two changes close that hole:
+
+- **`podman_t` wraps every podman invocation in `timeout(1)`.** Command
+  timeouts default to 60s, machine operations to 180s; override with
+  `PODMAN_CMD_TIMEOUT` / `PODMAN_MACHINE_TIMEOUT`. A timeout is logged as
+  `TIMEOUT: 'podman run -d' exceeded 180s and was killed` — deliberately
+  distinct from an ordinary failure, because not being able to tell a hang
+  from a failure is what made the outage take 27 hours to spot. The caller
+  treats a timeout like any other failure and retries next cycle.
+
+  `timeout(1)` is required, not optional. It comes from `coreutils`, which
+  `config/formulae.txt` installs. If it is missing the loop exits at startup
+  with instructions rather than running unsupervised. A `perl -e 'alarm'`
+  fallback was tried and rejected: SIGALRM kills perl but leaves the command's
+  children running, so they hold the command-substitution pipe open and
+  `state=$(podman_t ... machine inspect)` blocks forever regardless.
+
+- **`reap_machine_helpers` verifies the helper processes actually exited.**
+  `podman machine stop` returning 0 does not mean `gvproxy` and `vfkit` are
+  gone — the 6.0.2 `gvproxy` in the August incident survived for seven days.
+  Before any machine start, and after the recovery path's machine stop, any
+  surviving helper whose argv names `transmission-vm` gets SIGTERM, then
+  SIGKILL if it ignores that. The match is scoped to the machine name so other
+  podman machines on the host are untouched.
+
+**Podman version drift is the underlying trigger.** A `brew upgrade` replaces
+the CLI without restarting the running VM or its helpers. The timeout and reap
+changes make the resulting mismatch recoverable rather than fatal; they do not
+prevent the drift itself. After upgrading podman, cycle the machine:
+
+```bash
+launchctl kickstart -k "gui/$(id -u)/com.tilsit.podman-transmission-vm"
+```
+
 ## Common Gotchas
 
 1. **PATH issues**: Transmission runs scripts with minimal PATH (`/usr/bin:/bin:/usr/sbin:/sbin`). Script adds `/usr/local/bin:/opt/homebrew/bin` explicitly for Homebrew tools.

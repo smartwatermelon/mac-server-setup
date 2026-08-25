@@ -302,6 +302,13 @@ main() {
     log "Fetching regions advertising port_forward=true..."
     local region_list
     region_list="$(list_pf_regions)"
+    # A here-string always supplies a trailing newline, so mapfile on an empty
+    # region_list yields regions=("") — one empty element, not an empty array.
+    # The "no regions to probe" guard below counts that as 1 and the loop then
+    # probes the empty region name, emitting a confusing container_failed row.
+    if [[ -z "${region_list}" ]]; then
+      die "No regions advertising port_forward=true — PIA server list may be unavailable"
+    fi
     mapfile -t regions <<<"${region_list}"
     log "${#regions[@]} candidate regions"
   elif [[ ${#regions[@]} -eq 0 ]]; then
