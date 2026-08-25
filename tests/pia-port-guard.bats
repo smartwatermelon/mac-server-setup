@@ -129,6 +129,14 @@ teardown() {
 }
 
 # --- apply_port ------------------------------------------------------------
+#
+# Assertions that something did NOT happen are written as `run grep` plus an
+# explicit status check, never as a bare `! grep ...`. POSIX exempts a
+# !-negated command from `set -e`, so `! grep -q ...` cannot fail a BATS test:
+# it reads like an assertion and behaves like a no-op. These tests exist to
+# prove that an invalid port never reaches `transmission-remote -p`, which is
+# the failure that stopped downloads for 47 hours -- an assertion that cannot
+# fail is worse than none, because it looks like coverage.
 
 @test "apply_port sets a valid port that differs from the current one" {
   export STUB_CURRENT_PORT="33361"
@@ -142,7 +150,8 @@ teardown() {
   run apply_port 54321 "http://localhost:9091/transmission/rpc"
   [ "$status" -eq 0 ]
   [[ "$output" == *"no change needed"* ]]
-  ! grep -q -- "-p 54321" "${CALL_LOG}"
+  run grep -q -- "-p 54321" "${CALL_LOG}"
+  [ "$status" -ne 0 ]
 }
 
 @test "apply_port refuses an empty port and never calls -p" {
@@ -150,7 +159,8 @@ teardown() {
   run apply_port "" "http://localhost:9091/transmission/rpc"
   [ "$status" -ne 0 ]
   [[ "$output" == *"REFUSING"* ]]
-  ! grep -q -- " -p " "${CALL_LOG}"
+  run grep -q -- " -p " "${CALL_LOG}"
+  [ "$status" -ne 0 ]
 }
 
 @test "apply_port reports the preserved port when refusing" {
@@ -170,7 +180,8 @@ teardown() {
   export STUB_CURRENT_PORT="33361"
   run apply_port "null" "http://localhost:9091/transmission/rpc"
   [ "$status" -ne 0 ]
-  ! grep -q -- " -p " "${CALL_LOG}"
+  run grep -q -- " -p " "${CALL_LOG}"
+  [ "$status" -ne 0 ]
 }
 
 @test "apply_port passes auth arguments through without word splitting" {
@@ -189,7 +200,13 @@ teardown() {
   export STUB_CURRENT_PORT="33361"
   run apply_port 54321 "http://localhost:9091/transmission/rpc"
   [ "$status" -eq 0 ]
-  ! grep -qx -- "--auth" "${ARG_LOG}"
+  # Both halves of this assertion matter. ARG_LOG (not CALL_LOG) because one
+  # argument per line is the only way to tell a credential containing spaces
+  # from four separate arguments; `run grep` (not `! grep`) because POSIX
+  # exempts a !-negated command from `set -e`, so the negated form cannot fail
+  # a BATS test at all.
+  run grep -qx -- "--auth" "${ARG_LOG}"
+  [ "$status" -ne 0 ]
 }
 
 # --- idempotency ------------------------------------------------------------

@@ -83,7 +83,8 @@ teardown() {
   done
 
   # Nothing above should have reached transmission-remote with -p.
-  ! grep -q -- " -p " "${CALL_LOG}"
+  run grep -q -- " -p " "${CALL_LOG}"
+  [ "$status" -ne 0 ]
 }
 
 @test "the guard applies a well-formed port" {
