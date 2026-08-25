@@ -50,6 +50,25 @@ setup() {
   extract_and_render_wrapper
   write_podman_mock
   write_mount_mock
+  link_timeout
+}
+
+# ---------------------------------------------------------------------------
+# The wrapper resets PATH to "${HOMEBREW_PREFIX}/bin:...:/usr/bin:/bin", and
+# the tests point HOMEBREW_PREFIX at the sandbox so the podman mock is found
+# first. timeout(1) is coreutils, which lives in the real Homebrew prefix and
+# is therefore off that PATH — so link it in. The wrapper now requires it and
+# exits at startup without it (#168), which would fail every test here for a
+# reason that has nothing to do with what is under test.
+# ---------------------------------------------------------------------------
+link_timeout() {
+  local real_timeout
+  real_timeout="$(command -v timeout || true)"
+  if [[ -z "${real_timeout}" ]]; then
+    echo "timeout(1) not found — install coreutils (brew install coreutils)" >&2
+    return 1
+  fi
+  ln -sf "${real_timeout}" "${MOCK_BIN_DIR}/timeout"
 }
 
 # ---------------------------------------------------------------------------
@@ -292,4 +311,169 @@ run_wrapper_briefly() {
   local inspect_calls
   inspect_calls=$(call_count "machine inspect transmission-vm")
   [ "${inspect_calls}" -ge 2 ]
+}
+
+# ---------------------------------------------------------------------------
+# Timeout hardening (#168)
+#
+# On 2026-08-16 a `podman run -d` issued through a freshly upgraded 6.1.0 CLI,
+# against a machine whose 6.0.2 gvproxy still held the socket paths, hung
+# indefinitely. The supervision loop calls ensure_container synchronously, so
+# the hang froze the entire loop for 27 hours: no log lines, no container,
+# nothing listening on the web UI port, and none of the automatic recovery the
+# loop exists to provide.
+#
+# The regression these tests protect is not "podman failed" — the loop already
+# handled that — it is "podman never returned".
+# ---------------------------------------------------------------------------
+
+# Replace the podman mock with one that hangs on a chosen subcommand, so the
+# no-longer-unbounded wait can actually be exercised.
+write_hanging_podman_mock() {
+  local hang_on="$1"
+  cat >"${MOCK_BIN_DIR}/podman" <<MOCK_EOF
+#!/usr/bin/env bash
+echo "\$*" >>"\${CALLS_FILE}"
+if [[ "\$1" == "${hang_on}" ]]; then
+  # Reproduce the 2026-08-16 hang: never return, never print.
+  sleep 3600
+fi
+case "\$*" in
+  "machine inspect"*) cat "\${MACHINE_STATE_FILE}"; exit 0 ;;
+  "machine start"*)   echo running >"\${MACHINE_STATE_FILE}"; exit 0 ;;
+  "machine stop"*)    echo stopped >"\${MACHINE_STATE_FILE}"; exit 0 ;;
+esac
+case "\$1" in
+  info)      exit 0 ;;
+  container) [[ "\$(cat "\${CONTAINER_EXISTS_FILE}")" == "true" ]] && exit 0 || exit 1 ;;
+  inspect)   cat "\${CONTAINER_RUNNING_FILE}"; exit 0 ;;
+  *)         exit 0 ;;
+esac
+MOCK_EOF
+  chmod +x "${MOCK_BIN_DIR}/podman"
+}
+
+@test "every podman call in the supervision loop is bounded by a timeout" {
+  # The whole class of bug: any unbounded podman invocation can freeze the loop.
+  # Assert none survive rather than enumerating the ones that were fixed, so a
+  # newly added bare call fails this test instead of shipping.
+  # Only command positions count. Comments legitimately name `podman machine
+  # stop` in the header's maintenance notes, and log strings mention podman in
+  # prose; neither is an invocation. A real call starts a line, follows `$(`,
+  # or follows `!`/`&&`/`||`/`;`.
+  run bash -c "grep -vE '^[[:space:]]*#' \"${WRAPPER_SCRIPT}\" | grep -nE '(^[[:space:]]*|\\\$\\(|[!;][[:space:]]*|&&[[:space:]]*|\\|\\|[[:space:]]*)podman[[:space:]]+[a-z]'"
+
+  local line
+  while IFS= read -r line; do
+    [[ -z "${line}" ]] && continue
+    # podman_t's own body is the one place a bare `podman` is correct — it is
+    # what _timeout wraps.
+    [[ "${line}" == *'_timeout "${limit}" podman'* ]] && continue
+    echo "unbounded podman call: ${line}" >&2
+    return 1
+  done <<<"${output}"
+}
+
+@test "a hung podman run is killed rather than freezing the loop forever" {
+  set_mock_state "running" "false" "false"
+  write_hanging_podman_mock "run"
+
+  # 3s budget against a mock that sleeps for an hour. Before the fix this
+  # blocked inside ensure_container and the loop never iterated again.
+  PODMAN_MACHINE_TIMEOUT=2 PODMAN_CMD_TIMEOUT=2 SUPERVISE_INTERVAL=1 \
+    run timeout 12 "${WRAPPER_SCRIPT}"
+
+  # Killed by the outer timeout means the wrapper was still looping, not stuck.
+  [ "${status}" -eq 124 ]
+
+  # The decisive evidence: the loop kept going past the hung call.
+  local run_calls
+  run_calls=$(grep -c '^run -d' "${CALLS_FILE}" || true)
+  [ "${run_calls}" -ge 2 ]
+}
+
+@test "a timed-out podman call is logged distinctly from an ordinary failure" {
+  set_mock_state "running" "false" "false"
+  write_hanging_podman_mock "run"
+
+  PODMAN_MACHINE_TIMEOUT=2 PODMAN_CMD_TIMEOUT=2 SUPERVISE_INTERVAL=1 \
+    run timeout 8 "${WRAPPER_SCRIPT}"
+
+  # An operator reading the log has to be able to tell a hang from a failure —
+  # that distinction is what took 27 hours to spot the first time.
+  [[ "${output}" == *"TIMEOUT:"* ]]
+  [[ "${output}" == *"exceeded"* ]]
+  # Name the subcommand, not the forty-flag argv that buries it.
+  [[ "${output}" == *"TIMEOUT: 'podman run -d' exceeded"* ]]
+}
+
+@test "a hung machine inspect does not prevent later loop iterations" {
+  set_mock_state "running" "true" "true"
+  write_hanging_podman_mock "machine"
+
+  # Every `machine` subcommand hangs here, so each iteration burns the full
+  # timeout on inspect and again on start. Budget accordingly: 1s timeouts and
+  # a 15s run leave room for several iterations. Before the fix the first
+  # inspect never returned and there was no second iteration at all.
+  PODMAN_MACHINE_TIMEOUT=1 PODMAN_CMD_TIMEOUT=1 SUPERVISE_INTERVAL=1 \
+    run timeout 15 "${WRAPPER_SCRIPT}"
+
+  [ "${status}" -eq 124 ]
+  local inspect_calls
+  inspect_calls=$(call_count "machine inspect transmission-vm")
+  [ "${inspect_calls}" -ge 2 ]
+}
+
+# ---------------------------------------------------------------------------
+# Stale helper reaping (#168)
+# ---------------------------------------------------------------------------
+
+@test "the machine stop path verifies helper processes exited, not just the exit code" {
+  # `podman machine stop` returned 0 in the August incident while a 6.0.2
+  # gvproxy kept running for seven more days, still holding the socket paths
+  # the upgraded CLI then tried to reuse.
+  run grep -c 'reap_machine_helpers' "${WRAPPER_SCRIPT}"
+  # Defined once, called from the recovery path and before a machine start.
+  [ "${output}" -ge 3 ]
+}
+
+@test "reap_machine_helpers escalates to SIGKILL for a helper that ignores SIGTERM" {
+  run grep -A 30 '^reap_machine_helpers()' "${WRAPPER_SCRIPT}"
+  [[ "${output}" == *"kill -0"* ]]
+  [[ "${output}" == *"kill -9"* ]]
+}
+
+@test "reap_machine_helpers only targets this machine's helpers" {
+  # An unqualified `pkill gvproxy` would take down every other podman machine
+  # on the host. The match has to be scoped to transmission-vm.
+  run grep -A 12 '^reap_machine_helpers()' "${WRAPPER_SCRIPT}"
+  [[ "${output}" == *"transmission-vm"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# Startup sequence
+# ---------------------------------------------------------------------------
+
+@test "a failed initial machine start does not silently fall through to container create" {
+  # Contributing factor in #168: ensure_machine's return value was ignored at
+  # the top-level call sites, so a machine failure surfaced later as a
+  # confusing container error.
+  run grep -A 6 '^wait_for_nfs || exit 1' "${WRAPPER_SCRIPT}"
+  [[ "${output}" == *"if ensure_machine; then"* ]]
+}
+
+@test "the loop refuses to start without timeout(1) rather than running unbounded" {
+  # A supervision loop that cannot bound its subprocesses cannot recover from a
+  # hang, which is the whole failure mode of #168. Exiting loudly beats running
+  # in a state that only looks supervised.
+  rm -f "${MOCK_BIN_DIR}/timeout"
+
+  run timeout 10 "${WRAPPER_SCRIPT}"
+
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"FATAL: timeout(1) not found"* ]]
+  [[ "${output}" == *"brew install coreutils"* ]]
+
+  # And it must bail before touching podman at all.
+  [ ! -s "${CALLS_FILE}" ]
 }
