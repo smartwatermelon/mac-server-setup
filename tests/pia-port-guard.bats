@@ -23,6 +23,23 @@ setup() {
   export CALL_LOG="${TEST_TMPDIR}/calls.log"
   touch "${CALL_LOG}"
 
+  # Companion log holding one argument per line, recorded only for the call
+  # that sets the port. Two properties matter, and both are needed:
+  #
+  #   One argument per line -- CALL_LOG joins with "$*", which is convenient
+  #   for adjacency assertions ("-p 54321") but blind to argument boundaries:
+  #   one argument containing spaces and four separate arguments render as the
+  #   same bytes. Only a one-per-line record can tell them apart, and it does
+  #   so regardless of what IFS happens to be.
+  #
+  #   Scoped to the port-setting call -- apply_port calls transmission-remote
+  #   more than once (current_peer_port runs first). A log accumulated across
+  #   every call lets a correctly-quoted -si call satisfy an assertion aimed
+  #   at a broken -p call, so the test passes on word-split code. Recording
+  #   only the -p invocation keeps the assertion pointed at its subject.
+  export ARG_LOG="${TEST_TMPDIR}/args.log"
+  touch "${ARG_LOG}"
+
   # Port reported by the stub's -si output; tests override to simulate the
   # daemon's current state.
   export STUB_CURRENT_PORT="33361"
@@ -36,6 +53,9 @@ for arg in "$@"; do
     exit 0
   fi
 done
+# Anything past the -si branch is the port-setting call. Record its arguments
+# one per line so word-splitting assertions see only this invocation.
+printf '%s\n' "$@" >>"${ARG_LOG}"
 exit 0
 STUB
   chmod +x "${TEST_TMPDIR}/transmission-remote"
@@ -168,14 +188,24 @@ teardown() {
   export STUB_CURRENT_PORT="33361"
   run apply_port 54321 "http://localhost:9091/transmission/rpc" --auth "user:pass with spaces"
   [ "$status" -eq 0 ]
-  grep -q -- "--auth user:pass with spaces" "${CALL_LOG}"
+  # Assert on ARG_LOG, not CALL_LOG: one line per argument means the credential
+  # arriving whole is distinguishable from it being split into four arguments.
+  # A "$*"-joined line renders both cases identically, so it cannot catch the
+  # regression this test exists for.
+  grep -qx -- "--auth" "${ARG_LOG}"
+  grep -qx -- "user:pass with spaces" "${ARG_LOG}"
 }
 
 @test "apply_port works with no auth arguments supplied" {
   export STUB_CURRENT_PORT="33361"
   run apply_port 54321 "http://localhost:9091/transmission/rpc"
   [ "$status" -eq 0 ]
-  run grep -q -- "--auth" "${CALL_LOG}"
+  # Both halves of this assertion matter. ARG_LOG (not CALL_LOG) because one
+  # argument per line is the only way to tell a credential containing spaces
+  # from four separate arguments; `run grep` (not `! grep`) because POSIX
+  # exempts a !-negated command from `set -e`, so the negated form cannot fail
+  # a BATS test at all.
+  run grep -qx -- "--auth" "${ARG_LOG}"
   [ "$status" -ne 0 ]
 }
 

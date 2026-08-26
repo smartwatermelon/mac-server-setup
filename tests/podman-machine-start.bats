@@ -119,7 +119,7 @@ extract_and_render_wrapper() {
   # the mocks first.
   export HOSTNAME_LOWER="testhost"
   export HOST_PORT="9091"
-  export PIA_REGION="panama"
+  export PIA_REGION="ca_vancouver"
   export LAN="192.168.1.0/24"
   export PUID="501"
   export PGID="20"

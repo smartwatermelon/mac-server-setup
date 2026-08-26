@@ -191,23 +191,39 @@ send_email() {
 # Heartbeat
 # ---------------------------------------------------------------------------
 
+# Logs a heartbeat if one is due, and prints the timestamp the caller should
+# persist: the new one when it logged, the existing one otherwise.
+#
+# This deliberately does not write state itself. It used to, which meant the
+# healthy path wrote the state file twice per cycle — once here with a fresh
+# last_heartbeat but every other field stale from the previous cycle, then
+# again in main with the real values. Each write is atomic on its own, so the
+# file was never torn, but a kill landing between them left a state file
+# pairing a current heartbeat with last cycle's port and failure count. Main
+# then had to read its own heartbeat back off disk to carry it forward.
+#
+# Returning the value instead collapses that to a single write at the end of
+# the cycle, so state advances all at once or not at all.
 maybe_heartbeat() {
   local detail="$1"
-
-  local last_heartbeat
-  last_heartbeat=$(state_get "last_heartbeat" "1970-01-01T00:00:00Z")
+  local current="$2"
 
   local now_epoch last_epoch
   now_epoch=$(date +%s)
-  last_epoch=$(date -j -f '%Y-%m-%dT%H:%M:%SZ' "${last_heartbeat}" '+%s' 2>/dev/null) || last_epoch=0
+  last_epoch=$(date -j -f '%Y-%m-%dT%H:%M:%SZ' "${current}" '+%s' 2>/dev/null) || last_epoch=0
 
   if [[ $((now_epoch - last_epoch)) -ge ${HEARTBEAT_INTERVAL_SECONDS} ]]; then
     log "OK: ${detail}"
-    local now state
-    now=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-    state=$(read_state | jq --arg lh "${now}" '.last_heartbeat = $lh')
-    write_state "${state}"
+    date -u '+%Y-%m-%dT%H:%M:%SZ'
+    return 0
   fi
+
+  # Suppressed, not failed: carrying the existing timestamp forward is the
+  # normal outcome for all but one cycle an hour. Return explicitly so the
+  # status is the function's own contract rather than whatever printf last
+  # happened to return.
+  printf '%s' "${current}"
+  return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -250,6 +266,12 @@ main() {
 
   local now
   now=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+  # Read the existing heartbeat once, here. maybe_heartbeat either hands it
+  # back unchanged or returns a fresh one; either way the single write at the
+  # end of this function persists whatever it returned.
+  local heartbeat
+  heartbeat="$(state_get "last_heartbeat" "1970-01-01T00:00:00Z")"
 
   if [[ "${bad}" == "true" ]]; then
     failures=$((failures + 1))
@@ -303,11 +325,8 @@ No action required." || true
     fi
     was_alerted=false
     failures=0
-    maybe_heartbeat "peer port ${port}, reachable: ${open}"
+    heartbeat="$(maybe_heartbeat "peer port ${port}, reachable: ${open}" "${heartbeat}")"
   fi
-
-  local heartbeat
-  heartbeat="$(state_get "last_heartbeat" "${now}")"
 
   local new_state
   new_state=$(jq -n \

@@ -392,3 +392,92 @@ watchdog_log() {
     "${REPO_DIR}/app-setup/podman-transmission-setup.sh"
   [ "$status" -eq 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# Heartbeat state writes (#184)
+#
+# The healthy path used to write the state file twice per cycle: once inside
+# maybe_heartbeat with a fresh last_heartbeat but every other field still
+# holding the previous cycle's values, then again in main with the real ones.
+# Individually each write is atomic, so the file was never torn — but a kill
+# landing between them persisted a current heartbeat next to a stale port and
+# failure count. maybe_heartbeat now returns the timestamp instead of storing
+# it, so a cycle's state advances in one write or not at all.
+# ---------------------------------------------------------------------------
+
+@test "maybe_heartbeat does not write state itself" {
+  # Structural: the whole point of the change is that this function has no
+  # write_state call left in it. Behavioural tests below cannot distinguish
+  # one write from two, so assert on the function body directly.
+  #
+  # Ask bash for the body via declare -f rather than slicing the file with
+  # awk. A text extractor has to guess where the function ends, and every
+  # cheap guess ("the next } at column 0") breaks the day someone adds a case
+  # statement or a nested block closed in column 0: the extract silently comes
+  # back truncated, write_state is missing from the part that was read, and
+  # this test goes green for the wrong reason. bash has already parsed the
+  # function, so it knows the real boundaries.
+  local body
+  body="$(TEST_RUNNER=true bash -c \
+    'source "$1" >/dev/null 2>&1; declare -f maybe_heartbeat' _ "${WATCHDOG}")"
+
+  # Guard the guard: an empty body would make the assertion below vacuous.
+  [ -n "${body}" ]
+  grep -q 'maybe_heartbeat' <<<"${body}"
+  ! grep -q 'write_state' <<<"${body}"
+}
+
+@test "a healthy cycle records a heartbeat and the current port together" {
+  set_rpc "51413" "true"
+
+  run run_cycle
+  [ "$status" -eq 0 ]
+
+  # One consistent snapshot: the heartbeat is real, and it sits next to this
+  # cycle's port rather than a previous cycle's.
+  [ "$(state_field '.last_heartbeat')" != "null" ]
+  [ "$(state_field '.last_heartbeat')" != "1970-01-01T00:00:00Z" ]
+  [ "$(state_field '.peer_port')" = "51413" ]
+  [ "$(state_field '.port_is_open')" = "yes" ]
+}
+
+@test "a heartbeat inside the interval is not rewritten" {
+  set_rpc "51413" "true"
+  run_cycle
+  local first
+  first="$(state_field '.last_heartbeat')"
+
+  # HEARTBEAT_INTERVAL_SECONDS is an hour, so an immediate second cycle is
+  # well inside it: the timestamp must survive unchanged rather than being
+  # refreshed or dropped.
+  set_rpc "51414" "true"
+  run run_cycle
+  [ "$status" -eq 0 ]
+  [ "$(state_field '.last_heartbeat')" = "${first}" ]
+
+  # ...while the rest of the cycle's data still advances.
+  [ "$(state_field '.peer_port')" = "51414" ]
+}
+
+@test "a bad cycle does not invent a heartbeat it never logged" {
+  # The old code defaulted the carried-forward value to now, so a first cycle
+  # that found the port broken wrote a heartbeat that never happened — which
+  # then suppressed the first real one for a full interval.
+  set_rpc "0" "false"
+
+  run run_cycle
+  [ "$status" -eq 0 ]
+  [ "$(state_field '.last_heartbeat')" = "1970-01-01T00:00:00Z" ]
+  ! grep -q 'OK: peer port' <<<"$(watchdog_log)"
+}
+
+@test "the first healthy cycle after a bad one logs its heartbeat immediately" {
+  set_rpc "0" "false"
+  run_cycle
+
+  set_rpc "51413" "true"
+  run run_cycle
+  [ "$status" -eq 0 ]
+  [ "$(state_field '.last_heartbeat')" != "1970-01-01T00:00:00Z" ]
+  grep -q 'OK: peer port 51413' <<<"$(watchdog_log)"
+}
