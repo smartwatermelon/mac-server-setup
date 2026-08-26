@@ -74,6 +74,14 @@ done
 SCRIPT_DIR="$(cd -P "$(dirname "${SCRIPT_SOURCE}")" && pwd)"
 readonly SCRIPT_DIR
 
+# Duplicate-quality comparison (#178). Optional: if the library is absent the
+# script keeps its previous behaviour of triaging every duplicate for a human,
+# rather than failing over a feature that only refines an already-safe path.
+if [[ -f "${SCRIPT_DIR}/media-compare.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "${SCRIPT_DIR}/media-compare.sh"
+fi
+
 # Derive HOME from script path (assumes script is in user's home directory tree)
 if [[ "${SCRIPT_DIR}" =~ ^(/Users/[^/]+) ]]; then
   DERIVED_HOME="${BASH_REMATCH[1]}"
@@ -1293,6 +1301,13 @@ process_media() {
     if [[ "${INVOCATION_MODE}" == "automated" ]]; then
       local category
       category=$(classify_failure "${LAST_PREVIEW_OUTPUT:-${LAST_FILEBOT_OUTPUT:-}}")
+      # Preview runs with --action test, which reports [TEST] lines rather than
+      # the conflict messages that name both paths. So this call normally finds
+      # no pair and does nothing -- which is the correct outcome, not a missed
+      # one: with no way to identify the library file, the download belongs in
+      # triage. It is called here anyway so both triage sites behave the same
+      # way if FileBot ever does report a conflict during preview.
+      handle_duplicate_upgrades "${category}" "${LAST_PREVIEW_OUTPUT:-${LAST_FILEBOT_OUTPUT:-}}"
       local triage_base="${TR_TORRENT_DIR%/*}/triage"
       if triage_failed_torrent "${source_dir}" "${category}" "${triage_base}"; then
         return 0
@@ -1319,6 +1334,7 @@ process_media() {
     if [[ "${INVOCATION_MODE}" == "automated" ]]; then
       local category
       category=$(classify_failure "${LAST_FILEBOT_OUTPUT}")
+      handle_duplicate_upgrades "${category}" "${LAST_FILEBOT_OUTPUT}"
       local triage_base="${TR_TORRENT_DIR%/*}/triage"
       if triage_failed_torrent "${source_dir}" "${category}" "${triage_base}"; then
         # Return 0: the torrent is "handled" (triaged), trigger watcher should
@@ -1399,6 +1415,58 @@ cleanup_empty_dirs() {
       fi
     done
   done
+}
+
+# Upgrade library files this download improves on, before it goes to triage.
+#
+# Only runs for the already-in-plex category: every other failure means FileBot
+# never worked out which library file the download collides with, so there is
+# nothing to compare against. A download that loses the comparison, or that
+# cannot be compared at all, still goes to triage exactly as before — this only
+# adds the case where the new copy is measurably better.
+#
+# Args: $1=category (from classify_failure), $2=FileBot output
+# Returns 0 always; a comparison that changes nothing is a normal outcome.
+handle_duplicate_upgrades() {
+  local category="$1"
+  local filebot_output="$2"
+
+  [[ "${category}" == "already-in-plex" ]] || return 0
+
+  # media-compare.sh is sourced only when present, so a deployment without it
+  # keeps the old triage-everything behaviour rather than erroring.
+  if ! declare -F process_duplicate_conflicts >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local quarantine_dir="${TR_TORRENT_DIR%/*}/triage/quarantine"
+
+  local replaced
+  replaced="$(process_duplicate_conflicts "${filebot_output}" "${quarantine_dir}" 2>/dev/null)"
+  [[ "${replaced}" =~ ^[0-9]+$ ]] || return 0
+  [[ "${replaced}" -gt 0 ]] || return 0
+
+  # replace_media_file returns success in dry run without moving anything, so
+  # `replaced` counts what WOULD have happened. Acting on it here would make a
+  # dry run issue a real Plex scan and really delete quarantined files, which
+  # is the one thing dry run promises not to do.
+  if [[ "${MEDIA_COMPARE_DRY_RUN:-false}" == "true" ]]; then
+    log "DRY RUN: would upgrade ${replaced} library file(s) and rescan Plex"
+    return 0
+  fi
+
+  log "Upgraded ${replaced} library file(s) with higher-quality copies"
+
+  # Only scan when something actually changed — this runs on every duplicate,
+  # and a scan with nothing to find is wasted work on a large library.
+  local detected_type="movie"
+  if echo "${filebot_output}" | grep -iq "TV Shows"; then
+    detected_type="show"
+  fi
+  trigger_plex_scan "${detected_type}" || log "Warning: Plex scan after upgrade failed"
+
+  prune_quarantine "${quarantine_dir}" || true
+  return 0
 }
 
 # Move a failed torrent to a triage directory based on failure category.
