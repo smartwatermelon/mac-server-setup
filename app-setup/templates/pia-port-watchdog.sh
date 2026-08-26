@@ -214,7 +214,15 @@ maybe_heartbeat() {
 
   if [[ $((now_epoch - last_epoch)) -ge ${HEARTBEAT_INTERVAL_SECONDS} ]]; then
     log "OK: ${detail}"
-    date -u '+%Y-%m-%dT%H:%M:%SZ'
+    # Assign first, then print through the same printf the suppressed branch
+    # uses, so both return paths have one visible output contract. Command
+    # substitution strips the trailing newline either way, so this changes
+    # nothing a caller can observe -- but a reader no longer has to work that
+    # out to be sure. Assigning separately also keeps date's exit status
+    # visible instead of burying it inside printf's arguments.
+    local now
+    now="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    printf '%s' "${now}"
     return 0
   fi
 
