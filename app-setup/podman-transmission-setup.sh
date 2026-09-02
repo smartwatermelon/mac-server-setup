@@ -770,6 +770,7 @@ ensure_container() {
         --env-file "${OPERATOR_HOME}/containers/transmission/.env" \\
         -e OPENVPN_PROVIDER=PIA \\
         -e "OPENVPN_CONFIG=${PIA_REGION}" \\
+        -e "OPENVPN_OPTS=--mute-replay-warnings" \\
         -e "DISABLE_PORT_UPDATER=true" \\
         -e "TRANSMISSION_PEER_PORT_RANDOM_ON_START=false" \\
         -e "LOCAL_NETWORK=${LAN}" \\
@@ -1086,6 +1087,7 @@ else
     --env-file "${CONTAINER_DIR}/.env" \
     -e OPENVPN_PROVIDER=PIA \
     -e "OPENVPN_CONFIG=${PIA_REGION}" \
+    -e "OPENVPN_OPTS=--mute-replay-warnings" \
     -e "DISABLE_PORT_UPDATER=true" \
     -e "TRANSMISSION_PEER_PORT_RANDOM_ON_START=false" \
     -e "LOCAL_NETWORK=${LAN}" \
