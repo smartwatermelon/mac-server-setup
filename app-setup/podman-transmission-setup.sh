@@ -580,6 +580,22 @@ set_section "Deploy Machine Start Wrapper"
 
 MACHINE_START_DEST="${OPERATOR_HOME}/.local/bin/podman-machine-start.sh"
 
+# Stably-signed mirror of Homebrew's podman, maintained by
+# /usr/local/bin/${HOSTNAME_LOWER}-stable-sign.sh (deployed by
+# scripts/server/setup-auto-updates.sh). The wrapper puts it first in PATH so
+# the podman-remote that starts the VM - and therefore is the process macOS
+# holds responsible for the VM's VirtioFS access to the NFS mount - keeps the
+# same path and code requirement across brew upgrades. Without it every
+# upgrade re-prompts "podman-remote would like to access files on a network
+# volume" and the supervision loop blocks until someone clicks Allow.
+# See docs/apps/stable-signing-README.md.
+STABLE_PODMAN_BIN="/usr/local/stable/podman/bin"
+if [[ ! -x "${STABLE_PODMAN_BIN}/podman-remote" ]]; then
+  log "⚠️  ${STABLE_PODMAN_BIN}/podman-remote not found - the wrapper will fall back to"
+  log "    ${HOMEBREW_PREFIX}/bin/podman, whose TCC grants do not survive brew upgrades."
+  log "    Run scripts/setup-auto-updates.sh (or /usr/local/bin/${HOSTNAME_LOWER}-stable-sign.sh) to create it."
+fi
+
 # Write the wrapper directly (values baked in at deploy time).
 # Variables prefixed with \ escape into the written script; bare ${...} expand now.
 # Required variables (all defined earlier): NFS_MOUNT_POINT (Section 2b), OPERATOR_HOME (line ~88),
@@ -604,7 +620,11 @@ set -uo pipefail
 #   podman machine stop transmission-vm
 # Reverse with 'launchctl bootstrap gui/<uid> <plist>' or reboot.
 
-export PATH="${HOMEBREW_PREFIX}/bin:${HOMEBREW_PREFIX}/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+# ${STABLE_PODMAN_BIN} comes first on purpose: it holds a stably-signed copy of
+# podman-remote whose macOS privacy (TCC) grant for the NFS mount survives brew
+# upgrades. The Homebrew copy re-prompts after every upgrade and the prompt
+# blocks this loop. Details: docs/apps/stable-signing-README.md
+export PATH="${STABLE_PODMAN_BIN}:${HOMEBREW_PREFIX}/bin:${HOMEBREW_PREFIX}/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 SUPERVISE_INTERVAL=\${SUPERVISE_INTERVAL:-300}
 

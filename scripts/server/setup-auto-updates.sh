@@ -163,8 +163,10 @@ setup_homebrew_autoupdate() {
   local plist_path="/Library/LaunchDaemons/com.${HOSTNAME_LOWER}.brew-upgrade.plist"
   local upgrade_script="/usr/local/bin/${HOSTNAME_LOWER}-brew-upgrade.sh"
 
-  # Check if already configured (--force re-applies)
-  if sudo test -f "${plist_path}" && sudo test -f "${upgrade_script}" && [[ "${FORCE}" != "true" ]]; then
+  # Check if already configured (--force re-applies). An upgrade script that
+  # predates the stable-sign hook is regenerated, not kept.
+  if sudo test -f "${plist_path}" && sudo test -f "${upgrade_script}" \
+    && sudo grep -q 'stable-sign' "${upgrade_script}" && [[ "${FORCE}" != "true" ]]; then
     log "Homebrew auto-update already configured"
     sudo launchctl load "${plist_path}" 2>/dev/null || true
     return 0
@@ -207,6 +209,16 @@ brew update 2>&1 | tee -a "${LOG_FILE}" || true
 # Upgrade formulae first (never need sudo)
 log "Running brew upgrade --formula..."
 brew upgrade --formula 2>&1 | tee -a "${LOG_FILE}" || true
+
+# Refresh the stably-signed copies of binaries whose macOS privacy (TCC)
+# grants must survive the upgrade. See docs/apps/stable-signing-README.md.
+STABLE_SIGN="/usr/local/bin/__HOSTNAME_LOWER__-stable-sign.sh"
+if [[ -x "${STABLE_SIGN}" ]]; then
+  log "Running stable-sign..."
+  "${STABLE_SIGN}" 2>&1 | tee -a "${LOG_FILE}" || true
+else
+  log "stable-sign script not found at ${STABLE_SIGN}; TCC grants for Homebrew binaries may need re-approval"
+fi
 
 # Upgrade casks separately — some may fail if they need sudo
 log "Running brew upgrade --cask..."
@@ -268,6 +280,66 @@ EOF
   # Load the LaunchDaemon
   sudo launchctl load "${plist_path}" 2>/dev/null || true
   show_log "Homebrew auto-update configured and loaded (daily at 04:30, as ${ADMIN_USER})"
+}
+
+# ============================================================================
+# 5a-ii: Stable signing (TCC grants that survive brew upgrade)
+# ============================================================================
+#
+# macOS keys privacy grants ("access files on a network volume", Full Disk
+# Access) on an executable's path and code signature. Homebrew binaries change
+# both on every upgrade, so the daily upgrade above silently revokes them and
+# the next protected access blocks on a GUI prompt nobody is there to answer.
+# stable-sign.sh keeps re-signed copies at a fixed path under
+# /usr/local/stable; the upgrade script calls it after every formula upgrade.
+# Full write-up: docs/apps/stable-signing-README.md
+
+setup_stable_sign() {
+  set_section "Stable Signing"
+
+  local template="" candidate
+  # Deployed package layout first, repo layout second.
+  for candidate in \
+    "${SETUP_DIR}/app-setup/templates/stable-sign.sh" \
+    "${SETUP_DIR}/../app-setup/templates/stable-sign.sh" \
+    "${HOME}/app-setup/templates/stable-sign.sh"; do
+    if [[ -f "${candidate}" ]]; then
+      template="${candidate}"
+      break
+    fi
+  done
+  if [[ -z "${template}" ]]; then
+    log_error "stable-sign.sh template not found (looked under ${SETUP_DIR} and ${HOME}/app-setup)"
+    return 1
+  fi
+
+  local stable_sign_script="/usr/local/bin/${HOSTNAME_LOWER}-stable-sign.sh"
+  log "Deploying ${template} to ${stable_sign_script}..."
+  sudo -p "[Auto-Updates] Enter password to deploy stable-sign script: " \
+    install -m 755 -o root -g wheel "${template}" "${stable_sign_script}"
+  sudo sed -i '' "s|__HOSTNAME_LOWER__|${HOSTNAME_LOWER}|g" "${stable_sign_script}"
+  sudo sed -i '' "s|__HOSTNAME__|${HOSTNAME}|g" "${stable_sign_script}"
+
+  if sudo grep -q '__[A-Z_]*__' "${stable_sign_script}"; then
+    log_error "Unsubstituted placeholder left in ${stable_sign_script}"
+    return 1
+  fi
+
+  # First run creates the signing identity and /usr/local/stable through
+  # `sudo -n`, which succeeds here because the `sudo install` above has just
+  # cached the credential (or the admin has a NOPASSWD rule). Do not add
+  # `sudo -v`: it demands a password whenever any password-requiring rule
+  # matches, even alongside NOPASSWD: ALL, and there is no TTY in the
+  # unattended case.
+  log "Running ${stable_sign_script} (creates the signing identity and the stable mirror)..."
+  if "${stable_sign_script}" 2>&1 | tee -a "${LOG_FILE}"; then
+    local signed_count
+    signed_count=$("${stable_sign_script}" --check 2>&1 | grep -c ' OK ' || true)
+    show_log "Stable signing configured: ${signed_count} binary(ies) signed under /usr/local/stable"
+  else
+    log_error "stable-sign.sh failed; run ${stable_sign_script} manually and check the output"
+    return 1
+  fi
 }
 
 # ============================================================================
@@ -403,6 +475,7 @@ main() {
   echo ""
   echo "This script will configure:"
   echo "  1. Homebrew auto-update (daily at 04:30 via LaunchDaemon, as ${ADMIN_USER})"
+  echo "     + stably-signed copies of TCC-sensitive Homebrew binaries (/usr/local/stable)"
   echo "  2. Mac App Store auto-update (macOS built-in)"
   echo "  3. macOS Software Update (weekly download-only, Sundays at 04:00)"
   echo ""
@@ -416,6 +489,7 @@ main() {
 
   cleanup_old_launchagents
   setup_homebrew_autoupdate
+  setup_stable_sign
   setup_mas_updates
   setup_softwareupdate
 

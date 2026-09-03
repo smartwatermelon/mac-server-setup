@@ -403,6 +403,17 @@ VM and recreates the container to obtain fresh VirtioFS handles.
 > enforces NFS access restrictions at the kernel level for any process
 > without FDA, including system XPC services.
 
+### "podman-remote would like to access files on a network volume"
+
+A separate grant (`kTCCServiceSystemPolicyNetworkVolumes`, per-user) is keyed
+on the `podman-remote` that ran `podman machine start`, because macOS holds
+that process responsible for the VM's VirtioFS access. Homebrew's
+`podman-remote` changes path and code hash on every `brew upgrade`, so the
+grant died daily and the supervisor blocked on the prompt after every VM
+start. The supervisor now runs podman from a stably-signed mirror at
+`/usr/local/stable/podman/bin`, maintained by the daily upgrade job. Full
+write-up, evidence and operations: `docs/apps/stable-signing-README.md`.
+
 ### Every podman call is bounded by a timeout
 
 The supervision loop is single-threaded: it calls `ensure_machine`,
