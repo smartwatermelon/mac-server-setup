@@ -7,10 +7,11 @@
 # `brew upgrade` (docs/apps/stable-signing-README.md).
 #
 # codesign, security and sudo are mocked in ${TEST_TMPDIR}/bin. The codesign
-# mock records each signature as a sidecar file next to the binary and
-# verifies `-R=` requirements against it, so tests can assert on the
-# identifier and certificate that were actually applied. rsync and openssl
-# are the real tools.
+# mock records each signature as a trailing "#SIG:" line inside the binary
+# (so it travels with the bytes, like a real signature) and verifies `-R=`
+# requirements against it, so tests can assert on the identifier and
+# certificate that were actually applied. rsync and openssl are the real
+# tools.
 #
 # Run with: bats tests/stable-sign.bats
 
@@ -329,4 +330,88 @@ MOCK_EOF
   [[ "${output}" == *"codesign failed"* ]]
   run find "${STABLE_ROOT}" -name '*.stable-sign.tmp'
   [ -z "${output}" ]
+  # The stamp is dropped before the sync starts, so an interrupted run can
+  # never leave a half-updated mirror that reads as current.
+  [ ! -e "${STABLE_ROOT}/podman/.source-version" ]
+}
+
+@test "an interrupted sync leaves the mirror stale, not current" {
+  "${SCRIPT}" >/dev/null
+  make_fake_formula "6.2.0"
+  cat >"${MOCK_BIN_DIR}/codesign.real" <"${MOCK_BIN_DIR}/codesign"
+  cat >"${MOCK_BIN_DIR}/codesign" <<'MOCK_EOF'
+#!/usr/bin/env bash
+[[ "$1" == "-f" ]] && exit 1
+exec "$(dirname "$0")/codesign.real" "$@"
+MOCK_EOF
+  chmod +x "${MOCK_BIN_DIR}/codesign" "${MOCK_BIN_DIR}/codesign.real"
+
+  run "${SCRIPT}"
+  [ "${status}" -eq 1 ]
+  [ ! -e "${STABLE_ROOT}/podman/.source-version" ]
+  run "${SCRIPT}" --check
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"synced from <never>"* ]]
+}
+
+@test "sudo denial on first run is fatal and creates neither identity nor mirror" {
+  # Unattended run on a fresh box with no NOPASSWD rule: `sudo -n` fails.
+  cat >"${MOCK_BIN_DIR}/sudo" <<'MOCK_EOF'
+#!/usr/bin/env bash
+echo "sudo: a password is required" >&2
+exit 1
+MOCK_EOF
+  chmod +x "${MOCK_BIN_DIR}/sudo"
+
+  run "${SCRIPT}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"security import failed"* ]]
+  [ ! -f "${IDENTITY_FILE}" ]
+  [ ! -e "${STABLE_ROOT}" ]
+}
+
+@test "sudo denial when creating the stable root is fatal" {
+  touch "${IDENTITY_FILE}"
+  cat >"${MOCK_BIN_DIR}/sudo" <<'MOCK_EOF'
+#!/usr/bin/env bash
+exit 1
+MOCK_EOF
+  chmod +x "${MOCK_BIN_DIR}/sudo"
+
+  run "${SCRIPT}"
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"could not create ${STABLE_ROOT}"* ]]
+  [ ! -e "${STABLE_ROOT}/podman" ]
+}
+
+@test "a source change with identical size and mtime is still copied (checksum, not quick-check)" {
+  "${SCRIPT}" >/dev/null
+  # podman-mac-helper is mirrored verbatim, so source and stable copy have
+  # identical size; give them identical mtime too, then change one byte.
+  local src="${HOMEBREW_PREFIX}/opt/podman/bin/podman-mac-helper"
+  local dst="${STABLE_ROOT}/podman/bin/podman-mac-helper"
+  printf '#!/bin/sh\necho helpeX\n' >"${src}"
+  touch -r "${dst}" "${src}"
+  [ "$(stat -f %z "${src}")" -eq "$(stat -f %z "${dst}")" ]
+  [ "$(stat -f %m "${src}")" -eq "$(stat -f %m "${dst}")" ]
+
+  run "${SCRIPT}" --force
+  [ "${status}" -eq 0 ]
+  [ "$("${dst}")" == "helpeX" ]
+}
+
+@test "--check treats an uninstalled formula as skipped, not stale" {
+  touch "${IDENTITY_FILE}"
+  rm -rf "${HOMEBREW_PREFIX}/opt/podman"
+  run "${SCRIPT}" --check
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"not installed (skipped)"* ]]
+}
+
+@test "--check shows where the bare podman link points" {
+  "${SCRIPT}" >/dev/null
+  run "${SCRIPT}" --check
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"podman "*"link -> podman-remote (signed)"* ]]
+  [[ "${output}" == *"podman-mac-helper"*"unsigned (not in STABLE_TARGETS)"* ]]
 }

@@ -215,7 +215,11 @@ brew upgrade --formula 2>&1 | tee -a "${LOG_FILE}" || true
 STABLE_SIGN="/usr/local/bin/__HOSTNAME_LOWER__-stable-sign.sh"
 if [[ -x "${STABLE_SIGN}" ]]; then
   log "Running stable-sign..."
-  "${STABLE_SIGN}" 2>&1 | tee -a "${LOG_FILE}" || true
+  # Not silenced: a failure here means the next VM start blocks on a TCC
+  # prompt, so make it greppable (ERROR:) instead of burying it.
+  if ! "${STABLE_SIGN}" 2>&1 | tee -a "${LOG_FILE}"; then
+    log "ERROR: stable-sign failed; the podman TCC grant may be stale. Run ${STABLE_SIGN} --check"
+  fi
 else
   log "stable-sign script not found at ${STABLE_SIGN}; TCC grants for Homebrew binaries may need re-approval"
 fi
@@ -332,14 +336,26 @@ setup_stable_sign() {
   # matches, even alongside NOPASSWD: ALL, and there is no TTY in the
   # unattended case.
   log "Running ${stable_sign_script} (creates the signing identity and the stable mirror)..."
-  if "${stable_sign_script}" 2>&1 | tee -a "${LOG_FILE}"; then
-    local signed_count
-    signed_count=$("${stable_sign_script}" --check 2>&1 | grep -c ' OK ' || true)
-    show_log "Stable signing configured: ${signed_count} binary(ies) signed under /usr/local/stable"
-  else
+  if ! "${stable_sign_script}" 2>&1 | tee -a "${LOG_FILE}"; then
     log_error "stable-sign.sh failed; run ${stable_sign_script} manually and check the output"
     return 1
   fi
+
+  # --check exits non-zero if anything is stale; its per-binary lines carry
+  # a fixed '  <bin>  OK  ' column. Zero signed binaries is not a success.
+  local check_output signed_count
+  if ! check_output=$("${stable_sign_script}" --check 2>&1); then
+    log_error "stable-sign.sh --check reports a stale mirror:"
+    printf '%s\n' "${check_output}" | tee -a "${LOG_FILE}"
+    return 1
+  fi
+  signed_count=$(printf '%s\n' "${check_output}" | grep -c '^  [^ ]*  *OK  ' || true)
+  if [[ "${signed_count}" -eq 0 ]]; then
+    log_error "stable-sign.sh --check found no signed binaries (is podman installed?):"
+    printf '%s\n' "${check_output}" | tee -a "${LOG_FILE}"
+    return 1
+  fi
+  show_log "Stable signing configured: ${signed_count} binary(ies) signed under /usr/local/stable"
 }
 
 # ============================================================================

@@ -61,6 +61,14 @@
 # every daily brew upgrade. Runs as the administrator; needs sudo only to
 # create the signing identity and the stable root the first time.
 #
+# SECURITY NOTE: the identity is a stable label, not a trust boundary. Its
+# private key is imported with an ACL that lets /usr/bin/codesign use it for
+# any local user, so every account on the machine can produce a binary that
+# satisfies the requirement. The only thing that keeps an attacker from
+# inheriting a grant is that TCC also keys on the path and the mirror is
+# writable by the administrator only. That is the same boundary Homebrew's
+# own binaries already have.
+#
 # Documentation: docs/apps/stable-signing-README.md
 
 set -euo pipefail
@@ -74,6 +82,7 @@ CERT_DAYS="${CERT_DAYS:-3650}"
 
 # formula:bin[,bin...] - bin names under <formula>/bin/ that get re-signed.
 # Everything in bin/ and libexec/ is mirrored; only these are re-signed.
+# Names are split on commas and whitespace, so no spaces or glob characters.
 STABLE_TARGETS=(
   "podman:podman-remote"
 )
@@ -183,7 +192,7 @@ EOF
   # identity, and TCC matches on the certificate hash, not on trust.
   sudo -n security import "${work}/id.p12" -k "${KEYCHAIN}" -P "${p12_pass}" \
     -T /usr/bin/codesign -T /usr/bin/security >/dev/null \
-    || die "security import failed (needs passwordless sudo or an interactive session)"
+    || die "security import failed (sudo -n: needs a NOPASSWD rule, or run 'sudo -v' first)"
 
   identity_present || die "identity not visible after import"
   rm -rf "${WORK_DIR}"
@@ -242,11 +251,20 @@ sync_target() {
   [[ -d "${src}/bin" ]] || die "formula '${formula}' has no ${src}/bin"
   mkdir -p "${dest}/bin"
 
+  # Drop the version stamp first: if this run is interrupted anywhere below,
+  # the next run sees a stale mirror instead of trusting a half-updated one.
+  rm -f "${dest}/.source-version"
+
   # rsync writes each file to a temp name and renames it, so a process that
   # is executing the old copy is never handed a half-written file.
-  rsync -a --delete "${src}/bin/" "${dest}/bin/"
+  # --checksum: the default size+mtime quick-check would skip a source file
+  # that changed content but not size or mtime - which is exactly the shape
+  # of a re-signed or tampered stable copy, since signing on a copy preserves
+  # the mtime. A full checksum over a formula's bin/ and libexec/ is cheap
+  # for a once-daily job.
+  rsync -a --checksum --delete "${src}/bin/" "${dest}/bin/"
   if [[ -d "${src}/libexec" ]]; then
-    rsync -a --delete "${src}/libexec/" "${dest}/libexec/"
+    rsync -a --checksum --delete "${src}/libexec/" "${dest}/libexec/"
   else
     rm -rf "${dest}/libexec"
   fi
@@ -281,6 +299,11 @@ report_target() {
   current=$(source_version "${formula}")
   synced=$(cat "${dest}/.source-version" 2>/dev/null || echo '<never>')
   printf '%s\n' "${formula}:"
+  if [[ -z "${current}" ]]; then
+    # Same outcome as the sync path: an uninstalled formula is skipped.
+    printf '  source:  not installed (skipped)\n'
+    return 0
+  fi
   printf '  source:  %s\n' "${current}"
   printf '  stable:  %s (synced from %s)\n' "${dest}" "${synced}"
   for bin in ${bins//,/ }; do
@@ -290,6 +313,28 @@ report_target() {
     else
       printf '  %-14s STALE\n' "${bin}"
       status=1
+    fi
+  done
+  # Everything else in bin/: a symlink onto a signed binary is what callers
+  # rely on (bare 'podman' -> podman-remote); a real file that is not in
+  # STABLE_TARGETS runs with Homebrew's ad-hoc signature and gets no stable
+  # grant. Informational, not a failure.
+  local entry name target
+  for entry in "${dest}/bin"/*; do
+    [[ -e "${entry}" || -L "${entry}" ]] || continue
+    name=$(basename "${entry}")
+    case ",${bins}," in
+      *",${name},"*) continue ;;
+      *) ;;
+    esac
+    if [[ -L "${entry}" ]]; then
+      target=$(readlink "${entry}" || true)
+      case ",${bins}," in
+        *",${target},"*) printf '  %-14s link -> %s (signed)\n' "${name}" "${target}" ;;
+        *) printf '  %-14s link -> %s (unsigned target)\n' "${name}" "${target}" ;;
+      esac
+    else
+      printf '  %-14s unsigned (not in STABLE_TARGETS)\n' "${name}"
     fi
   done
   target_current "${formula}" "${bins}" || status=1

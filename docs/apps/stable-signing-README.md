@@ -54,8 +54,11 @@ symlinks: the stored client path still pointed at the versioned Cellar path.
 
 ### What was verified before building this
 
-Experiments with a tiny C program (`nvtest`) that opens a file on the NFS
-mount from a LaunchAgent, plus the live `podman-remote`:
+All four rows below were measured on TILSIT on 2026-09-03, not inferred:
+experiments with a tiny C program (`nvtest`) that opens a file on the NFS
+mount from a LaunchAgent (rows 1 to 3, each cycled more than once), plus
+re-signing the live `podman-remote` while its VM was running (row 4: one more
+prompt appeared on the next access):
 
 | Change                                                 | Prompts again? |
 | ------------------------------------------------------ | -------------- |
@@ -77,11 +80,16 @@ the grant matches forever.
 
 `stable-sign.sh` keeps a *stable mirror* of each configured formula:
 
-1. `rsync -a --delete` `${HOMEBREW_PREFIX}/opt/<formula>/bin/` and
-   `libexec/` into `/usr/local/stable/<formula>/`. The `opt/` link is
-   Homebrew's version-independent pointer, so this always tracks the current
-   release. The relative `podman -> podman-remote` symlink is preserved, and
-   podman finds vfkit/gvproxy at `../libexec/podman` relative to itself.
+1. Drop the `.source-version` stamp, then `rsync -a --checksum --delete`
+   `${HOMEBREW_PREFIX}/opt/<formula>/bin/` and `libexec/` into
+   `/usr/local/stable/<formula>/`. The `opt/` link is Homebrew's
+   version-independent pointer, so this always tracks the current release.
+   `--checksum` matters because signing on a copy preserves the mtime, so
+   rsync's size+mtime quick-check could otherwise leave a tampered stable
+   copy in place. The relative `podman -> podman-remote` symlink is
+   preserved (bare `podman` in the supervisor executes the signed file
+   through it), and podman finds vfkit/gvproxy at `../libexec/podman`
+   relative to itself.
 2. Re-sign the binaries named in `STABLE_TARGETS` with the local identity
    and identifier `local.<hostname>.stable.<bin>`. The signing happens on a
    temp copy that is then `mv`'d over the original, so a running process
@@ -119,14 +127,27 @@ Notes learned the hard way:
   is needed. `security find-identity -v` hides the identity as untrusted;
   codesign signs with it anyway, and TCC matches on the certificate hash, not
   on trust.
-- The certificate is valid for 10 years. Rotating it changes the requirement
-  and costs exactly one re-prompt per binary.
+- The certificate is valid for 10 years (until 2036). Nothing warns before
+  expiry; rotating it changes the requirement and costs exactly one
+  re-prompt per binary.
+- **The identity is a stable label, not a trust boundary.** The `-T
+  /usr/bin/codesign` ACL applies to any local user, so the operator account
+  can sign a binary that satisfies the exact requirement (verified). What
+  keeps a forged binary from inheriting the grant is that TCC also keys on
+  the path, and `/usr/local/stable` is writable only by the administrator.
+  That is no weaker than the Homebrew binaries it replaces, whose ad-hoc
+  cdhash anyone can produce, but do not read the signature as
+  authentication.
 
 ## Operations
 
 ```bash
-# State of every target; exit 1 if anything is stale
+# State of every target; exit 1 if anything is stale. Also lists every
+# other entry in bin/: symlinks with their target, and unsigned files.
 /usr/local/bin/tilsit-stable-sign.sh --check
+
+# Did the daily upgrade job's stable-sign step fail?
+grep -E 'stable-sign|ERROR' ~/.local/state/tilsit-brew-upgrade.log | tail
 
 # Refresh after a manual brew upgrade (the daily daemon does this itself)
 /usr/local/bin/tilsit-stable-sign.sh

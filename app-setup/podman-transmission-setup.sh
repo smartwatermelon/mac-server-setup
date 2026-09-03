@@ -623,7 +623,10 @@ set -uo pipefail
 # ${STABLE_PODMAN_BIN} comes first on purpose: it holds a stably-signed copy of
 # podman-remote whose macOS privacy (TCC) grant for the NFS mount survives brew
 # upgrades. The Homebrew copy re-prompts after every upgrade and the prompt
-# blocks this loop. Details: docs/apps/stable-signing-README.md
+# blocks this loop. Bare 'podman' below is safe only because Homebrew ships
+# bin/podman as a symlink to podman-remote: the kernel executes the signed
+# file and TCC keys on that resolved path. stable-sign.sh --check shows
+# where each link points. Details: docs/apps/stable-signing-README.md
 export PATH="${STABLE_PODMAN_BIN}:${HOMEBREW_PREFIX}/bin:${HOMEBREW_PREFIX}/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 SUPERVISE_INTERVAL=\${SUPERVISE_INTERVAL:-300}
