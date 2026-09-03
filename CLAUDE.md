@@ -71,6 +71,20 @@ PIA's `port_forward` region flag cannot be trusted, the upstream
 `update-port.sh` bug that zeroes Transmission's listen port on PF failure, and
 diagnosing tunnel-vs-port-forwarding failures
 
+### Stable Signing (TCC grants that survive brew upgrade)
+
+**Files**: `app-setup/templates/stable-sign.sh`,
+`scripts/server/setup-auto-updates.sh`, `tests/stable-sign.bats`, and the
+`export PATH=` line of the wrapper in `app-setup/podman-transmission-setup.sh`
+
+**Documentation**: `docs/apps/stable-signing-README.md`
+
+**Covers**: Why macOS privacy grants for Homebrew binaries die on every
+upgrade (path + cdhash keyed TCC rows), responsible-process attribution for
+the Podman VM's VirtioFS access, the `/usr/local/stable` mirror and
+self-signed identity, why vfkit must never be re-signed, and the `--check`
+verification
+
 ### Transmission-FileBot (media processing pipeline)
 
 **Files**: `app-setup/templates/transmission-done.sh`,
@@ -89,6 +103,8 @@ test architecture (BATS, TEST_RUNNER mode), file stability checks
 # Run all BATS tests
 bats tests/plex-watchdog.bats
 bats tests/cloudflare-ddns.bats
+bats tests/stable-sign.bats
+bats tests/podman-machine-start.bats
 bats tests/transmission-filebot/**/*.bats
 
 # Lint all shell scripts

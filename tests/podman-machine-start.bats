@@ -125,6 +125,10 @@ extract_and_render_wrapper() {
   export PGID="20"
   export TZ_VALUE="America/Los_Angeles"
   export HOMEBREW_PREFIX="${TEST_TMPDIR}"
+  # The stable-signed podman mirror (docs/apps/stable-signing-README.md) is
+  # prepended to the wrapper's PATH. Point it at a directory that does not
+  # exist so the mocks in ${HOMEBREW_PREFIX}/bin still win.
+  export STABLE_PODMAN_BIN="${TEST_TMPDIR}/stable-podman-bin"
 
   WRAPPER_SCRIPT="${TEST_TMPDIR}/podman-machine-start.sh"
   eval "cat <<RENDER_EOF
@@ -247,6 +251,35 @@ run_wrapper_briefly() {
 @test "wrapper extraction: runtime variables remain escaped (not deploy-time substituted)" {
   run cat "${WRAPPER_SCRIPT}"
   [[ "${output}" == *'SUPERVISE_INTERVAL=${SUPERVISE_INTERVAL:-300}'* ]]
+}
+
+@test "wrapper PATH: the stable-signed podman mirror is searched before Homebrew" {
+  # The podman-remote that runs `machine start` is the process macOS holds
+  # responsible for the VM's VirtioFS access to the NFS mount, so its TCC
+  # grant is keyed on that binary's path and signature. Homebrew's copy
+  # changes both on every upgrade; the stable mirror changes neither. If the
+  # mirror is not first in PATH, the fix does nothing.
+  run grep -E '^export PATH=' "${WRAPPER_SCRIPT}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == "export PATH=\"${STABLE_PODMAN_BIN}:${HOMEBREW_PREFIX}/bin:"* ]]
+}
+
+@test "wrapper PATH: a podman in the stable mirror is the one the supervisor runs" {
+  set_mock_state "stopped" "true" "true"
+
+  # Put a second podman in the stable dir that tags its calls, then check the
+  # supervisor's calls carry the tag: PATH order decided which one ran.
+  mkdir -p "${STABLE_PODMAN_BIN}"
+  cat >"${STABLE_PODMAN_BIN}/podman" <<MOCK_EOF
+#!/usr/bin/env bash
+echo "STABLE \$*" >>"\${CALLS_FILE}"
+exec "${MOCK_BIN_DIR}/podman" "\$@"
+MOCK_EOF
+  chmod +x "${STABLE_PODMAN_BIN}/podman"
+
+  run run_wrapper_briefly
+
+  [ "$(call_count "STABLE machine start transmission-vm")" -eq 1 ]
 }
 
 @test "supervisor: calls machine start exactly once when initial state is stopped" {
