@@ -26,9 +26,17 @@ the container over VirtioFS. The VirtioFS I/O is performed by Apple's
 a file on a network volume, macOS Tahoe checks the
 `kTCCServiceSystemPolicyNetworkVolumes` privacy grant. XPC services are not
 their own TCC client. macOS attributes the access to the *responsible
-process*, which for a Podman machine is the `podman-remote` process that ran
-`podman machine start` (vfkit inherits it). So the grant that matters is the
-operator's per-user TCC row for `podman-remote`.
+process*, and the rule observed on TILSIT is: **the first non-Apple binary
+below the LaunchAgent's `/bin/bash`**. Everything under it inherits.
+
+For the podman supervisor that chain is `timeout` (coreutils `gtimeout`)
+-> `podman-remote` -> `vfkit`. Before the bounded-timeout change (2026-08-25)
+the responsible binary was `podman-remote`, which is why the TCC database
+holds one row per podman version. With only podman mirrored, the first
+restart on 2026-09-03 prompted for `gtimeout` instead. LaunchAgents that run
+Homebrew `bash` directly get a row for `bash` for the same reason. So every
+Homebrew binary on the path from the LaunchAgent to the protected access
+needs a stable copy.
 
 ### Why the grant keeps disappearing
 
@@ -66,6 +74,7 @@ prompt appeared on the next access):
 | Self-signed identity + fixed identifier, same path     | no             |
 | Same signature, copy to a different path               | yes (path)     |
 | Re-sign the binary a running VM is responsible for     | once, then no  |
+| Mirror podman only; `timeout` still from the Cellar    | yes (gtimeout) |
 
 Signing with a self-signed identity changes the stored requirement to
 
@@ -100,7 +109,10 @@ the grant matches forever.
 
 Consumers put `/usr/local/stable/<formula>/bin` ahead of `/opt/homebrew/bin`
 in PATH. For Podman that is the `export PATH=` line of
-`podman-machine-start.sh`.
+`podman-machine-start.sh`, which lists the podman and coreutils mirrors.
+Both `timeout` and `podman` are executed through Homebrew's own symlinks
+(`timeout -> gtimeout`, `podman -> podman-remote`), so the kernel runs the
+signed file and TCC keys on its path.
 
 **Never signed**: vfkit (carries the `com.apple.security.virtualization`
 entitlement, which `codesign -f` without `--entitlements` would strip) and
@@ -158,16 +170,20 @@ sudo sqlite3 /Users/operator/Library/Application\ Support/com.apple.TCC/TCC.db \
 ```
 
 Expected once adopted: one final prompt for
-`/usr/local/stable/podman/bin/podman-remote`, then none, across brew
-upgrades and reboots.
+`/usr/local/stable/coreutils/bin/gtimeout` (the responsible binary), then
+none, across brew upgrades and reboots. Which binary the prompt names is the
+quickest way to find the responsible process when a new one appears: the
+row it leaves in the TCC database (query above) is the path to mirror.
 
 ### Adding another binary
 
 Append `"<formula>:<bin>[,<bin>]"` to `STABLE_TARGETS` in the template,
 redeploy with `scripts/setup-auto-updates.sh --force`, and make the consumer
-use `/usr/local/stable/<formula>/bin/<bin>`. Candidates: Homebrew `bash` used
-by LaunchAgents that touch the NFS mount (currently covered by an FDA grant on
-`/bin/bash`; see the note in `transmission-filebot-README.md`).
+use `/usr/local/stable/<formula>/bin/<bin>`. Check the whole process chain
+from the LaunchAgent down: the first non-Apple binary is the one that needs
+the stable copy, not the one that opens the file. Candidates: Homebrew `bash`
+used by LaunchAgents that touch the NFS mount (currently covered by an FDA
+grant on `/bin/bash`; see the note in `transmission-filebot-README.md`).
 
 ### Cleanup after adoption
 
