@@ -83,8 +83,15 @@ CERT_DAYS="${CERT_DAYS:-3650}"
 # formula:bin[,bin...] - bin names under <formula>/bin/ that get re-signed.
 # Everything in bin/ and libexec/ is mirrored; only these are re-signed.
 # Names are split on commas and whitespace, so no spaces or glob characters.
+#
+# macOS attributes a protected access to the first non-Apple binary below
+# the LaunchAgent's /bin/bash, so every Homebrew binary on that path needs a
+# stable copy. The podman supervisor's chain is timeout (coreutils gtimeout)
+# -> podman-remote -> vfkit; with only podman mirrored the prompt moved to
+# gtimeout (measured 2026-09-03).
 STABLE_TARGETS=(
   "podman:podman-remote"
+  "coreutils:gtimeout"
 )
 
 MODE="sync"
@@ -130,19 +137,29 @@ die() {
 # Signing identity
 # ---------------------------------------------------------------------------
 
-identity_present() {
+# The identity list is captured before it is searched. Piping it into
+# `grep -q` (or an awk that exits on the first match) under pipefail fails at
+# random: the reader exits early and `security` takes SIGPIPE writing its
+# "N identities found" trailer.
+identity_list() {
   # No -v: a self-signed identity reports CSSMERR_TP_NOT_TRUSTED and is
   # filtered out by -v, yet codesign uses it fine.
-  security find-identity -p codesigning "${KEYCHAIN}" 2>/dev/null \
-    | grep -q "\"${SIGNING_IDENTITY}\""
+  security find-identity -p codesigning "${KEYCHAIN}" 2>/dev/null || true
+}
+
+identity_present() {
+  local list
+  list=$(identity_list)
+  grep -q "\"${SIGNING_IDENTITY}\"" <<<"${list}"
 }
 
 # Hash of the identity (certificate + private key), taken from the identity
 # list rather than find-certificate: a stray certificate with the same label
 # but no key would otherwise be picked up, and codesign never signs with it.
 cert_sha1() {
-  security find-identity -p codesigning "${KEYCHAIN}" 2>/dev/null \
-    | awk -v name="\"${SIGNING_IDENTITY}\"" 'index($0, name) {print tolower($2); exit}'
+  local list
+  list=$(identity_list)
+  awk -v name="\"${SIGNING_IDENTITY}\"" 'index($0, name) {print tolower($2); exit}' <<<"${list}"
 }
 
 ensure_identity() {
@@ -316,10 +333,10 @@ report_target() {
     fi
   done
   # Everything else in bin/: a symlink onto a signed binary is what callers
-  # rely on (bare 'podman' -> podman-remote); a real file that is not in
-  # STABLE_TARGETS runs with Homebrew's ad-hoc signature and gets no stable
-  # grant. Informational, not a failure.
-  local entry name target
+  # rely on (bare 'timeout' -> gtimeout, 'podman' -> podman-remote), so show
+  # those. Anything else runs with Homebrew's own signature and gets no
+  # stable grant; just count it. Informational, not a failure.
+  local entry name target other=0
   for entry in "${dest}/bin"/*; do
     [[ -e "${entry}" || -L "${entry}" ]] || continue
     name=$(basename "${entry}")
@@ -327,16 +344,18 @@ report_target() {
       *",${name},"*) continue ;;
       *) ;;
     esac
+    target=""
     if [[ -L "${entry}" ]]; then
       target=$(readlink "${entry}" || true)
-      case ",${bins}," in
-        *",${target},"*) printf '  %-14s link -> %s (signed)\n' "${name}" "${target}" ;;
-        *) printf '  %-14s link -> %s (unsigned target)\n' "${name}" "${target}" ;;
-      esac
-    else
-      printf '  %-14s unsigned (not in STABLE_TARGETS)\n' "${name}"
     fi
+    case ",${bins}," in
+      *",${target},"*) printf '  %-14s link -> %s (signed)\n' "${name}" "${target}" ;;
+      *) other=$((other + 1)) ;;
+    esac
   done
+  if [[ "${other}" -gt 0 ]]; then
+    printf '  (%d other entries in bin/ keep their Homebrew signature)\n' "${other}"
+  fi
   target_current "${formula}" "${bins}" || status=1
   return "${status}"
 }

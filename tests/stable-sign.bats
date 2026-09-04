@@ -408,10 +408,42 @@ MOCK_EOF
   [[ "${output}" == *"not installed (skipped)"* ]]
 }
 
+# A fake Homebrew coreutils: g-prefixed binaries plus the unprefixed
+# `timeout -> gtimeout` link the supervisor relies on.
+make_fake_coreutils() {
+  local ver="$1"
+  local cellar="${HOMEBREW_PREFIX}/Cellar/coreutils/${ver}"
+  mkdir -p "${cellar}/bin"
+  printf '#!/bin/sh\necho gtimeout %s\n' "${ver}" >"${cellar}/bin/gtimeout"
+  printf '#!/bin/sh\necho gdate\n' >"${cellar}/bin/gdate"
+  chmod +x "${cellar}/bin/"*
+  ln -sf gtimeout "${cellar}/bin/timeout"
+  ln -sfn "../Cellar/coreutils/${ver}" "${HOMEBREW_PREFIX}/opt/coreutils"
+}
+
+@test "coreutils gtimeout is mirrored and signed; the timeout link resolves to it" {
+  # timeout is the outermost non-Apple binary in the supervisor's process
+  # chain, so macOS holds it responsible for the VM's network-volume access.
+  make_fake_coreutils "9.11"
+  run "${SCRIPT}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"coreutils: synced ../Cellar/coreutils/9.11"* ]]
+  [ "$(grep '^#SIG:' "${STABLE_ROOT}/coreutils/bin/gtimeout" | sed 's/^#SIG://')" \
+    == "local.testhost.stable.gtimeout|${CERT_SHA1}" ]
+  [ "$(readlink "${STABLE_ROOT}/coreutils/bin/timeout")" == "gtimeout" ]
+  run grep -l '^#SIG:' "${STABLE_ROOT}/coreutils/bin/gdate"
+  [ -z "${output}" ]
+
+  run "${SCRIPT}" --check
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"timeout "*"link -> gtimeout (signed)"* ]]
+}
+
 @test "--check shows where the bare podman link points" {
   "${SCRIPT}" >/dev/null
   run "${SCRIPT}" --check
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"podman "*"link -> podman-remote (signed)"* ]]
-  [[ "${output}" == *"podman-mac-helper"*"unsigned (not in STABLE_TARGETS)"* ]]
+  [[ "${output}" == *"(1 other entries in bin/ keep their Homebrew signature)"* ]]
+  [[ "${output}" != *"podman-mac-helper"* ]]
 }

@@ -129,6 +129,7 @@ extract_and_render_wrapper() {
   # prepended to the wrapper's PATH. Point it at a directory that does not
   # exist so the mocks in ${HOMEBREW_PREFIX}/bin still win.
   export STABLE_PODMAN_BIN="${TEST_TMPDIR}/stable-podman-bin"
+  export STABLE_COREUTILS_BIN="${TEST_TMPDIR}/stable-coreutils-bin"
 
   WRAPPER_SCRIPT="${TEST_TMPDIR}/podman-machine-start.sh"
   eval "cat <<RENDER_EOF
@@ -261,7 +262,25 @@ run_wrapper_briefly() {
   # mirror is not first in PATH, the fix does nothing.
   run grep -E '^export PATH=' "${WRAPPER_SCRIPT}"
   [ "${status}" -eq 0 ]
-  [[ "${output}" == "export PATH=\"${STABLE_PODMAN_BIN}:${HOMEBREW_PREFIX}/bin:"* ]]
+  [[ "${output}" == "export PATH=\"${STABLE_PODMAN_BIN}:${STABLE_COREUTILS_BIN}:${HOMEBREW_PREFIX}/bin:"* ]]
+}
+
+@test "wrapper PATH: a timeout in the stable coreutils mirror is the one that wraps podman" {
+  set_mock_state "stopped" "true" "true"
+
+  # macOS holds the outermost non-Apple binary (timeout) responsible for the
+  # VM's network-volume access, so the stable copy must be the one executed.
+  mkdir -p "${STABLE_COREUTILS_BIN}"
+  cat >"${STABLE_COREUTILS_BIN}/timeout" <<MOCK_EOF
+#!/usr/bin/env bash
+echo "STABLE-TIMEOUT \$*" >>"\${CALLS_FILE}"
+exec "${MOCK_BIN_DIR}/timeout" "\$@"
+MOCK_EOF
+  chmod +x "${STABLE_COREUTILS_BIN}/timeout"
+
+  run run_wrapper_briefly
+
+  [ "$(call_count "STABLE-TIMEOUT --kill-after=10 180 podman machine start transmission-vm")" -eq 1 ]
 }
 
 @test "wrapper PATH: a podman in the stable mirror is the one the supervisor runs" {

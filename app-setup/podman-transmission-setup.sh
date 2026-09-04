@@ -580,21 +580,28 @@ set_section "Deploy Machine Start Wrapper"
 
 MACHINE_START_DEST="${OPERATOR_HOME}/.local/bin/podman-machine-start.sh"
 
-# Stably-signed mirror of Homebrew's podman, maintained by
+# Stably-signed mirrors of Homebrew's podman and coreutils, maintained by
 # /usr/local/bin/${HOSTNAME_LOWER}-stable-sign.sh (deployed by
-# scripts/server/setup-auto-updates.sh). The wrapper puts it first in PATH so
-# the podman-remote that starts the VM - and therefore is the process macOS
-# holds responsible for the VM's VirtioFS access to the NFS mount - keeps the
-# same path and code requirement across brew upgrades. Without it every
-# upgrade re-prompts "podman-remote would like to access files on a network
-# volume" and the supervision loop blocks until someone clicks Allow.
+# scripts/server/setup-auto-updates.sh). The wrapper puts them first in PATH.
+#
+# macOS holds the first non-Apple binary below this LaunchAgent's /bin/bash
+# responsible for everything under it, including the VM's VirtioFS access to
+# the NFS mount. In this script that is coreutils' gtimeout (every podman
+# call runs under `timeout`), and below it podman-remote. Both must keep the
+# same path and code requirement across brew upgrades, or every upgrade
+# re-prompts "... would like to access files on a network volume" and the
+# supervision loop blocks until someone clicks Allow. Measured 2026-09-03:
+# with only podman mirrored, the prompt simply moved to gtimeout.
 # See docs/apps/stable-signing-README.md.
 STABLE_PODMAN_BIN="/usr/local/stable/podman/bin"
-if [[ ! -x "${STABLE_PODMAN_BIN}/podman-remote" ]]; then
-  log "⚠️  ${STABLE_PODMAN_BIN}/podman-remote not found - the wrapper will fall back to"
-  log "    ${HOMEBREW_PREFIX}/bin/podman, whose TCC grants do not survive brew upgrades."
-  log "    Run scripts/setup-auto-updates.sh (or /usr/local/bin/${HOSTNAME_LOWER}-stable-sign.sh) to create it."
-fi
+STABLE_COREUTILS_BIN="/usr/local/stable/coreutils/bin"
+for stable_bin in "${STABLE_PODMAN_BIN}/podman-remote" "${STABLE_COREUTILS_BIN}/gtimeout"; do
+  if [[ ! -x "${stable_bin}" ]]; then
+    log "⚠️  ${stable_bin} not found - the wrapper will fall back to the ${HOMEBREW_PREFIX}/bin"
+    log "    copy, whose TCC grants do not survive brew upgrades."
+    log "    Run scripts/setup-auto-updates.sh (or /usr/local/bin/${HOSTNAME_LOWER}-stable-sign.sh) to create it."
+  fi
+done
 
 # Write the wrapper directly (values baked in at deploy time).
 # Variables prefixed with \ escape into the written script; bare ${...} expand now.
@@ -620,14 +627,18 @@ set -uo pipefail
 #   podman machine stop transmission-vm
 # Reverse with 'launchctl bootstrap gui/<uid> <plist>' or reboot.
 
-# ${STABLE_PODMAN_BIN} comes first on purpose: it holds a stably-signed copy of
-# podman-remote whose macOS privacy (TCC) grant for the NFS mount survives brew
-# upgrades. The Homebrew copy re-prompts after every upgrade and the prompt
-# blocks this loop. Bare 'podman' below is safe only because Homebrew ships
-# bin/podman as a symlink to podman-remote: the kernel executes the signed
-# file and TCC keys on that resolved path. stable-sign.sh --check shows
-# where each link points. Details: docs/apps/stable-signing-README.md
-export PATH="${STABLE_PODMAN_BIN}:${HOMEBREW_PREFIX}/bin:${HOMEBREW_PREFIX}/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+# The two stable dirs come first on purpose: they hold stably-signed copies of
+# gtimeout (the process macOS holds responsible for everything below it) and
+# podman-remote, whose macOS privacy (TCC) grants for the NFS mount survive
+# brew upgrades. The Homebrew copies re-prompt after every upgrade and the
+# prompt blocks this loop. Bare 'timeout' and 'podman' below are safe only
+# because Homebrew ships them as symlinks (timeout -> gtimeout,
+# podman -> podman-remote): the kernel executes the signed file and TCC keys
+# on that resolved path. stable-sign.sh --check shows where each link points.
+# The coreutils dir adds no unprefixed name that ${HOMEBREW_PREFIX}/bin does
+# not already put ahead of the system tools. Details:
+# docs/apps/stable-signing-README.md
+export PATH="${STABLE_PODMAN_BIN}:${STABLE_COREUTILS_BIN}:${HOMEBREW_PREFIX}/bin:${HOMEBREW_PREFIX}/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 SUPERVISE_INTERVAL=\${SUPERVISE_INTERVAL:-300}
 
