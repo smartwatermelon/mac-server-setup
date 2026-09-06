@@ -112,8 +112,13 @@ while IFS= read -r -d '' entry; do
     continue
   fi
 
-  # If entry matches an active torrent name, leave it alone
-  if grep -qxF "${basename}" "${active_names_file}"; then
+  # If entry matches an active torrent name, leave it alone.
+  # With the incomplete directory disabled and rename-partial-files on,
+  # Transmission writes a single-file torrent as "<name>.part" until it
+  # completes, so an in-progress download never matches its torrent name
+  # verbatim. Compare with the suffix stripped, or the sweep deletes a
+  # download that is still being written (issue: Seven Psychopaths, 2026-09-05).
+  if grep -qxF "${basename%.part}" "${active_names_file}"; then
     skipped=$((skipped + 1))
     continue
   fi

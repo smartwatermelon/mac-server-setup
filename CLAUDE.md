@@ -105,6 +105,7 @@ bats tests/plex-watchdog.bats
 bats tests/cloudflare-ddns.bats
 bats tests/stable-sign.bats
 bats tests/podman-machine-start.bats
+bats tests/pending-move-cleanup.bats
 bats tests/transmission-filebot/**/*.bats
 
 # Lint all shell scripts
