@@ -325,10 +325,13 @@ To revert:   ssh operator@${hostname_lower} plex-watchdog-ctl revert"
   local now
   now=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
+  local last_heartbeat
+  last_heartbeat=$(state_get "last_heartbeat" "${now}")
+
   local new_state
   new_state=$(jq -n \
     --arg lp "${now}" \
-    --arg lh "$(state_get "last_heartbeat" "${now}")" \
+    --arg lh "${last_heartbeat}" \
     --arg rh "${current_hash}" \
     --argjson cf 0 \
     --argjson settings "${new_settings_json}" \

@@ -61,7 +61,7 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
 fi
 
 # Load configuration
-# shellcheck source=config/config.conf
+# shellcheck source=/dev/null
 source "${CONFIG_FILE}"
 
 # Computed variables
