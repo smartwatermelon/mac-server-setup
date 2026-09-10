@@ -78,7 +78,7 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
   exit 1
 fi
 
-# shellcheck source=config/config.conf
+# shellcheck source=/dev/null
 source "${CONFIG_FILE}"
 
 # SERVER_NAME comes from the sourced config. Validate it before deriving

@@ -449,7 +449,7 @@ fi
 WATCHDOG_LOG="${OPERATOR_HOME}/.local/state/plex-watchdog.log"
 if [[ -f "${WATCHDOG_LOG}" ]]; then
   log "Watchdog log created at ${WATCHDOG_LOG}"
-  log "Last log entry: $(sudo tail -1 "${WATCHDOG_LOG}")"
+  log "Last log entry: $(sudo tail -1 "${WATCHDOG_LOG}" || true)"
 else
   collect_warning "No watchdog log file found after initial run"
 fi
