@@ -519,3 +519,46 @@ record_filebot_calls() {
   category=$(classify_failure "${LAST_PREVIEW_OUTPUT}")
   assert_equal "already-in-plex" "${category}"
 }
+
+@test "preview_filebot_changes: auto-detect preview runs strict" {
+  # Preview conflict output feeds media-compare. A non-strict auto-detect
+  # preview can match the wrong episode, and its conflict line would then pair
+  # the download with the wrong library file.
+  export FILEBOT_TEST_OVERRIDE=false
+  record_filebot_calls
+  preview_filebot_changes "${TEST_TEMP_DIR}" || true
+  preview_filebot_changes "${TEST_TEMP_DIR}" "TheMovieDB::TV" || true
+  run cat "${FILEBOT_CALLS}"
+  assert_output_not_contains "-non-strict" "${output}"
+}
+
+@test "preview_filebot_changes: TheTVDB preview keeps -non-strict" {
+  export FILEBOT_TEST_OVERRIDE=false
+  record_filebot_calls
+  preview_filebot_changes "${TEST_TEMP_DIR}" "TheTVDB" || true
+  run cat "${FILEBOT_CALLS}"
+  assert_output_contains "-non-strict" "${output}"
+}
+
+@test "process_media: previews movie-pattern files with TheMovieDB" {
+  local test_dir="${TEST_TEMP_DIR}/media"
+  mkdir -p "${test_dir}"
+  touch "${test_dir}/Some Movie 1999 1080p.mkv"
+  export PREVIEW_DB_FILE="${TEST_TEMP_DIR}/preview_db"
+  check_disk_space() { return 0; }
+  check_files_ready() { return 0; }
+  confirm_changes() { return 0; }
+  process_media_with_fallback() { return 0; }
+  trigger_plex_scan() { return 0; }
+  preview_filebot_changes() {
+    printf '%s' "${2:-}" >"${PREVIEW_DB_FILE}"
+    LAST_PREVIEW_OUTPUT="[TEST] x"
+    return 0
+  }
+
+  process_media "${test_dir}"
+
+  local preview_db
+  preview_db=$(<"${PREVIEW_DB_FILE}")
+  assert_equal "TheMovieDB" "${preview_db}"
+}

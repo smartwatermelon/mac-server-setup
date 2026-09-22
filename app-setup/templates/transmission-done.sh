@@ -847,6 +847,21 @@ process_movie() {
     >>"${LOG_FILE}" 2>&1
 }
 
+# Whether FileBot may run -non-strict against a database ($1; empty means
+# auto-detection).
+#
+# Auto-detection and TheMovieDB::TV must run strict. They use TheMovieDB,
+# whose episode lists can be missing whole seasons (its Great British Bake Off
+# entry stops at series 7), and -non-strict fills the gap with a wrong episode
+# matched by title: S17E01 "Cake Week" became S04E01 "Cake". Strict mode fails
+# instead, and the chain moves on. The other databases keep -non-strict,
+# because strict mode refuses any show name shared with a spin-off, which would
+# make TheTVDB fail on shows it knows perfectly well.
+filebot_nonstrict_allowed() {
+  local database="${1:-}"
+  [[ -n "${database}" && "${database}" != "TheMovieDB::TV" ]]
+}
+
 # Preview FileBot changes with dry-run
 preview_filebot_changes() {
   local source_dir="$1"
@@ -861,13 +876,19 @@ preview_filebot_changes() {
     --output "${PLEX_MEDIA_PATH}"
     -r
     --conflict skip
-    -non-strict
     --action test # DRY-RUN MODE
   )
 
   # Add database if specified
   if [[ -n "${db}" ]]; then
     filebot_args+=(--db "${db}")
+  fi
+
+  # Same strictness as the real run. This matters beyond accuracy: a failed
+  # preview's conflict line is handed to media-compare, so a wrong non-strict
+  # match here could pair the download with the wrong library file.
+  if filebot_nonstrict_allowed "${db}"; then
+    filebot_args+=(-non-strict)
   fi
 
   # Run FileBot in test mode
@@ -1009,11 +1030,7 @@ process_media_with_autodetect() {
 
   log "Attempting FileBot auto-detection (no database specified)"
 
-  # Strict on purpose. Auto-detection uses TheMovieDB, whose entries can be
-  # missing whole seasons (its Great British Bake Off entry stops at series 7).
-  # With -non-strict, FileBot remaps a missing season by episode title, so
-  # S17E01 "Cake Week" became S04E01 "Cake". Strict mode fails instead, and the
-  # chain moves on to a database that has the season.
+  # Strict on purpose (no -non-strict): see filebot_nonstrict_allowed.
   local output exit_code
   output=$(run_filebot -rename "${source_dir}" \
     --format "{plex}" \
@@ -1068,14 +1085,10 @@ process_with_database() {
 
   log "Attempting FileBot processing with database: ${database}"
 
-  # TheMovieDB::TV runs strict for the same reason auto-detection does: its
-  # episode lists can be missing seasons, and -non-strict fills the gap with a
-  # wrong episode matched by title. The other databases keep -non-strict,
-  # because strict mode refuses any show name shared with a spin-off, which
-  # would make TheTVDB fail on shows it knows perfectly well.
-  local strict_args=(-non-strict)
-  if [[ "${database}" == "TheMovieDB::TV" ]]; then
-    strict_args=()
+  # See filebot_nonstrict_allowed for why TheMovieDB::TV runs strict.
+  local strict_args=()
+  if filebot_nonstrict_allowed "${database}"; then
+    strict_args=(-non-strict)
   fi
 
   local output exit_code
@@ -1364,14 +1377,19 @@ process_media() {
     return 1
   fi
 
-  # Step 3: Preview changes with dry-run. Episode-style files preview against
-  # TheTVDB, the same database the fallback chain tries first for them, so the
-  # preview (and manual-mode confirmation) shows the destination actually used.
+  # Step 3: Preview changes with dry-run, against the database the fallback
+  # chain will actually use, so the preview (and manual-mode confirmation)
+  # shows the real destination. Episode-style files go to TheTVDB. Movie-style
+  # files go to TheMovieDB, which is where both strict auto-detection and the
+  # movie chain send them. Anything else previews with strict auto-detection,
+  # the chain's first strategy for it.
   local media_type preview_db=""
   media_type=$(detect_media_type_heuristic "${source_dir}") || true
-  if [[ "${media_type}" == "tv" ]]; then
-    preview_db="TheTVDB"
-  fi
+  case "${media_type}" in
+    tv) preview_db="TheTVDB" ;;
+    movie) preview_db="TheMovieDB" ;;
+    *) ;;
+  esac
 
   if ! preview_filebot_changes "${source_dir}" "${preview_db}"; then
     log "Error: Preview failed - cannot determine what changes would be made"
