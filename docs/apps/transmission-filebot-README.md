@@ -89,9 +89,11 @@ Media detection (process_media)
   - Pattern matching: S01E01 → TV, (19|20)XX → Movie
   - Tries most likely type first, falls back if needed
   ↓
-FileBot processing
-  - TV: TheTVDB database → {plex} format
-  - Movie: TheMovieDB database → {plex} format
+FileBot processing (process_media_with_fallback)
+  - TV (episode-style names): TheTVDB → TheMovieDB::TV → AniDB,
+    then auto-detection, then movie databases
+  - Everything else: auto-detection first, then database chains
+  - A library conflict stops the chain (see Duplicate handling)
   - Actions: move, artwork, metadata, subtitles
   ↓
 Plex notification (trigger_plex_scan)
@@ -110,12 +112,40 @@ Cleanup empty directories
 - **Pattern-based media type detection**: Filename analysis before attempting FileBot processing
 - **stdout/stderr separation**: All user messages to stderr, only data to stdout
 
+### Database choice and strict matching
+
+Episode-style files go to TheTVDB first, not to FileBot's auto-detection.
+Auto-detection uses TheMovieDB, and TheMovieDB can be missing whole seasons: its
+Great British Bake Off entry (id 34549) stops at series 7, the last BBC series.
+With `-non-strict`, FileBot does not give up on a season it cannot find. It
+remaps the file by episode title instead, so S17E01 "Cake Week" was filed as
+S04E01 "Cake", and every Channel 4 season landed in series 1–7 folders.
+
+Auto-detection and `TheMovieDB::TV` therefore run strict, and fail rather than
+guess. TheTVDB, AniDB, and the movie databases keep `-non-strict`, because
+strict mode refuses any name shared with a spin-off ("The Great British Bake
+Off: An Extra Slice"). Tested against FileBot 5.3.0 on 2026-09-22:
+
+| Database | `-non-strict` | strict |
+| --- | --- | --- |
+| auto-detect (TheMovieDB) | S04E01 (wrong) | fails |
+| TheMovieDB::TV | S10E01 (wrong) | fails |
+| TheTVDB | S17E01 (correct) | fails |
+
 ### Duplicate handling and quality upgrades
 
-FileBot runs with `--conflict auto`, which **skips** rather than overwrites when
-a download renames onto a path that already holds a file. The download is then
-classified `already-in-plex` by `classify_failure()` and moved to
-`triage/already-in-plex/`. Nothing is overwritten and nothing is lost.
+FileBot runs with `--conflict skip`, which never overwrites a library file. (It
+used to run with `--conflict auto`, which is not a skip: it deletes the library
+file whenever it judges the download better, and together with a wrong match
+that destroyed correct episodes.) A skipped download is classified
+`already-in-plex` by `classify_failure()` and moved to
+`triage/already-in-plex/`.
+
+Most duplicates are caught at the preview step, because FileBot prints the
+conflict line even under `--action test`. `preview_filebot_changes()` keeps its
+output on failure so that line reaches `classify_failure()`. When a conflict
+shows up later in the fallback chain, the chain stops there: another database
+could only re-match the same file somewhere wrong.
 
 `media-compare.sh` decides which of the two copies is better, so that the
 download is not left sitting in triage waiting for someone to compare them by
@@ -127,7 +157,7 @@ behaviour of triaging every duplicate.
 FileBot's own conflict message, which names both paths:
 
 ```text
-[AUTO] Skipped [SOURCE] because [DEST] already exists
+[SKIP] Skipped [SOURCE] because [DEST] already exists
 [IMPORT] Destination file already exists: DEST (SOURCE)
 ```
 

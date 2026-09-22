@@ -160,7 +160,7 @@ media_file_size() {
 # through to the existing triage behaviour.
 #
 # Two formats, with the paths in opposite orders:
-#   [AUTO] Skipped [SOURCE] because [DEST] already exists
+#   [SKIP] Skipped [SOURCE] because [DEST] already exists   ([AUTO] under --conflict auto)
 #   [IMPORT] Destination file already exists: DEST (SOURCE)
 #
 # The IMPORT form is genuinely ambiguous: `DEST (SOURCE)` cannot be split by

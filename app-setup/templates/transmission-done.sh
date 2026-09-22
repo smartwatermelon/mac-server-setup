@@ -826,7 +826,7 @@ process_tv_show() {
     --format "{plex}" \
     --output "${PLEX_MEDIA_PATH}" \
     -r \
-    --conflict auto \
+    --conflict skip \
     -non-strict \
     --apply artwork url metadata import subtitles finder date chmod prune clean thumbnail \
     --action move \
@@ -841,7 +841,7 @@ process_movie() {
     --format "{plex}" \
     --output "${PLEX_MEDIA_PATH}" \
     -r \
-    --conflict auto \
+    --conflict skip \
     --apply artwork url metadata import subtitles finder date chmod prune clean thumbnail \
     --action move \
     >>"${LOG_FILE}" 2>&1
@@ -860,7 +860,7 @@ preview_filebot_changes() {
     --format "{plex}"
     --output "${PLEX_MEDIA_PATH}"
     -r
-    --conflict auto
+    --conflict skip
     -non-strict
     --action test # DRY-RUN MODE
   )
@@ -874,6 +874,12 @@ preview_filebot_changes() {
   local preview_output preview_exit
   preview_output=$(run_filebot "${filebot_args[@]}" 2>&1)
   preview_exit=$?
+
+  # Store before any early return: when preview fails, process_media classifies
+  # the failure from this output. A duplicate shows up here as FileBot's
+  # "Skipped [X] because [Y] already exists" line, and losing it sends the
+  # download to triage/failed instead of already-in-plex and media-compare.
+  LAST_PREVIEW_OUTPUT="${preview_output}"
 
   # Count files to process
   local file_count
@@ -902,8 +908,6 @@ preview_filebot_changes() {
   log "Preview: ${file_count} files to process"
   echo "${preview_output}" | grep "\[TEST\]" | tee -a "${LOG_FILE}"
 
-  # Store output for confirmation step
-  LAST_PREVIEW_OUTPUT="${preview_output}"
   log "Preview stored (${#LAST_PREVIEW_OUTPUT} bytes)"
   return 0
 }
@@ -1005,13 +1009,17 @@ process_media_with_autodetect() {
 
   log "Attempting FileBot auto-detection (no database specified)"
 
+  # Strict on purpose. Auto-detection uses TheMovieDB, whose entries can be
+  # missing whole seasons (its Great British Bake Off entry stops at series 7).
+  # With -non-strict, FileBot remaps a missing season by episode title, so
+  # S17E01 "Cake Week" became S04E01 "Cake". Strict mode fails instead, and the
+  # chain moves on to a database that has the season.
   local output exit_code
   output=$(run_filebot -rename "${source_dir}" \
     --format "{plex}" \
     --output "${PLEX_MEDIA_PATH}" \
     -r \
-    --conflict auto \
-    -non-strict \
+    --conflict skip \
     --apply artwork url metadata import subtitles finder date chmod prune clean thumbnail \
     --action move \
     2>&1)
@@ -1060,14 +1068,24 @@ process_with_database() {
 
   log "Attempting FileBot processing with database: ${database}"
 
+  # TheMovieDB::TV runs strict for the same reason auto-detection does: its
+  # episode lists can be missing seasons, and -non-strict fills the gap with a
+  # wrong episode matched by title. The other databases keep -non-strict,
+  # because strict mode refuses any show name shared with a spin-off, which
+  # would make TheTVDB fail on shows it knows perfectly well.
+  local strict_args=(-non-strict)
+  if [[ "${database}" == "TheMovieDB::TV" ]]; then
+    strict_args=()
+  fi
+
   local output exit_code
   output=$(run_filebot -rename "${source_dir}" \
     --db "${database}" \
     --format "{plex}" \
     --output "${PLEX_MEDIA_PATH}" \
     -r \
-    --conflict auto \
-    -non-strict \
+    --conflict skip \
+    ${strict_args[@]+"${strict_args[@]}"} \
     --apply artwork url metadata import subtitles finder date chmod prune clean thumbnail \
     --action move \
     2>&1)
@@ -1121,7 +1139,7 @@ process_with_xattr() {
     --format "{plex}" \
     --output "${PLEX_MEDIA_PATH}" \
     -r \
-    --conflict auto \
+    --conflict skip \
     --apply artwork url metadata import subtitles finder date chmod prune clean thumbnail \
     --action move \
     2>&1)
@@ -1163,6 +1181,18 @@ process_with_xattr() {
   return 0
 }
 
+# True when the last FileBot run matched the download but refused to move it
+# because the library already holds a file at the destination.
+#
+# That is a final answer, not a miss: FileBot identified the media. Trying more
+# databases can only re-match the same file somewhere wrong, and it would
+# overwrite LAST_FILEBOT_OUTPUT, so classify_failure would lose the conflict
+# line that routes the download to already-in-plex and media-compare.
+filebot_reported_conflict() {
+  grep -qE 'Skipped \[.*\] because \[.*\] already exists|Destination file already exists' \
+    <<<"${LAST_FILEBOT_OUTPUT:-}"
+}
+
 # Try TV show database chain
 try_tv_databases() {
   local source_dir="$1"
@@ -1179,6 +1209,10 @@ try_tv_databases() {
       return 0
     fi
     log "Failed with TV database: ${db}"
+    if filebot_reported_conflict; then
+      log "Library conflict reported by ${db}; stopping database chain"
+      return 1
+    fi
   done
 
   return 1
@@ -1200,15 +1234,21 @@ try_movie_databases() {
       return 0
     fi
     log "Failed with movie database: ${db}"
+    if filebot_reported_conflict; then
+      log "Library conflict reported by ${db}; stopping database chain"
+      return 1
+    fi
   done
 
   return 1
 }
 
 # Process media with comprehensive fallback strategy
+# Args: $1=source path, $2=media type from detect_media_type_heuristic
+#       (optional; detected here when omitted)
 process_media_with_fallback() {
   local source_dir="$1"
-  local detected_type=""
+  local detected_type="${2:-}"
 
   # Validate source path exists (may be a directory or single file)
   if [[ ! -e "${source_dir}" ]]; then
@@ -1218,6 +1258,45 @@ process_media_with_fallback() {
 
   log "Starting comprehensive fallback processing"
 
+  if [[ -z "${detected_type}" ]]; then
+    detected_type=$(detect_media_type_heuristic "${source_dir}") || true
+  fi
+
+  # Files named like episodes (S01E01, 1x01) go to TheTVDB first. Letting
+  # FileBot auto-detect them sends them to TheMovieDB, which is missing seasons
+  # of some shows (see process_media_with_autodetect).
+  if [[ "${detected_type}" == "tv" ]]; then
+    log "Strategy 1: TV database chain (episode-style filenames)"
+    if try_tv_databases "${source_dir}"; then
+      log "Success: TV database chain"
+      return 0
+    fi
+    filebot_reported_conflict && return 1
+
+    log "Strategy 2: FileBot auto-detection"
+    if process_media_with_autodetect "${source_dir}"; then
+      log "Success: FileBot auto-detection"
+      return 0
+    fi
+    filebot_reported_conflict && return 1
+
+    log "Failed: TV database chain and auto-detection, trying movie databases as fallback"
+    if try_movie_databases "${source_dir}"; then
+      log "Success: Movie database fallback"
+      return 0
+    fi
+    filebot_reported_conflict && return 1
+
+    log "Strategy 3: xattr cache (last resort)"
+    if process_with_xattr "${source_dir}"; then
+      log "Success: xattr cache"
+      return 0
+    fi
+    log "Failed: xattr cache"
+    log "Error: All fallback strategies exhausted"
+    return 1
+  fi
+
   # Strategy 1: Auto-detection (let FileBot decide)
   log "Strategy 1: FileBot auto-detection"
   if process_media_with_autodetect "${source_dir}"; then
@@ -1225,28 +1304,18 @@ process_media_with_fallback() {
     return 0
   fi
   log "Failed: FileBot auto-detection"
+  filebot_reported_conflict && return 1
 
   # Strategy 2: Heuristic detection + database chains
   log "Strategy 2: Heuristic detection with database fallback"
-  detected_type=$(detect_media_type_heuristic "${source_dir}")
 
-  if [[ "${detected_type}" == "tv" ]]; then
-    log "Detected as TV show, trying TV database chain"
-    if try_tv_databases "${source_dir}"; then
-      log "Success: TV database chain"
-      return 0
-    fi
-    log "Failed: TV database chain, trying movie databases as fallback"
-    if try_movie_databases "${source_dir}"; then
-      log "Success: Movie database fallback"
-      return 0
-    fi
-  elif [[ "${detected_type}" == "movie" ]]; then
+  if [[ "${detected_type}" == "movie" ]]; then
     log "Detected as movie, trying movie database chain"
     if try_movie_databases "${source_dir}"; then
       log "Success: Movie database chain"
       return 0
     fi
+    filebot_reported_conflict && return 1
     log "Failed: Movie database chain, trying TV databases as fallback"
     if try_tv_databases "${source_dir}"; then
       log "Success: TV database fallback"
@@ -1258,11 +1327,13 @@ process_media_with_fallback() {
       log "Success: TV database chain (unknown type)"
       return 0
     fi
+    filebot_reported_conflict && return 1
     if try_movie_databases "${source_dir}"; then
       log "Success: Movie database chain (unknown type)"
       return 0
     fi
   fi
+  filebot_reported_conflict && return 1
 
   # Strategy 3: xattr cache (last resort)
   log "Strategy 3: xattr cache (last resort)"
@@ -1293,20 +1364,27 @@ process_media() {
     return 1
   fi
 
-  # Step 3: Preview changes with dry-run
-  if ! preview_filebot_changes "${source_dir}"; then
+  # Step 3: Preview changes with dry-run. Episode-style files preview against
+  # TheTVDB, the same database the fallback chain tries first for them, so the
+  # preview (and manual-mode confirmation) shows the destination actually used.
+  local media_type preview_db=""
+  media_type=$(detect_media_type_heuristic "${source_dir}") || true
+  if [[ "${media_type}" == "tv" ]]; then
+    preview_db="TheTVDB"
+  fi
+
+  if ! preview_filebot_changes "${source_dir}" "${preview_db}"; then
     log "Error: Preview failed - cannot determine what changes would be made"
 
     # In automated mode, triage the failure instead of leaving it in pending-move
     if [[ "${INVOCATION_MODE}" == "automated" ]]; then
       local category
       category=$(classify_failure "${LAST_PREVIEW_OUTPUT:-${LAST_FILEBOT_OUTPUT:-}}")
-      # Preview runs with --action test, which reports [TEST] lines rather than
-      # the conflict messages that name both paths. So this call normally finds
-      # no pair and does nothing -- which is the correct outcome, not a missed
-      # one: with no way to identify the library file, the download belongs in
-      # triage. It is called here anyway so both triage sites behave the same
-      # way if FileBot ever does report a conflict during preview.
+      # With --conflict skip, a download that collides with a library file
+      # fails here: FileBot prints "Skipped [X] because [Y] already exists"
+      # even under --action test. That line names both paths, so
+      # media-compare can pair the two copies and upgrade the library file
+      # when the download is better.
       handle_duplicate_upgrades "${category}" "${LAST_PREVIEW_OUTPUT:-${LAST_FILEBOT_OUTPUT:-}}"
       local triage_base="${TR_TORRENT_DIR%/*}/triage"
       if triage_failed_torrent "${source_dir}" "${category}" "${triage_base}"; then
@@ -1326,7 +1404,7 @@ process_media() {
 
   # Step 5: Process with comprehensive fallback strategy
   LAST_FILEBOT_OUTPUT=""
-  if ! process_media_with_fallback "${source_dir}"; then
+  if ! process_media_with_fallback "${source_dir}" "${media_type}"; then
     log "Error: All FileBot strategies failed"
     log_filebot_error 1 "${LAST_FILEBOT_OUTPUT}" "${source_dir}" "fallback-chain"
 
