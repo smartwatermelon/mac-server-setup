@@ -198,7 +198,9 @@ maybe_heartbeat() {
 
   local now_epoch last_epoch
   now_epoch=$(date +%s)
-  last_epoch=$(date -j -f '%Y-%m-%dT%H:%M:%SZ' "${current}" '+%s' 2>/dev/null) || last_epoch=0
+  # -u: the stored value is UTC; parsed as local time, it lands in the future
+  # west of UTC.
+  last_epoch=$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "${current}" '+%s' 2>/dev/null) || last_epoch=0
 
   if [[ $((now_epoch - last_epoch)) -ge ${HEARTBEAT_INTERVAL_SECONDS} ]]; then
     log "OK: ${detail}"

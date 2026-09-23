@@ -494,6 +494,44 @@ WanPerStreamMaxUploadRate=0"
 }
 
 # ===========================================================================
+# Heartbeat
+#
+# last_heartbeat is written in UTC with a trailing Z. It must be parsed as
+# UTC too: parsed as local time, a zone west of UTC pushes it into the
+# future and the hourly heartbeat stops for hours at a time.
+# ===========================================================================
+
+@test "maybe_heartbeat: logs when the last heartbeat is 2 hours old, west of UTC" {
+  export TZ=America/Los_Angeles
+  source_watchdog_functions
+  : >"${LOG_FILE}"
+  cp "${FIXTURES_DIR}/golden-basic.conf" "${GOLDEN_CONF}"
+  local two_hours_ago
+  two_hours_ago=$(date -u -r "$(($(date +%s) - 7200))" '+%Y-%m-%dT%H:%M:%SZ')
+  echo "{\"last_heartbeat\": \"${two_hours_ago}\"}" >"${STATE_FILE}"
+
+  maybe_heartbeat
+
+  grep -q "OK: .* settings monitored, no drift" "${LOG_FILE}"
+  [ "$(alert_state_get last_heartbeat "")" != "${two_hours_ago}" ]
+}
+
+@test "maybe_heartbeat: stays quiet when the last heartbeat is 30 minutes old" {
+  export TZ=America/Los_Angeles
+  source_watchdog_functions
+  : >"${LOG_FILE}"
+  cp "${FIXTURES_DIR}/golden-basic.conf" "${GOLDEN_CONF}"
+  local half_hour_ago
+  half_hour_ago=$(date -u -r "$(($(date +%s) - 1800))" '+%Y-%m-%dT%H:%M:%SZ')
+  echo "{\"last_heartbeat\": \"${half_hour_ago}\"}" >"${STATE_FILE}"
+
+  maybe_heartbeat
+
+  [ "$(grep -c "settings monitored" "${LOG_FILE}")" -eq 0 ]
+  [ "$(alert_state_get last_heartbeat "")" = "${half_hour_ago}" ]
+}
+
+# ===========================================================================
 # Full poll cycles: email under launchd, and the shared alert library
 #
 # launchd runs this agent as `/bin/bash <script>` (bash 3.2) with
