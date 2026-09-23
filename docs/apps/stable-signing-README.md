@@ -3,8 +3,9 @@
 **Files**: `app-setup/templates/stable-sign.sh`,
 `scripts/server/setup-auto-updates.sh` (deploys it and hooks it into the daily
 brew upgrade), `app-setup/podman-transmission-setup.sh` (puts the stable mirror
-first in the supervisor's PATH), `tests/stable-sign.bats`,
-`tests/podman-machine-start.bats`
+first in the supervisor's PATH), `app-setup/templates/transmission-trigger-watcher.sh`
+(puts the stable bash first in the watcher's PATH), `tests/stable-sign.bats`,
+`tests/podman-machine-start.bats`, `tests/transmission-trigger-watcher.bats`
 
 **Deployed**: `/usr/local/bin/<hostname>-stable-sign.sh`, mirror tree under
 `/usr/local/stable/<formula>/`, signing identity `"<HOSTNAME> Local Code
@@ -37,6 +38,18 @@ restart on 2026-09-03 prompted for `gtimeout` instead. LaunchAgents that run
 Homebrew `bash` directly get a row for `bash` for the same reason. So every
 Homebrew binary on the path from the LaunchAgent to the protected access
 needs a stable copy.
+
+The same rule applies to FileBot. The trigger watcher (`/bin/bash`) puts
+Homebrew first in PATH and runs `transmission-done`, whose
+`#!/usr/bin/env bash` therefore resolves to Homebrew bash. That bash is the
+first non-Apple binary above FileBot's reads on the NFS mount. On 2026-09-16
+the daily upgrade installed bash 5.3.20; the first torrent after it
+(2026-09-17 00:56) opened a "bash would like to access files on a network
+volume" prompt, and FileBot's preview blocked for 19 hours until someone
+clicked Allow at 19:53. Plex and the Transmission container also failed to
+read the NAS during that window and recovered on the same click, so a pending
+prompt appears to hold up other network-volume checks (observed, not proven).
+The TCC database had one row per bash version (5.3.12, 5.3.15, 5.3.20).
 
 ### Why the grant keeps disappearing
 
@@ -109,7 +122,10 @@ the grant matches forever.
 
 Consumers put `/usr/local/stable/<formula>/bin` ahead of `/opt/homebrew/bin`
 in PATH. For Podman that is the `export PATH=` line of
-`podman-machine-start.sh`, which lists the podman and coreutils mirrors.
+`podman-machine-start.sh`, which lists the podman and coreutils mirrors. For
+FileBot it is the `export PATH=` line of `transmission-trigger-watcher.sh`,
+which lists `/usr/local/stable/bash/bin`, so every `#!/usr/bin/env bash`
+child of the watcher runs the signed bash.
 Both `timeout` and `podman` are executed through Homebrew's own symlinks
 (`timeout -> gtimeout`, `podman -> podman-remote`), so the kernel runs the
 signed file and TCC keys on its path.
@@ -170,8 +186,9 @@ sudo sqlite3 /Users/operator/Library/Application\ Support/com.apple.TCC/TCC.db \
 ```
 
 Expected once adopted: one final prompt for
-`/usr/local/stable/coreutils/bin/gtimeout` (the responsible binary), then
-none, across brew upgrades and reboots. Which binary the prompt names is the
+`/usr/local/stable/coreutils/bin/gtimeout` and one for
+`/usr/local/stable/bash/bin/bash` (the responsible binaries), then none,
+across brew upgrades and reboots. Which binary the prompt names is the
 quickest way to find the responsible process when a new one appears: the
 row it leaves in the TCC database (query above) is the path to mirror.
 
@@ -181,9 +198,10 @@ Append `"<formula>:<bin>[,<bin>]"` to `STABLE_TARGETS` in the template,
 redeploy with `scripts/setup-auto-updates.sh --force`, and make the consumer
 use `/usr/local/stable/<formula>/bin/<bin>`. Check the whole process chain
 from the LaunchAgent down: the first non-Apple binary is the one that needs
-the stable copy, not the one that opens the file. Candidates: Homebrew `bash`
-used by LaunchAgents that touch the NFS mount (currently covered by an FDA
-grant on `/bin/bash`; see the note in `transmission-filebot-README.md`).
+the stable copy, not the one that opens the file. A script with
+`#!/usr/bin/env bash` that runs with Homebrew first in PATH runs Homebrew
+bash, which then becomes that binary; put `/usr/local/stable/bash/bin` first
+instead, as the trigger watcher does.
 
 ### Cleanup after adoption
 

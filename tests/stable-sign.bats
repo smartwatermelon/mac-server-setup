@@ -447,3 +447,43 @@ make_fake_coreutils() {
   [[ "${output}" == *"(1 other entries in bin/ keep their Homebrew signature)"* ]]
   [[ "${output}" != *"podman-mac-helper"* ]]
 }
+
+# A fake Homebrew bash: the interpreter plus the bashbug script beside it.
+make_fake_bash() {
+  local ver="$1"
+  local cellar="${HOMEBREW_PREFIX}/Cellar/bash/${ver}"
+  mkdir -p "${cellar}/bin"
+  printf '#!/bin/sh\necho bash %s\n' "${ver}" >"${cellar}/bin/bash"
+  printf '#!/bin/sh\necho bashbug\n' >"${cellar}/bin/bashbug"
+  chmod +x "${cellar}/bin/"*
+  ln -sfn "../Cellar/bash/${ver}" "${HOMEBREW_PREFIX}/opt/bash"
+}
+
+@test "bash is mirrored and signed; bashbug keeps its Homebrew signature" {
+  # The trigger watcher's `env bash` children are responsible for FileBot's
+  # network-volume reads, so bash needs the same stable identity.
+  make_fake_bash "5.3.20"
+  run "${SCRIPT}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"bash: synced ../Cellar/bash/5.3.20"* ]]
+  [ "$(grep '^#SIG:' "${STABLE_ROOT}/bash/bin/bash" | sed 's/^#SIG://')" \
+    == "local.testhost.stable.bash|${CERT_SHA1}" ]
+  run grep -l '^#SIG:' "${STABLE_ROOT}/bash/bin/bashbug"
+  [ -z "${output}" ]
+
+  run "${SCRIPT}" --check
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"bash:"*"bash "*"OK"* ]]
+}
+
+@test "a bash upgrade re-syncs and re-signs the stable bash at the same path" {
+  make_fake_bash "5.3.20"
+  "${SCRIPT}" >/dev/null
+  make_fake_bash "5.3.21"
+  run "${SCRIPT}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *"bash: synced ../Cellar/bash/5.3.21"* ]]
+  [ "$("${STABLE_ROOT}/bash/bin/bash")" == "bash 5.3.21" ]
+  [ "$(grep '^#SIG:' "${STABLE_ROOT}/bash/bin/bash" | sed 's/^#SIG://')" \
+    == "local.testhost.stable.bash|${CERT_SHA1}" ]
+}

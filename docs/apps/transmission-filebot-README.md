@@ -444,6 +444,15 @@ start. The supervisor now runs podman from a stably-signed mirror at
 `/usr/local/stable/podman/bin`, maintained by the daily upgrade job. Full
 write-up, evidence and operations: `docs/apps/stable-signing-README.md`.
 
+### "bash would like to access files on a network volume"
+
+The same failure, on the FileBot side. The trigger watcher runs
+`transmission-done` (`#!/usr/bin/env bash`), and that bash is the binary
+macOS holds responsible for FileBot's reads on the NFS mount. With Homebrew
+bash, every bash upgrade voided the grant; on 2026-09-17 FileBot blocked on
+the prompt for 19 hours. The watcher now puts `/usr/local/stable/bash/bin`
+first in PATH. See `docs/apps/stable-signing-README.md`.
+
 ### Every podman call is bounded by a timeout
 
 The supervision loop is single-threaded: it calls `ensure_machine`,

@@ -24,14 +24,20 @@
 
 set -euo pipefail
 
-# Ensure Homebrew bash is in PATH so child scripts with #!/usr/bin/env bash
-# resolve to Bash 5 (not macOS's /bin/bash 3.2 which lacks modern syntax).
+# Child scripts with #!/usr/bin/env bash must resolve to Bash 5 (not macOS's
+# /bin/bash 3.2, which lacks modern syntax), and to the stably-signed copy
+# first. That bash is the first non-Apple binary in transmission-done's
+# process chain, so macOS holds it responsible for FileBot's reads on the NFS
+# mount. Homebrew's own bash changes path and cdhash on every upgrade, which
+# voids the network-volume grant and leaves FileBot blocked on a prompt.
+# See docs/apps/stable-signing-README.md.
 ARCH="$(arch)"
 case "${ARCH}" in
   arm64) HOMEBREW_PREFIX="/opt/homebrew" ;;
   *) HOMEBREW_PREFIX="/usr/local" ;;
 esac
-export PATH="${HOMEBREW_PREFIX}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+STABLE_BASH_BIN="/usr/local/stable/bash/bin"
+export PATH="${STABLE_BASH_BIN}:${HOMEBREW_PREFIX}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 SERVER_NAME="__SERVER_NAME__"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
