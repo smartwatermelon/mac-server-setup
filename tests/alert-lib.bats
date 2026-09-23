@@ -239,6 +239,14 @@ line two"
   [ "$(state_field '.transitions.tcc.alerted')" = "true" ]
   [ "$(state_field '.transitions.tcc.since | type')" = "number" ]
   [ "$(state_field '.transitions.tcc.last_sent | type')" = "number" ]
+  # The watchdog's own log must show the alert went out, not just msmtp.log.
+  grep -q "ALERT sent: tcc: \[HOST\] TCC prompt pending" "${LOG_FILE}"
+}
+
+@test "alert_transition: a failed send logs no ALERT sent line" {
+  touch "${MSMTP_FAIL_FLAG}"
+  run alert_transition tcc true "subject" "body"
+  [ "$(grep -c 'ALERT sent' "${LOG_FILE}")" -eq 0 ]
 }
 
 @test "alert_transition: staying bad sends nothing more" {
