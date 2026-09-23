@@ -669,6 +669,38 @@ log_ts() {
     echo "[\${ts}] \$*"
 }
 
+# Status for stall-watchdog (#199), rewritten once per cycle. The watchdog
+# alerts when consecutive_failures reaches 3, or when updated_at stops moving
+# (the loop is hung or gone). This loop sends no email itself: one place
+# decides what is worth an alert. The data-access check is not counted here;
+# it already escalates on its own by cycling the VM, and only a failed restart
+# from that recovery counts.
+SUPERVISOR_STATUS_FILE="${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-supervisor-status.json"
+SUPERVISOR_FAILURES=0
+RECOVERY_FAILED=false
+
+# record_cycle ok | record_cycle fail "<what failed>"
+record_cycle() {
+    local error=""
+    if [[ "\$1" == "ok" ]]; then
+        SUPERVISOR_FAILURES=0
+    else
+        SUPERVISOR_FAILURES=\$((SUPERVISOR_FAILURES + 1))
+        error="\${2:-unknown}"
+    fi
+    local tmp="\${SUPERVISOR_STATUS_FILE}.tmp.\$\$"
+    mkdir -p "\$(dirname "\${SUPERVISOR_STATUS_FILE}")" 2>/dev/null || true
+    # error is always one of this script's fixed messages, which contain no
+    # quotes or backslashes, so plain printf yields valid JSON.
+    if printf '{"consecutive_failures": %d, "last_error": "%s", "updated_at": %d}\n' \\
+        "\${SUPERVISOR_FAILURES}" "\${error}" "\$(date +%s)" >"\${tmp}" 2>/dev/null \\
+        && mv -f "\${tmp}" "\${SUPERVISOR_STATUS_FILE}"; then
+        return 0
+    fi
+    rm -f "\${tmp}" 2>/dev/null
+    log_ts "WARNING: could not write \${SUPERVISOR_STATUS_FILE}"
+}
+
 # Every podman call in this script goes through podman_t (issue #168).
 #
 # On 2026-08-16 a routine VirtioFS recovery issued \`podman run -d\` through a
@@ -868,6 +900,7 @@ check_data_access() {
                 log_ts "RECOVERY: VM and container restarted successfully"
             else
                 log_ts "RECOVERY: restart failed — will retry next cycle"
+                RECOVERY_FAILED=true
             fi
             DATA_CHECK_FAILURES=0
         fi
@@ -886,9 +919,15 @@ wait_for_nfs || exit 1
 # machine start followed by an attempted container create produces a confusing
 # log — the container error looks like the problem when the machine was.
 if ensure_machine; then
-    ensure_container || log_ts "initial ensure_container failed — supervision loop will retry"
+    if ensure_container; then
+        record_cycle ok
+    else
+        log_ts "initial ensure_container failed — supervision loop will retry"
+        record_cycle fail "ensure_container failed"
+    fi
 else
     log_ts "initial ensure_machine failed — supervision loop will retry"
+    record_cycle fail "ensure_machine failed"
 fi
 
 log_ts "entering supervision loop (interval=\${SUPERVISE_INTERVAL}s)"
@@ -896,12 +935,20 @@ while true; do
     sleep "\${SUPERVISE_INTERVAL}"
     if ensure_machine; then
         if ensure_container; then
+            RECOVERY_FAILED=false
             check_data_access || log_ts "data access check failed — will retry next cycle"
+            if [[ "\${RECOVERY_FAILED}" == "true" ]]; then
+                record_cycle fail "VM recovery restart failed"
+            else
+                record_cycle ok
+            fi
         else
             log_ts "ensure_container failed — will retry next cycle"
+            record_cycle fail "ensure_container failed"
         fi
     else
         log_ts "ensure_machine failed — will retry next cycle"
+        record_cycle fail "ensure_machine failed"
     fi
 done
 WRAPPER
