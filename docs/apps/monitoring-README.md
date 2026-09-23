@@ -105,6 +105,10 @@ one KEY in one run.
   entry. The default subject is `RESOLVED: <SUBJECT>`.
 - Good, not alerted: remove the entry, if one exists.
 
+Each accepted alert or reminder logs `ALERT sent: <KEY>: <subject>`, and each
+recovery logs `RESOLVED: <KEY>`, so the watchdog's own log shows every email
+without cross-checking `msmtp.log`.
+
 It returns 1 if an alert or reminder send failed, else 0. Under `set -e`, call
 it as `alert_transition ... || true`.
 
@@ -236,22 +240,43 @@ sudo launchctl bootstrap gui/$(id -u operator) \
 To reload after changing the plist, `bootout` the label first. To rerun it
 now, `sudo launchctl kickstart -kp gui/$(id -u operator)/com.<host>.stall-watchdog`.
 
+### Live test (2026-09-23)
+
+Run on TILSIT with an ad-hoc-signed copy of Homebrew bash at
+`/Users/Shared/tcc-canary/probe2`, started by a temporary operator
+LaunchAgent that ran `/bin/ls` on the NAS mount:
+
+| Time | Event |
+| --- | --- |
+| 15:15:03 | tccd logged `AUTHREQ_PROMPTING`; the dialog opened and `ls` blocked |
+| 15:16:46 | the watchdog recorded the prompt (`446/17928.161`) |
+| 15:20:56 | alert email sent (first run after 5 minutes open) |
+| 15:26:47 | Don't Allow clicked; `ls` failed with "Operation not permitted" |
+| 15:27:04 | the watchdog closed the prompt ("open 11m") and logged `RESOLVED: tcc_prompt` |
+| 15:27:06 | recovery email sent |
+
+An earlier canary, answered with Allow after 34 seconds, was recorded and
+closed without an email, as intended.
+
+While the prompt was open, `podman ps`, `ls` of `/data` inside the VM, Plex
+`checkFiles=1` on a library item, and operator's own `/bin/ls` of the NAS all
+returned in under a second. **An open prompt blocks only the process it was
+raised for**, not other network-volume access. So the 09-17 outage, which
+stalled FileBot, Transmission and Plex, was not one prompt blocking all NAS
+access. Each was probably waiting on a prompt of its own, or on a process that
+was, but that is not confirmed.
+
+To repeat the test, use a new path and signing identifier each time: once a
+prompt is answered, tccd stores the answer for that binary and does not ask
+again. `tccutil reset` takes a bundle ID and cannot remove these rows, but
+they are inert once the binary is deleted.
+
 ### Not yet proven
 
-- **A live prompt, end to end.** The checks are tested with fixtures built
-  from the real 2026-09-23 09:22 prompt, and the watchdog has been run against
-  that prompt's real log lines. A live test still needs a real unanswered
-  prompt: an ad-hoc-signed copy of bash that lists the NAS mount, run from a
-  temporary operator LaunchAgent, left for 5 minutes or more. Expect one alert
-  naming its path, then one recovery email when you click Don't Allow.
 - **Whether a prompt is logged again after a long gap.** A scan looks back at
   most an hour. If the agent was not running for longer than that while a
   prompt opened, the watchdog sees that prompt only if tccd logs it again,
   which is expected on the next access attempt but not verified.
-- **Whether an open prompt blocks other network-volume access.** The 09-17
-  outage suggested that it does (Plex stalled too), but that is not
-  confirmed. During the live test, check whether Plex `checkFiles` and
-  `podman ps` hang, and record the result here.
 
 ## Troubleshooting
 
