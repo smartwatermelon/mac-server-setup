@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MediaContainer size="3" totalSize="50" offset="0" mixedParents="1">
+<Directory ratingKey="30001" key="/library/metadata/30001/children" type="season" title="Season 11" parentTitle="Some Show" />
+<Video ratingKey="24136" key="/library/metadata/24136" type="movie" title="Sample Movie">
+<Media id="41478" container="mkv">
+<Part id="41479" key="/library/parts/41479/1/file.mkv" file="/Users/operator/Media/Movies/Sample Movie (2026)/Sample Movie (2026).mkv" size="4325939384" container="mkv" />
+</Media>
+</Video>
+<Video ratingKey="24100" key="/library/metadata/24100" type="movie" title="Older Movie">
+<Media id="41400" container="mkv">
+<Part id="41401" key="/library/parts/41401/1/file.mkv" file="/Users/operator/Media/Movies/Older Movie (2025)/Older Movie (2025).mkv" size="1000" container="mkv" />
+</Media>
+</Video>
+</MediaContainer>

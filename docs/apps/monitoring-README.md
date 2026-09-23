@@ -9,7 +9,7 @@ msmtp (Gmail SMTP). They all send that email through one shared library,
 
 | Watchdog | LaunchAgent | Interval | Log | Deployed by |
 | --- | --- | --- | --- | --- |
-| `plex-watchdog` — Plex settings drift, Plex unreachable | `com.<host>.plex-watchdog` | 300 s, RunAtLoad | `~/.local/state/plex-watchdog.log` | `plex-watchdog-setup.sh` |
+| `plex-watchdog` — Plex settings drift, Plex unreachable, Plex cannot read media files | `com.<host>.plex-watchdog` | 300 s, RunAtLoad | `~/.local/state/plex-watchdog.log` | `plex-watchdog-setup.sh` |
 | `pia-port-watchdog.sh` — PIA port forwarding lost | `com.<host>.pia-port-watchdog` | 900 s | `~/.local/state/<host>-pia-port-watchdog.log` | `podman-transmission-setup.sh` |
 | `stall-watchdog.sh` — server blocked on a privacy prompt, a long `transmission-done`, supervisor failing | `com.<host>.stall-watchdog` | 120 s, RunAtLoad | `~/.local/state/<host>-stall-watchdog.log` | `podman-transmission-setup.sh` |
 
@@ -113,8 +113,10 @@ It returns 1 if an alert or reminder send failed, else 0. Under `set -e`, call
 it as `alert_transition ... || true`.
 
 plex-watchdog and pia-port-watchdog use `alert_send` and the state functions,
-but keep their own alert, dedupe and heartbeat logic. stall-watchdog uses
-`alert_transition` for all of its checks.
+but keep their own alert, dedupe and heartbeat logic. The exception is
+plex-watchdog's media access check (key `media_unreachable`), which uses
+`alert_transition`. stall-watchdog uses `alert_transition` for all of its
+checks.
 
 ## Send a test alert under launchd's PATH
 
@@ -280,6 +282,12 @@ fresh evaluation and others do not is not known.
 
 Expect an outage of Transmission, and possibly of Plex, for as long as a
 test prompt stays open.
+
+If a prompt blocks Plex's own reads, plex-watchdog's media access check
+(`[<host>] Plex cannot read media files`, see `plex-watchdog-README.md`) is
+expected to alert after 10 minutes. This is not tested against a real
+prompt, and the spot check above shows `checkFiles=1` can still answer while
+a prompt is open.
 
 To repeat the test, use a new path and signing identifier each time: once a
 prompt is answered, tccd stores the answer for that binary and does not ask

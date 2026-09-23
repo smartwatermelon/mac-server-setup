@@ -6,6 +6,8 @@ Monitors Plex server preferences against a curated golden configuration and send
 
 The watchdog polls the Plex REST API every 5 minutes, comparing current settings against a golden config file. When a monitored setting changes, it sends an email with the drift details and instructions to accept or revert.
 
+Each poll also asks Plex whether it can read its newest movie or episode on disk. See [Media access check](#media-access-check).
+
 Two setup scripts deploy four components:
 
 | Script                   | What it deploys                                       |
@@ -139,12 +141,50 @@ The template is at `app-setup/templates/plex-golden.conf.template`. Values are p
 The daemon runs once per LaunchAgent invocation (every 5 minutes):
 
 1. Fetch Plex prefs XML via REST API
-2. **Fast path**: compare SHA-256 hash against stored hash — if unchanged, skip to heartbeat check (this is 99.9% of runs)
-3. Parse XML with `xmllint` (handles entities like `&amp;` correctly)
-4. Compare each monitored setting against golden config
-5. Send email on new drift; send "resolved" email when drift clears
-6. Save state atomically (temp file + mv)
-7. Log a heartbeat once per hour when there's no drift
+2. Run the [media access check](#media-access-check). This runs before the fast path, so it runs on every poll.
+3. **Fast path**: compare SHA-256 hash against stored hash — if unchanged, skip to heartbeat check (this is 99.9% of runs)
+4. Parse XML with `xmllint` (handles entities like `&amp;` correctly)
+5. Compare each monitored setting against golden config
+6. Send email on new drift; send "resolved" email when drift clears
+7. Save state atomically (temp file + mv). Only the drift keys are updated; the media check's keys are kept.
+8. Log a heartbeat once per hour when there's no drift
+
+### Media access check
+
+Plex can answer its API while it cannot open a single file. On 2026-09-17 a
+macOS privacy prompt blocked Plex's access to the NAS for 19 hours, and
+nothing alerted (issue #199). So each poll asks Plex itself to check a file:
+
+1. `GET /library/recentlyAdded` (first 10 items). Take the first `<Video>`
+   (a movie or an episode). TV seasons come back as `<Directory>`, which has no
+   file to check.
+2. `GET /library/metadata/<ratingKey>?checkFiles=1`, with a 30 s timeout.
+   Plex then checks the file on disk and sets `exists` and `accessible` on each
+   `<Part>`.
+
+The check fails on `exists="0"`, on `accessible="0"`, or when Plex does not
+answer in 30 s (a blocked read can hang rather than fail). Two failures in a
+row send one email, `[<host>] Plex cannot read media files`, with the title,
+the file path and the result. The email repeats every 12 hours while the
+failure lasts. When a check passes again, a `RESOLVED:` email goes out.
+
+The check does not read the NAS itself. The watchdog runs as `/bin/bash`,
+which is a different privacy (TCC) identity from Plex. It could read the NAS
+while Plex is blocked, or the reverse.
+
+These cases skip the check, log a `WARNING: media check skipped` line, and do
+not count as a failure:
+
+- no movie or episode in the recent list
+- any other request error, for example a 404 when the item was removed
+  between the two requests
+- no `exists`/`accessible` attributes in the answer
+- Plex unreachable. The "Plex server unreachable" alert covers that case, and
+  an open media alert stays open (no false recovery email).
+
+State: `.media_check_failures` and `.transitions.media_unreachable` in
+`state.json`. The alert uses `alert_transition` from the shared alert library
+(see `monitoring-README.md`).
 
 ### Alert deduplication
 
@@ -156,6 +196,7 @@ The watchdog tracks which drifts have been emailed in `state.json`. It only emai
 ### Error handling
 
 - **Plex unreachable**: logs a warning, emails only after 3 consecutive failures (15 minutes)
+- **Plex cannot read media**: emails after 2 consecutive failed media checks (10 minutes), see [Media access check](#media-access-check)
 - **msmtp failure**: logs error, continues monitoring (email failure doesn't block drift detection)
 - **xmllint failure**: logs error, preserves last known good state
 
@@ -220,12 +261,12 @@ alert under launchd's PATH.
 
 ## Testing
 
-27 BATS unit tests in `tests/plex-watchdog.bats`:
+44 BATS tests in `tests/plex-watchdog.bats`:
 
 ```bash
 bats tests/plex-watchdog.bats
 ```
 
-Tests cover golden config parsing, XML parsing with entity handling, drift detection, state management, atomic writes, and token file operations. All use fixtures — no live Plex server required.
+Tests cover golden config parsing, XML parsing with entity handling, drift detection, state management, atomic writes, token file operations, full poll cycles under launchd's PATH, and the media access check. The curl mock answers each Plex URL from a fixture in `tests/fixtures/`. No live Plex server is required.
 
 Integration test tracking: #87 (email delivery), #88 (live Plex end-to-end), #89 (LaunchAgent/permissions).
