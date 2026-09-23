@@ -45,6 +45,14 @@ ALERT_LIB="${ALERT_LIB:-${HOME}/.local/lib/alert-lib.sh}"
 CONSECUTIVE_FAILURE_THRESHOLD=3
 HEARTBEAT_INTERVAL_SECONDS=3600
 
+# Media access check (see check_media_access). A blocked read can hang rather
+# than fail, so a timeout counts as a failure.
+MEDIA_CHECK_TIMEOUT_SECONDS=30
+MEDIA_FAILURE_THRESHOLD=2
+# A blocked Plex can stay blocked all day (the 2026-09-17 prompt lasted 19
+# hours). Resend an open media alert twice a day. Used by alert_transition.
+export ALERT_REMINDER_SECONDS=43200
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -166,6 +174,107 @@ send_email() {
 }
 
 # ---------------------------------------------------------------------------
+# Media access check
+#
+# Plex can answer its API while it cannot open a single file: on 2026-09-17 a
+# macOS privacy prompt blocked its NAS access for 19 hours (issue #199). So
+# ask Plex itself to stat the newest movie or episode. Checking the NAS from
+# this script would prove nothing: /bin/bash is a different TCC identity from
+# Plex, so it can pass while Plex is blocked, or the reverse.
+#
+# Failure: a <Part> with exists="0" or accessible="0", or no answer within
+# MEDIA_CHECK_TIMEOUT_SECONDS. Anything else that stops the check (no movie or
+# episode in the recent list, the item removed between the two requests,
+# attributes missing) is "unknown": logged, not counted.
+#
+# State: .media_check_failures, and .transitions.media_unreachable (owned by
+# alert_transition).
+# ---------------------------------------------------------------------------
+
+check_media_access() {
+  local token="$1"
+
+  # recentlyAdded lists TV as <Directory type="season">, which has no <Part>
+  # to check, so take the first <Video>.
+  local recent rating_key
+  if ! recent=$(curl -sf --max-time 15 -H "X-Plex-Token: ${token}" \
+    "${PLEX_URL}/library/recentlyAdded?X-Plex-Container-Start=0&X-Plex-Container-Size=10" 2>/dev/null); then
+    log "WARNING: media check skipped: could not list recently added items"
+    return 0
+  fi
+  rating_key=$(echo "${recent}" | xmllint --xpath 'string((/MediaContainer/Video)[1]/@ratingKey)' - 2>/dev/null) || rating_key=""
+  if [[ ! "${rating_key}" =~ ^[0-9]+$ ]]; then
+    log "WARNING: media check skipped: no movie or episode in the recently added list"
+    return 0
+  fi
+
+  local xml rc=0 failure=""
+  xml=$(curl -sf --max-time "${MEDIA_CHECK_TIMEOUT_SECONDS}" -H "X-Plex-Token: ${token}" \
+    "${PLEX_URL}/library/metadata/${rating_key}?checkFiles=1" 2>/dev/null) || rc=$?
+  local title="item ${rating_key}" file=""
+  if [[ ${rc} -eq 28 ]]; then
+    failure="Plex did not answer within ${MEDIA_CHECK_TIMEOUT_SECONDS} s"
+  elif [[ ${rc} -ne 0 ]]; then
+    log "WARNING: media check skipped: checkFiles request for item ${rating_key} failed (curl exit ${rc})"
+    return 0
+  else
+    local checked bad
+    checked=$(echo "${xml}" | xmllint --xpath 'count(//Part[@exists and @accessible])' - 2>/dev/null) || checked=0
+    if [[ "${checked}" == "0" ]]; then
+      log "WARNING: media check skipped: no exists/accessible attributes for item ${rating_key}"
+      return 0
+    fi
+    title=$(echo "${xml}" | xmllint --xpath 'string((//Video)[1]/@title)' - 2>/dev/null) || title="item ${rating_key}"
+    bad=$(echo "${xml}" | xmllint --xpath 'count(//Part[@exists="0" or @accessible="0"])' - 2>/dev/null) || bad=0
+    if [[ "${bad}" != "0" ]]; then
+      local exists accessible
+      file=$(echo "${xml}" | xmllint --xpath 'string((//Part[@exists="0" or @accessible="0"])[1]/@file)' - 2>/dev/null) || file=""
+      exists=$(echo "${xml}" | xmllint --xpath 'string((//Part[@exists="0" or @accessible="0"])[1]/@exists)' - 2>/dev/null) || exists="?"
+      accessible=$(echo "${xml}" | xmllint --xpath 'string((//Part[@exists="0" or @accessible="0"])[1]/@accessible)' - 2>/dev/null) || accessible="?"
+      failure="Plex reports exists=${exists} accessible=${accessible}"
+    fi
+  fi
+
+  local failures
+  failures=$(alert_state_get "media_check_failures" "0")
+  [[ "${failures}" =~ ^[0-9]+$ ]] || failures=0
+  if [[ -n "${failure}" ]]; then
+    failures=$((failures + 1))
+    log "WARNING: media check failed (${failures}/${MEDIA_FAILURE_THRESHOLD}): ${title}: ${failure}"
+  else
+    failures=0
+  fi
+  # A corrupt state file must not stop the run under set -e: start it fresh,
+  # as Step 8 does, so the cycle rewrites it.
+  local state
+  state=$(alert_state_read)
+  jq -e 'type == "object"' >/dev/null 2>&1 <<<"${state}" || state='{}'
+  state=$(jq --argjson f "${failures}" '.media_check_failures = $f' <<<"${state}")
+  alert_state_write "${state}"
+
+  local is_bad=false
+  [[ ${failures} -ge ${MEDIA_FAILURE_THRESHOLD} ]] && is_bad=true
+  local hostname_lower
+  hostname_lower=$(echo "${HOSTNAME_LABEL}" | tr '[:upper:]' '[:lower:]')
+  alert_transition "media_unreachable" "${is_bad}" \
+    "[${HOSTNAME_LABEL}] Plex cannot read media files" \
+    "Plex has failed to read a media file on ${failures} checks in a row (checked every 5 minutes).
+Its API still answers, so Plex is running, but playback will fail.
+
+Item:   ${title}
+File:   ${file:-unknown}
+Result: ${failure}
+
+Common causes: a macOS privacy prompt waiting on the ${HOSTNAME_LABEL} desktop
+(stall-watchdog also alerts on that), or a stale NAS mount.
+
+Check: ssh ${hostname_lower} and look at the desktop, or ls -l the file above
+Log:   ${LOG_FILE}" \
+    "RESOLVED: [${HOSTNAME_LABEL}] Plex can read media files again" \
+    "Plex read ${title} successfully. No action required." || true
+}
+
+# ---------------------------------------------------------------------------
 # Main poll cycle
 # ---------------------------------------------------------------------------
 
@@ -208,6 +317,10 @@ Please verify Plex is running:
     fi
     return 0
   fi
+
+  # Step 2b: Can Plex read its media? Runs before the fast path below, which
+  # returns early on almost every cycle.
+  check_media_access "${token}"
 
   # Step 3: Fast-path hash check
   local current_hash
@@ -320,20 +433,24 @@ To revert:   ssh operator@${hostname_lower} plex-watchdog-ctl revert"
   local last_heartbeat
   last_heartbeat=$(alert_state_get "last_heartbeat" "${now}")
 
+  # Update these keys in place. Rebuilding the file would drop the media
+  # check's .media_check_failures and .transitions.
+  local base_state
+  base_state=$(alert_state_read)
+  jq -e 'type == "object"' >/dev/null 2>&1 <<<"${base_state}" || base_state='{}'
+
   local new_state
-  new_state=$(jq -n \
+  new_state=$(jq \
     --arg lp "${now}" \
     --arg lh "${last_heartbeat}" \
     --arg rh "${current_hash}" \
     --argjson cf 0 \
     --argjson settings "${new_settings_json}" \
-    '{
-      last_poll: $lp,
-      last_heartbeat: $lh,
-      response_hash: $rh,
-      consecutive_failures: $cf,
-      settings: $settings
-    }')
+    '.last_poll = $lp
+      | .last_heartbeat = $lh
+      | .response_hash = $rh
+      | .consecutive_failures = $cf
+      | .settings = $settings' <<<"${base_state}")
 
   alert_state_write "${new_state}"
 

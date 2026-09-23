@@ -554,15 +554,39 @@ render_watchdog() {
   cp "${FIXTURES_DIR}/golden-basic.conf" "${HOME}/.config/plex-watchdog/golden.conf"
 }
 
-# curl mock: serves the sample prefs (TranscoderCanOnlyRemuxVideo=1, golden
-# says 0, so one setting has drifted), or fails when PLEX_DOWN=1.
+# curl mock, dispatched on the URL (the last argument). Every URL is appended
+# to CURL_LOG.
+#   /:/prefs              the sample prefs (TranscoderCanOnlyRemuxVideo=1,
+#                         golden says 0, so one setting has drifted)
+#   /library/recentlyAdded  RECENT=normal (a season first, then movies) or
+#                         RECENT=seasons (no movie or episode at all)
+#   ?checkFiles=1         CHECKFILES=ok|missing|inaccessible, or timeout
+#                         (curl exit 28) or 404 (curl -f exit 22)
+# PLEX_DOWN=1 fails every request, as a stopped Plex does.
 write_curl_mock() {
   cat >"$1" <<MOCK
 #!/usr/bin/env bash
+url="\${!#}"
+echo "\${url}" >>"\${CURL_LOG:-/dev/null}"
 if [[ "\${PLEX_DOWN:-0}" == "1" ]]; then
   exit 7
 fi
-cat "${FIXTURES_DIR}/plex-prefs-sample.xml"
+case "\${url}" in
+  */library/recentlyAdded*)
+    case "\${RECENT:-normal}" in
+      seasons) cat "${FIXTURES_DIR}/plex-recently-added-seasons-only.xml" ;;
+      *) cat "${FIXTURES_DIR}/plex-recently-added.xml" ;;
+    esac
+    ;;
+  *checkFiles=1*)
+    case "\${CHECKFILES:-ok}" in
+      timeout) exit 28 ;;
+      404) exit 22 ;;
+      *) cat "${FIXTURES_DIR}/plex-checkfiles-\${CHECKFILES:-ok}.xml" ;;
+    esac
+    ;;
+  *) cat "${FIXTURES_DIR}/plex-prefs-sample.xml" ;;
+esac
 MOCK
   chmod +x "$1"
 }
@@ -600,6 +624,9 @@ run_launchd_cycle() {
     HOME="${HOME}" \
     MAIL_LOG="${MAIL_LOG}" \
     PLEX_DOWN="${PLEX_DOWN:-0}" \
+    RECENT="${RECENT:-normal}" \
+    CHECKFILES="${CHECKFILES:-ok}" \
+    CURL_LOG="${TEST_TMPDIR}/curl.log" \
     /bin/bash "${WATCHDOG}"
 }
 
@@ -659,4 +686,179 @@ MOCK
     "${REPO_DIR}/app-setup/plex-watchdog-setup.sh"
   grep -q 'sudo cp "${ALERT_LIB_TEMPLATE}" "${ALERT_LIB_DEST}"' \
     "${REPO_DIR}/app-setup/plex-watchdog-setup.sh"
+}
+
+# ===========================================================================
+# Media access check (issue #199)
+#
+# Plex can answer its API while it cannot open a single file: on 2026-09-17 a
+# privacy prompt blocked its NAS access for 19 hours. Each cycle asks Plex
+# itself to stat the newest movie or episode (/library/metadata/<key>
+# ?checkFiles=1). Two failed checks in a row send one alert.
+# ===========================================================================
+
+WATCHDOG_STATE() {
+  cat "${HOME}/.config/plex-watchdog/state.json"
+}
+
+subject_count() {
+  grep -c "^Subject: $1" "${MAIL_LOG}" || true
+}
+
+MEDIA_ALERT='\[TESTHOST\] Plex cannot read media files'
+
+@test "media check: the alert is sent on the 2nd failed cycle, even when the prefs hash is unchanged" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+
+  CHECKFILES=missing run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(subject_count "${MEDIA_ALERT}")" -eq 0 ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "1" ]
+
+  # Cycle 2 sees the same prefs, so it takes the hash fast path.
+  CHECKFILES=missing run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(subject_count "${MEDIA_ALERT}")" -eq 1 ]
+  grep -q "Sample Movie (2026).mkv" "${MAIL_LOG}"
+  grep -q "privacy prompt" "${MAIL_LOG}"
+  grep -q "ALERT sent: media_unreachable" <<<"$(watchdog_log)"
+}
+
+@test "media check: picks the first movie or episode, not the first item" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+
+  run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  grep -q "/library/metadata/24136?checkFiles=1" "${TEST_TMPDIR}/curl.log"
+  [ "$(grep -c "metadata/30001" "${TEST_TMPDIR}/curl.log")" -eq 0 ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "0" ]
+}
+
+@test "media check: accessible=0 alone counts as a failure" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+
+  CHECKFILES=inaccessible run run_launchd_cycle
+  CHECKFILES=inaccessible run run_launchd_cycle
+  [ "$(subject_count "${MEDIA_ALERT}")" -eq 1 ]
+}
+
+@test "media check: a checkFiles timeout counts as a failure" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+
+  CHECKFILES=timeout run run_launchd_cycle
+  CHECKFILES=timeout run run_launchd_cycle
+  [ "$(subject_count "${MEDIA_ALERT}")" -eq 1 ]
+  grep -q "did not answer within" "${MAIL_LOG}"
+}
+
+@test "media check: one failure then success sends nothing and resets the count" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+
+  CHECKFILES=missing run run_launchd_cycle
+  run run_launchd_cycle
+  [ "$(subject_count "${MEDIA_ALERT}")" -eq 0 ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "0" ]
+}
+
+@test "media check: a recovery email is sent once files are readable again" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+
+  CHECKFILES=missing run run_launchd_cycle
+  CHECKFILES=missing run run_launchd_cycle
+  [ "$(subject_count "${MEDIA_ALERT}")" -eq 1 ]
+
+  run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(subject_count 'RESOLVED: \[TESTHOST\] Plex can read media files again')" -eq 1 ]
+  grep -q "RESOLVED: media_unreachable" <<<"$(watchdog_log)"
+  [ "$(jq -r '.transitions.media_unreachable // "gone"' <<<"$(WATCHDOG_STATE)")" = "gone" ]
+}
+
+@test "media check: no movie or episode in recentlyAdded is skipped, not counted" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo '{"media_check_failures": 1}' >"${HOME}/.config/plex-watchdog/state.json"
+
+  RECENT=seasons run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "1" ]
+  [ "$(grep -c checkFiles "${TEST_TMPDIR}/curl.log")" -eq 0 ]
+  grep -q "media check skipped" <<<"$(watchdog_log)"
+}
+
+@test "media check: a 404 for the item (removed between calls) is skipped, not counted" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo '{"media_check_failures": 1}' >"${HOME}/.config/plex-watchdog/state.json"
+
+  CHECKFILES=404 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "1" ]
+  [ "$(subject_count "${MEDIA_ALERT}")" -eq 0 ]
+  grep -q "media check skipped" <<<"$(watchdog_log)"
+}
+
+@test "media check: Plex unreachable skips the check and sends no false recovery" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  local now
+  now=$(date +%s)
+  echo "{\"media_check_failures\": 3, \"transitions\": {\"media_unreachable\": {\"alerted\": true, \"since\": ${now}, \"last_sent\": ${now}}}}" \
+    >"${HOME}/.config/plex-watchdog/state.json"
+
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(grep -c "^Subject: RESOLVED" "${MAIL_LOG}")" -eq 0 ]
+  [ "$(jq -r '.transitions.media_unreachable.alerted' <<<"$(WATCHDOG_STATE)")" = "true" ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "3" ]
+}
+
+@test "state save after a prefs change keeps the media check's keys" {
+  # Step 8 used to rebuild state.json from scratch, which dropped .transitions
+  # and made the media alert fire again on every settings change.
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  local now
+  now=$(date +%s)
+  echo "{\"media_check_failures\": 1, \"transitions\": {\"media_unreachable\": {\"alerted\": true, \"since\": ${now}, \"last_sent\": ${now}}}}" \
+    >"${HOME}/.config/plex-watchdog/state.json"
+
+  # No response_hash in the state, so this cycle takes the full path.
+  CHECKFILES=missing run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.response_hash | length' <<<"$(WATCHDOG_STATE)")" -eq 64 ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "2" ]
+  [ "$(jq -r '.transitions.media_unreachable.alerted' <<<"$(WATCHDOG_STATE)")" = "true" ]
+  [ "$(subject_count "${MEDIA_ALERT}")" -eq 0 ]
+}
+
+@test "a corrupt state.json is replaced in one cycle, not a stop on every run" {
+  # The old Step 8 rebuilt the file from scratch, so a corrupt file healed on
+  # the next full cycle. The media check reads the state first, so it must
+  # not die on it under set -e.
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo 'not json' >"${HOME}/.config/plex-watchdog/state.json"
+
+  run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.response_hash | length' <<<"$(WATCHDOG_STATE)")" -eq 64 ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "0" ]
 }
