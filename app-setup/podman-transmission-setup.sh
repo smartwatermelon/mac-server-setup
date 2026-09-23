@@ -594,6 +594,57 @@ if [[ "${PORT_WATCHDOG_DEPLOY}" == "true" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Section 7c: Deploy stall watchdog (#199)
+#
+# Alerts when the server is blocked rather than broken: a macOS privacy prompt
+# left open, transmission-done running for over 45 minutes, or the supervisor
+# loop below failing or going quiet. See docs/apps/monitoring-README.md.
+# ---------------------------------------------------------------------------
+
+set_section "Deploy Stall Watchdog"
+
+STALL_WATCHDOG_TEMPLATE="${SCRIPT_DIR}/templates/stall-watchdog.sh"
+STALL_WATCHDOG_DEST="${OPERATOR_HOME}/.local/bin/stall-watchdog.sh"
+
+# Same preconditions as the port watchdog: an agent that can only log that it
+# failed to send mail looks like monitoring without being any.
+STALL_WATCHDOG_DEPLOY=true
+if [[ -z "${MONITORING_EMAIL:-}" ]] || [[ "${MONITORING_EMAIL}" == "your-email@example.com" ]]; then
+  log "⏭️  Skipping stall watchdog: MONITORING_EMAIL not configured in ${CONFIG_FILE}"
+  STALL_WATCHDOG_DEPLOY=false
+elif [[ ! -f "${PORT_WATCHDOG_MSMTP}" ]]; then
+  log "⏭️  Skipping stall watchdog: msmtp not configured. Run msmtp-setup.sh, then re-run this script."
+  STALL_WATCHDOG_DEPLOY=false
+elif [[ ! -f "${STALL_WATCHDOG_TEMPLATE}" ]]; then
+  collect_error "Stall watchdog template not found: ${STALL_WATCHDOG_TEMPLATE}"
+  STALL_WATCHDOG_DEPLOY=false
+elif [[ ! -f "${ALERT_LIB_TEMPLATE}" ]]; then
+  collect_error "Alert library template not found: ${ALERT_LIB_TEMPLATE}"
+  STALL_WATCHDOG_DEPLOY=false
+fi
+
+if [[ "${STALL_WATCHDOG_DEPLOY}" == "true" ]]; then
+  # Installed here as well as for the port watchdog, so this agent never
+  # depends on the other one having been deployed. The copy is idempotent.
+  log "Deploying alert-lib.sh"
+  sudo -iu "${OPERATOR_USERNAME}" mkdir -p "$(dirname "${ALERT_LIB_DEST}")"
+  sudo cp "${ALERT_LIB_TEMPLATE}" "${ALERT_LIB_DEST}"
+  sudo chown "${OPERATOR_USERNAME}:staff" "${ALERT_LIB_DEST}"
+  sudo chmod 644 "${ALERT_LIB_DEST}"
+
+  log "Deploying stall-watchdog.sh"
+
+  sudo sed \
+    -e "s|__SERVER_NAME__|${HOSTNAME}|g" \
+    -e "s|__MONITORING_EMAIL__|${MONITORING_EMAIL}|g" \
+    "${STALL_WATCHDOG_TEMPLATE}" | sudo tee "${STALL_WATCHDOG_DEST}" >/dev/null
+
+  sudo chown "${OPERATOR_USERNAME}:staff" "${STALL_WATCHDOG_DEST}"
+  sudo chmod 755 "${STALL_WATCHDOG_DEST}"
+  log "✅ stall-watchdog.sh deployed"
+fi
+
+# ---------------------------------------------------------------------------
 # Section 8: Deploy podman-machine-start.sh wrapper
 # ---------------------------------------------------------------------------
 
@@ -1124,6 +1175,50 @@ PLIST
     log "✅ pia-port-watchdog LaunchAgent created (every 15 minutes)"
   else
     collect_error "Invalid plist syntax in ${PORT_WATCHDOG_PLIST}"
+  fi
+fi
+
+# --- 9e: Stall watchdog timer ---
+
+if [[ "${STALL_WATCHDOG_DEPLOY}" == "true" ]]; then
+  STALL_WATCHDOG_PLIST="${LAUNCHAGENT_DIR}/com.${HOSTNAME_LOWER}.stall-watchdog.plist"
+  log "Creating LaunchAgent: ${STALL_WATCHDOG_PLIST}"
+
+  # Every 2 minutes: tccd's log lines do not stay in the unified log for long,
+  # so the watchdog has to see a prompt while it is fresh. Each run reads only
+  # what was logged since the previous one (about 1 s). RunAtLoad so a prompt
+  # raised during login is caught without waiting for the first interval.
+  sudo -iu "${OPERATOR_USERNAME}" tee "${STALL_WATCHDOG_PLIST}" >/dev/null <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.${HOSTNAME_LOWER}.stall-watchdog</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${OPERATOR_HOME}/.local/bin/stall-watchdog.sh</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>120</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-stall-watchdog.log</string>
+  <key>StandardErrorPath</key>
+  <string>${OPERATOR_HOME}/.local/state/${HOSTNAME_LOWER}-stall-watchdog.log</string>
+</dict>
+</plist>
+PLIST
+
+  sudo chown "${OPERATOR_USERNAME}:staff" "${STALL_WATCHDOG_PLIST}"
+  sudo chmod 644 "${STALL_WATCHDOG_PLIST}"
+
+  if sudo plutil -lint "${STALL_WATCHDOG_PLIST}" >/dev/null 2>&1; then
+    log "✅ stall-watchdog LaunchAgent created (every 2 minutes)"
+  else
+    collect_error "Invalid plist syntax in ${STALL_WATCHDOG_PLIST}"
   fi
 fi
 

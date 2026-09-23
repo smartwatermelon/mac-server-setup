@@ -466,3 +466,42 @@ supervisor_status() {
   [ "$status" -eq 1 ]
   [[ "$(watchdog_log)" == *"ERROR: alert library not found"* ]]
 }
+
+# ===========================================================================
+# Deploy wiring in podman-transmission-setup.sh
+# ===========================================================================
+
+SETUP_SCRIPT="${REPO_DIR}/app-setup/podman-transmission-setup.sh"
+
+@test "deploy: every placeholder is substituted in the rendered watchdog" {
+  run grep -c '__[A-Z_]*__' "${WATCHDOG}"
+  [ "$output" -eq 0 ]
+}
+
+@test "deploy: the setup script substitutes every placeholder the template declares" {
+  local placeholder block
+  block="$(grep -A 30 'Deploying stall-watchdog.sh' "${SETUP_SCRIPT}")"
+  [ -n "${block}" ]
+  while IFS= read -r placeholder; do
+    grep -q "s|${placeholder}|" <<<"${block}" || {
+      echo "stall-watchdog deploy never substitutes ${placeholder}" >&2
+      return 1
+    }
+  done < <(grep -oE '__[A-Z_]+__' "${TEMPLATE}" | sort -u)
+}
+
+@test "deploy: only when it can send mail, and with the alert library" {
+  run grep -A 16 'STALL_WATCHDOG_DEPLOY=true' "${SETUP_SCRIPT}"
+  [[ "$output" == *"MONITORING_EMAIL"* ]]
+  [[ "$output" == *"msmtp"* ]]
+  run grep -A 12 'if \[\[ "${STALL_WATCHDOG_DEPLOY}" == "true" \]\]; then' "${SETUP_SCRIPT}"
+  [[ "$output" == *'sudo cp "${ALERT_LIB_TEMPLATE}" "${ALERT_LIB_DEST}"'* ]]
+}
+
+@test "deploy: the LaunchAgent runs /bin/bash every 2 minutes, starting at load" {
+  run grep -A 26 'stall-watchdog.plist"' "${SETUP_SCRIPT}"
+  [[ "$output" == *"<string>/bin/bash</string>"* ]]
+  [[ "$output" == *'<string>${OPERATOR_HOME}/.local/bin/stall-watchdog.sh</string>'* ]]
+  [[ "$output" == *"<integer>120</integer>"* ]]
+  [[ "$output" == *"<key>RunAtLoad</key>"*"<true/>"* ]]
+}

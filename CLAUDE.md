@@ -61,11 +61,13 @@ API error modes, and the `TEST_RUNNER` hook that lets BATS mock network calls.
 
 **Files**: `app-setup/templates/alert-lib.sh`,
 `app-setup/templates/plex-watchdog.sh`,
-`app-setup/templates/pia-port-watchdog.sh`, `app-setup/msmtp-setup.sh`,
-`app-setup/plex-watchdog-setup.sh`, the pia-port-watchdog section of
+`app-setup/templates/pia-port-watchdog.sh`,
+`app-setup/templates/stall-watchdog.sh`, `app-setup/msmtp-setup.sh`,
+`app-setup/plex-watchdog-setup.sh`, the pia-port-watchdog and stall-watchdog
+sections and the supervisor status file in
 `app-setup/podman-transmission-setup.sh`, `tests/alert-lib.bats`,
 `tests/plex-watchdog.bats`, `tests/pia-port-watchdog.bats`,
-`tests/msmtp-setup.bats`
+`tests/stall-watchdog.bats`, `tests/msmtp-setup.bats`
 
 **Documentation**: `docs/apps/monitoring-README.md`
 
@@ -73,7 +75,9 @@ API error modes, and the `TEST_RUNNER` hook that lets BATS mock network calls.
 `alert-lib.sh` API (`alert_send`, state helpers, `alert_transition`), why
 launchd's PATH made every alert email fail silently until 2026-09, bash 3.2
 compatibility (the LaunchAgents run `/bin/bash`), `msmtp.log`, and how to send
-a test alert under launchd's PATH
+a test alert under launchd's PATH; stall-watchdog's TCC prompt detection
+(tccd AUTHREQ lines, `<tccd pid>/<msgID>` keys), clearing a stuck prompt by
+hand, and the supervisor status file
 
 ### PIA VPN (credentials, port forwarding, region selection)
 
@@ -125,6 +129,7 @@ bats tests/alert-lib.bats
 bats tests/plex-watchdog.bats
 bats tests/pia-port-watchdog.bats
 bats tests/msmtp-setup.bats
+bats tests/stall-watchdog.bats
 bats tests/cloudflare-ddns.bats
 bats tests/stable-sign.bats
 bats tests/transmission-trigger-watcher.bats
