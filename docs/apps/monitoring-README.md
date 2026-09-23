@@ -249,22 +249,37 @@ LaunchAgent that ran `/bin/ls` on the NAS mount:
 | Time | Event |
 | --- | --- |
 | 15:15:03 | tccd logged `AUTHREQ_PROMPTING`; the dialog opened and `ls` blocked |
+| 15:16:20 | supervisor: `/data/ inaccessible inside container (failure 1/3)` |
 | 15:16:46 | the watchdog recorded the prompt (`446/17928.161`) |
+| 15:18:42 | OpenVPN was signalled and the container stopped |
 | 15:20:56 | alert email sent (first run after 5 minutes open) |
-| 15:26:47 | Don't Allow clicked; `ls` failed with "Operation not permitted" |
+| 15:21:20–15:24:36 | supervisor: `podman run -d` hung for 180 s and was killed |
+| 15:26:47 | Don't Allow clicked; `ls` failed with "Operation not permitted"; the container started within the same second |
 | 15:27:04 | the watchdog closed the prompt ("open 11m") and logged `RESOLVED: tcc_prompt` |
 | 15:27:06 | recovery email sent |
 
 An earlier canary, answered with Allow after 34 seconds, was recorded and
 closed without an email, as intended.
 
-While the prompt was open, `podman ps`, `ls` of `/data` inside the VM, Plex
-`checkFiles=1` on a library item, and operator's own `/bin/ls` of the NAS all
-returned in under a second. **An open prompt blocks only the process it was
-raised for**, not other network-volume access. So the 09-17 outage, which
-stalled FileBot, Transmission and Plex, was not one prompt blocking all NAS
-access. Each was probably waiting on a prompt of its own, or on a process that
-was, but that is not confirmed.
+**An open prompt blocks every later network-volume check, not just the process
+it was raised for.** Requests reach the per-user tccd through `sandboxd`
+(pid 17928 here, the first half of every msgID), which sends them one at a
+time. Right after the canary's RESULT (`17928.161`), tccd logged the next
+request, `17928.166`: vfkit, with our stably-signed `gtimeout` as the
+responsible process. It was allowed (`authValue=2`) the moment it was
+evaluated, but it had waited behind the prompt, and with it the VM's access to
+the NAS. Transmission was down from about 15:18 until the click. This is
+consistent with the 09-17 outage, where FileBot, Transmission and Plex all
+stalled behind one prompt.
+
+A spot check 28 seconds into the first canary's prompt (15:12:44) found
+`podman ps`, the VM's `/data`, Plex `checkFiles=1` and operator's `ls` of the
+NAS all answering in under a second. That check did not hit a fresh TCC
+evaluation, so it proves nothing about blocking. Why some accesses need a
+fresh evaluation and others do not is not known.
+
+Expect an outage of Transmission, and possibly of Plex, for as long as a
+test prompt stays open.
 
 To repeat the test, use a new path and signing identifier each time: once a
 prompt is answered, tccd stores the answer for that binary and does not ask
