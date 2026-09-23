@@ -258,6 +258,21 @@ if [[ -f "${WATCHDOG_DEST}" ]] && [[ "${FORCE}" != "true" ]]; then
   collect_warning "Existing deployment found. Continuing will overwrite scripts but preserve golden config."
 fi
 
+# Deploy the shared alert library the watchdog sources (alert_send, state
+# helpers). The watchdog exits with an error if it is missing.
+ALERT_LIB_TEMPLATE="${TEMPLATE_DIR}/alert-lib.sh"
+ALERT_LIB_DEST="${OPERATOR_HOME}/.local/lib/alert-lib.sh"
+if [[ ! -f "${ALERT_LIB_TEMPLATE}" ]]; then
+  collect_error "Template not found: ${ALERT_LIB_TEMPLATE}"
+  exit 1
+fi
+
+sudo -iu "${OPERATOR_USERNAME}" mkdir -p "$(dirname "${ALERT_LIB_DEST}")"
+sudo cp "${ALERT_LIB_TEMPLATE}" "${ALERT_LIB_DEST}"
+sudo chown "${OPERATOR_USERNAME}:staff" "${ALERT_LIB_DEST}"
+sudo chmod 644 "${ALERT_LIB_DEST}"
+log "alert-lib.sh deployed to ${ALERT_LIB_DEST}"
+
 # Deploy plex-watchdog
 WATCHDOG_TEMPLATE="${TEMPLATE_DIR}/plex-watchdog.sh"
 if [[ ! -f "${WATCHDOG_TEMPLATE}" ]]; then

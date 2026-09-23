@@ -311,12 +311,34 @@ EOF
 fi
 
 # ---------------------------------------------------------------------------
-# Section 4: Send test email
+# Section 4: Install the shared alert library
+# ---------------------------------------------------------------------------
+
+set_section "Alert Library"
+
+# Every watchdog sends mail through alert_send in this library. It resolves
+# msmtp by absolute path, because launchd's PATH has no Homebrew in it.
+ALERT_LIB_TEMPLATE="${SCRIPT_DIR}/templates/alert-lib.sh"
+ALERT_LIB_DEST="${OPERATOR_HOME}/.local/lib/alert-lib.sh"
+
+if [[ ! -f "${ALERT_LIB_TEMPLATE}" ]]; then
+  collect_error "Template not found: ${ALERT_LIB_TEMPLATE}"
+  exit 1
+fi
+
+sudo -iu "${OPERATOR_USERNAME}" mkdir -p "$(dirname "${ALERT_LIB_DEST}")"
+sudo cp "${ALERT_LIB_TEMPLATE}" "${ALERT_LIB_DEST}"
+sudo chown "${OPERATOR_USERNAME}:staff" "${ALERT_LIB_DEST}"
+sudo chmod 644 "${ALERT_LIB_DEST}"
+log "alert-lib.sh deployed to ${ALERT_LIB_DEST}"
+
+# ---------------------------------------------------------------------------
+# Section 5: Send test email
 # ---------------------------------------------------------------------------
 
 set_section "Test Email"
 
-log "Sending test email to ${MONITORING_EMAIL}..."
+log "Sending test email to ${MONITORING_EMAIL} under launchd's PATH..."
 
 TEST_SUBJECT="[${HOSTNAME}] Monitoring email configured"
 TEST_BODY="This is a test email from the ${HOSTNAME} Mac Mini server.
@@ -328,15 +350,24 @@ Sent: $(date '+%Y-%m-%d %H:%M:%S %Z')
 Host: ${HOSTNAME}
 From: msmtp-setup.sh"
 
-# Send as operator to verify the full chain works as it will at runtime
-if printf "Subject: %s\nTo: %s\n\n%s\n" "${TEST_SUBJECT}" "${MONITORING_EMAIL}" "${TEST_BODY}" \
-  | sudo -iu "${OPERATOR_USERNAME}" msmtp -C "${MSMTP_CONFIG}" "${MONITORING_EMAIL}"; then
+# Send as operator, through alert_send, with exactly the environment a
+# LaunchAgent gets: launchd's minimal PATH (no Homebrew) and nothing else.
+# A login shell (sudo -iu) has Homebrew on PATH, so a test sent that way
+# passed while every launchd-driven alert failed. -u, not -iu, for that reason.
+# alert_send prints why it failed (including msmtp's stderr) on stderr.
+if sudo -u "${OPERATOR_USERNAME}" /usr/bin/env -i \
+  PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+  HOME="${OPERATOR_HOME}" \
+  MONITORING_EMAIL="${MONITORING_EMAIL}" \
+  /bin/bash -c 'cd "${HOME}" && . "$1" && alert_send "$2" "$3"' \
+  _ "${ALERT_LIB_DEST}" "${TEST_SUBJECT}" "${TEST_BODY}"; then
   log "Test email sent successfully to ${MONITORING_EMAIL}"
 else
-  collect_error "Failed to send test email — check App Password and Gmail settings"
+  collect_error "Failed to send test email under launchd's PATH — see the alert-lib error above, and ${MSMTP_LOG}"
   exit 1
 fi
 
 log ""
 log "msmtp setup complete. Any script running as ${OPERATOR_USERNAME} can now send email via:"
-log "  echo 'body' | msmtp -C ${MSMTP_CONFIG} ${MONITORING_EMAIL}"
+log "  MONITORING_EMAIL=${MONITORING_EMAIL}; . ${ALERT_LIB_DEST}; alert_send SUBJECT BODY"
+log "Do not call a bare 'msmtp' from a LaunchAgent: launchd's PATH does not include Homebrew."

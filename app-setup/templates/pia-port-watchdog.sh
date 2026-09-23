@@ -32,6 +32,16 @@
 
 set -euo pipefail
 
+# launchd starts this with PATH=/usr/bin:/bin:/usr/sbin:/sbin, which has no
+# Homebrew in it. Set PATH explicitly so the script behaves the same under
+# launchd as in a login shell. See docs/apps/monitoring-README.md.
+ARCH="$(arch)"
+case "${ARCH}" in
+  arm64) HOMEBREW_PREFIX="/opt/homebrew" ;;
+  *) HOMEBREW_PREFIX="/usr/local" ;;
+esac
+export PATH="${HOMEBREW_PREFIX}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -43,9 +53,9 @@ HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 TRANSMISSION_RPC_URL="http://localhost:__TRANSMISSION_HOST_PORT__/transmission/rpc"
 
 STATE_DIR="${HOME}/.config/pia-port-watchdog"
-STATE_FILE="${STATE_DIR}/state.json"
-MSMTP_CONFIG="${HOME}/.config/msmtp/config"
+export STATE_FILE="${STATE_DIR}/state.json" # read by alert-lib.sh
 LOG_FILE="${HOME}/.local/state/${HOSTNAME_LOWER}-pia-port-watchdog.log"
+ALERT_LIB="${ALERT_LIB:-${HOME}/.local/lib/alert-lib.sh}"
 
 # The peer port legitimately reads 0 for a few seconds during a container
 # restart or a region change. Require several consecutive bad polls before
@@ -69,31 +79,18 @@ log() {
 }
 
 # ---------------------------------------------------------------------------
-# State (atomic write via temp+mv, as plex-watchdog does)
+# Shared alert library: alert_send, and the alert_state_* helpers (atomic
+# JSON state reads/writes via temp+mv) on STATE_FILE.
+# Deployed by podman-transmission-setup.sh and msmtp-setup.sh.
 # ---------------------------------------------------------------------------
 
-read_state() {
-  if [[ -f "${STATE_FILE}" ]]; then
-    cat "${STATE_FILE}"
-  else
-    echo '{}'
-  fi
-}
-
-write_state() {
-  local state="$1"
-  local tmp="${STATE_FILE}.tmp.$$"
-  printf '%s\n' "${state}" >"${tmp}"
-  mv "${tmp}" "${STATE_FILE}"
-}
-
-state_get() {
-  local key="$1"
-  local default="${2:-}"
-  local val
-  val=$(read_state | jq -r ".${key} // empty" 2>/dev/null) || true
-  printf '%s' "${val:-${default}}"
-}
+if [[ ! -r "${ALERT_LIB}" ]]; then
+  mkdir -p "$(dirname "${LOG_FILE}")"
+  log "ERROR: alert library not found at ${ALERT_LIB} — cannot send alerts. Re-run podman-transmission-setup.sh"
+  exit 1
+fi
+# shellcheck source=/dev/null
+source "${ALERT_LIB}"
 
 # ---------------------------------------------------------------------------
 # Transmission RPC
@@ -175,16 +172,7 @@ port_is_open() {
 # ---------------------------------------------------------------------------
 
 send_email() {
-  local subject="$1"
-  local body="$2"
-
-  if [[ ! -f "${MSMTP_CONFIG}" ]]; then
-    log "ERROR: msmtp config not found at ${MSMTP_CONFIG} — cannot send email"
-    return 1
-  fi
-
-  printf 'Subject: %s\nTo: %s\n\n%s\n' "${subject}" "${MONITORING_EMAIL}" "${body}" \
-    | msmtp -C "${MSMTP_CONFIG}" "${MONITORING_EMAIL}" 2>/dev/null
+  alert_send "$1" "$2"
 }
 
 # ---------------------------------------------------------------------------
@@ -243,8 +231,8 @@ main() {
   mkdir -p "$(dirname "${LOG_FILE}")"
 
   local was_alerted failures
-  was_alerted=$(state_get "alerted" "false")
-  failures=$(state_get "consecutive_failures" "0")
+  was_alerted=$(alert_state_get "alerted" "false")
+  failures=$(alert_state_get "consecutive_failures" "0")
 
   # An unreachable Transmission is a different problem with its own monitoring
   # (the container health check restarts it). Reporting it as lost port
@@ -279,7 +267,7 @@ main() {
   # back unchanged or returns a fresh one; either way the single write at the
   # end of this function persists whatever it returned.
   local heartbeat
-  heartbeat="$(state_get "last_heartbeat" "1970-01-01T00:00:00Z")"
+  heartbeat="$(alert_state_get "last_heartbeat" "1970-01-01T00:00:00Z")"
 
   if [[ "${bad}" == "true" ]]; then
     failures=$((failures + 1))
@@ -353,7 +341,7 @@ No action required." || true
       alerted: $al
     }')
 
-  write_state "${new_state}"
+  alert_state_write "${new_state}"
 }
 
 # Entry point — skipped when sourced for tests (TEST_RUNNER=true)

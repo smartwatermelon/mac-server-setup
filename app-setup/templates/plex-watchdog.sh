@@ -17,6 +17,16 @@
 
 set -euo pipefail
 
+# launchd starts this with PATH=/usr/bin:/bin:/usr/sbin:/sbin, which has no
+# Homebrew in it. Set PATH explicitly so the script behaves the same under
+# launchd as in a login shell. See docs/apps/monitoring-README.md.
+ARCH="$(arch)"
+case "${ARCH}" in
+  arm64) HOMEBREW_PREFIX="/opt/homebrew" ;;
+  *) HOMEBREW_PREFIX="/usr/local" ;;
+esac
+export PATH="${HOMEBREW_PREFIX}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -28,9 +38,9 @@ PLEX_TOKEN_FILE="${HOME}/.config/plex-watchdog/token"
 
 CONFIG_DIR="${HOME}/.config/plex-watchdog"
 GOLDEN_CONF="${CONFIG_DIR}/golden.conf"
-STATE_FILE="${CONFIG_DIR}/state.json"
-MSMTP_CONFIG="${HOME}/.config/msmtp/config"
+export STATE_FILE="${CONFIG_DIR}/state.json" # read by alert-lib.sh
 LOG_FILE="${HOME}/.local/state/plex-watchdog.log"
+ALERT_LIB="${ALERT_LIB:-${HOME}/.local/lib/alert-lib.sh}"
 
 CONSECUTIVE_FAILURE_THRESHOLD=3
 HEARTBEAT_INTERVAL_SECONDS=3600
@@ -46,31 +56,18 @@ log() {
 }
 
 # ---------------------------------------------------------------------------
-# State management (atomic reads/writes via temp+mv)
+# Shared alert library: alert_send, and the alert_state_* helpers (atomic
+# JSON state reads/writes via temp+mv) on STATE_FILE.
+# Deployed by plex-watchdog-setup.sh and msmtp-setup.sh.
 # ---------------------------------------------------------------------------
 
-read_state() {
-  if [[ -f "${STATE_FILE}" ]]; then
-    cat "${STATE_FILE}"
-  else
-    echo '{}'
-  fi
-}
-
-write_state() {
-  local state="$1"
-  local tmp="${STATE_FILE}.tmp.$$"
-  printf '%s\n' "${state}" >"${tmp}"
-  mv "${tmp}" "${STATE_FILE}"
-}
-
-state_get() {
-  local key="$1"
-  local default="${2:-}"
-  local val
-  val=$(read_state | jq -r ".${key} // empty" 2>/dev/null) || true
-  echo "${val:-${default}}"
-}
+if [[ ! -r "${ALERT_LIB}" ]]; then
+  mkdir -p "$(dirname "${LOG_FILE}")"
+  log "ERROR: alert library not found at ${ALERT_LIB} — cannot send alerts. Re-run plex-watchdog-setup.sh"
+  exit 1
+fi
+# shellcheck source=/dev/null
+source "${ALERT_LIB}"
 
 # ---------------------------------------------------------------------------
 # Plex token from file
@@ -165,16 +162,7 @@ load_golden() {
 # ---------------------------------------------------------------------------
 
 send_email() {
-  local subject="$1"
-  local body="$2"
-
-  if [[ ! -f "${MSMTP_CONFIG}" ]]; then
-    log "ERROR: msmtp config not found at ${MSMTP_CONFIG} — cannot send email"
-    return 1
-  fi
-
-  printf 'Subject: %s\nTo: %s\n\n%s\n' "${subject}" "${MONITORING_EMAIL}" "${body}" \
-    | msmtp -C "${MSMTP_CONFIG}" "${MONITORING_EMAIL}" 2>/dev/null
+  alert_send "$1" "$2"
 }
 
 # ---------------------------------------------------------------------------
@@ -194,22 +182,26 @@ main() {
   if ! xml=$(fetch_prefs_xml "${token}") || [[ -z "${xml}" ]]; then
     # Plex unreachable — handle consecutive failures
     local failures
-    failures=$(state_get "consecutive_failures" "0")
+    failures=$(alert_state_get "consecutive_failures" "0")
     ((failures += 1))
 
     local state
-    state=$(read_state | jq --argjson f "${failures}" '.consecutive_failures = $f | .last_poll = (now | todate)' 2>/dev/null) || state="{\"consecutive_failures\": ${failures}}"
-    write_state "${state}"
+    state=$(alert_state_read | jq --argjson f "${failures}" '.consecutive_failures = $f | .last_poll = (now | todate)' 2>/dev/null) || state="{\"consecutive_failures\": ${failures}}"
+    alert_state_write "${state}"
 
     if [[ ${failures} -ge ${CONSECUTIVE_FAILURE_THRESHOLD} ]]; then
       log "ERROR: Plex unreachable for ${failures} consecutive polls"
       if [[ ${failures} -eq ${CONSECUTIVE_FAILURE_THRESHOLD} ]]; then
+        # tr, not ${HOSTNAME_LABEL,,}: the LaunchAgent runs /bin/bash 3.2,
+        # where ,, is a "bad substitution" and this email was never built.
+        local unreachable_host_lower
+        unreachable_host_lower=$(echo "${HOSTNAME_LABEL}" | tr '[:upper:]' '[:lower:]')
         send_email \
           "[${HOSTNAME_LABEL}] Plex server unreachable" \
           "The Plex server at ${PLEX_URL} has been unreachable for ${failures} consecutive checks ($((failures * 5)) minutes).
 
 Please verify Plex is running:
-  ssh operator@${HOSTNAME_LABEL,,} 'pgrep -f \"Plex Media Server\"'" || true
+  ssh operator@${unreachable_host_lower} 'pgrep -f \"Plex Media Server\"'" || true
       fi
     else
       log "WARNING: Plex unreachable (${failures}/${CONSECUTIVE_FAILURE_THRESHOLD} before alert)"
@@ -221,7 +213,7 @@ Please verify Plex is running:
   local current_hash
   current_hash=$(printf '%s' "${xml}" | shasum -a 256 | cut -d' ' -f1)
   local stored_hash
-  stored_hash=$(state_get "response_hash" "")
+  stored_hash=$(alert_state_get "response_hash" "")
 
   if [[ "${current_hash}" == "${stored_hash}" ]]; then
     # No change — check if heartbeat is due
@@ -247,7 +239,7 @@ Please verify Plex is running:
 
   # Read state once before the loop to avoid repeated file reads
   local cached_state
-  cached_state=$(read_state)
+  cached_state=$(alert_state_read)
 
   while IFS='=' read -r golden_key golden_value; do
     [[ -z "${golden_key}" ]] && continue
@@ -326,7 +318,7 @@ To revert:   ssh operator@${hostname_lower} plex-watchdog-ctl revert"
   now=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
   local last_heartbeat
-  last_heartbeat=$(state_get "last_heartbeat" "${now}")
+  last_heartbeat=$(alert_state_get "last_heartbeat" "${now}")
 
   local new_state
   new_state=$(jq -n \
@@ -343,7 +335,7 @@ To revert:   ssh operator@${hostname_lower} plex-watchdog-ctl revert"
       settings: $settings
     }')
 
-  write_state "${new_state}"
+  alert_state_write "${new_state}"
 
   if [[ "${drift_found}" == "false" ]]; then
     maybe_heartbeat
@@ -356,7 +348,7 @@ To revert:   ssh operator@${hostname_lower} plex-watchdog-ctl revert"
 
 maybe_heartbeat() {
   local last_heartbeat
-  last_heartbeat=$(state_get "last_heartbeat" "1970-01-01T00:00:00Z")
+  last_heartbeat=$(alert_state_get "last_heartbeat" "1970-01-01T00:00:00Z")
 
   local now_epoch last_epoch
   now_epoch=$(date +%s)
@@ -374,8 +366,8 @@ maybe_heartbeat() {
     local now
     now=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
     local state
-    state=$(read_state | jq --arg lh "${now}" '.last_heartbeat = $lh')
-    write_state "${state}"
+    state=$(alert_state_read | jq --arg lh "${now}" '.last_heartbeat = $lh')
+    alert_state_write "${state}"
   fi
 }
 

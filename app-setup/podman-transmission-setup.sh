@@ -548,6 +548,8 @@ set_section "Deploy PIA Port Watchdog"
 PORT_WATCHDOG_TEMPLATE="${SCRIPT_DIR}/templates/pia-port-watchdog.sh"
 PORT_WATCHDOG_DEST="${OPERATOR_HOME}/.local/bin/pia-port-watchdog.sh"
 PORT_WATCHDOG_MSMTP="${OPERATOR_HOME}/.config/msmtp/config"
+ALERT_LIB_TEMPLATE="${SCRIPT_DIR}/templates/alert-lib.sh"
+ALERT_LIB_DEST="${OPERATOR_HOME}/.local/lib/alert-lib.sh"
 
 # The watchdog alerts by email, so it needs both a destination address and a
 # configured msmtp. Neither is set up by this script — msmtp-setup.sh owns
@@ -563,9 +565,21 @@ elif [[ ! -f "${PORT_WATCHDOG_MSMTP}" ]]; then
 elif [[ ! -f "${PORT_WATCHDOG_TEMPLATE}" ]]; then
   collect_error "PIA port watchdog template not found: ${PORT_WATCHDOG_TEMPLATE}"
   PORT_WATCHDOG_DEPLOY=false
+elif [[ ! -f "${ALERT_LIB_TEMPLATE}" ]]; then
+  collect_error "Alert library template not found: ${ALERT_LIB_TEMPLATE}"
+  PORT_WATCHDOG_DEPLOY=false
 fi
 
 if [[ "${PORT_WATCHDOG_DEPLOY}" == "true" ]]; then
+  # The watchdog sources this for alert_send and its state helpers, and exits
+  # with an error if it is missing.
+  log "Deploying alert-lib.sh"
+  sudo -iu "${OPERATOR_USERNAME}" mkdir -p "$(dirname "${ALERT_LIB_DEST}")"
+  sudo cp "${ALERT_LIB_TEMPLATE}" "${ALERT_LIB_DEST}"
+  sudo chown "${OPERATOR_USERNAME}:staff" "${ALERT_LIB_DEST}"
+  sudo chmod 644 "${ALERT_LIB_DEST}"
+  log "✅ alert-lib.sh deployed to ${ALERT_LIB_DEST}"
+
   log "Deploying pia-port-watchdog.sh"
 
   sudo sed \
