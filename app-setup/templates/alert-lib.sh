@@ -192,6 +192,13 @@ alert_transition() {
     _alert_log "ERROR: state file ${STATE_FILE:-} is not a JSON object — starting it fresh"
     state='{}'
   fi
+  # A non-object .transitions (hand edit, older format) would make every jq
+  # call below fail, and the state would be written out empty: the alert
+  # would then fire again on every run.
+  if ! jq -e '(.transitions // {}) | type == "object"' >/dev/null 2>&1 <<<"${state}"; then
+    _alert_log "ERROR: .transitions in ${STATE_FILE:-} is not a JSON object — resetting it"
+    state="$(jq '.transitions = {}' <<<"${state}")"
+  fi
 
   local entry
   entry="$(jq -c --arg k "${key}" '.transitions[$k] // {}' <<<"${state}")"
@@ -201,8 +208,10 @@ alert_transition() {
   since="$(jq -r '.since // empty' <<<"${entry}")"
   last_sent="$(jq -r '.last_sent // empty' <<<"${entry}")"
   # Both are epoch seconds; drop anything else (e.g. a hand-edited value).
-  [[ "${since}" =~ ^[0-9]+$ ]] || since=""
-  [[ "${last_sent}" =~ ^[0-9]+$ ]] || last_sent=""
+  # 10# forces decimal: bash reads a leading zero as octal ("08" is an error),
+  # and --argjson rejects a leading zero as invalid JSON.
+  if [[ "${since}" =~ ^[0-9]+$ ]]; then since=$((10#${since})); else since=""; fi
+  if [[ "${last_sent}" =~ ^[0-9]+$ ]]; then last_sent=$((10#${last_sent})); else last_sent=""; fi
 
   local now
   now="$(date +%s)"

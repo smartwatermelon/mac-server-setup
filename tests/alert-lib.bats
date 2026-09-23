@@ -343,6 +343,32 @@ line two"
   [ "$(state_field '.transitions.k.alerted')" = "true" ]
 }
 
+@test "alert_transition: a non-object .transitions is replaced, not written out as an empty file" {
+  alert_state_write '{"transitions": "oops", "last_poll": "t"}'
+
+  alert_transition k true "down" "body"
+  [ "$(mail_count)" -eq 1 ]
+  grep -q "\.transitions in .* is not a JSON object" "${LOG_FILE}"
+  [ "$(state_field '.transitions.k.alerted')" = "true" ]
+  [ "$(state_field '.last_poll')" = "t" ]
+
+  # State survived, so the next run stays quiet instead of re-alerting.
+  alert_transition k true "down" "body"
+  [ "$(mail_count)" -eq 1 ]
+}
+
+@test "alert_transition: timestamps with a leading zero are read as decimal" {
+  export ALERT_REMINDER_SECONDS=60
+  alert_state_write '{"transitions": {"k": {"alerted": true, "since": "08", "last_sent": "09"}}}'
+
+  run alert_transition k true "down" "body"
+  [ "$status" -eq 0 ]
+  # last_sent 9 is decades ago, so a reminder is due.
+  [ "$(mail_count)" -eq 1 ]
+  [ "$(state_field '.transitions.k.since')" = "8" ]
+  jq -e . "${STATE_FILE}" >/dev/null
+}
+
 @test "alert_transition: no reminder unless ALERT_REMINDER_SECONDS is set" {
   alert_transition k true "down" "body"
   # Backdate the last send by a day.

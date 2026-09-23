@@ -201,13 +201,18 @@ If state is "not running", it will fire on the next 5-minute interval. To trigge
 sudo -iu operator bash ~/.local/bin/plex-watchdog
 ```
 
-**No email received**: Check msmtp log:
+**No email received**: First look for `ERROR` lines in the watchdog log
+(`/Users/operator/.local/state/plex-watchdog.log`). A send that fails before
+msmtp starts (for example, msmtp not found) leaves no entry in msmtp's log. Then
+check msmtp's log:
 
 ```bash
 sudo tail -20 /Users/operator/.local/state/msmtp.log
 ```
 
 Common issues: Gmail App Password expired or revoked, 2FA disabled on the Google account.
+See `monitoring-README.md` for the shared alert library and how to send a test
+alert under launchd's PATH.
 
 **Status shows drift on fresh deploy**: This shouldn't happen since the golden config is generated from current values at setup time. Run `plex-watchdog-ctl refresh` to regenerate.
 
