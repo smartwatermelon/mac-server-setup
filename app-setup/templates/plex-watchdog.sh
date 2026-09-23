@@ -244,8 +244,12 @@ check_media_access() {
   else
     failures=0
   fi
+  # A corrupt state file must not stop the run under set -e: start it fresh,
+  # as Step 8 does, so the cycle rewrites it.
   local state
-  state=$(alert_state_read | jq --argjson f "${failures}" '.media_check_failures = $f')
+  state=$(alert_state_read)
+  jq -e 'type == "object"' >/dev/null 2>&1 <<<"${state}" || state='{}'
+  state=$(jq --argjson f "${failures}" '.media_check_failures = $f' <<<"${state}")
   alert_state_write "${state}"
 
   local is_bad=false

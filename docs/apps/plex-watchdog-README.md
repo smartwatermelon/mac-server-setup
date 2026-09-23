@@ -261,7 +261,7 @@ alert under launchd's PATH.
 
 ## Testing
 
-44 BATS tests in `tests/plex-watchdog.bats`:
+45 BATS tests in `tests/plex-watchdog.bats`:
 
 ```bash
 bats tests/plex-watchdog.bats

@@ -847,3 +847,18 @@ MEDIA_ALERT='\[TESTHOST\] Plex cannot read media files'
   [ "$(jq -r '.transitions.media_unreachable.alerted' <<<"$(WATCHDOG_STATE)")" = "true" ]
   [ "$(subject_count "${MEDIA_ALERT}")" -eq 0 ]
 }
+
+@test "a corrupt state.json is replaced in one cycle, not a stop on every run" {
+  # The old Step 8 rebuilt the file from scratch, so a corrupt file healed on
+  # the next full cycle. The media check reads the state first, so it must
+  # not die on it under set -e.
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo 'not json' >"${HOME}/.config/plex-watchdog/state.json"
+
+  run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.response_hash | length' <<<"$(WATCHDOG_STATE)")" -eq 64 ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "0" ]
+}
