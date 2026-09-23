@@ -389,6 +389,13 @@ Processed 0 files')"
   [ "${out}" = "$(printf '/src/video.mkv\t/dst/video.mkv')" ]
 }
 
+@test "parses the SKIP Skipped conflict format (--conflict skip)" {
+  local out
+  out="$(parse_filebot_conflicts '[SKIP] Skipped [/src/Show S17E01.mkv] because [/dst/Season 17/Show - S17E01 - Cake Week.mkv] already exists
+Processed 0 files')"
+  [ "${out}" = "$(printf '/src/Show S17E01.mkv\t/dst/Season 17/Show - S17E01 - Cake Week.mkv')" ]
+}
+
 @test "parses the IMPORT destination-exists format, which lists the paths in the other order" {
   local out
   out="$(parse_filebot_conflicts '[IMPORT] Destination file already exists: /dst/video.mkv (/src/video.mkv)

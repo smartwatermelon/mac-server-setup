@@ -28,7 +28,7 @@ load ../test_helper
   assert_equal "tv" "${result}"
 }
 
-@test "TV workflow: processes TV show with FileBot auto-detection" {
+@test "TV workflow: processes TV show via the TV database chain" {
   export TEST_MODE=true
   export FILEBOT_TEST_OVERRIDE=true
   export LOG_FILE="${TEST_TEMP_DIR}/test.log"
@@ -178,5 +178,5 @@ load ../test_helper
 
   run cat "${LOG_FILE}"
   assert_output_contains "Starting comprehensive fallback processing" "${output}"
-  assert_output_contains "Strategy 1: FileBot auto-detection" "${output}"
+  assert_output_contains "Strategy 1: TV database chain" "${output}"
 }

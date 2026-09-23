@@ -127,6 +127,20 @@ assert_output_contains() {
   fi
 }
 
+# Helper function to assert output does NOT contain string
+assert_output_not_contains() {
+  local unexpected="$1"
+  local actual="$2"
+
+  if [[ "${actual}" != *"${unexpected}"* ]]; then
+    return 0
+  else
+    echo "Expected output NOT to contain: '${unexpected}'"
+    echo "Actual output: '${actual}'"
+    return 1
+  fi
+}
+
 # Helper function to assert variable equals value
 assert_equal() {
   local expected="$1"
