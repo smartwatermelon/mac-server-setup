@@ -16,6 +16,21 @@ CTL_TEMPLATE="${REPO_DIR}/app-setup/templates/plex-watchdog-ctl.sh"
 setup() {
   # Create temp directory for each test
   TEST_TMPDIR=$(mktemp -d)
+
+  # Sandbox HOME: the watchdog derives its token, state, log, msmtp config
+  # and alert-lib paths from it.
+  export HOME="${TEST_TMPDIR}/home"
+  mkdir -p "${HOME}/.config/msmtp" "${HOME}/.local/state" "${HOME}/.local/lib"
+  touch "${HOME}/.config/msmtp/config"
+  cp "${REPO_DIR}/app-setup/templates/alert-lib.sh" "${HOME}/.local/lib/alert-lib.sh"
+
+  # The watchdog sets PATH to <HOMEBREW_PREFIX>/bin:/usr/bin:... itself, so
+  # mocks go in a fake prefix that the rendered template points at.
+  FAKE_BREW="${TEST_TMPDIR}/brew"
+  mkdir -p "${FAKE_BREW}/bin"
+  export MAIL_LOG="${TEST_TMPDIR}/mail.log"
+  : >"${MAIL_LOG}"
+
   export CONFIG_DIR="${TEST_TMPDIR}/config"
   export GOLDEN_CONF="${CONFIG_DIR}/golden.conf"
   export STATE_FILE="${CONFIG_DIR}/state.json"
@@ -48,6 +63,7 @@ source_watchdog_functions() {
     -e 's/__MONITORING_EMAIL__/test@example.com/g' \
     -e 's/^main "\$@"/# main "$@" — disabled for testing/' \
     -e "s|^CONFIG_DIR=.*|CONFIG_DIR=\"${CONFIG_DIR}\"|" \
+    -e "s|HOMEBREW_PREFIX=\"[^\"]*\"|HOMEBREW_PREFIX=\"${FAKE_BREW}\"|" \
     "${WATCHDOG_TEMPLATE}" >"${tmp}"
   # Stub send_email
   echo 'send_email() { echo "MOCK_EMAIL: $1"; return 0; }' >>"${tmp}"
@@ -202,29 +218,29 @@ EOF
 # State management
 # ===========================================================================
 
-@test "read_state: returns empty JSON when state file does not exist" {
+@test "alert_state_read: returns empty JSON when state file does not exist" {
   source_watchdog_functions
   rm -f "${STATE_FILE}"
 
-  run read_state
+  run alert_state_read
   [ "$status" -eq 0 ]
   [ "$output" = "{}" ]
 }
 
-@test "read_state: returns file contents when state file exists" {
+@test "alert_state_read: returns file contents when state file exists" {
   source_watchdog_functions
   echo '{"consecutive_failures": 3}' >"${STATE_FILE}"
 
-  run read_state
+  run alert_state_read
   [ "$status" -eq 0 ]
   [[ "$output" == *'"consecutive_failures": 3'* ]]
 }
 
-@test "write_state: creates state file atomically" {
+@test "alert_state_write: creates state file atomically" {
   source_watchdog_functions
   local state='{"test": true}'
 
-  write_state "${state}"
+  alert_state_write "${state}"
 
   [ -f "${STATE_FILE}" ]
   run cat "${STATE_FILE}"
@@ -236,25 +252,25 @@ EOF
   [ "$tmp_count" -eq 0 ]
 }
 
-@test "state_get: extracts value from state JSON" {
+@test "alert_state_get: extracts value from state JSON" {
   source_watchdog_functions
   echo '{"consecutive_failures": 5, "response_hash": "abc123"}' >"${STATE_FILE}"
 
-  run state_get "consecutive_failures" "0"
+  run alert_state_get "consecutive_failures" "0"
   [ "$output" = "5" ]
 
-  run state_get "response_hash" ""
+  run alert_state_get "response_hash" ""
   [ "$output" = "abc123" ]
 }
 
-@test "state_get: returns default for missing keys" {
+@test "alert_state_get: returns default for missing keys" {
   source_watchdog_functions
   echo '{}' >"${STATE_FILE}"
 
-  run state_get "consecutive_failures" "0"
+  run alert_state_get "consecutive_failures" "0"
   [ "$output" = "0" ]
 
-  run state_get "missing_key" "default_val"
+  run alert_state_get "missing_key" "default_val"
   [ "$output" = "default_val" ]
 }
 
@@ -475,4 +491,134 @@ WanPerStreamMaxUploadRate=0"
   run get_plex_token
   [ "$status" -eq 0 ]
   [[ "$output" == *"test-token-with-spaces"* ]]
+}
+
+# ===========================================================================
+# Full poll cycles: email under launchd, and the shared alert library
+#
+# launchd runs this agent as `/bin/bash <script>` (bash 3.2) with
+# PATH=/usr/bin:/bin:/usr/sbin:/sbin. msmtp is a Homebrew binary, so the old
+# bare `msmtp ... 2>/dev/null` failed on every launchd run and nobody saw it.
+# ===========================================================================
+
+# Render the whole template as plex-watchdog-setup.sh does, with the Homebrew
+# prefix pointed at the fake one. Uses the real $HOME-based paths.
+render_watchdog() {
+  WATCHDOG="${TEST_TMPDIR}/plex-watchdog"
+  sed \
+    -e 's/__HOSTNAME__/TESTHOST/g' \
+    -e 's/__MONITORING_EMAIL__/test@example.com/g' \
+    -e "s|HOMEBREW_PREFIX=\"[^\"]*\"|HOMEBREW_PREFIX=\"${FAKE_BREW}\"|" \
+    "${WATCHDOG_TEMPLATE}" >"${WATCHDOG}"
+
+  mkdir -p "${HOME}/.config/plex-watchdog"
+  echo "test-token-123" >"${HOME}/.config/plex-watchdog/token"
+  cp "${FIXTURES_DIR}/golden-basic.conf" "${HOME}/.config/plex-watchdog/golden.conf"
+}
+
+# curl mock: serves the sample prefs (TranscoderCanOnlyRemuxVideo=1, golden
+# says 0, so one setting has drifted), or fails when PLEX_DOWN=1.
+write_curl_mock() {
+  cat >"$1" <<MOCK
+#!/usr/bin/env bash
+if [[ "\${PLEX_DOWN:-0}" == "1" ]]; then
+  exit 7
+fi
+cat "${FIXTURES_DIR}/plex-prefs-sample.xml"
+MOCK
+  chmod +x "$1"
+}
+
+write_msmtp_mock() {
+  cat >"${FAKE_BREW}/bin/msmtp" <<'MOCK'
+#!/usr/bin/env bash
+{ echo "=== MAIL ==="; cat; } >>"${MAIL_LOG}"
+MOCK
+  chmod +x "${FAKE_BREW}/bin/msmtp"
+}
+
+mail_count() {
+  grep -c '^=== MAIL ===' "${MAIL_LOG}" || true
+}
+
+watchdog_log() {
+  cat "${HOME}/.local/state/plex-watchdog.log" 2>/dev/null || true
+}
+
+# Run one cycle the way launchd does: /bin/bash, launchd's PATH, a bare env.
+# Why the extra dir: curl must be mocked for BOTH the old and the new code, or
+# the old code would query the live Plex on this host. The new watchdog
+# replaces PATH with <prefix>/bin:/usr/bin:..., so it finds curl in the fake
+# prefix; the old one never changes PATH, so it finds this copy. msmtp exists
+# only in the fake prefix, so the only way to send is to look it up there by
+# absolute path — which is the bug under test.
+run_launchd_cycle() {
+  local launchd_extra="${TEST_TMPDIR}/launchd-extra/bin"
+  mkdir -p "${launchd_extra}"
+  write_curl_mock "${launchd_extra}/curl"
+
+  env -i \
+    PATH="${launchd_extra}:/usr/bin:/bin:/usr/sbin:/sbin" \
+    HOME="${HOME}" \
+    MAIL_LOG="${MAIL_LOG}" \
+    PLEX_DOWN="${PLEX_DOWN:-0}" \
+    /bin/bash "${WATCHDOG}"
+}
+
+@test "launchd PATH: the drift alert email is sent when Homebrew is not on PATH" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+
+  run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(mail_count)" -eq 1 ]
+  grep -q "Subject: \[TESTHOST\] Plex setting drift detected" "${MAIL_LOG}"
+  grep -q "Drift alert email sent" <<<"$(watchdog_log)"
+}
+
+@test "launchd PATH: the Plex-unreachable email is built under /bin/bash 3.2" {
+  # It used ${HOSTNAME_LABEL,,}, which is a "bad substitution" in bash 3.2.
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo '{"consecutive_failures": 2}' >"${HOME}/.config/plex-watchdog/state.json"
+
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(mail_count)" -eq 1 ]
+  grep -q "Subject: \[TESTHOST\] Plex server unreachable" "${MAIL_LOG}"
+  grep -q "ssh operator@testhost" "${MAIL_LOG}"
+}
+
+@test "a failed drift email is logged with msmtp's stderr" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  cat >"${FAKE_BREW}/bin/msmtp" <<'MOCK'
+#!/usr/bin/env bash
+echo "msmtp: cannot connect to smtp.gmail.com" >&2
+exit 69
+MOCK
+  chmod +x "${FAKE_BREW}/bin/msmtp"
+
+  run bash "${WATCHDOG}"
+  [ "$status" -eq 0 ]
+  grep -q "cannot connect to smtp.gmail.com" <<<"$(watchdog_log)"
+  grep -q "ERROR: Failed to send drift alert email" <<<"$(watchdog_log)"
+}
+
+@test "a missing alert library stops the watchdog with an ERROR in its log" {
+  render_watchdog
+  rm -f "${HOME}/.local/lib/alert-lib.sh"
+
+  run bash "${WATCHDOG}"
+  [ "$status" -eq 1 ]
+  grep -q "ERROR: alert library not found at ${HOME}/.local/lib/alert-lib.sh" <<<"$(watchdog_log)"
+}
+
+@test "plex-watchdog-setup.sh deploys the alert library" {
+  grep -q 'ALERT_LIB_DEST="${OPERATOR_HOME}/.local/lib/alert-lib.sh"' \
+    "${REPO_DIR}/app-setup/plex-watchdog-setup.sh"
+  grep -q 'sudo cp "${ALERT_LIB_TEMPLATE}" "${ALERT_LIB_DEST}"' \
+    "${REPO_DIR}/app-setup/plex-watchdog-setup.sh"
 }

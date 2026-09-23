@@ -28,7 +28,12 @@ TEMPLATE="${REPO_DIR}/app-setup/templates/pia-port-watchdog.sh"
 setup() {
   TEST_TMPDIR=$(mktemp -d)
   export TEST_TMPDIR
-  MOCK_BIN_DIR="${TEST_TMPDIR}/bin"
+  # The watchdog sets its own PATH (Homebrew prefix + system dirs), so mocks
+  # on the test's PATH would be dropped. render_template points the
+  # watchdog's HOMEBREW_PREFIX at this fake prefix, and the mocks live in its
+  # bin: curl through PATH, msmtp through alert-lib's <prefix>/bin/msmtp.
+  FAKE_BREW="${TEST_TMPDIR}/brew"
+  MOCK_BIN_DIR="${FAKE_BREW}/bin"
   mkdir -p "${MOCK_BIN_DIR}"
 
   # HOME drives every path the script writes to, so pointing it at the sandbox
@@ -36,6 +41,10 @@ setup() {
   export HOME="${TEST_TMPDIR}/home"
   mkdir -p "${HOME}/.config/msmtp" "${HOME}/.local/state"
   touch "${HOME}/.config/msmtp/config"
+
+  # The shared alert library, where the setup scripts deploy it.
+  mkdir -p "${HOME}/.local/lib"
+  cp "${REPO_DIR}/app-setup/templates/alert-lib.sh" "${HOME}/.local/lib/alert-lib.sh"
 
   export MAIL_LOG="${TEST_TMPDIR}/mail.log"
   : >"${MAIL_LOG}"
@@ -69,6 +78,7 @@ render_template() {
     -e "s|__SERVER_NAME__|TESTHOST|g" \
     -e "s|__MONITORING_EMAIL__|ops@example.com|g" \
     -e "s|__TRANSMISSION_HOST_PORT__|9091|g" \
+    -e "s|HOMEBREW_PREFIX=\"[^\"]*\"|HOMEBREW_PREFIX=\"${FAKE_BREW}\"|" \
     "${TEMPLATE}" >"${WATCHDOG}"
   chmod +x "${WATCHDOG}"
   export WATCHDOG
@@ -407,15 +417,16 @@ watchdog_log() {
 
 @test "maybe_heartbeat does not write state itself" {
   # Structural: the whole point of the change is that this function has no
-  # write_state call left in it. Behavioural tests below cannot distinguish
-  # one write from two, so assert on the function body directly.
+  # alert_state_write call (formerly write_state) left in it. Behavioural
+  # tests below cannot distinguish one write from two, so assert on the
+  # function body directly.
   #
   # Ask bash for the body via declare -f rather than slicing the file with
   # awk. A text extractor has to guess where the function ends, and every
   # cheap guess ("the next } at column 0") breaks the day someone adds a case
   # statement or a nested block closed in column 0: the extract silently comes
-  # back truncated, write_state is missing from the part that was read, and
-  # this test goes green for the wrong reason. bash has already parsed the
+  # back truncated, the state write is missing from the part that was read,
+  # and this test goes green for the wrong reason. bash has already parsed the
   # function, so it knows the real boundaries.
   local body
   body="$(TEST_RUNNER=true bash -c \
@@ -424,7 +435,7 @@ watchdog_log() {
   # Guard the guard: an empty body would make the assertion below vacuous.
   [ -n "${body}" ]
   grep -q 'maybe_heartbeat' <<<"${body}"
-  ! grep -q 'write_state' <<<"${body}"
+  ! grep -q 'state_write' <<<"${body}"
 }
 
 @test "a healthy cycle records a heartbeat and the current port together" {
@@ -480,4 +491,83 @@ watchdog_log() {
   [ "$status" -eq 0 ]
   [ "$(state_field '.last_heartbeat')" != "1970-01-01T00:00:00Z" ]
   grep -q 'OK: peer port 51413' <<<"$(watchdog_log)"
+}
+
+# ---------------------------------------------------------------------------
+# Email under launchd, and the shared alert library
+#
+# launchd runs this agent as `/bin/bash <script>` with
+# PATH=/usr/bin:/bin:/usr/sbin:/sbin. msmtp is a Homebrew binary, so the old
+# bare `msmtp ... 2>/dev/null` failed on every launchd run and nobody saw it.
+# ---------------------------------------------------------------------------
+
+@test "launchd PATH: the alert email is sent when Homebrew is not on PATH" {
+  # Why the extra dir: curl must be mocked for BOTH the old and the new code,
+  # or the old code would query the live Transmission on this host. The new
+  # watchdog replaces PATH with <prefix>/bin:/usr/bin:..., so it finds curl in
+  # the fake prefix; the old one never changes PATH, so it finds this copy.
+  # msmtp exists only in the fake prefix, so the only way to send is to look
+  # it up there by absolute path — which is the bug under test.
+  local launchd_extra="${TEST_TMPDIR}/launchd-extra/bin"
+  mkdir -p "${launchd_extra}"
+  cp "${MOCK_BIN_DIR}/curl" "${launchd_extra}/curl"
+
+  # Two bad polls already recorded: this run is the one that must alert.
+  mkdir -p "${HOME}/.config/pia-port-watchdog"
+  echo '{"consecutive_failures": 2, "alerted": false}' \
+    >"${HOME}/.config/pia-port-watchdog/state.json"
+  set_rpc "0" "false"
+
+  run env -i \
+    PATH="${launchd_extra}:/usr/bin:/bin:/usr/sbin:/sbin" \
+    HOME="${HOME}" \
+    MAIL_LOG="${MAIL_LOG}" \
+    RPC_PEER_PORT_FILE="${RPC_PEER_PORT_FILE}" \
+    RPC_PORT_OPEN_FILE="${RPC_PORT_OPEN_FILE}" \
+    RPC_REACHABLE_FILE="${RPC_REACHABLE_FILE}" \
+    /bin/bash "${WATCHDOG}"
+
+  [ "$status" -eq 0 ]
+  [ "$(mail_count)" -eq 1 ]
+  grep -q "Transmission port forwarding lost" "${MAIL_LOG}"
+  [ "$(state_field '.alerted')" = "true" ]
+}
+
+@test "a failed send is logged with msmtp's stderr and retried next cycle" {
+  cat >"${MOCK_BIN_DIR}/msmtp" <<'MOCK'
+#!/usr/bin/env bash
+echo "msmtp: cannot connect to smtp.gmail.com" >&2
+exit 69
+MOCK
+  set_rpc "0" "false"
+  run_cycle
+  run_cycle
+  run_cycle
+
+  [ "$(mail_count)" -eq 0 ]
+  [ "$(state_field '.alerted')" = "false" ]
+  grep -q "cannot connect to smtp.gmail.com" <<<"$(watchdog_log)"
+  grep -q "ERROR: failed to send alert email" <<<"$(watchdog_log)"
+
+  # Mail works again: the next bad cycle sends the alert that was missed.
+  write_msmtp_mock
+  run_cycle
+  [ "$(mail_count)" -eq 1 ]
+  [ "$(state_field '.alerted')" = "true" ]
+}
+
+@test "a missing alert library stops the watchdog with an ERROR in its log" {
+  rm -f "${HOME}/.local/lib/alert-lib.sh"
+
+  run run_cycle
+  [ "$status" -eq 1 ]
+  grep -q "ERROR: alert library not found at ${HOME}/.local/lib/alert-lib.sh" <<<"$(watchdog_log)"
+}
+
+@test "the setup script deploys the alert library with the watchdog" {
+  run grep -A 12 'if \[\[ "${PORT_WATCHDOG_DEPLOY}" == "true" \]\]; then' \
+    "${REPO_DIR}/app-setup/podman-transmission-setup.sh"
+  [[ "$output" == *'sudo cp "${ALERT_LIB_TEMPLATE}" "${ALERT_LIB_DEST}"'* ]]
+  grep -q 'ALERT_LIB_DEST="${OPERATOR_HOME}/.local/lib/alert-lib.sh"' \
+    "${REPO_DIR}/app-setup/podman-transmission-setup.sh"
 }
