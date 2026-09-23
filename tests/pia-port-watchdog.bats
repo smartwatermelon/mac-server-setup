@@ -470,6 +470,20 @@ watchdog_log() {
   [ "$(state_field '.peer_port')" = "51414" ]
 }
 
+@test "a 2-hour-old heartbeat is due, west of UTC" {
+  # last_heartbeat is stored in UTC with a trailing Z. Parsed as local time,
+  # it lands hours in the future west of UTC, and the hourly heartbeat stops.
+  local two_hours_ago
+  two_hours_ago=$(date -u -r "$(($(date +%s) - 7200))" '+%Y-%m-%dT%H:%M:%SZ')
+
+  run env TZ=America/Los_Angeles TEST_RUNNER=true bash -c \
+    'source "$1" >/dev/null 2>&1; maybe_heartbeat "test" "$2"' \
+    _ "${WATCHDOG}" "${two_hours_ago}"
+  [ "$status" -eq 0 ]
+  [ -n "${output}" ]
+  [ "${output}" != "${two_hours_ago}" ]
+}
+
 @test "a bad cycle does not invent a heartbeat it never logged" {
   # The old code defaulted the carried-forward value to now, so a first cycle
   # that found the port broken wrote a heartbeat that never happened — which

@@ -11,11 +11,12 @@ msmtp (Gmail SMTP). They all send that email through one shared library,
 | --- | --- | --- | --- | --- |
 | `plex-watchdog` — Plex settings drift, Plex unreachable | `com.<host>.plex-watchdog` | 300 s, RunAtLoad | `~/.local/state/plex-watchdog.log` | `plex-watchdog-setup.sh` |
 | `pia-port-watchdog.sh` — PIA port forwarding lost | `com.<host>.pia-port-watchdog` | 900 s | `~/.local/state/<host>-pia-port-watchdog.log` | `podman-transmission-setup.sh` |
+| `stall-watchdog.sh` — server blocked on a privacy prompt, a long `transmission-done`, supervisor failing | `com.<host>.stall-watchdog` | 120 s, RunAtLoad | `~/.local/state/<host>-stall-watchdog.log` | `podman-transmission-setup.sh` |
 
-Paths are under the operator's home (`/Users/operator`). Both LaunchAgents run
+Paths are under the operator's home (`/Users/operator`). All the LaunchAgents run
 the script as `/bin/bash <script>` and send stdout and stderr to the same log
-file. For the details of each check, see `plex-watchdog-README.md` and
-`pia-vpn-README.md`.
+file. For the details of each check, see `plex-watchdog-README.md`,
+`pia-vpn-README.md`, and [stall-watchdog](#stall-watchdog) below.
 
 Other files:
 
@@ -107,9 +108,9 @@ one KEY in one run.
 It returns 1 if an alert or reminder send failed, else 0. Under `set -e`, call
 it as `alert_transition ... || true`.
 
-The two current watchdogs use `alert_send` and the state functions, but keep
-their own alert, dedupe and heartbeat logic. `alert_transition` is for new
-checks.
+plex-watchdog and pia-port-watchdog use `alert_send` and the state functions,
+but keep their own alert, dedupe and heartbeat logic. stall-watchdog uses
+`alert_transition` for all of its checks.
 
 ## Send a test alert under launchd's PATH
 
@@ -136,6 +137,121 @@ sudo tail -1 /Users/operator/.local/state/msmtp.log
 
 Use `sudo -u`, not `sudo -iu`. A login shell adds Homebrew to PATH, and the
 test then proves nothing about launchd.
+
+## stall-watchdog
+
+Issue #199. On 2026-09-17 a macOS privacy (TCC) prompt about network-volume
+access stayed open on the desktop for 19 hours. FileBot, the Transmission
+container and Plex waited on it, and nothing alerted, because no check looked
+for "blocked" as opposed to "failed". stall-watchdog runs every 2 minutes and
+makes one `alert_transition` call per check:
+
+| Key | Bad when | Notes |
+| --- | --- | --- |
+| `tcc_prompt` | a TCC prompt has been open for 5 minutes or more | The email lists every open prompt: service, binary, how long it has been open. Reminder every 12 hours. |
+| `tcc_log_unreadable` | `log show` failed 3 runs in a row | State is left untouched on a failed read, so no prompt is lost. |
+| `done_running_long` | a `transmission-done` process has run for over 45 minutes | Found with `ps -axo pid=,etime=,command=`. Never killed: stopping FileBot mid-move can lose the file. |
+| `supervisor_failing` | the status file shows 3 or more consecutive failed cycles | See "Supervisor status file" below. |
+| `supervisor_stale` | the status file has not been updated for an hour | The supervisor loop is hung, or its agent is not running. |
+
+`ALERT_REMINDER_SECONDS` is 43200 for all of these. State is in
+`~/.config/stall-watchdog/state.json`.
+
+### How prompts are detected
+
+The per-user `tccd` logs two lines per prompt, with the same `msgID`:
+
+```text
+AUTHREQ_PROMPTING: msgID=17928.48, service=kTCCServiceSystemPolicyNetworkVolumes, subject=Sub:{/usr/local/stable/bash/bin/bash}Resp:{...}
+AUTHREQ_RESULT: msgID=17928.48, authValue=2, ...
+```
+
+The first is logged when the dialog opens, the second when someone answers it
+(Allow or Don't Allow). Each run reads new `AUTHREQ_PROMPTING` lines since the
+previous run (with 1 minute of overlap, and at most 1 hour of catch-up after a
+gap), and records each prompt in `.tcc_prompts`. While a prompt is open, it
+also reads `AUTHREQ_RESULT` lines over the same window. On TILSIT there are
+about 39,000 RESULT lines a day, mostly from the system `tccd`, and about one
+PROMPTING line, so RESULT lines are read only when needed.
+
+Prompts are keyed `<tccd pid>/<msgID>`. The msgID is `<client pid>.<sequence>`,
+and the same client (`sandboxd`) talks to both the system `tccd` and the
+per-user one, each with its own sequence. A RESULT from the system `tccd` can
+carry the same msgID as an open prompt, and must not close it.
+
+A prompt closes on its own RESULT line, or when the `tccd` process that owns it
+has exited. It is never dropped for being old: that would send a recovery email
+while the dialog is still on screen. `tccd` log lines do not stay in the log
+for long (the 09-17 lines were already gone by 09-23), which is why the
+watchdog keeps its own state.
+
+### Clearing a prompt by hand
+
+If a RESULT line is missed (the log was unreadable for longer than the 1-hour
+catch-up window), the prompt stays open and a reminder goes out every 12 hours.
+After you check that no dialog is on the desktop, remove the entry. The recovery
+email goes out on the next run. The path is spelled out because `sudo -u`
+keeps your own HOME, so `~` would point at the wrong file:
+
+```bash
+sudo -u operator /bin/bash -c '
+  f=/Users/operator/.config/stall-watchdog/state.json
+  jq ".tcc_prompts" "$f"                                   # find the key
+  jq "del(.tcc_prompts[\"<key>\"])" "$f" >"$f.tmp" && mv "$f.tmp" "$f"'
+```
+
+### Supervisor status file
+
+The podman supervisor loop (the `podman-machine-start.sh` wrapper, written by
+`podman-transmission-setup.sh`) rewrites
+`~/.local/state/<host>-supervisor-status.json` once per cycle:
+
+```json
+{"consecutive_failures": 0, "last_error": "", "updated_at": 1790192010}
+```
+
+A cycle fails when `ensure_machine` or `ensure_container` fails, or when a VM
+recovery restart fails. A data-access failure on its own does not count: that
+check already escalates by cycling the VM. The wrapper sends no email.
+
+**A missing file means "unknown", and nothing is alerted.** The wrapper change
+takes effect only when the supervisor is restarted, and restarting it restarts
+the VM. The header of the wrapper heredoc in `podman-transmission-setup.sh`
+explains why the loop must never exit. So stall-watchdog can be deployed first, and the supervisor checks
+start working at the next VM maintenance window.
+
+### Deploying
+
+Re-running all of `podman-transmission-setup.sh` also manages the container.
+To deploy only the watchdog: render the template with the real
+`__SERVER_NAME__` and `__MONITORING_EMAIL__`, install it to
+`~operator/.local/bin/stall-watchdog.sh` (mode 755), write the plist from
+section 9e of the setup script, and load it:
+
+```bash
+sudo launchctl bootstrap gui/$(id -u operator) \
+  /Users/operator/Library/LaunchAgents/com.<host>.stall-watchdog.plist
+```
+
+To reload after changing the plist, `bootout` the label first. To rerun it
+now, `sudo launchctl kickstart -kp gui/$(id -u operator)/com.<host>.stall-watchdog`.
+
+### Not yet proven
+
+- **A live prompt, end to end.** The checks are tested with fixtures built
+  from the real 2026-09-23 09:22 prompt, and the watchdog has been run against
+  that prompt's real log lines. A live test still needs a real unanswered
+  prompt: an ad-hoc-signed copy of bash that lists the NAS mount, run from a
+  temporary operator LaunchAgent, left for 5 minutes or more. Expect one alert
+  naming its path, then one recovery email when you click Don't Allow.
+- **Whether a prompt is logged again after a long gap.** A scan looks back at
+  most an hour. If the agent was not running for longer than that while a
+  prompt opened, the watchdog sees that prompt only if tccd logs it again,
+  which is expected on the next access attempt but not verified.
+- **Whether an open prompt blocks other network-volume access.** The 09-17
+  outage suggested that it does (Plex stalled too), but that is not
+  confirmed. During the live test, check whether Plex `checkFiles` and
+  `podman ps` hang, and record the result here.
 
 ## Troubleshooting
 
@@ -165,6 +281,9 @@ log is the record of the failure.
 bats tests/alert-lib.bats
 bats tests/plex-watchdog.bats
 bats tests/pia-port-watchdog.bats
+bats tests/stall-watchdog.bats
+bats tests/msmtp-setup.bats
+bats tests/podman-machine-start.bats   # supervisor status file
 ```
 
 Each watchdog test file has a "launchd PATH" test. It runs the rendered

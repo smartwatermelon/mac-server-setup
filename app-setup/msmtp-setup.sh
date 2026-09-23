@@ -214,8 +214,11 @@ MSMTP_CONFIG_DIR="${OPERATOR_HOME}/.config/msmtp"
 MSMTP_CONFIG="${MSMTP_CONFIG_DIR}/config"
 MSMTP_LOG="${OPERATOR_HOME}/.local/state/msmtp.log"
 
-# Check if msmtp config already exists with an embedded password
-if [[ -f "${MSMTP_CONFIG}" ]] && grep -q '^password ' "${MSMTP_CONFIG}" 2>/dev/null; then
+# Check if msmtp config already exists with an embedded password. The file is
+# mode 600 and owned by operator, so read it as operator: a grep as the admin
+# user running this script fails, and every run would prompt again.
+if [[ -f "${MSMTP_CONFIG}" ]] \
+  && sudo -u "${OPERATOR_USERNAME}" grep -q '^password ' "${MSMTP_CONFIG}"; then
   log "msmtp config already exists with embedded password at ${MSMTP_CONFIG}"
   if [[ "${FORCE}" != "true" ]]; then
     log "Use --force to overwrite existing configuration"

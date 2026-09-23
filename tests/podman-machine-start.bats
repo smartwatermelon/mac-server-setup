@@ -50,7 +50,20 @@ setup() {
   extract_and_render_wrapper
   write_podman_mock
   write_mount_mock
+  write_pgrep_mock
   link_timeout
+}
+
+# ---------------------------------------------------------------------------
+# reap_machine_helpers finds vfkit/gvproxy with `pgrep -f` and kills any whose
+# arguments name transmission-vm. Unmocked, a test that drives ensure_machine
+# with the machine "stopped" reaches for the REAL helpers: on TILSIT that is
+# the live Transmission VM. Only file permissions saved it (the helpers belong
+# to operator, the tests ran as the admin user). Mock pgrep to find nothing.
+# ---------------------------------------------------------------------------
+write_pgrep_mock() {
+  printf '#!/usr/bin/env bash\nexit 1\n' >"${MOCK_BIN_DIR}/pgrep"
+  chmod +x "${MOCK_BIN_DIR}/pgrep"
 }
 
 # ---------------------------------------------------------------------------
@@ -171,6 +184,10 @@ case "$*" in
     exit 0
     ;;
   "machine start"*)
+    # Opt-in failure: the machine stays stopped and start reports an error.
+    if [[ -f "${MACHINE_START_FAIL_FILE:-/nonexistent}" ]]; then
+      exit 1
+    fi
     echo "running" >"${MACHINE_STATE_FILE}"
     exit 0
     ;;
@@ -528,4 +545,60 @@ MOCK_EOF
 
   # And it must bail before touching podman at all.
   [ ! -s "${CALLS_FILE}" ]
+}
+
+# ---------------------------------------------------------------------------
+# Supervisor status file (#199)
+#
+# stall-watchdog alerts when the supervisor fails several cycles in a row or
+# stops reporting. It learns both from a small JSON file this loop rewrites
+# once per cycle: {consecutive_failures, last_error, updated_at (epoch)}.
+# ---------------------------------------------------------------------------
+
+status_file() {
+  printf '%s' "${OPERATOR_HOME}/.local/state/testhost-supervisor-status.json"
+}
+
+@test "status file: a healthy loop reports zero failures and a fresh timestamp" {
+  set_mock_state "running" "true" "true"
+
+  run run_wrapper_briefly
+
+  [ -f "$(status_file)" ]
+  [ "$(jq -r '.consecutive_failures' "$(status_file)")" -eq 0 ]
+  local updated now
+  updated="$(jq -r '.updated_at' "$(status_file)")"
+  now="$(date +%s)"
+  [ $((now - updated)) -le 10 ]
+}
+
+@test "status file: repeated machine start failures are counted, with the error" {
+  set_mock_state "stopped" "true" "true"
+  export MACHINE_START_FAIL_FILE="${TEST_TMPDIR}/machine-start.fail"
+  touch "${MACHINE_START_FAIL_FILE}"
+
+  run run_wrapper_briefly
+
+  [ -f "$(status_file)" ]
+  [ "$(jq -r '.consecutive_failures' "$(status_file)")" -ge 3 ]
+  [ "$(jq -r '.last_error' "$(status_file)")" = "ensure_machine failed" ]
+}
+
+@test "status file: a successful cycle resets the failure count" {
+  set_mock_state "stopped" "true" "true"
+  export MACHINE_START_FAIL_FILE="${TEST_TMPDIR}/machine-start.fail"
+  touch "${MACHINE_START_FAIL_FILE}"
+  run run_wrapper_briefly
+  [ "$(jq -r '.consecutive_failures' "$(status_file)")" -ge 1 ]
+
+  rm -f "${MACHINE_START_FAIL_FILE}"
+  run run_wrapper_briefly
+
+  [ "$(jq -r '.consecutive_failures' "$(status_file)")" -eq 0 ]
+  [ "$(jq -r '.last_error' "$(status_file)")" = "" ]
+}
+
+@test "status file: the path is rendered at deploy time, not left as a variable" {
+  run grep -F "SUPERVISOR_STATUS_FILE=\"${OPERATOR_HOME}/.local/state/testhost-supervisor-status.json\"" "${WRAPPER_SCRIPT}"
+  [ "${status}" -eq 0 ]
 }
