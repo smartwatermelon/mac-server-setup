@@ -506,6 +506,13 @@ else
   log "✅ transmission-trigger-watcher.sh deployed to ${WATCHER_DEST}"
 fi
 
+# The watcher puts the stably-signed bash first in PATH (see the template).
+if [[ ! -x "/usr/local/stable/bash/bin/bash" ]]; then
+  log "⚠️  /usr/local/stable/bash/bin/bash not found - transmission-done will run under"
+  log "    ${HOMEBREW_PREFIX}/bin/bash, whose network-volume grant does not survive brew upgrades."
+  log "    Run scripts/setup-auto-updates.sh (or /usr/local/bin/${HOSTNAME_LOWER}-stable-sign.sh) to create it."
+fi
+
 # ---------------------------------------------------------------------------
 # Section 7b: Deploy pending-move cleanup script
 # ---------------------------------------------------------------------------

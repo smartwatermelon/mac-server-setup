@@ -74,8 +74,10 @@ diagnosing tunnel-vs-port-forwarding failures
 ### Stable Signing (TCC grants that survive brew upgrade)
 
 **Files**: `app-setup/templates/stable-sign.sh`,
-`scripts/server/setup-auto-updates.sh`, `tests/stable-sign.bats`, and the
-`export PATH=` line of the wrapper in `app-setup/podman-transmission-setup.sh`
+`scripts/server/setup-auto-updates.sh`, `tests/stable-sign.bats`,
+`tests/transmission-trigger-watcher.bats`, the `export PATH=` line of the
+wrapper in `app-setup/podman-transmission-setup.sh`, and the `export PATH=`
+line of `app-setup/templates/transmission-trigger-watcher.sh`
 
 **Documentation**: `docs/apps/stable-signing-README.md`
 
@@ -104,6 +106,7 @@ test architecture (BATS, TEST_RUNNER mode), file stability checks
 bats tests/plex-watchdog.bats
 bats tests/cloudflare-ddns.bats
 bats tests/stable-sign.bats
+bats tests/transmission-trigger-watcher.bats
 bats tests/podman-machine-start.bats
 bats tests/pending-move-cleanup.bats
 bats tests/transmission-filebot/**/*.bats

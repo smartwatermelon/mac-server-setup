@@ -89,9 +89,15 @@ CERT_DAYS="${CERT_DAYS:-3650}"
 # stable copy. The podman supervisor's chain is timeout (coreutils gtimeout)
 # -> podman-remote -> vfkit; with only podman mirrored the prompt moved to
 # gtimeout (measured 2026-09-03).
+#
+# bash: the trigger watcher runs transmission-done (#!/usr/bin/env bash)
+# with Homebrew first in PATH, so Homebrew bash is responsible for FileBot's
+# reads on the NFS mount. The bash 5.3.20 upgrade on 2026-09-16 left a
+# prompt that blocked FileBot for 19 hours on 2026-09-17.
 STABLE_TARGETS=(
   "podman:podman-remote"
   "coreutils:gtimeout"
+  "bash:bash"
 )
 
 MODE="sync"
