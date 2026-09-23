@@ -64,7 +64,8 @@ API error modes, and the `TEST_RUNNER` hook that lets BATS mock network calls.
 `app-setup/templates/pia-port-watchdog.sh`, `app-setup/msmtp-setup.sh`,
 `app-setup/plex-watchdog-setup.sh`, the pia-port-watchdog section of
 `app-setup/podman-transmission-setup.sh`, `tests/alert-lib.bats`,
-`tests/plex-watchdog.bats`, `tests/pia-port-watchdog.bats`
+`tests/plex-watchdog.bats`, `tests/pia-port-watchdog.bats`,
+`tests/msmtp-setup.bats`
 
 **Documentation**: `docs/apps/monitoring-README.md`
 
@@ -123,6 +124,7 @@ test architecture (BATS, TEST_RUNNER mode), file stability checks
 bats tests/alert-lib.bats
 bats tests/plex-watchdog.bats
 bats tests/pia-port-watchdog.bats
+bats tests/msmtp-setup.bats
 bats tests/cloudflare-ddns.bats
 bats tests/stable-sign.bats
 bats tests/transmission-trigger-watcher.bats
