@@ -256,6 +256,7 @@ No action required.}" || true
   local rc=0
   if [[ -n "${send_subject}" ]]; then
     if alert_send "${send_subject}" "${body}"; then
+      _alert_log "ALERT sent: ${key}: ${send_subject}"
       alerted=true
       last_sent="${now}"
     else
