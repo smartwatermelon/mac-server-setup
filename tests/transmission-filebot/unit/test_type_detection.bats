@@ -199,3 +199,31 @@ load ../test_helper
   run cat "${LOG_FILE}"
   assert_output_contains "Pattern counts" "${output}"
 }
+
+# Production runs with TEST_MODE=false, where log() also prints to the
+# terminal. That output must not reach stdout: callers capture this function
+# with $(...), and on 2026-09-24 the captured log lines made media_type differ
+# from "tv", so an SNW episode previewed with strict auto-detection and failed.
+@test "detect_media_type_heuristic: returns only the type when TEST_MODE=false" {
+  local file="${TEST_TEMP_DIR}/star.trek.strange.new.worlds.s04e10.1080p.web.h264-cakes[EZTVx.to].mkv"
+  touch "${file}"
+  export TR_TORRENT_FILES="${file}"
+  export TEST_MODE=false
+
+  local result
+  result=$(detect_media_type_heuristic "${file}")
+
+  assert_equal "tv" "${result}"
+}
+
+@test "log: writes to LOG_FILE and not to stdout when TEST_MODE=false" {
+  export TEST_MODE=false
+  : >"${LOG_FILE}"
+
+  local captured
+  captured=$(log "probe message" 2>/dev/null)
+
+  assert_equal "" "${captured}"
+  run cat "${LOG_FILE}"
+  assert_output_contains "probe message" "${output}"
+}

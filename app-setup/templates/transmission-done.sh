@@ -231,11 +231,12 @@ log() {
   fi
   local timestamp
   timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-  # In test mode, only write to log file (don't output to stdout)
+  # stderr, never stdout: functions that return data by echo are captured with
+  # $(...), and a log line in that capture corrupts the returned value.
   if [[ "${TEST_MODE}" == "true" ]]; then
     printf '[%s] %s\n' "${timestamp}" "$1" >>"${LOG_FILE}"
   else
-    printf '[%s] %s\n' "${timestamp}" "$1" | tee -a "${LOG_FILE}"
+    printf '[%s] %s\n' "${timestamp}" "$1" | tee -a "${LOG_FILE}" >&2
   fi
 }
 
