@@ -348,6 +348,21 @@ MOCK_EOF
   [ "${run_calls}" -eq 1 ]
 }
 
+@test "supervisor: the recreated container starts added torrents instead of pausing them" {
+  set_mock_state "running" "false" "false"
+
+  run run_wrapper_briefly
+
+  grep '^run -d' "${CALLS_FILE}" | grep -q -- '-e TRANSMISSION_START_ADDED_TORRENTS=true'
+}
+
+@test "setup: the initial podman run also starts added torrents instead of pausing them" {
+  local block
+  block=$(awk '/^  if sudo -iu "\$\{OPERATOR_USERNAME\}" podman run -d \\$/{flag=1} flag{print} /haugene\/transmission-openvpn:latest; then$/{flag=0}' "${SETUP_SCRIPT}")
+  [ -n "${block}" ]
+  grep -q -- '-e TRANSMISSION_START_ADDED_TORRENTS=true' <<<"${block}"
+}
+
 @test "supervisor: does not call podman run again once the container exists and is running" {
   set_mock_state "running" "true" "true"
 
