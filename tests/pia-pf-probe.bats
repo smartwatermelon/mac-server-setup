@@ -96,7 +96,9 @@ load_probe() {
     printf '%s\n' "source \"${PROBE}\""
     printf '%s\n' 'list_pf_regions() { printf ""; }'
     printf '%s\n' 'load_credentials() { PIA_USERNAME=u; PIA_PASSWORD=p; }'
-    printf '%s\n' 'probe_region() { printf "PROBED:[%s]\n" "$1" >&2; printf "x,no,stub,,,\n"; }'
+    cat <<'STUB'
+probe_region() { printf "PROBED:[%s]\n" "$1" >&2; printf "x,no,stub,,,\n"; }
+STUB
     printf '%s\n' 'cleanup_probe_container() { :; }'
     printf '%s\n' "main --all --out \"${TEST_TMPDIR}/out.csv\""
   } >"${script}"
@@ -135,7 +137,9 @@ load_probe() {
     printf '%s\n' 'load_credentials() { PIA_USERNAME=u; PIA_PASSWORD=p; }'
     # An OK row so main's "nothing confirmed" exit-1 path is not what is under
     # test here; the region-to-row mapping is.
-    printf '%s\n' 'probe_region() { printf "%s,yes,OK,40001,10.0.0.1,confirmed\n" "$1"; }'
+    cat <<'STUB'
+probe_region() { printf "%s,yes,OK,40001,10.0.0.1,confirmed\n" "$1"; }
+STUB
     printf '%s\n' 'cleanup_probe_container() { :; }'
     printf '%s\n' "main --all --out \"${TEST_TMPDIR}/out.csv\""
   } >"${script}"
@@ -169,7 +173,9 @@ load_probe() {
     printf '%s\n' 'TEST_RUNNER=true'
     printf '%s\n' "source \"${PROBE}\""
     printf '%s\n' 'load_credentials() { PIA_USERNAME=u; PIA_PASSWORD=p; }'
-    printf '%s\n' 'probe_region() { printf "%s,no,stub,,,note\n" "$1"; }'
+    cat <<'STUB'
+probe_region() { printf "%s,no,stub,,,note\n" "$1"; }
+STUB
     printf '%s\n' 'cleanup_probe_container() { :; }'
     printf '%s\n' "main --out \"${TEST_TMPDIR}/out.csv\" ca_vancouver"
   } >"${script}"
@@ -187,11 +193,9 @@ load_probe() {
   load_probe
   echo 1 >"${PODMAN_RUN_RC_FILE}"
   # probe_region interpolates the credentials into the podman run flags; main
-  # normally sets them via load_credentials.
-  PIA_USERNAME=u
-  PIA_PASSWORD=p
-
-  run probe_region "bogus_region"
+  # normally sets them via load_credentials. Assigned on the call so they stay
+  # scoped to it.
+  PIA_USERNAME=u PIA_PASSWORD=p run probe_region "bogus_region"
   [ "$status" -eq 0 ]
   [[ "$output" == "bogus_region,no,container_failed,,,could not start probe container" ]]
 }
@@ -203,12 +207,10 @@ load_probe() {
   # one.
   load_probe
   echo 0 >"${PODMAN_RUN_RC_FILE}"
-  PIA_USERNAME=u
-  PIA_PASSWORD=p
   # Collapse the wait so the test does not sit through the real 90s timeout.
-  # probe_region reads TUNNEL_TIMEOUT from the enclosing scope; assigning it on
-  # the call keeps that dependency explicit.
-  TUNNEL_TIMEOUT=0 run probe_region "ca_vancouver"
+  # probe_region reads TUNNEL_TIMEOUT and the credentials from the enclosing
+  # scope; assigning them on the call keeps that dependency explicit.
+  PIA_USERNAME=u PIA_PASSWORD=p TUNNEL_TIMEOUT=0 run probe_region "ca_vancouver"
   [ "$status" -eq 0 ]
   [[ "$output" == "ca_vancouver,no,tunnel_timeout,,,no tunnel after 0s" ]]
 }
@@ -224,8 +226,8 @@ load_probe() {
   printf 'PIA_USERNAME=p1234567\nPIA_PASSWORD=s3cr3t\n' >"${env_file}"
 
   PIA_ENV_FILE="${env_file}" load_credentials
-  [ "${PIA_USERNAME}" = "p1234567" ]
-  [ "${PIA_PASSWORD}" = "s3cr3t" ]
+  [ "${PIA_USERNAME:-}" = "p1234567" ]
+  [ "${PIA_PASSWORD:-}" = "s3cr3t" ]
 }
 
 @test "a password containing '=' survives credential parsing intact" {
@@ -236,7 +238,7 @@ load_probe() {
   printf 'PIA_USERNAME=p1234567\nPIA_PASSWORD=a=b=c\n' >"${env_file}"
 
   PIA_ENV_FILE="${env_file}" load_credentials
-  [ "${PIA_PASSWORD}" = "a=b=c" ]
+  [ "${PIA_PASSWORD:-}" = "a=b=c" ]
 }
 
 @test "a missing env file fails loudly instead of probing without credentials" {
@@ -270,7 +272,9 @@ load_probe() {
     printf '%s\n' 'TEST_RUNNER=true'
     printf '%s\n' "source \"${PROBE}\""
     printf '%s\n' 'load_credentials() { PIA_USERNAME=u; PIA_PASSWORD=p; }'
-    printf '%s\n' 'probe_region() { printf "%s,no,stub,,,\n" "$1"; }'
+    cat <<'STUB'
+probe_region() { printf "%s,no,stub,,,\n" "$1"; }
+STUB
     printf '%s\n' 'cleanup_probe_container() { :; }'
     printf '%s\n' 'main --nonsense'
   } >"${script}"
@@ -283,5 +287,15 @@ load_probe() {
 @test "the TEST_RUNNER hook keeps sourcing side-effect free" {
   # If main ran on source, every test above would probe for real.
   run grep -E '^if \[\[ "\$\{TEST_RUNNER:-false\}" != "true" \]\]; then' "${PROBE}"
+  [ "$status" -eq 0 ]
+}
+
+@test "the probe requests tokens from PIA's v2 endpoint with form credentials" {
+  # The legacy /gtoken/generateToken endpoint returned HTTP 500 "all APIs
+  # down" for over an hour on 2026-10-12. A probe still using it would report
+  # every region as token_failed.
+  run grep -E '^PIA_TOKEN_URL="https://www.privateinternetaccess.com/api/client/v2/token"$' "${PROBE}"
+  [ "$status" -eq 0 ]
+  run grep -F -- "--form-string \"username=\${PIA_USERNAME}\" --form-string \"password=\${PIA_PASSWORD}\"" "${PROBE}"
   [ "$status" -eq 0 ]
 }

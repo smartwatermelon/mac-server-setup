@@ -101,9 +101,11 @@ teardown() {
 @test "sources the guard before defining any port-applying logic" {
   # A regression here would mean the script could call apply_port without the
   # guard having been loaded.
-  local guard_line apply_line
-  guard_line="$(grep -n 'source "${GUARD_LIB}"' "${POST_START}" | cut -d: -f1)"
-  apply_line="$(grep -n 'apply_port "\${pf_port}"' "${POST_START}" | cut -d: -f1)"
+  local guard_match apply_match guard_line apply_line
+  guard_match="$(grep -nF "source \"\${GUARD_LIB}\"" "${POST_START}")"
+  apply_match="$(grep -nF "apply_port \"\${pf_port}\"" "${POST_START}")"
+  guard_line="${guard_match%%:*}"
+  apply_line="${apply_match%%:*}"
   [ -n "${guard_line}" ]
   [ -n "${apply_line}" ]
   [ "${guard_line}" -lt "${apply_line}" ]
@@ -197,4 +199,103 @@ teardown() {
   run bash "${script}"
   [ "$status" -eq 0 ]
   [ "$output" = "not yet established" ]
+}
+
+# --- token acquisition (2026-10-12) -----------------------------------------
+#
+# PIA's legacy gtoken endpoint answered HTTP 500 "all APIs down" on five
+# consecutive renewals while the v2 endpoint issued tokens. These tests drive
+# get_auth_token against a stub curl whose answer is chosen per endpoint.
+
+# Writes ${TEST_TMPDIR}/token.sh, a harness that defines get_auth_token and
+# its helpers, runs it, and prints the resulting token on success.
+make_token_harness() {
+  local script="${TEST_TMPDIR}/token.sh"
+  {
+    printf '%s\n' '#!/usr/bin/env bash'
+    printf '%s\n' 'set -uo pipefail'
+    grep -E '^(PIA_TOKEN_URL|PIA_TOKEN_URL_LEGACY|CURL_[A-Z_]+)=' "${POST_START}"
+    printf '%s\n' 'CURL_RETRY_DELAY=0'
+    printf '%s\n' 'pia_user=p1234567 pia_pass=hunter2 pf_token=""'
+    sed -n '/^log() {/,/^}/p' "${POST_START}"
+    sed -n '/^request_token() {/,/^}/p' "${POST_START}"
+    sed -n '/^get_auth_token() {/,/^}/p' "${POST_START}"
+    cat <<'RUN'
+get_auth_token && echo "TOKEN=${pf_token}"
+RUN
+  } >"${script}"
+}
+
+# Stub curl. Per endpoint, STUB_V2 / STUB_LEGACY name a canned outcome:
+#   ok      -> HTTP 200 with a token
+#   down    -> HTTP 500 with PIA's "all APIs down" message
+#   neterr  -> curl exits 6 with an error on stderr
+make_curl_stub() {
+  cat >"${TEST_TMPDIR}/curl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${CALL_LOG}"
+url="${*: -1}"
+case "${url}" in
+  */api/client/v2/token) outcome="${STUB_V2}" ;;
+  */gtoken/generateToken) outcome="${STUB_LEGACY}" ;;
+  *) outcome=neterr ;;
+esac
+case "${outcome}" in
+  ok) printf '{"status":"OK","token":"tok-%s"}\n200' "${url##*/}" ;;
+  down) printf '{\n    "status": "ERROR",\n    "message": "server error: all APIs down; please report bug"\n}\n500' ;;
+  neterr) echo "curl: (6) Could not resolve host" >&2; exit 6 ;;
+esac
+STUB
+  chmod +x "${TEST_TMPDIR}/curl"
+}
+
+@test "token: uses the v2 endpoint and does not touch legacy when v2 works" {
+  make_curl_stub
+  make_token_harness
+  STUB_V2=ok STUB_LEGACY=down run bash "${TEST_TMPDIR}/token.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"TOKEN=tok-token"* ]]
+  run grep -c generateToken "${CALL_LOG}"
+  [ "$output" -eq 0 ]
+}
+
+@test "token: v2 sends credentials as form fields, as PIA's reference does" {
+  make_curl_stub
+  make_token_harness
+  STUB_V2=ok STUB_LEGACY=ok run bash "${TEST_TMPDIR}/token.sh"
+  grep -q -- "--form-string username=p1234567 --form-string password=hunter2 .*/api/client/v2/token" "${CALL_LOG}"
+}
+
+@test "token: falls back to legacy when v2 returns an error" {
+  make_curl_stub
+  make_token_harness
+  STUB_V2=down STUB_LEGACY=ok run bash "${TEST_TMPDIR}/token.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"TOKEN=tok-generateToken"* ]]
+  [[ "$output" == *"(v2) returned no token: HTTP 500: server error: all APIs down"* ]]
+}
+
+@test "token: logs PIA's status and message when both endpoints fail" {
+  make_curl_stub
+  make_token_harness
+  STUB_V2=down STUB_LEGACY=down run bash "${TEST_TMPDIR}/token.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"TOKEN="* ]]
+  [[ "$output" == *"(legacy) returned no token: HTTP 500: server error: all APIs down; please report bug"* ]]
+}
+
+@test "token: logs curl's own error on a network failure" {
+  make_curl_stub
+  make_token_harness
+  STUB_V2=neterr STUB_LEGACY=neterr run bash "${TEST_TMPDIR}/token.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"(v2) failed: curl exit 6: curl: (6) Could not resolve host"* ]]
+}
+
+@test "token: every token request retries transient failures" {
+  make_curl_stub
+  make_token_harness
+  STUB_V2=down STUB_LEGACY=down run bash "${TEST_TMPDIR}/token.sh"
+  run grep -c -- '--retry 3' "${CALL_LOG}"
+  [ "$output" -eq 2 ]
 }

@@ -112,8 +112,10 @@ tunnel repeatedly reconnecting.
 PIA's next-generation port forwarding is a two-step flow, implemented in the
 image's `/etc/openvpn/pia/update-port.sh`:
 
-1. `POST https://www.privateinternetaccess.com/gtoken/generateToken` with the
-   account credentials, returning a bearer token.
+1. `POST https://www.privateinternetaccess.com/api/client/v2/token` with the
+   account credentials as form fields, returning a bearer token. Our manager
+   falls back to the legacy `/gtoken/generateToken` endpoint (HTTP basic auth)
+   if v2 fails — see [Token endpoint outage](#token-endpoint-outage-2026-10-12).
 2. `GET https://<tunnel-gateway>:19999/getSignature` with that token, returning
    a signed payload containing the assigned port, then `bindPort` to reserve
    it.
@@ -161,10 +163,12 @@ points at the operator's `.env`.
 The probe runs in its own throwaway container and does not disturb the live
 `transmission-vpn` container or any download in progress.
 
-It reads credentials from the same `.env` the live container uses, and passes
-them into the probe container as environment variables on the `podman exec`
-rather than interpolating them into command strings — so they stay out of the
-process table, matching the `--env-file` protection described above.
+It reads credentials from the same `.env` the live container uses and passes
+them into the probe container as `podman exec -e` variables. That does **not**
+keep them out of the process table: the values appear in the host's
+`podman exec` argv, and again in the container's `curl` argv. The live
+manager (`transmission-post-start.sh`) has the same exposure inside the
+container, because curl takes the credentials as arguments.
 
 The probe container runs with `--privileged`, `--device /dev/net/tun`, and
 `CREATE_TUN_DEVICE=false`, mirroring the live container. That last one is
@@ -377,6 +381,40 @@ sudo -u operator podman logs transmission-vpn | grep -c "startup script complete
 and silently replaces the one PIA assigned. `settings.json` and the running
 listen port then disagree. The setup script now pins
 `TRANSMISSION_PEER_PORT_RANDOM_ON_START=false`.
+
+## Token endpoint outage (2026-10-12)
+
+After a container recreate at 11:33, every token request failed for over an
+hour and pia-port-watchdog sent its "port forwarding lost" alert. The tunnel
+was healthy and the guard kept the existing peer port, so downloads continued
+unforwarded.
+
+Cause: PIA's legacy `/gtoken/generateToken` endpoint was answering HTTP 500
+with `{"status": "ERROR", "message": "server error: all APIs down; please
+report bug"}` on most calls. The v2 endpoint `/api/client/v2/token` — the one
+PIA's own `pia-foss/manual-connections/get_token.sh` uses — issued tokens
+normally, and `getSignature` accepts them.
+
+The manager now:
+
+- asks v2 first and falls back to the legacy endpoint;
+- retries each token request (`--retry 3`), which covers HTTP 500/502/503/504;
+- logs the HTTP status and PIA's `message`, or curl's own error. The earlier
+  version discarded both, so the log could only say "network or auth".
+
+To test the token endpoints by hand from inside the container (prints the
+status, never the token):
+
+```bash
+sudo -u operator podman exec transmission-vpn bash -c '
+  u=$(sed -n 1p /config/openvpn-credentials.txt)
+  p=$(sed -n 2p /config/openvpn-credentials.txt)
+  curl -s -o /dev/null -w "v2: %{http_code}\n" \
+    --form-string "username=$u" --form-string "password=$p" \
+    https://www.privateinternetaccess.com/api/client/v2/token
+  curl -s -o /dev/null -w "legacy: %{http_code}\n" -X POST --user "$u:$p" \
+    https://www.privateinternetaccess.com/gtoken/generateToken'
+```
 
 ## Monitoring note
 
