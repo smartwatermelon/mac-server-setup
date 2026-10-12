@@ -163,10 +163,12 @@ points at the operator's `.env`.
 The probe runs in its own throwaway container and does not disturb the live
 `transmission-vpn` container or any download in progress.
 
-It reads credentials from the same `.env` the live container uses, and passes
-them into the probe container as environment variables on the `podman exec`
-rather than interpolating them into command strings — so they stay out of the
-process table, matching the `--env-file` protection described above.
+It reads credentials from the same `.env` the live container uses and passes
+them into the probe container as `podman exec -e` variables. That does **not**
+keep them out of the process table: the values appear in the host's
+`podman exec` argv, and again in the container's `curl` argv. The live
+manager (`transmission-post-start.sh`) has the same exposure inside the
+container, because curl takes the credentials as arguments.
 
 The probe container runs with `--privileged`, `--device /dev/net/tun`, and
 `CREATE_TUN_DEVICE=false`, mirroring the live container. That last one is
@@ -408,7 +410,7 @@ sudo -u operator podman exec transmission-vpn bash -c '
   u=$(sed -n 1p /config/openvpn-credentials.txt)
   p=$(sed -n 2p /config/openvpn-credentials.txt)
   curl -s -o /dev/null -w "v2: %{http_code}\n" \
-    --form "username=$u" --form "password=$p" \
+    --form-string "username=$u" --form-string "password=$p" \
     https://www.privateinternetaccess.com/api/client/v2/token
   curl -s -o /dev/null -w "legacy: %{http_code}\n" -X POST --user "$u:$p" \
     https://www.privateinternetaccess.com/gtoken/generateToken'

@@ -194,7 +194,7 @@ request_token() {
 # Populates pf_token. Returns non-zero if neither endpoint would issue one.
 get_auth_token() {
   request_token "v2" "${PIA_TOKEN_URL}" \
-    --form "username=${pia_user}" --form "password=${pia_pass}" \
+    --form-string "username=${pia_user}" --form-string "password=${pia_pass}" \
     && return 0
 
   request_token "legacy" "${PIA_TOKEN_URL_LEGACY}" \

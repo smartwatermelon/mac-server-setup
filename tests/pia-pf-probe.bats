@@ -296,6 +296,6 @@ STUB
   # every region as token_failed.
   run grep -E '^PIA_TOKEN_URL="https://www.privateinternetaccess.com/api/client/v2/token"$' "${PROBE}"
   [ "$status" -eq 0 ]
-  run grep -F -- "--form \"username=\${PIA_USERNAME}\" --form \"password=\${PIA_PASSWORD}\"" "${PROBE}"
+  run grep -F -- "--form-string \"username=\${PIA_USERNAME}\" --form-string \"password=\${PIA_PASSWORD}\"" "${PROBE}"
   [ "$status" -eq 0 ]
 }

@@ -263,7 +263,7 @@ STUB
   make_curl_stub
   make_token_harness
   STUB_V2=ok STUB_LEGACY=ok run bash "${TEST_TMPDIR}/token.sh"
-  grep -q -- "--form username=p1234567 --form password=hunter2 .*/api/client/v2/token" "${CALL_LOG}"
+  grep -q -- "--form-string username=p1234567 --form-string password=hunter2 .*/api/client/v2/token" "${CALL_LOG}"
 }
 
 @test "token: falls back to legacy when v2 returns an error" {

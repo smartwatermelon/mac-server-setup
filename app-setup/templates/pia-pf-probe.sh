@@ -197,13 +197,8 @@ probe_region() {
     return 0
   fi
 
-  # Next-generation PIA port forwarding is a two-step flow: obtain a bearer
-  # token from the account API, then present it to the PF service running on
-  # the tunnel gateway.
-  # Credentials are handed to the exec as environment variables rather than
-  # interpolated into the command string, so they never appear in the
-  # container's process table. This mirrors the --env-file protection the live
-  # container relies on.
+  # Token first, then the PF service on the tunnel gateway. The credentials
+  # still appear in podman exec's and curl's argv.
   local token
   token="$(podman exec \
     -e "PIA_USERNAME=${PIA_USERNAME}" \
@@ -211,7 +206,7 @@ probe_region() {
     -e "PIA_TOKEN_URL=${PIA_TOKEN_URL}" \
     "${PROBE_CONTAINER}" sh -c \
     'curl --silent --show-error --max-time 15 --retry 3 --retry-delay 10 \
-       --form "username=${PIA_USERNAME}" --form "password=${PIA_PASSWORD}" \
+       --form-string "username=${PIA_USERNAME}" --form-string "password=${PIA_PASSWORD}" \
        "${PIA_TOKEN_URL}" | jq -r .token' 2>/dev/null || true)"
 
   if [[ -z "${token}" || "${token}" == "null" ]]; then
