@@ -53,12 +53,16 @@ fi
 
 GUARD_LIB="/scripts/pia-port-guard.sh"
 
+# Token endpoints in order: v2 as in PIA's get_token.sh, then legacy gtoken
+# (HTTP 500s on 2026-10-12; see pia-vpn-README).
+PIA_TOKEN_URL="https://www.privateinternetaccess.com/api/client/v2/token"
+PIA_TOKEN_URL_LEGACY="https://www.privateinternetaccess.com/gtoken/generateToken"
+
 # PIA's next-generation port forwarding. 19999 is a convention from PIA's
 # reference implementation, not a value they advertise — their server list
 # publishes ports for every other service but none for forwarding. If PIA ever
 # moves it, this fails closed: the guard keeps the existing port rather than
 # zeroing it.
-PIA_TOKEN_URL="https://www.privateinternetaccess.com/gtoken/generateToken"
 PF_API_PORT=19999
 
 CURL_MAX_TIME=15
@@ -153,22 +157,48 @@ pf_gateway_or_unknown() {
   printf '%s' "${gateway:-not yet established}"
 }
 
-# Populates pf_token. Returns non-zero if PIA would not issue one.
-get_auth_token() {
-  local response
-  response="$(curl --silent --show-error --request POST \
-    --max-time "${CURL_MAX_TIME}" \
-    --user "${pia_user}:${pia_pass}" \
-    "${PIA_TOKEN_URL}" 2>/dev/null)" || {
-    log "Token request failed (network or auth)"
-    return 1
-  }
+# Sets pf_token from one endpoint. Args: log label, URL, credential args.
+# --retry covers HTTP 500. Failures log the status or curl's error.
+request_token() {
+  local label="$1" url="$2"
+  shift 2
 
-  pf_token="$(jq -r '.token // empty' <<<"${response}" 2>/dev/null)"
-  [[ -n "${pf_token}" ]] || {
-    log "Token response contained no token"
+  local err_file response rc http_code body message err_text
+  err_file="$(mktemp)"
+  response="$(curl --silent --show-error \
+    --retry "${CURL_RETRY}" --retry-delay "${CURL_RETRY_DELAY}" \
+    --max-time "${CURL_MAX_TIME}" \
+    --write-out '\n%{http_code}' \
+    "$@" "${url}" 2>"${err_file}")"
+  rc=$?
+
+  if [[ ${rc} -ne 0 ]]; then
+    err_text="$(head -c 200 "${err_file}" | tr '\n' ' ')"
+    log "Token request (${label}) failed: curl exit ${rc}: ${err_text}"
+    rm -f "${err_file}"
     return 1
-  }
+  fi
+  rm -f "${err_file}"
+
+  http_code="${response##*$'\n'}"
+  body="${response%$'\n'*}"
+
+  pf_token="$(jq -r '.token // empty' <<<"${body}" 2>/dev/null)"
+  if [[ -z "${pf_token}" ]]; then
+    message="$(jq -r '.message // empty' <<<"${body}" 2>/dev/null | head -c 200)"
+    log "Token request (${label}) returned no token: HTTP ${http_code}${message:+: ${message}}"
+    return 1
+  fi
+}
+
+# Populates pf_token. Returns non-zero if neither endpoint would issue one.
+get_auth_token() {
+  request_token "v2" "${PIA_TOKEN_URL}" \
+    --form "username=${pia_user}" --form "password=${pia_pass}" \
+    && return 0
+
+  request_token "legacy" "${PIA_TOKEN_URL_LEGACY}" \
+    --request POST --user "${pia_user}:${pia_pass}"
 }
 
 # Populates pf_payload, pf_signature, pf_port, pf_token_expiry.

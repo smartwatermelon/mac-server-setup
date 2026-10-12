@@ -35,7 +35,9 @@ set -euo pipefail
 # used only to build the candidate shortlist for --all; it is never treated as
 # proof that forwarding works.
 PIA_SERVER_LIST="https://serverlist.piaservers.net/vpninfo/servers/v4"
-PIA_TOKEN_URL="https://www.privateinternetaccess.com/gtoken/generateToken"
+# v2, as in PIA's get_token.sh. Legacy gtoken returned HTTP 500s on
+# 2026-10-12 and would fail every region.
+PIA_TOKEN_URL="https://www.privateinternetaccess.com/api/client/v2/token"
 
 # PF API listens on the tunnel gateway once a tunnel is established.
 PF_PORT=19999
@@ -208,8 +210,9 @@ probe_region() {
     -e "PIA_PASSWORD=${PIA_PASSWORD}" \
     -e "PIA_TOKEN_URL=${PIA_TOKEN_URL}" \
     "${PROBE_CONTAINER}" sh -c \
-    'curl --silent --show-error --request POST --max-time 15 \
-       --user "${PIA_USERNAME}:${PIA_PASSWORD}" "${PIA_TOKEN_URL}" | jq -r .token' 2>/dev/null || true)"
+    'curl --silent --show-error --max-time 15 --retry 3 --retry-delay 10 \
+       --form "username=${PIA_USERNAME}" --form "password=${PIA_PASSWORD}" \
+       "${PIA_TOKEN_URL}" | jq -r .token' 2>/dev/null || true)"
 
   if [[ -z "${token}" || "${token}" == "null" ]]; then
     cleanup_probe_container
