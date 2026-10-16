@@ -56,7 +56,8 @@ load ../test_helper
   local test_dir="${TEST_TEMP_DIR}/media"
   mkdir -p "${test_dir}"
 
-  run process_with_database "${test_dir}" "TheMovieDB"
+  # TheTVDB: the override's empty output makes the TheMovieDB year guard refuse (#216).
+  run process_with_database "${test_dir}" "TheTVDB"
 
   assert_success
 }
@@ -70,7 +71,7 @@ load ../test_helper
   local test_dir="${TEST_TEMP_DIR}/media"
   mkdir -p "${test_dir}"
 
-  process_with_database "${test_dir}" "TheMovieDB"
+  process_with_database "${test_dir}" "TheMovieDB" || true
 
   run cat "${LOG_FILE}"
   assert_output_contains "Attempting FileBot processing with database: TheMovieDB" "${output}"
@@ -348,7 +349,8 @@ load ../test_helper
     return 1
   }
 
-  run process_with_database "${test_dir}" "TheMovieDB"
+  # TheTVDB: a TheMovieDB run would stop at the year-guard dry run (#216) before counting moves.
+  run process_with_database "${test_dir}" "TheTVDB"
 
   assert_failure
   run cat "${LOG_FILE}"
@@ -744,4 +746,16 @@ record_filebot() {
   local category
   category=$(classify_failure "${LAST_FILEBOT_OUTPUT}")
   assert_equal "no-match" "${category}"
+}
+
+@test "process_with_database: an empty TheMovieDB dry run moves nothing" {
+  # Fail closed: a dry run that errors (say, TMDB down) leaves nothing to check.
+  record_filebot "Fetching data from TheMovieDB failed"
+
+  local rc=0
+  process_with_database "${TEST_TEMP_DIR}" "TheMovieDB" || rc=$?
+
+  assert_equal "1" "${rc}"
+  run cat "${FILEBOT_CALLS}"
+  assert_output_not_contains "--action move" "${output}"
 }

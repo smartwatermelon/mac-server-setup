@@ -931,7 +931,7 @@ filebot_year_mismatch() {
     local src_years dest_year
     src_years=$(name_years "$(basename "${src}")")
     [[ -z "${src_years}" ]] && src_years=$(name_years "$(basename "$(dirname "${src}")")")
-    dest_year=$(grep -oE '\((19|20)[0-9]{2}\)' <<<"${dest}" | tail -1 | tr -d '()')
+    dest_year=$(grep -oE '\((19|20)[0-9]{2}\)' <<<"${dest}" | tail -1 | tr -d '()' || true)
     [[ -z "${src_years}" || -z "${dest_year}" ]] && continue
 
     if ! grep -qx "${dest_year}" <<<"${src_years}"; then
@@ -1210,6 +1210,13 @@ process_with_database() {
     if year_guard_rejects "${database}" "${dry_run}"; then
       echo "${YEAR_GUARD_OUTPUT}" >>"${LOG_FILE}"
       LAST_FILEBOT_OUTPUT="${YEAR_GUARD_OUTPUT}"
+      return 1
+    fi
+    # Fail closed: a dry run with no match to check (say, a TMDB error) must not let an unchecked move through.
+    if ! grep -qE '\[TEST\].* from \[|Skipped \[|Destination file already exists' <<<"${dry_run}"; then
+      log "Year guard: ${database} dry run showed no match to check; not moving"
+      echo "${dry_run}" >>"${LOG_FILE}"
+      LAST_FILEBOT_OUTPUT="${dry_run}"
       return 1
     fi
   fi
@@ -1733,7 +1740,8 @@ triage_failed_torrent() {
 # Email a no-match or failed triage (#216), after the move so retries do not resend. Never changes the result.
 notify_unprocessed() {
   local category="$1"
-  local torrent_name="$2"
+  # The name goes into the Subject header: CR or LF in it would start new headers.
+  local torrent_name="${2//[$'\r\n']/ }"
   local triage_dir="$3"
   local filebot_output="$4"
 
@@ -1749,7 +1757,7 @@ notify_unprocessed() {
   fi
 
   local reason
-  reason=$(grep "^${YEAR_MISMATCH_MARKER}" <<<"${filebot_output}" | head -1)
+  reason=$(grep "^${YEAR_MISMATCH_MARKER}" <<<"${filebot_output}" | head -1 || true)
   if [[ -z "${reason}" ]]; then
     reason="FileBot output (last 15 lines):"$'\n'"$(tail -15 <<<"${filebot_output}")"
   fi

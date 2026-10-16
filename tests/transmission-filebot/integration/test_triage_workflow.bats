@@ -103,6 +103,17 @@ ${YEAR_MISMATCH_MARKER} TheMovieDB: x.1989.avi says 1989, match is 1988 (/m/Movi
   assert_output_contains "could not identify: Some.Torrent.1989" "${output}"
   assert_output_contains "says 1989, match is 1988" "${output}"
   assert_output_contains "triage/no-match" "${output}"
+  run grep -c "^TO=" "${ALERT_CALLS}"
+  assert_equal "1" "${output}"
+}
+
+@test "triage email: CR and LF in the torrent name cannot add headers" {
+  export ALERT_EMAIL="me@example.com"
+  run_failed_preview "Processed 0 files"
+  notify_unprocessed "no-match" $'Evil\r\nBcc: x@example.com' "/t" "Processed 0 files"
+
+  run grep "^SUBJECT=" "${ALERT_CALLS}"
+  assert_output_contains "Evil  Bcc: x@example.com" "${output}"
 }
 
 @test "triage email: a failed torrent is emailed" {
@@ -113,6 +124,8 @@ ${YEAR_MISMATCH_MARKER} TheMovieDB: x.1989.avi says 1989, match is 1988 (/m/Movi
   run cat "${ALERT_CALLS}"
   assert_output_contains "failed to process: Some.Torrent.1989" "${output}"
   assert_output_contains "UnknownHostException" "${output}"
+  run grep -c "^TO=" "${ALERT_CALLS}"
+  assert_equal "1" "${output}"
 }
 
 @test "triage email: already-in-plex sends no email" {
