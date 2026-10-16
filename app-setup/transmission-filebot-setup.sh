@@ -625,12 +625,29 @@ get_media_path() {
   echo "${media_path}"
 }
 
+# BEGIN alert email config
+
+# Print MONITORING_EMAIL from config/config.conf, or nothing if unset or the placeholder.
+get_monitoring_email() {
+  local config_conf="${SCRIPT_DIR}/config/config.conf"
+  [[ -f "${config_conf}" ]] || return 0
+  (
+    set +u
+    # shellcheck source=/dev/null
+    source "${config_conf}"
+    if [[ -n "${MONITORING_EMAIL:-}" ]] && [[ "${MONITORING_EMAIL}" != "your-email@example.com" ]]; then
+      printf '%s' "${MONITORING_EMAIL}"
+    fi
+  )
+}
+
 write_config() {
   local plex_server="$1"
   local plex_token="$2"
   local media_path="$3"
   local movie_section_id="${4:-}"
   local tv_section_id="${5:-}"
+  local alert_email="${6:-}"
 
   # Create config directory if it doesn't exist
   if [[ ! -d "${USER_CONFIG_DIR}" ]]; then
@@ -657,6 +674,13 @@ write_config() {
     tv_section_line="  tv_section_id: ${tv_section_id}"$'\n'
   fi
 
+  # Optional too: transmission-done emails this address when it cannot
+  # identify or process a download (#216), and sends nothing without it.
+  local alerts_block=""
+  if [[ -n "${alert_email}" ]]; then
+    alerts_block="alerts:"$'\n'"  email: ${alert_email}"$'\n'
+  fi
+
   # Write new config (mode 600 — contains Plex auth token)
   printf 'Writing config to: %s\n' "${USER_CONFIG}" >&2
   (
@@ -669,7 +693,7 @@ plex:
   server: ${plex_server}
   token: ${plex_token}
   media_path: ${media_path}
-${movie_section_line}${tv_section_line}logging:
+${movie_section_line}${tv_section_line}${alerts_block}logging:
   file: .local/state/transmission-processing.log
   max_size: 10485760  # 10MB
 EOF
@@ -684,6 +708,8 @@ EOF
   printf 'Config file written successfully.\n' >&2
   return 0
 }
+
+# END alert email config
 
 install_symlink() {
   local target="${SCRIPT_DIR}/templates/transmission-done.sh"
@@ -806,8 +832,15 @@ main() {
     printf 'transmission-done will fall back to legacy hardcoded section IDs (movie=1, tv=2).\n' >&2
   fi
 
+  local alert_email
+  alert_email=$(get_monitoring_email)
+  if [[ -z "${alert_email}" ]]; then
+    printf '\nWarning: MONITORING_EMAIL not set in config/config.conf.\n' >&2
+    printf 'transmission-done will not email when it cannot process a download.\n' >&2
+  fi
+
   # Write configuration file
-  if ! write_config "${plex_server}" "${token}" "${media_path}" "${movie_section_id}" "${tv_section_id}"; then
+  if ! write_config "${plex_server}" "${token}" "${media_path}" "${movie_section_id}" "${tv_section_id}" "${alert_email}"; then
     printf 'Error: Failed to write configuration\n' >&2
     exit 1
   fi

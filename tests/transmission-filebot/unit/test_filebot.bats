@@ -56,7 +56,8 @@ load ../test_helper
   local test_dir="${TEST_TEMP_DIR}/media"
   mkdir -p "${test_dir}"
 
-  run process_with_database "${test_dir}" "TheMovieDB"
+  # TheTVDB: the override's empty output makes the TheMovieDB year guard refuse (#216).
+  run process_with_database "${test_dir}" "TheTVDB"
 
   assert_success
 }
@@ -70,7 +71,7 @@ load ../test_helper
   local test_dir="${TEST_TEMP_DIR}/media"
   mkdir -p "${test_dir}"
 
-  process_with_database "${test_dir}" "TheMovieDB"
+  process_with_database "${test_dir}" "TheMovieDB" || true
 
   run cat "${LOG_FILE}"
   assert_output_contains "Attempting FileBot processing with database: TheMovieDB" "${output}"
@@ -348,7 +349,8 @@ load ../test_helper
     return 1
   }
 
-  run process_with_database "${test_dir}" "TheMovieDB"
+  # TheTVDB: a TheMovieDB run would stop at the year-guard dry run (#216) before counting moves.
+  run process_with_database "${test_dir}" "TheTVDB"
 
   assert_failure
   run cat "${LOG_FILE}"
@@ -561,4 +563,199 @@ record_filebot_calls() {
   local preview_db
   preview_db=$(<"${PREVIEW_DB_FILE}")
   assert_equal "TheMovieDB" "${preview_db}"
+}
+
+# --- Year guard on non-strict movie matches (#216) ---
+
+# The #216 dry-run line, exactly as FileBot logged it on 2026-10-15
+readonly AROUND_THE_WORLD='[TEST] from [/m/Torrents/pending-move/[ www.Torrentday.com ] - Around.The.World.In.80.Days.1989.DVDRip.XviD 3 parts/Around.The.World.In.80.Days.1989.Part1.DVDRip.XviD.avi] to [/m/Movies/Around the World in 80 Days (1988)/Around the World in 80 Days (1988) - CD1.avi]'
+
+# Record each FileBot call. A dry run (--action test) prints DRY_RUN_OUTPUT; a
+# real run prints a successful move.
+record_filebot() {
+  export FILEBOT_TEST_OVERRIDE=false
+  export FILEBOT_CALLS="${TEST_TEMP_DIR}/filebot_calls"
+  : >"${FILEBOT_CALLS}"
+  export DRY_RUN_OUTPUT="$1"
+  run_filebot() {
+    local IFS=" "
+    printf '%s\n' "$*" >>"${FILEBOT_CALLS}"
+    if [[ "$*" == *"--action test"* ]]; then
+      printf '%s\n' "${DRY_RUN_OUTPUT}"
+      return 0
+    fi
+    echo "[MOVE] from [/a/file.mkv] to [/plex/Movies/file.mkv]"
+    return 0
+  }
+}
+
+# --- filebot_year_mismatch ---
+
+@test "filebot_year_mismatch: rejects the #216 match (1989 filed as 1988)" {
+  run filebot_year_mismatch "${AROUND_THE_WORLD}"
+  assert_success
+  assert_output_contains "says 1989, match is 1988" "${output}"
+}
+
+@test "filebot_year_mismatch: accepts a match that keeps the year" {
+  run filebot_year_mismatch "[MOVE] from [/a/Heat.1995.1080p.mkv] to [/m/Movies/Heat (1995)/Heat (1995).mkv]"
+  assert_failure
+}
+
+@test "filebot_year_mismatch: passes when the filename has no year" {
+  run filebot_year_mismatch "[TEST] from [/a/Heat.mkv] to [/m/Movies/Heat (1995)/Heat (1995).mkv]"
+  assert_failure
+}
+
+@test "filebot_year_mismatch: a resolution is not a year" {
+  run filebot_year_mismatch "[TEST] from [/a/Heat.1080p.2160p.mkv] to [/m/Movies/Heat (1995)/Heat (1995).mkv]"
+  assert_failure
+}
+
+@test "filebot_year_mismatch: a title year beside the release year is accepted" {
+  run filebot_year_mismatch "[TEST] from [/a/2001.A.Space.Odyssey.1968.mkv] to [/m/Movies/2001 A Space Odyssey (1968)/2001 A Space Odyssey (1968).mkv]"
+  assert_failure
+}
+
+@test "filebot_year_mismatch: exact match only, one year off is rejected" {
+  run filebot_year_mismatch "[TEST] from [/a/Heat.1995.mkv] to [/m/Movies/Heat (1996)/Heat (1996).mkv]"
+  assert_success
+}
+
+@test "filebot_year_mismatch: uses the folder year when the file has none" {
+  run filebot_year_mismatch "[TEST] from [/a/Heat.1995.1080p/abc-xyz.mkv] to [/m/Movies/Heat (1996)/Heat (1996).mkv]"
+  assert_success
+  assert_output_contains "abc-xyz.mkv says 1995, match is 1996" "${output}"
+}
+
+@test "filebot_year_mismatch: checks the destination of a conflict line" {
+  run filebot_year_mismatch "[SKIP] Skipped [/a/Heat.1995.mkv] because [/m/Movies/Heat (1986)/Heat (1986).mkv] already exists"
+  assert_success
+}
+
+@test "filebot_year_mismatch: checks an IMPORT conflict line" {
+  run filebot_year_mismatch "[IMPORT] Destination file already exists: /m/Movies/Heat (1986)/Heat (1986).mkv (/a/Heat.1995.mkv)"
+  assert_success
+}
+
+@test "filebot_year_guard_applies: movie databases only" {
+  filebot_year_guard_applies "TheMovieDB"
+  filebot_year_guard_applies "OMDb"
+  # `! cmd` never fails a bats test, so each negative case uses run.
+  local db
+  for db in "TheTVDB" "TheMovieDB::TV" "AniDB" ""; do
+    run filebot_year_guard_applies "${db}"
+    assert_failure
+  done
+}
+
+# --- process_with_database ---
+
+@test "process_with_database: wrong-year TheMovieDB match moves nothing" {
+  record_filebot "${AROUND_THE_WORLD}"
+
+  local rc=0
+  process_with_database "${TEST_TEMP_DIR}" "TheMovieDB" || rc=$?
+
+  assert_equal "1" "${rc}"
+  run cat "${FILEBOT_CALLS}"
+  assert_output_contains "--action test" "${output}"
+  assert_output_not_contains "--action move" "${output}"
+  local category
+  category=$(classify_failure "${LAST_FILEBOT_OUTPUT}")
+  assert_equal "no-match" "${category}"
+  filebot_chain_should_stop
+}
+
+@test "process_with_database: TheMovieDB match with the right year is moved" {
+  record_filebot "[TEST] from [/a/Heat.1995.mkv] to [/m/Movies/Heat (1995)/Heat (1995).mkv]"
+
+  run process_with_database "${TEST_TEMP_DIR}" "TheMovieDB"
+
+  assert_success
+  run cat "${FILEBOT_CALLS}"
+  assert_output_contains "--action move" "${output}"
+}
+
+@test "process_with_database: TV databases get no dry run" {
+  record_filebot "${AROUND_THE_WORLD}"
+
+  run process_with_database "${TEST_TEMP_DIR}" "TheTVDB"
+
+  assert_success
+  run cat "${FILEBOT_CALLS}"
+  assert_output_not_contains "--action test" "${output}"
+}
+
+# --- preview and chain ---
+
+@test "preview_filebot_changes: a wrong-year conflict is no-match, not already-in-plex" {
+  # A conflict with a wrong-title library file must never reach media-compare.
+  export FILEBOT_TEST_OVERRIDE=false
+  run_filebot() {
+    echo "[SKIP] Skipped [/a/Heat.1995.mkv] because [/m/Movies/Heat (1986)/Heat (1986).mkv] already exists"
+    echo "Processed 0 files"
+    return 1
+  }
+
+  local rc=0
+  preview_filebot_changes "${TEST_TEMP_DIR}" "TheMovieDB" || rc=$?
+
+  assert_equal "1" "${rc}"
+  local category
+  category=$(classify_failure "${LAST_PREVIEW_OUTPUT}")
+  assert_equal "no-match" "${category}"
+}
+
+@test "preview_filebot_changes: a wrong-year preview fails" {
+  record_filebot "${AROUND_THE_WORLD}"
+
+  local rc=0
+  preview_filebot_changes "${TEST_TEMP_DIR}" "TheMovieDB" || rc=$?
+
+  assert_equal "1" "${rc}"
+  assert_output_contains "${YEAR_MISMATCH_MARKER}" "${LAST_PREVIEW_OUTPUT}"
+}
+
+@test "process_media_with_fallback: a year mismatch stops the chain" {
+  # #216: after TheMovieDB, OMDb and the non-strict TV chain were next.
+  export FILEBOT_TEST_OVERRIDE=false
+  export FILEBOT_CALLS="${TEST_TEMP_DIR}/filebot_calls"
+  : >"${FILEBOT_CALLS}"
+  local test_dir="${TEST_TEMP_DIR}/media"
+  mkdir -p "${test_dir}"
+  touch "${test_dir}/Around.The.World.In.80.Days.1989.Part1.DVDRip.XviD.avi"
+  run_filebot() {
+    local IFS=" "
+    printf '%s\n' "$*" >>"${FILEBOT_CALLS}"
+    if [[ "$*" == *"--action test"* ]]; then
+      printf '%s\n' "${AROUND_THE_WORLD}"
+      return 0
+    fi
+    echo "Movie not found"
+    return 1
+  }
+
+  local rc=0
+  process_media_with_fallback "${test_dir}" "movie" || rc=$?
+
+  assert_equal "1" "${rc}"
+  run cat "${FILEBOT_CALLS}"
+  assert_output_not_contains "OMDb" "${output}"
+  assert_output_not_contains "TheTVDB" "${output}"
+  local category
+  category=$(classify_failure "${LAST_FILEBOT_OUTPUT}")
+  assert_equal "no-match" "${category}"
+}
+
+@test "process_with_database: an empty TheMovieDB dry run moves nothing" {
+  # Fail closed: a dry run that errors (say, TMDB down) leaves nothing to check.
+  record_filebot "Fetching data from TheMovieDB failed"
+
+  local rc=0
+  process_with_database "${TEST_TEMP_DIR}" "TheMovieDB" || rc=$?
+
+  assert_equal "1" "${rc}"
+  run cat "${FILEBOT_CALLS}"
+  assert_output_not_contains "--action move" "${output}"
 }

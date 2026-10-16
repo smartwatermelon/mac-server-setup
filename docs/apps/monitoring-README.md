@@ -112,6 +112,11 @@ without cross-checking `msmtp.log`.
 It returns 1 if an alert or reminder send failed, else 0. Under `set -e`, call
 it as `alert_transition ... || true`.
 
+`transmission-done` also calls `alert_send`, once per download that it cannot
+identify or process. It is not a watchdog, and it reads the recipient from
+`alerts.email` in its own `config.yml`. See "Email when a download cannot be
+processed" in `transmission-filebot-README.md`.
+
 plex-watchdog and pia-port-watchdog use `alert_send` and the state functions,
 but keep their own alert, dedupe and heartbeat logic. The exception is
 plex-watchdog's media access check (key `media_unreachable`), which uses
