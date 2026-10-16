@@ -119,7 +119,9 @@ verification
 
 **Covers**: FileBot invocation and output parsing, Plex API section IDs,
 NFS/VirtioFS cache invalidation, Transmission's limited execution environment,
-test architecture (BATS, TEST_RUNNER mode), file stability checks
+test architecture (BATS, TEST_RUNNER mode), file stability checks, the year
+guard on non-strict movie matches, and the "could not process" email
+(`alerts.email`)
 
 ## Testing
 

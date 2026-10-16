@@ -132,6 +132,58 @@ Off: An Extra Slice"). Tested against FileBot 5.3.0 on 2026-09-22:
 | TheMovieDB::TV | S10E01 (wrong) | fails |
 | TheTVDB | S17E01 (correct) | fails |
 
+### Year guard on movie matches (#216)
+
+Non-strict matching has the same flaw on the movie side: it takes the closest
+title even when the year is wrong. On 2026-10-15 the 1989 NBC miniseries
+`Around.The.World.In.80.Days.1989.Part{1,2,3}.DVDRip.XviD.avi` was refused by
+strict auto-detection, then matched by non-strict TheMovieDB to the 1988
+animated film and filed as `Movies/Around the World in 80 Days (1988)/... -
+CD{1,2,3}.avi`, with that film's poster, backdrop and `tmdb.url`. Plex prefers
+those local files, so fixing the match in Plex did not stick.
+
+Before TheMovieDB or OMDb moves anything, `process_with_database` dry-runs the
+match (`--action test`). `filebot_year_mismatch` compares each destination's
+`(YYYY)` with the years in the source filename (or its folder name, when the
+file has none). The preview step runs the same check. If they differ:
+
+- nothing is moved, and the database chain stops (`filebot_chain_should_stop`);
+  the next candidates, OMDb and the non-strict TV chain, are no safer
+- a `YEAR MISMATCH:` line is added to the output, so `classify_failure` returns
+  `no-match`, even when the output also holds a conflict line. A conflict with
+  a wrong-title file must never reach media-compare.
+
+The years must be equal. A one-year tolerance would not have caught 1989 →
+1988. The cost of that is that an occasional correct match, where TMDB's
+release year is a year off the release name, goes to `triage/no-match/` with
+an email instead of into the library. A filename with no year is not checked.
+TV databases are not guarded: an episode's destination carries the show's
+first-aired year, which date-named episodes legitimately contradict.
+
+### Email when a download cannot be processed
+
+When a download is triaged as `no-match` or `failed`, `notify_unprocessed`
+emails `alerts.email` from `config.yml` through `alert-lib.sh` (see
+`monitoring-README.md`). The email names the torrent, the triage folder, and
+either the year-guard reason or the last 15 lines of FileBot output.
+`already-in-plex` sends nothing: FileBot identified the download, and
+media-compare has handled it.
+
+- The email goes out only after the triage move succeeds. A failed move makes
+  the trigger watcher retry, and each retry would send another email.
+- `alert-lib.sh` is loaded from `~/.local/lib/` (where `msmtp-setup.sh`
+  deploys it), or else from beside the script. Without it, or without
+  `alerts.email`, the download is still triaged and a log line says no email
+  was sent.
+- `transmission-filebot-setup.sh` writes `alerts.email` from
+  `MONITORING_EMAIL` in `config/config.conf`. An existing `config.yml` gets the
+  key only when setup is re-run, or by hand:
+
+  ```yaml
+  alerts:
+    email: you@example.com
+  ```
+
 ### Duplicate handling and quality upgrades
 
 FileBot runs with `--conflict skip`, which never overwrites a library file. (It

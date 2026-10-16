@@ -101,6 +101,16 @@ fi
 EFFECTIVE_HOME="${HOME:-${DERIVED_HOME}}"
 readonly EFFECTIVE_HOME
 
+# Optional alert email (#216): the deployed copy in ~/.local/lib first, then the copy beside this script.
+for alert_lib in "${EFFECTIVE_HOME}/.local/lib/alert-lib.sh" "${SCRIPT_DIR}/alert-lib.sh"; do
+  if [[ -f "${alert_lib}" ]]; then
+    # shellcheck source=/dev/null
+    source "${alert_lib}"
+    break
+  fi
+done
+unset alert_lib
+
 # Constants
 readonly LOCAL_CONFIG="${SCRIPT_DIR}/config.yml"
 readonly USER_CONFIG="${EFFECTIVE_HOME}/.config/transmission-done/config.yml"
@@ -133,6 +143,13 @@ LAST_PREVIEW_OUTPUT=""
 
 # Last successful FileBot output (for Plex scan type detection)
 LAST_FILEBOT_OUTPUT=""
+
+# FileBot output annotated by the year guard (see year_guard_rejects)
+YEAR_GUARD_OUTPUT=""
+
+# Recipient for "could not process" email (config.yml alerts.email). Empty
+# means no email.
+ALERT_EMAIL=""
 
 # Config validation functions
 validate_config_file() {
@@ -181,6 +198,13 @@ read_config() {
 
   local effective_home
   effective_home=$(get_home_directory "${config_file}") || return 1
+
+  # Optional, like the section IDs below: a missing key reads as "null".
+  local alert_email
+  alert_email=$("${YQ}" eval '.alerts.email' "${config_file}")
+  if [[ -n "${alert_email}" ]] && [[ "${alert_email}" != "null" ]]; then
+    ALERT_EMAIL="${alert_email}"
+  fi
 
   PLEX_SERVER=$("${YQ}" eval '.plex.server' "${config_file}")
   PLEX_TOKEN=$("${YQ}" eval '.plex.token' "${config_file}")
@@ -559,6 +583,12 @@ log_filebot_error() {
 classify_failure() {
   local filebot_output="$1"
 
+  # Year guard first (#216): any conflict line is with a wrong title and must not reach media-compare.
+  if grep -q "^${YEAR_MISMATCH_MARKER}" <<<"${filebot_output}"; then
+    echo "no-match"
+    return 0
+  fi
+
   # Already in Plex: FileBot found a match but the destination file exists
   if echo "${filebot_output}" | grep -qiE "already exists|Skipped.*already exists"; then
     echo "already-in-plex"
@@ -863,6 +893,73 @@ filebot_nonstrict_allowed() {
   [[ -n "${database}" && "${database}" != "TheMovieDB::TV" ]]
 }
 
+# Marks a year-guard rejection in FileBot output (#216).
+readonly YEAR_MISMATCH_MARKER="YEAR MISMATCH:"
+
+# The year guard (#216) covers the non-strict movie databases. Not TV: date-named episodes differ from the show's year.
+filebot_year_guard_applies() {
+  case "${1:-}" in
+    TheMovieDB | OMDb) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Print the years in a name, one per line. Whole tokens only, so 1080p is not a year.
+name_years() {
+  tr -cs '[:alnum:]' '\n' <<<"$1" | grep -E '^(19|20)[0-9]{2}$' || true
+}
+
+# Print why a match in $1 changed the filename's year (exact match only, #216) and return 0. Return 1 if all agree.
+filebot_year_mismatch() {
+  local output="$1"
+  local line src dest
+  local re_move='from \[(.*)\] to \[(.*)\]$'
+  local re_skip='Skipped \[(.*)\] because \[(.*)\] already exists'
+  local re_import='Destination file already exists: (.*) \((.*)\)$'
+
+  while IFS= read -r line; do
+    if [[ "${line}" =~ ${re_move} ]] || [[ "${line}" =~ ${re_skip} ]]; then
+      src="${BASH_REMATCH[1]}"
+      dest="${BASH_REMATCH[2]}"
+    elif [[ "${line}" =~ ${re_import} ]]; then
+      dest="${BASH_REMATCH[1]}"
+      src="${BASH_REMATCH[2]}"
+    else
+      continue
+    fi
+
+    local src_years dest_year
+    src_years=$(name_years "$(basename "${src}")")
+    [[ -z "${src_years}" ]] && src_years=$(name_years "$(basename "$(dirname "${src}")")")
+    dest_year=$(grep -oE '\((19|20)[0-9]{2}\)' <<<"${dest}" | tail -1 | tr -d '()')
+    [[ -z "${src_years}" || -z "${dest_year}" ]] && continue
+
+    if ! grep -qx "${dest_year}" <<<"${src_years}"; then
+      local years_list
+      years_list="${src_years//$'\n'//}"
+      printf '%s says %s, match is %s (%s)\n' "$(basename "${src}")" \
+        "${years_list}" "${dest_year}" "${dest}"
+      return 0
+    fi
+  done <<<"${output}"
+
+  return 1
+}
+
+# Return 0 if the year guard rejects output $2 from database $1, and set YEAR_GUARD_OUTPUT with a marker line.
+year_guard_rejects() {
+  local database="$1"
+  local output="$2"
+  local reason
+
+  filebot_year_guard_applies "${database}" || return 1
+  reason=$(filebot_year_mismatch "${output}") || return 1
+
+  log "Year guard rejected ${database} match: ${reason}"
+  YEAR_GUARD_OUTPUT="${output}"$'\n'"${YEAR_MISMATCH_MARKER} ${database}: ${reason}"
+  return 0
+}
+
 # Preview FileBot changes with dry-run
 preview_filebot_changes() {
   local source_dir="$1"
@@ -902,6 +999,12 @@ preview_filebot_changes() {
   # "Skipped [X] because [Y] already exists" line, and losing it sends the
   # download to triage/failed instead of already-in-plex and media-compare.
   LAST_PREVIEW_OUTPUT="${preview_output}"
+
+  # Year guard (#216) before anything reads this, so a wrong-year conflict never reaches media-compare.
+  if year_guard_rejects "${db}" "${preview_output}"; then
+    LAST_PREVIEW_OUTPUT="${YEAR_GUARD_OUTPUT}"
+    return 1
+  fi
 
   # Count files to process
   local file_count
@@ -1092,6 +1195,25 @@ process_with_database() {
     strict_args=(-non-strict)
   fi
 
+  # Year guard (#216): dry-run first, move nothing on a year change. Local, so LAST_PREVIEW_OUTPUT survives.
+  if filebot_year_guard_applies "${database}"; then
+    local dry_run
+    dry_run=$(run_filebot -rename "${source_dir}" \
+      --db "${database}" \
+      --format "{plex}" \
+      --output "${PLEX_MEDIA_PATH}" \
+      -r \
+      --conflict skip \
+      ${strict_args[@]+"${strict_args[@]}"} \
+      --action test \
+      2>&1)
+    if year_guard_rejects "${database}" "${dry_run}"; then
+      echo "${YEAR_GUARD_OUTPUT}" >>"${LOG_FILE}"
+      LAST_FILEBOT_OUTPUT="${YEAR_GUARD_OUTPUT}"
+      return 1
+    fi
+  fi
+
   local output exit_code
   output=$(run_filebot -rename "${source_dir}" \
     --db "${database}" \
@@ -1207,6 +1329,12 @@ filebot_reported_conflict() {
     <<<"${LAST_FILEBOT_OUTPUT:-}"
 }
 
+# Stop the chain on a library conflict or a year-guard rejection: the next database is no safer (#216).
+filebot_chain_should_stop() {
+  filebot_reported_conflict \
+    || grep -q "^${YEAR_MISMATCH_MARKER}" <<<"${LAST_FILEBOT_OUTPUT:-}"
+}
+
 # Try TV show database chain
 try_tv_databases() {
   local source_dir="$1"
@@ -1223,8 +1351,8 @@ try_tv_databases() {
       return 0
     fi
     log "Failed with TV database: ${db}"
-    if filebot_reported_conflict; then
-      log "Library conflict reported by ${db}; stopping database chain"
+    if filebot_chain_should_stop; then
+      log "Final answer from ${db} (library conflict or year mismatch); stopping database chain"
       return 1
     fi
   done
@@ -1248,8 +1376,8 @@ try_movie_databases() {
       return 0
     fi
     log "Failed with movie database: ${db}"
-    if filebot_reported_conflict; then
-      log "Library conflict reported by ${db}; stopping database chain"
+    if filebot_chain_should_stop; then
+      log "Final answer from ${db} (library conflict or year mismatch); stopping database chain"
       return 1
     fi
   done
@@ -1285,21 +1413,21 @@ process_media_with_fallback() {
       log "Success: TV database chain"
       return 0
     fi
-    filebot_reported_conflict && return 1
+    filebot_chain_should_stop && return 1
 
     log "Strategy 2: FileBot auto-detection"
     if process_media_with_autodetect "${source_dir}"; then
       log "Success: FileBot auto-detection"
       return 0
     fi
-    filebot_reported_conflict && return 1
+    filebot_chain_should_stop && return 1
 
     log "Failed: TV database chain and auto-detection, trying movie databases as fallback"
     if try_movie_databases "${source_dir}"; then
       log "Success: Movie database fallback"
       return 0
     fi
-    filebot_reported_conflict && return 1
+    filebot_chain_should_stop && return 1
 
     log "Strategy 3: xattr cache (last resort)"
     if process_with_xattr "${source_dir}"; then
@@ -1318,7 +1446,7 @@ process_media_with_fallback() {
     return 0
   fi
   log "Failed: FileBot auto-detection"
-  filebot_reported_conflict && return 1
+  filebot_chain_should_stop && return 1
 
   # Strategy 2: Heuristic detection + database chains
   log "Strategy 2: Heuristic detection with database fallback"
@@ -1329,7 +1457,7 @@ process_media_with_fallback() {
       log "Success: Movie database chain"
       return 0
     fi
-    filebot_reported_conflict && return 1
+    filebot_chain_should_stop && return 1
     log "Failed: Movie database chain, trying TV databases as fallback"
     if try_tv_databases "${source_dir}"; then
       log "Success: TV database fallback"
@@ -1341,13 +1469,13 @@ process_media_with_fallback() {
       log "Success: TV database chain (unknown type)"
       return 0
     fi
-    filebot_reported_conflict && return 1
+    filebot_chain_should_stop && return 1
     if try_movie_databases "${source_dir}"; then
       log "Success: Movie database chain (unknown type)"
       return 0
     fi
   fi
-  filebot_reported_conflict && return 1
+  filebot_chain_should_stop && return 1
 
   # Strategy 3: xattr cache (last resort)
   log "Strategy 3: xattr cache (last resort)"
@@ -1407,6 +1535,8 @@ process_media() {
       handle_duplicate_upgrades "${category}" "${LAST_PREVIEW_OUTPUT:-${LAST_FILEBOT_OUTPUT:-}}"
       local triage_base="${TR_TORRENT_DIR%/*}/triage"
       if triage_failed_torrent "${source_dir}" "${category}" "${triage_base}"; then
+        notify_unprocessed "${category}" "$(basename "${source_dir}")" \
+          "${triage_base}/${category}" "${LAST_PREVIEW_OUTPUT:-${LAST_FILEBOT_OUTPUT:-}}"
         return 0
       fi
     fi
@@ -1434,6 +1564,8 @@ process_media() {
       handle_duplicate_upgrades "${category}" "${LAST_FILEBOT_OUTPUT}"
       local triage_base="${TR_TORRENT_DIR%/*}/triage"
       if triage_failed_torrent "${source_dir}" "${category}" "${triage_base}"; then
+        notify_unprocessed "${category}" "$(basename "${source_dir}")" \
+          "${triage_base}/${category}" "${LAST_FILEBOT_OUTPUT}"
         # Return 0: the torrent is "handled" (triaged), trigger watcher should
         # clean up the trigger and remove from Transmission
         return 0
@@ -1596,6 +1728,59 @@ triage_failed_torrent() {
     log "Warning: Failed to move ${torrent_name} to triage/${category}"
     return 1
   fi
+}
+
+# Email a no-match or failed triage (#216), after the move so retries do not resend. Never changes the result.
+notify_unprocessed() {
+  local category="$1"
+  local torrent_name="$2"
+  local triage_dir="$3"
+  local filebot_output="$4"
+
+  [[ "${category}" == "no-match" || "${category}" == "failed" ]] || return 0
+
+  if [[ -z "${ALERT_EMAIL}" ]]; then
+    log "No alerts.email in config; not emailing about ${category}: ${torrent_name}"
+    return 0
+  fi
+  if ! declare -F alert_send >/dev/null 2>&1; then
+    log "Warning: alert-lib.sh not found; not emailing about ${category}: ${torrent_name}"
+    return 0
+  fi
+
+  local reason
+  reason=$(grep "^${YEAR_MISMATCH_MARKER}" <<<"${filebot_output}" | head -1)
+  if [[ -z "${reason}" ]]; then
+    reason="FileBot output (last 15 lines):"$'\n'"$(tail -15 <<<"${filebot_output}")"
+  fi
+
+  local host what
+  host=$(hostname -s)
+  if [[ "${category}" == "no-match" ]]; then
+    what="could not identify"
+  else
+    what="failed to process"
+  fi
+
+  local body
+  body="transmission-done ${what} this download, so it was not added to Plex.
+
+Torrent:  ${torrent_name}
+Category: ${category}
+Moved to: ${triage_dir}
+
+${reason}
+
+Full log: ${LOG_FILE}"
+
+  if MONITORING_EMAIL="${ALERT_EMAIL}" \
+    ALERT_MSMTP_CONFIG="${ALERT_MSMTP_CONFIG:-${EFFECTIVE_HOME}/.config/msmtp/config}" \
+    alert_send "[${host}] transmission-done ${what}: ${torrent_name}" "${body}"; then
+    log "Emailed ${ALERT_EMAIL} about ${category}: ${torrent_name}"
+  else
+    log "Warning: email about ${category} failed: ${torrent_name}"
+  fi
+  return 0
 }
 
 rotate_log() {
