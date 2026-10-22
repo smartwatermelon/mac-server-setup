@@ -41,6 +41,59 @@ setup() {
 
   # Write a dummy token file
   echo "test-token-123" >"${PLEX_TOKEN_FILE}"
+
+  # The restart code calls pgrep, pkill, open and sleep. Mock them for every
+  # test: these tests also run on the Plex server, where a real pkill would
+  # stop the real Plex.
+  PROC_DIR="${TEST_TMPDIR}/procs"
+  mkdir -p "${PROC_DIR}"
+  write_process_mocks
+  DATA_LINK="${TEST_TMPDIR}/shared/PlexMediaServer/Plex Media Server"
+  DATA_DIR="${HOME}/Library/Application Support/Plex Media Server"
+}
+
+# Process mocks. A process group "runs" while its flag file exists in
+# PROC_DIR: main (the server) and helpers. pkill removes the flags, except
+# that -TERM does nothing while PROC_DIR/ignore-term exists. open creates
+# PROC_DIR/plex-up (which makes the curl mock answer) while
+# PROC_DIR/open-starts-plex exists. Every call is appended to PROC_DIR/calls.
+write_process_mocks() {
+  cat >"${FAKE_BREW}/bin/pgrep" <<MOCK
+#!/usr/bin/env bash
+pat="\${!#}"
+echo "pgrep \${pat}" >>"${PROC_DIR}/calls"
+case "\${pat}" in
+  *MacOS*) [[ -e "${PROC_DIR}/main" ]] ;;
+  *) [[ -e "${PROC_DIR}/main" || -e "${PROC_DIR}/helpers" ]] ;;
+esac
+MOCK
+  cat >"${FAKE_BREW}/bin/pkill" <<MOCK
+#!/usr/bin/env bash
+sig="\$1"
+pat="\${!#}"
+echo "pkill \${sig} \${pat}" >>"${PROC_DIR}/calls"
+if [[ "\${sig}" == "-TERM" && -e "${PROC_DIR}/ignore-term" ]]; then
+  exit 0
+fi
+case "\${pat}" in
+  *MacOS*) rm -f "${PROC_DIR}/main" ;;
+  *) rm -f "${PROC_DIR}/main" "${PROC_DIR}/helpers" ;;
+esac
+MOCK
+  cat >"${FAKE_BREW}/bin/open" <<MOCK
+#!/usr/bin/env bash
+echo "open \$*" >>"${PROC_DIR}/calls"
+echo "open env PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=\${PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR:-unset}" >>"${PROC_DIR}/calls"
+if [[ -e "${PROC_DIR}/open-starts-plex" ]]; then
+  touch "${PROC_DIR}/plex-up"
+fi
+MOCK
+  printf '#!/usr/bin/env bash\nexit 0\n' >"${FAKE_BREW}/bin/sleep"
+  chmod +x "${FAKE_BREW}/bin/pgrep" "${FAKE_BREW}/bin/pkill" "${FAKE_BREW}/bin/open" "${FAKE_BREW}/bin/sleep"
+}
+
+proc_calls() {
+  cat "${PROC_DIR}/calls" 2>/dev/null || true
 }
 
 teardown() {
@@ -64,9 +117,10 @@ source_watchdog_functions() {
     -e 's/^main "\$@"/# main "$@" — disabled for testing/' \
     -e "s|^CONFIG_DIR=.*|CONFIG_DIR=\"${CONFIG_DIR}\"|" \
     -e "s|HOMEBREW_PREFIX=\"[^\"]*\"|HOMEBREW_PREFIX=\"${FAKE_BREW}\"|" \
+    -e "s|^PLEX_DATA_LINK=.*|PLEX_DATA_LINK=\"${DATA_LINK}\"|" \
     "${WATCHDOG_TEMPLATE}" >"${tmp}"
   # Stub send_email
-  echo 'send_email() { echo "MOCK_EMAIL: $1"; return 0; }' >>"${tmp}"
+  echo "send_email() { echo \"MOCK_EMAIL: \$1\"; return 0; }" >>"${tmp}"
   # shellcheck source=/dev/null
   source "${tmp}"
 }
@@ -502,7 +556,6 @@ WanPerStreamMaxUploadRate=0"
 # ===========================================================================
 
 @test "maybe_heartbeat: logs when the last heartbeat is 2 hours old, west of UTC" {
-  export TZ=America/Los_Angeles
   source_watchdog_functions
   : >"${LOG_FILE}"
   cp "${FIXTURES_DIR}/golden-basic.conf" "${GOLDEN_CONF}"
@@ -510,14 +563,13 @@ WanPerStreamMaxUploadRate=0"
   two_hours_ago=$(date -u -r "$(($(date +%s) - 7200))" '+%Y-%m-%dT%H:%M:%SZ')
   echo "{\"last_heartbeat\": \"${two_hours_ago}\"}" >"${STATE_FILE}"
 
-  maybe_heartbeat
+  TZ=America/Los_Angeles maybe_heartbeat
 
   grep -q "OK: .* settings monitored, no drift" "${LOG_FILE}"
   [ "$(alert_state_get last_heartbeat "")" != "${two_hours_ago}" ]
 }
 
 @test "maybe_heartbeat: stays quiet when the last heartbeat is 30 minutes old" {
-  export TZ=America/Los_Angeles
   source_watchdog_functions
   : >"${LOG_FILE}"
   cp "${FIXTURES_DIR}/golden-basic.conf" "${GOLDEN_CONF}"
@@ -525,7 +577,7 @@ WanPerStreamMaxUploadRate=0"
   half_hour_ago=$(date -u -r "$(($(date +%s) - 1800))" '+%Y-%m-%dT%H:%M:%SZ')
   echo "{\"last_heartbeat\": \"${half_hour_ago}\"}" >"${STATE_FILE}"
 
-  maybe_heartbeat
+  TZ=America/Los_Angeles maybe_heartbeat
 
   [ "$(grep -c "settings monitored" "${LOG_FILE}")" -eq 0 ]
   [ "$(alert_state_get last_heartbeat "")" = "${half_hour_ago}" ]
@@ -547,6 +599,7 @@ render_watchdog() {
     -e 's/__HOSTNAME__/TESTHOST/g' \
     -e 's/__MONITORING_EMAIL__/test@example.com/g' \
     -e "s|HOMEBREW_PREFIX=\"[^\"]*\"|HOMEBREW_PREFIX=\"${FAKE_BREW}\"|" \
+    -e "s|^PLEX_DATA_LINK=.*|PLEX_DATA_LINK=\"${DATA_LINK}\"|" \
     "${WATCHDOG_TEMPLATE}" >"${WATCHDOG}"
 
   mkdir -p "${HOME}/.config/plex-watchdog"
@@ -562,13 +615,14 @@ render_watchdog() {
 #                         RECENT=seasons (no movie or episode at all)
 #   ?checkFiles=1         CHECKFILES=ok|missing|inaccessible, or timeout
 #                         (curl exit 28) or 404 (curl -f exit 22)
-# PLEX_DOWN=1 fails every request, as a stopped Plex does.
+# PLEX_DOWN=1 fails every request, as a stopped Plex does, until the open
+# mock creates PROC_DIR/plex-up (a restart that worked).
 write_curl_mock() {
   cat >"$1" <<MOCK
 #!/usr/bin/env bash
 url="\${!#}"
 echo "\${url}" >>"\${CURL_LOG:-/dev/null}"
-if [[ "\${PLEX_DOWN:-0}" == "1" ]]; then
+if [[ "\${PLEX_DOWN:-0}" == "1" && ! -e "${PROC_DIR}/plex-up" ]]; then
   exit 7
 fi
 case "\${url}" in
@@ -644,10 +698,12 @@ run_launchd_cycle() {
 
 @test "launchd PATH: the Plex-unreachable email is built under /bin/bash 3.2" {
   # It used ${HOSTNAME_LABEL,,}, which is a "bad substitution" in bash 3.2.
+  # With automatic restart off, this is still the email at the threshold.
   render_watchdog
   write_curl_mock "${FAKE_BREW}/bin/curl"
   write_msmtp_mock
   echo '{"consecutive_failures": 2}' >"${HOME}/.config/plex-watchdog/state.json"
+  touch "${HOME}/.config/plex-watchdog/no-restart"
 
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
@@ -682,9 +738,9 @@ MOCK
 }
 
 @test "plex-watchdog-setup.sh deploys the alert library" {
-  grep -q 'ALERT_LIB_DEST="${OPERATOR_HOME}/.local/lib/alert-lib.sh"' \
+  grep -qF "ALERT_LIB_DEST=\"\${OPERATOR_HOME}/.local/lib/alert-lib.sh\"" \
     "${REPO_DIR}/app-setup/plex-watchdog-setup.sh"
-  grep -q 'sudo cp "${ALERT_LIB_TEMPLATE}" "${ALERT_LIB_DEST}"' \
+  grep -qF "sudo cp \"\${ALERT_LIB_TEMPLATE}\" \"\${ALERT_LIB_DEST}\"" \
     "${REPO_DIR}/app-setup/plex-watchdog-setup.sh"
 }
 
@@ -861,4 +917,258 @@ MEDIA_ALERT='\[TESTHOST\] Plex cannot read media files'
   [ "$status" -eq 0 ]
   [ "$(jq -r '.response_hash | length' <<<"$(WATCHDOG_STATE)")" -eq 64 ]
   [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "0" ]
+}
+
+# ===========================================================================
+# Automatic restart (2026-10-22)
+#
+# Plex deadlocked during its nightly database maintenance and answered nothing
+# for 8.5 hours; the process stayed up. Plex ignores SIGTERM even when
+# healthy, so the SIGKILL path is the normal one. At the
+# unreachable threshold (3 polls) the watchdog stops Plex and its helpers,
+# starts it with open, and emails the result. One restart per hour.
+# ===========================================================================
+
+RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
+
+@test "auto-restart: below the threshold nothing is stopped" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo '{"consecutive_failures": 1}' >"${HOME}/.config/plex-watchdog/state.json"
+  touch "${PROC_DIR}/main"
+
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(proc_calls | grep -c '^pkill')" -eq 0 ]
+  [ "$(proc_calls | grep -c '^open')" -eq 0 ]
+  [ "$(mail_count)" -eq 0 ]
+  [ "$(jq -r '.consecutive_failures' <<<"$(WATCHDOG_STATE)")" = "2" ]
+}
+
+@test "auto-restart: at the threshold Plex is stopped, started with open, and the email says so" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo '{"consecutive_failures": 2}' >"${HOME}/.config/plex-watchdog/state.json"
+  touch "${PROC_DIR}/main" "${PROC_DIR}/helpers" "${PROC_DIR}/open-starts-plex"
+
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  proc_calls | grep -q '^pkill -TERM MacOS/Plex Media Server\$$'
+  proc_calls | grep -q '^pkill -TERM Plex Media Server\\.app/Contents/|Plex EAE Service$'
+  [ "$(proc_calls | grep -c '^pkill -KILL')" -eq 0 ]
+  proc_calls | grep -q '^open -a /Applications/Plex Media Server.app$'
+  [ "$(mail_count)" -eq 1 ]
+  [ "$(subject_count "${RESTARTED}")" -eq 1 ]
+  grep -q "touch .*/no-restart" "${MAIL_LOG}"
+  [ "$(jq -r '.consecutive_failures' <<<"$(WATCHDOG_STATE)")" = "0" ]
+  [[ "$(jq -r '.last_restart_epoch' <<<"$(WATCHDOG_STATE)")" =~ ^[0-9]+$ ]]
+  grep -q "RESTART: Plex answered" <<<"$(watchdog_log)"
+}
+
+@test "auto-restart: Plex that ignores SIGTERM gets SIGKILL" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo '{"consecutive_failures": 2}' >"${HOME}/.config/plex-watchdog/state.json"
+  touch "${PROC_DIR}/main" "${PROC_DIR}/ignore-term" "${PROC_DIR}/open-starts-plex"
+
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  proc_calls | grep -q '^pkill -KILL MacOS/Plex Media Server\$$'
+  grep -q "ignored SIGTERM for 10 s; sending SIGKILL" <<<"$(watchdog_log)"
+  [ "$(subject_count "${RESTARTED}")" -eq 1 ]
+}
+
+@test "auto-restart: open does not pass a data-directory override to Plex" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo '{"consecutive_failures": 2}' >"${HOME}/.config/plex-watchdog/state.json"
+  touch "${PROC_DIR}/open-starts-plex"
+
+  PLEX_DOWN=1 PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=/Users/Shared/PlexMediaServer \
+    run bash "${WATCHDOG}"
+  [ "$status" -eq 0 ]
+  proc_calls | grep -q '^open env PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=unset$'
+}
+
+@test "auto-restart: a restart that does not bring Plex back emails once and is not repeated" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo '{"consecutive_failures": 2}' >"${HOME}/.config/plex-watchdog/state.json"
+  touch "${PROC_DIR}/main"
+
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(subject_count '\[TESTHOST\] Plex unreachable; automatic restart failed')" -eq 1 ]
+  [ "$(jq -r '.restart_gave_up' <<<"$(WATCHDOG_STATE)")" = "true" ]
+  grep -q "did not answer within 90 s" <<<"$(watchdog_log)"
+
+  : >"${PROC_DIR}/calls"
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(mail_count)" -eq 1 ]
+  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
+}
+
+@test "auto-restart: unreachable again within the cooldown emails once and does not restart" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  local recent
+  recent=$(($(date +%s) - 600))
+  echo "{\"consecutive_failures\": 2, \"last_restart_epoch\": ${recent}}" \
+    >"${HOME}/.config/plex-watchdog/state.json"
+  touch "${PROC_DIR}/main"
+
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
+  [ "$(subject_count '\[TESTHOST\] Plex still unreachable after an automatic restart')" -eq 1 ]
+
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$(mail_count)" -eq 1 ]
+}
+
+@test "auto-restart: a restart older than the cooldown is not a reason to wait" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  local old
+  old=$(($(date +%s) - 7200))
+  echo "{\"consecutive_failures\": 2, \"last_restart_epoch\": ${old}}" \
+    >"${HOME}/.config/plex-watchdog/state.json"
+  touch "${PROC_DIR}/main" "${PROC_DIR}/open-starts-plex"
+
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  proc_calls | grep -q '^open -a'
+  [ "$(subject_count "${RESTARTED}")" -eq 1 ]
+}
+
+@test "auto-restart: the no-restart file turns restarts off" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo '{"consecutive_failures": 2}' >"${HOME}/.config/plex-watchdog/state.json"
+  touch "${HOME}/.config/plex-watchdog/no-restart" "${PROC_DIR}/main"
+
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
+  [ "$(subject_count '\[TESTHOST\] Plex server unreachable')" -eq 1 ]
+  grep -q "Automatic restart is off" "${MAIL_LOG}"
+}
+
+@test "recovery: the failure count resets on the hash fast path, with one recovery email" {
+  # Before this fix the count was reset only in Step 8, which the fast path
+  # skips. With unchanged prefs after an outage it stayed high, and the next
+  # outage was never alerted.
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  run run_launchd_cycle # stores response_hash
+  local state
+  state=$(jq '.consecutive_failures = 5 | .restart_gave_up = true' <<<"$(WATCHDOG_STATE)")
+  echo "${state}" >"${HOME}/.config/plex-watchdog/state.json"
+
+  run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.consecutive_failures' <<<"$(WATCHDOG_STATE)")" = "0" ]
+  [ "$(jq -r '.restart_gave_up // "gone"' <<<"$(WATCHDOG_STATE)")" = "gone" ]
+  [ "$(subject_count 'RESOLVED: \[TESTHOST\] Plex server reachable again')" -eq 1 ]
+
+  run run_launchd_cycle
+  [ "$(subject_count 'RESOLVED: \[TESTHOST\] Plex server reachable again')" -eq 1 ]
+}
+
+@test "recovery: a count below the threshold resets without an email" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  run run_launchd_cycle
+  local state
+  state=$(jq '.consecutive_failures = 1' <<<"$(WATCHDOG_STATE)")
+  echo "${state}" >"${HOME}/.config/plex-watchdog/state.json"
+
+  run run_launchd_cycle
+  [ "$(jq -r '.consecutive_failures' <<<"$(WATCHDOG_STATE)")" = "0" ]
+  [ "$(grep -c '^Subject: RESOLVED' "${MAIL_LOG}")" -eq 0 ]
+}
+
+# ===========================================================================
+# Plex data directory link (2026-10-22)
+#
+# The Plex LaunchAgent points Plex at /Users/Shared/PlexMediaServer. That path
+# must be a link to the real data, or Plex starts an empty server there.
+# ===========================================================================
+
+@test "data link: a missing link is created" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  mkdir -p "${DATA_DIR}"
+
+  run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ -L "${DATA_LINK}" ]
+  [ "$(readlink "${DATA_LINK}")" = "${DATA_DIR}" ]
+  grep -q "REPAIRED: created ${DATA_LINK}" <<<"$(watchdog_log)"
+  [ "$(subject_count '\[TESTHOST\] Plex data directory link')" -eq 0 ]
+}
+
+@test "data link: a link to the wrong place is repointed" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  mkdir -p "${DATA_DIR}" "$(dirname "${DATA_LINK}")" "${TEST_TMPDIR}/elsewhere"
+  ln -s "${TEST_TMPDIR}/elsewhere" "${DATA_LINK}"
+
+  run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(readlink "${DATA_LINK}")" = "${DATA_DIR}" ]
+  grep -q "REPAIRED: ${DATA_LINK} pointed at ${TEST_TMPDIR}/elsewhere" <<<"$(watchdog_log)"
+}
+
+@test "data link: a correct link is left alone and logs nothing" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  mkdir -p "${DATA_DIR}" "$(dirname "${DATA_LINK}")"
+  ln -s "${DATA_DIR}" "${DATA_LINK}"
+
+  run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(watchdog_log | grep -c 'data link\|REPAIRED')" -eq 0 ]
+}
+
+@test "data link: a real directory is never changed, and alerts once" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  mkdir -p "${DATA_DIR}" "${DATA_LINK}"
+  echo keep >"${DATA_LINK}/Preferences.xml"
+
+  run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  run run_launchd_cycle
+  [ -d "${DATA_LINK}" ] && [ ! -L "${DATA_LINK}" ]
+  [ "$(cat "${DATA_LINK}/Preferences.xml")" = "keep" ]
+  [ "$(subject_count '\[TESTHOST\] Plex data directory link is broken')" -eq 1 ]
+  grep -q "is a real directory, not a link" "${MAIL_LOG}"
+  [ "$(jq -r '.transitions.data_link.alerted' <<<"$(WATCHDOG_STATE)")" = "true" ]
+}
+
+@test "data link: not checked when the real data directory does not exist" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+
+  run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ ! -e "${DATA_LINK}" ] && [ ! -L "${DATA_LINK}" ]
+  grep -q "WARNING: data link not checked" <<<"$(watchdog_log)"
 }

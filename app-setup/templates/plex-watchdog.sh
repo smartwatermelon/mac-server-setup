@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 #
-# plex-watchdog — Plex settings drift detector
+# plex-watchdog — Plex settings drift detector and liveness guard
 #
 # Polls Plex server preferences against a golden configuration and sends
 # email alerts when settings drift. Designed to run every 5 minutes via
 # LaunchAgent (StartInterval=300).
 #
 # Each invocation is a single poll cycle: fetch, compare, alert, exit.
+# It also guards the data link and restarts a hung Plex.
 #
 # Template placeholders (replaced by plex-watchdog-setup.sh at deploy time):
 #   __HOSTNAME__          → server hostname (e.g. TILSIT)
@@ -52,6 +53,23 @@ MEDIA_FAILURE_THRESHOLD=2
 # A blocked Plex can stay blocked all day (the 2026-09-17 prompt lasted 19
 # hours). Resend an open media alert twice a day. Used by alert_transition.
 export ALERT_REMINDER_SECONDS=43200
+
+# Real Plex data, and the /Users/Shared path the Plex LaunchAgent names.
+# See ensure_data_link.
+PLEX_DATA_DIR="${HOME}/Library/Application Support/Plex Media Server"
+PLEX_DATA_LINK="/Users/Shared/PlexMediaServer/Plex Media Server"
+
+# Automatic restart, see handle_unreachable and "Automatic restart" in
+# plex-watchdog-README.md.
+RESTART_COOLDOWN_SECONDS=3600
+RESTART_TERM_WAIT_SECONDS=10
+RESTART_READY_WAIT_SECONDS=90
+NO_RESTART_FILE="${CONFIG_DIR}/no-restart"
+PLEX_APP="/Applications/Plex Media Server.app"
+PLEX_MAIN_PATTERN='MacOS/Plex Media Server$'
+# Helpers outlive a killed server and keep its ports. Also matches the
+# server itself.
+PLEX_HELPER_PATTERN='Plex Media Server\.app/Contents/|Plex EAE Service'
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -275,12 +293,223 @@ Log:   ${LOG_FILE}" \
 }
 
 # ---------------------------------------------------------------------------
+# Plex data directory link. Creates or repoints the link; never touches a
+# real directory. See plex-watchdog-README.md.
+# ---------------------------------------------------------------------------
+
+ensure_data_link() {
+  if [[ ! -d "${PLEX_DATA_DIR}" ]]; then
+    log "WARNING: data link not checked: ${PLEX_DATA_DIR} does not exist"
+    return 0
+  fi
+
+  local is_bad=false problem="" err=""
+  if [[ -L "${PLEX_DATA_LINK}" ]]; then
+    local target
+    target=$(readlink "${PLEX_DATA_LINK}")
+    if [[ "${target}" != "${PLEX_DATA_DIR}" ]]; then
+      if err=$(ln -sfn "${PLEX_DATA_DIR}" "${PLEX_DATA_LINK}" 2>&1); then
+        log "REPAIRED: ${PLEX_DATA_LINK} pointed at ${target}; now points at ${PLEX_DATA_DIR}"
+      else
+        is_bad=true
+        problem="The link points at ${target}, and repointing it failed: ${err}"
+      fi
+    fi
+  elif [[ -e "${PLEX_DATA_LINK}" ]]; then
+    is_bad=true
+    problem="${PLEX_DATA_LINK} is a real directory, not a link. Plex may have
+created a separate, empty server there. The watchdog does not change it."
+  elif err=$({ mkdir -p "$(dirname "${PLEX_DATA_LINK}")" \
+    && ln -s "${PLEX_DATA_DIR}" "${PLEX_DATA_LINK}"; } 2>&1); then
+    log "REPAIRED: created ${PLEX_DATA_LINK} -> ${PLEX_DATA_DIR}"
+  else
+    is_bad=true
+    problem="The link is missing, and creating it failed: ${err}"
+  fi
+
+  alert_transition "data_link" "${is_bad}" \
+    "[${HOSTNAME_LABEL}] Plex data directory link is broken" \
+    "${PLEX_DATA_LINK} must be a link to ${PLEX_DATA_DIR}.
+
+${problem}
+
+Until this is fixed, a Plex started by its LaunchAgent can come up as an
+empty, unclaimed server, and the nightly database backups may not be written.
+
+Fix (after checking which directory the running Plex uses, with
+lsof -p \$(pgrep -f 'MacOS/Plex Media Server\$') | grep library.db):
+  mv '${PLEX_DATA_LINK}' '${PLEX_DATA_LINK}.stray'
+The next watchdog run creates the link.
+Log: ${LOG_FILE}" \
+    "RESOLVED: [${HOSTNAME_LABEL}] Plex data directory link is fixed" \
+    "${PLEX_DATA_LINK} points at ${PLEX_DATA_DIR} again." || true
+}
+
+# ---------------------------------------------------------------------------
+# Plex restart
+# ---------------------------------------------------------------------------
+
+# Wait up to $2 seconds for no process to match $1. Returns 1 on timeout.
+wait_for_exit() {
+  local pattern="$1" seconds="$2" i=0
+  while [[ ${i} -lt ${seconds} ]]; do
+    pgrep -f "${pattern}" >/dev/null || return 0
+    sleep 1
+    i=$((i + 1))
+  done
+  ! pgrep -f "${pattern}" >/dev/null
+}
+
+# SIGTERM, then SIGKILL. Plex ignores SIGTERM even when healthy (seen
+# 2026-10-22), so expect SIGKILL.
+stop_processes() {
+  local pattern="$1" term_wait="$2" what="$3"
+  pgrep -f "${pattern}" >/dev/null || return 0
+  pkill -TERM -f "${pattern}" || true
+  if ! wait_for_exit "${pattern}" "${term_wait}"; then
+    log "RESTART: ${what} ignored SIGTERM for ${term_wait} s; sending SIGKILL"
+    pkill -KILL -f "${pattern}" || true
+    wait_for_exit "${pattern}" 5 || return 1
+  fi
+}
+
+# Stop Plex and start it again. Returns 0 when Plex answers within
+# RESTART_READY_WAIT_SECONDS.
+restart_plex() {
+  log "RESTART: stopping Plex"
+  if ! stop_processes "${PLEX_MAIN_PATTERN}" "${RESTART_TERM_WAIT_SECONDS}" "Plex Media Server" \
+    || ! stop_processes "${PLEX_HELPER_PATTERN}" 10 "Plex helper processes"; then
+    log "RESTART: ERROR: Plex processes are still running after SIGKILL"
+    return 1
+  fi
+
+  ensure_data_link
+
+  # open, not the binary: launchd can kill an agent's children. open passes
+  # its env to the app, so drop the override.
+  log "RESTART: starting ${PLEX_APP}"
+  if ! env -u PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR open -a "${PLEX_APP}"; then
+    log "RESTART: ERROR: open -a '${PLEX_APP}' failed"
+    return 1
+  fi
+
+  local waited=0
+  while [[ ${waited} -lt ${RESTART_READY_WAIT_SECONDS} ]]; do
+    if curl -sf --max-time 3 "${PLEX_URL}/identity" >/dev/null 2>&1; then
+      log "RESTART: Plex answered ${waited} s after start"
+      return 0
+    fi
+    sleep 2
+    waited=$((waited + 2))
+  done
+  log "RESTART: ERROR: Plex did not answer within ${RESTART_READY_WAIT_SECONDS} s of start"
+  return 1
+}
+
+# Set one top-level state key to a JSON value.
+state_set() {
+  local state
+  state=$(alert_state_read)
+  jq -e 'type == "object"' >/dev/null 2>&1 <<<"${state}" || state='{}'
+  state=$(jq --arg k "$1" --argjson v "$2" '.[$k] = $v' <<<"${state}")
+  alert_state_write "${state}"
+}
+
+# Polls at or over the threshold: restart, or email why not. The cases
+# are in plex-watchdog-README.md.
+handle_unreachable() {
+  local failures="$1"
+  local minutes=$((failures * 5))
+  # tr, not ${HOSTNAME_LABEL,,}: the LaunchAgent runs /bin/bash 3.2,
+  # where ,, is a "bad substitution" and this email was never built.
+  local host_lower
+  host_lower=$(echo "${HOSTNAME_LABEL}" | tr '[:upper:]' '[:lower:]')
+  local plex_log="${HOME}/Library/Logs/Plex Media Server/Plex Media Server.log"
+
+  if [[ -e "${NO_RESTART_FILE}" ]]; then
+    log "Automatic restart is off: ${NO_RESTART_FILE} exists"
+    if [[ ${failures} -eq ${CONSECUTIVE_FAILURE_THRESHOLD} ]]; then
+      send_email \
+        "[${HOSTNAME_LABEL}] Plex server unreachable" \
+        "The Plex server at ${PLEX_URL} has been unreachable for ${failures} consecutive checks (${minutes} minutes).
+Automatic restart is off (${NO_RESTART_FILE} exists).
+
+Please verify Plex is running:
+  ssh operator@${host_lower} 'pgrep -f \"Plex Media Server\"'" || true
+    fi
+    return 0
+  fi
+
+  local gave_up
+  gave_up=$(alert_state_get restart_gave_up false)
+  [[ "${gave_up}" == "true" ]] && return 0
+
+  local now last_restart
+  now=$(date +%s)
+  last_restart=$(alert_state_get last_restart_epoch 0)
+  [[ "${last_restart}" =~ ^[0-9]+$ ]] || last_restart=0
+  if [[ $((now - last_restart)) -lt ${RESTART_COOLDOWN_SECONDS} ]]; then
+    log "ERROR: Plex unreachable again within $((RESTART_COOLDOWN_SECONDS / 60)) minutes of an automatic restart; not restarting again"
+    state_set restart_gave_up true
+    send_email \
+      "[${HOSTNAME_LABEL}] Plex still unreachable after an automatic restart" \
+      "The Plex server at ${PLEX_URL} has been unreachable for ${failures} consecutive checks (${minutes} minutes),
+less than $((RESTART_COOLDOWN_SECONDS / 60)) minutes after the watchdog restarted it.
+
+The watchdog will not restart it again until Plex answers. Manual action is needed.
+
+Check:
+  ssh ${host_lower}
+  pgrep -fl 'Plex Media Server'
+  tail -50 '${plex_log}'
+Watchdog log: ${LOG_FILE}" || true
+    return 0
+  fi
+
+  # Record the attempt first, so a run that dies mid-restart still counts.
+  state_set last_restart_epoch "${now}"
+  local started
+  started=$(date '+%Y-%m-%d %H:%M:%S')
+  if restart_plex; then
+    # Plex answers again: start the next outage's count from zero.
+    state_set consecutive_failures 0
+    send_email \
+      "[${HOSTNAME_LABEL}] Plex was unresponsive and has been restarted" \
+      "The Plex server at ${PLEX_URL} did not answer for ${failures} consecutive checks (${minutes} minutes).
+The watchdog restarted it at ${started}, and Plex answers again.
+
+To find the cause, look in the Plex log for the time before the restart.
+On 2026-10-22 the sign was repeated 'threads are waiting on db connections' lines.
+  ${plex_log}
+
+To turn off automatic restarts: touch ${NO_RESTART_FILE}
+Watchdog log: ${LOG_FILE}" || true
+  else
+    state_set restart_gave_up true
+    send_email \
+      "[${HOSTNAME_LABEL}] Plex unreachable; automatic restart failed" \
+      "The Plex server at ${PLEX_URL} did not answer for ${failures} consecutive checks (${minutes} minutes).
+The watchdog tried to restart it at ${started}, but Plex does not answer.
+It will not try again until Plex answers. Manual action is needed.
+
+Check:
+  ssh ${host_lower}
+  pgrep -fl 'Plex Media Server'
+  tail -50 '${plex_log}'
+Watchdog log: ${LOG_FILE}" || true
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Main poll cycle
 # ---------------------------------------------------------------------------
 
 main() {
   mkdir -p "${CONFIG_DIR}"
   mkdir -p "$(dirname "${LOG_FILE}")"
+
+  # Step 0: Plex data directory link. Independent of whether Plex answers.
+  ensure_data_link
 
   # Step 1: Get Plex token
   local token
@@ -300,22 +529,32 @@ main() {
 
     if [[ ${failures} -ge ${CONSECUTIVE_FAILURE_THRESHOLD} ]]; then
       log "ERROR: Plex unreachable for ${failures} consecutive polls"
-      if [[ ${failures} -eq ${CONSECUTIVE_FAILURE_THRESHOLD} ]]; then
-        # tr, not ${HOSTNAME_LABEL,,}: the LaunchAgent runs /bin/bash 3.2,
-        # where ,, is a "bad substitution" and this email was never built.
-        local unreachable_host_lower
-        unreachable_host_lower=$(echo "${HOSTNAME_LABEL}" | tr '[:upper:]' '[:lower:]')
-        send_email \
-          "[${HOSTNAME_LABEL}] Plex server unreachable" \
-          "The Plex server at ${PLEX_URL} has been unreachable for ${failures} consecutive checks ($((failures * 5)) minutes).
-
-Please verify Plex is running:
-  ssh operator@${unreachable_host_lower} 'pgrep -f \"Plex Media Server\"'" || true
-      fi
+      handle_unreachable "${failures}"
     else
-      log "WARNING: Plex unreachable (${failures}/${CONSECUTIVE_FAILURE_THRESHOLD} before alert)"
+      log "WARNING: Plex unreachable (${failures}/${CONSECUTIVE_FAILURE_THRESHOLD} before restart)"
     fi
     return 0
+  fi
+
+  # Step 2a: reset the count here. The fast path skips Step 8, so the
+  # count stuck and the next outage went unalerted.
+  local prev_failures
+  prev_failures=$(alert_state_get "consecutive_failures" "0")
+  [[ "${prev_failures}" =~ ^[0-9]+$ ]] || prev_failures=0
+  local prev_gave_up
+  prev_gave_up=$(alert_state_get restart_gave_up false)
+  if [[ ${prev_failures} -gt 0 ]] || [[ "${prev_gave_up}" == "true" ]]; then
+    if [[ ${prev_failures} -ge ${CONSECUTIVE_FAILURE_THRESHOLD} ]]; then
+      log "RESOLVED: Plex reachable again after ${prev_failures} failed polls"
+      send_email \
+        "RESOLVED: [${HOSTNAME_LABEL}] Plex server reachable again" \
+        "The Plex server at ${PLEX_URL} answers again after ${prev_failures} failed checks. No action required." || true
+    fi
+    local reset_state
+    reset_state=$(alert_state_read)
+    jq -e 'type == "object"' >/dev/null 2>&1 <<<"${reset_state}" || reset_state='{}'
+    reset_state=$(jq '.consecutive_failures = 0 | del(.restart_gave_up)' <<<"${reset_state}")
+    alert_state_write "${reset_state}"
   fi
 
   # Step 2b: Can Plex read its media? Runs before the fast path below, which
