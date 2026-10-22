@@ -165,24 +165,45 @@ routing through the tunnel.
 
 ### Task 2b: Test whether the email header can be forged (before cutover)
 
-This decides whether layer 3 ships. It uses a throwaway hostname, so
-`tilsit.vip` is never exposed.
+This decides whether layer 3 ships, so it runs before Task 3 builds
+anything. The `cloudflared` daemon does not exist until Task 4, so this test
+runs `cloudflared` by hand in the foreground. It uses a throwaway hostname
+and a throwaway Caddy process, so `tilsit.vip` and production Caddy are
+never touched.
 
+0. Install `cloudflared` (`brew install cloudflared`, as the admin account).
+   Task 3's setup script will find it already installed.
 1. Create a temporary Access application on `accesstest.tilsit.vip` with a
-   deliberately **open** policy (any Google account; or Andrew plus a second
-   Google account he owns). Route it through the same tunnel to a loopback
-   echo listener that logs request headers (for example a temporary Caddy
-   site that logs `{header.Cf-Access-Authenticated-User-Email}`).
-2. Sign in as the second account. Send a request that carries a forged
+   deliberately **open** policy: Andrew plus a second Google account he
+   owns. Add an ingress rule `accesstest.tilsit.vip` →
+   `http://127.0.0.1:18081`, before the catch-all, and a proxied DNS record
+   for it.
+2. Start a scratch Caddy on `127.0.0.1:18081` (`admin off`, its config in
+   the session scratchpad). It logs `{header.Cf-Access-Authenticated-User-Email}`
+   for every request. Start `cloudflared` in the foreground in a root shell
+   that reads the token itself, so the token is never in an argument list:
+
+   ```bash
+   sudo bash -c 'TUNNEL_TOKEN=$(security find-generic-password \
+     -s cloudflare-tunnel-token -a tilsit.vip -w \
+     /Library/Keychains/System.keychain) && export TUNNEL_TOKEN \
+     && exec /opt/homebrew/bin/cloudflared tunnel --no-autoupdate run'
+   ```
+
+   `tilsit.vip` has no DNS record pointing at the tunnel yet, so only
+   `accesstest` is reachable through it.
+3. Sign in as the second account. Send a request that carries a forged
    `Cf-Access-Authenticated-User-Email: andrew.rich@gmail.com` header, for
    example with curl and the session cookie, or a browser header extension.
-3. Read the origin log.
+4. Read the scratch Caddy log.
    - If the logged value is the second account's real email, Cloudflare
      overwrote the forged header. Layer 3 is safe, and it ships.
    - If the forged value arrives, layer 3 is unsafe. Drop it, and record
      Andrew's decision on the residual risk (see "Layered checks").
-4. Delete the test application, its policy, its DNS record, its ingress
-   rule, and the echo site. Confirm each one is gone.
+5. Stop `cloudflared` (Ctrl-C) and the scratch Caddy. Delete the test
+   application, its policy, its DNS record, and its ingress rule. Confirm
+   through the API that each one is gone, and that the tunnel's ingress is
+   back to the `tilsit.vip` rule plus the catch-all.
 
 ### Task 3: Repo changes (branch, tests, PR)
 
