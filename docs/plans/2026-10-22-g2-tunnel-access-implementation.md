@@ -274,10 +274,15 @@ never touched.
 
 1. Deploy the Caddyfile change, validate it, then
    `launchctl kickstart -k system/com.caddyserver.caddy`.
-2. Check locally: `curl http://127.0.0.1:8080/` returns 200,
-   `/transmission/web/` returns 200, `/media/` returns 404 (no handler on
-   this site). From another LAN host, `10.0.15.15:8080` must refuse the
-   connection.
+2. Check locally against `http://127.0.0.1:8080`:
+   - If layer 3 shipped: with no email header, `/` and
+     `/transmission/web/` return 403. With
+     `-H 'Cf-Access-Authenticated-User-Email: <allowed>'`, `/` and
+     `/transmission/web/` return 200 and `/media/` returns 404.
+   - If layer 3 was dropped: the same paths without the header return 200,
+     200 and 404.
+   - In both cases, `10.0.15.15:8080` must refuse the connection from
+     another LAN host.
 3. Run `cloudflared-setup.sh`. Confirm in the dashboard that the tunnel
    shows healthy and that `/ready` on the metrics port returns 200.
 
