@@ -224,9 +224,25 @@ else
   log "stable-sign script not found at ${STABLE_SIGN}; TCC grants for Homebrew binaries may need re-approval"
 fi
 
-# Upgrade casks separately — some may fail if they need sudo
-log "Running brew upgrade --cask..."
-brew upgrade --cask 2>&1 | tee -a "${LOG_FILE}" || true
+# Upgrade casks separately; some need sudo. SKIP_CASKS update themselves
+# (Plex: see docs/apps/plex-setup-README.md).
+SKIP_CASKS=" plex-media-server "
+if ! outdated=$(brew outdated --cask --quiet 2>>"${LOG_FILE}"); then
+  log "ERROR: brew outdated --cask failed; no casks upgraded"
+  outdated=""
+fi
+casks=()
+while IFS= read -r cask; do
+  if [[ -n "${cask}" && "${SKIP_CASKS}" != *" ${cask} "* ]]; then
+    casks+=("${cask}")
+  fi
+done <<<"${outdated}"
+if [[ ${#casks[@]} -gt 0 ]]; then
+  log "Running brew upgrade --cask ${casks[*]}..."
+  brew upgrade --cask "${casks[@]}" 2>&1 | tee -a "${LOG_FILE}" || true
+else
+  log "No outdated casks to upgrade (skipped:${SKIP_CASKS% })"
+fi
 
 # Clean up old versions
 log "Running brew cleanup..."

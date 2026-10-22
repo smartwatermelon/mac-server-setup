@@ -130,6 +130,8 @@ guard on non-strict movie matches, and the "could not process" email
 bats tests/alert-lib.bats
 bats tests/plex-watchdog.bats
 bats tests/plex-data-link.bats
+bats tests/plex-updates.bats
+bats tests/brew-upgrade.bats
 bats tests/pia-port-watchdog.bats
 bats tests/msmtp-setup.bats
 bats tests/stall-watchdog.bats
