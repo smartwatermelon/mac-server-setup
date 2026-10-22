@@ -227,6 +227,7 @@ Limits:
 | Plex does not answer within 90 s of the start | Email `Plex unreachable; automatic restart failed`. No more restarts until Plex answers. |
 | Plex fails again less than 1 hour after a restart | Email `Plex still unreachable after an automatic restart`. No more restarts until Plex answers. |
 | `~/.config/plex-watchdog/no-restart` exists | No restart. The plain `Plex server unreachable` email goes out once, at the threshold. |
+| Prefs fail but `/identity` answers | No restart: Plex is up, and the usual cause is a revoked token. Email `Plex answers, but the watchdog cannot read its settings` once, at the threshold. During the 2026-10-22 hang `/identity` did not answer either. |
 | Plex answers again after an alert | Email `RESOLVED: Plex server reachable again`. |
 
 Turn restarts off for maintenance, and back on after:
@@ -351,7 +352,7 @@ alert under launchd's PATH.
 
 ## Testing
 
-60 BATS tests in `tests/plex-watchdog.bats`, and 8 in `tests/plex-data-link.bats` for the setup side of the data link:
+61 BATS tests in `tests/plex-watchdog.bats`, and 8 in `tests/plex-data-link.bats` for the setup side of the data link:
 
 ```bash
 bats tests/plex-watchdog.bats

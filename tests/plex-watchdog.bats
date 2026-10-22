@@ -625,6 +625,10 @@ echo "\${url}" >>"\${CURL_LOG:-/dev/null}"
 if [[ "\${PLEX_DOWN:-0}" == "1" && ! -e "${PROC_DIR}/plex-up" ]]; then
   exit 7
 fi
+# PREFS_DOWN=1: Plex answers, but the prefs request fails (a bad token).
+if [[ "\${PREFS_DOWN:-0}" == "1" && "\${url}" == */:/prefs ]]; then
+  exit 22
+fi
 case "\${url}" in
   */library/recentlyAdded*)
     case "\${RECENT:-normal}" in
@@ -678,6 +682,7 @@ run_launchd_cycle() {
     HOME="${HOME}" \
     MAIL_LOG="${MAIL_LOG}" \
     PLEX_DOWN="${PLEX_DOWN:-0}" \
+    PREFS_DOWN="${PREFS_DOWN:-0}" \
     RECENT="${RECENT:-normal}" \
     CHECKFILES="${CHECKFILES:-ok}" \
     CURL_LOG="${TEST_TMPDIR}/curl.log" \
@@ -1061,6 +1066,27 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
   [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
   [ "$(subject_count '\[TESTHOST\] Plex server unreachable')" -eq 1 ]
   grep -q "Automatic restart is off" "${MAIL_LOG}"
+}
+
+@test "auto-restart: a Plex that answers /identity is not restarted when only prefs fail" {
+  # A revoked token fails the prefs request while Plex is healthy. Killing it
+  # would cut streams and fix nothing.
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo '{"consecutive_failures": 2}' >"${HOME}/.config/plex-watchdog/state.json"
+  touch "${PROC_DIR}/main"
+
+  PREFS_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
+  [ "$(subject_count '\[TESTHOST\] Plex answers, but the watchdog cannot read its settings')" -eq 1 ]
+  grep -q "A 401 means the token" "${MAIL_LOG}"
+  grep -q "http_code}\\\\n" "${MAIL_LOG}"
+
+  PREFS_DOWN=1 run run_launchd_cycle
+  [ "$(mail_count)" -eq 1 ]
+  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
 }
 
 @test "recovery: the failure count resets on the hash fast path, with one recovery email" {

@@ -440,6 +440,25 @@ Please verify Plex is running:
     return 0
   fi
 
+  # A bad token also fails the prefs request. Do not kill a Plex that
+  # answers; the 2026-10-22 hang stopped /identity too.
+  if curl -sf --max-time 10 "${PLEX_URL}/identity" >/dev/null 2>&1; then
+    log "Plex answers /identity but not the prefs request; not restarting"
+    if [[ ${failures} -eq ${CONSECUTIVE_FAILURE_THRESHOLD} ]]; then
+      send_email \
+        "[${HOSTNAME_LABEL}] Plex answers, but the watchdog cannot read its settings" \
+        "Plex at ${PLEX_URL} answers /identity, but the authenticated prefs request has failed
+for ${failures} consecutive checks (${minutes} minutes). Plex was not restarted.
+
+The usual cause is a revoked or changed Plex token. Check:
+  ssh ${host_lower}
+  curl -s -o /dev/null -w '%{http_code}\\n' -H \"X-Plex-Token: \$(cat ~operator/.config/plex-watchdog/token)\" ${PLEX_URL}/:/prefs
+A 401 means the token in ${PLEX_TOKEN_FILE} must be replaced.
+Watchdog log: ${LOG_FILE}" || true
+    fi
+    return 0
+  fi
+
   local gave_up
   gave_up=$(alert_state_get restart_gave_up false)
   [[ "${gave_up}" == "true" ]] && return 0
