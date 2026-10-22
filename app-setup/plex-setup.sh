@@ -658,7 +658,7 @@ configure_plex_firewall() {
 }
 
 # Unattended Plex updates: an updater that cannot write the app waits for a
-# GUI password. See plex-setup-README.md.
+# GUI password. See docs/apps/plex-setup-README.md.
 configure_plex_updates() {
   section "Configuring Unattended Plex Updates"
 
