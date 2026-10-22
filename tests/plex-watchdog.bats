@@ -50,6 +50,8 @@ setup() {
   write_process_mocks
   DATA_LINK="${TEST_TMPDIR}/shared/PlexMediaServer/Plex Media Server"
   DATA_DIR="${HOME}/Library/Application Support/Plex Media Server"
+  # Does not exist unless a test creates it: an old binary, no update.
+  PLEX_BIN="${TEST_TMPDIR}/app/Plex Media Server"
 }
 
 # Process mocks. A process group "runs" while its flag file exists in
@@ -63,6 +65,7 @@ write_process_mocks() {
 pat="\${!#}"
 echo "pgrep \${pat}" >>"${PROC_DIR}/calls"
 case "\${pat}" in
+  *brew*) [[ -e "${PROC_DIR}/brew" ]] ;;
   *MacOS*) [[ -e "${PROC_DIR}/main" ]] ;;
   *) [[ -e "${PROC_DIR}/main" || -e "${PROC_DIR}/helpers" ]] ;;
 esac
@@ -118,6 +121,7 @@ source_watchdog_functions() {
     -e "s|^CONFIG_DIR=.*|CONFIG_DIR=\"${CONFIG_DIR}\"|" \
     -e "s|HOMEBREW_PREFIX=\"[^\"]*\"|HOMEBREW_PREFIX=\"${FAKE_BREW}\"|" \
     -e "s|^PLEX_DATA_LINK=.*|PLEX_DATA_LINK=\"${DATA_LINK}\"|" \
+    -e "s|^PLEX_BINARY=.*|PLEX_BINARY=\"${PLEX_BIN}\"|" \
     "${WATCHDOG_TEMPLATE}" >"${tmp}"
   # Stub send_email
   echo "send_email() { echo \"MOCK_EMAIL: \$1\"; return 0; }" >>"${tmp}"
@@ -600,6 +604,7 @@ render_watchdog() {
     -e 's/__MONITORING_EMAIL__/test@example.com/g' \
     -e "s|HOMEBREW_PREFIX=\"[^\"]*\"|HOMEBREW_PREFIX=\"${FAKE_BREW}\"|" \
     -e "s|^PLEX_DATA_LINK=.*|PLEX_DATA_LINK=\"${DATA_LINK}\"|" \
+    -e "s|^PLEX_BINARY=.*|PLEX_BINARY=\"${PLEX_BIN}\"|" \
     "${WATCHDOG_TEMPLATE}" >"${WATCHDOG}"
 
   mkdir -p "${HOME}/.config/plex-watchdog"
@@ -1197,4 +1202,75 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
   [ "$status" -eq 0 ]
   [ ! -e "${DATA_LINK}" ] && [ ! -L "${DATA_LINK}" ]
   grep -q "WARNING: data link not checked" <<<"$(watchdog_log)"
+}
+
+# ===========================================================================
+# Update guard
+#
+# A restart must not cut into a Plex update. Updates come from Plex's own
+# updater (writes update-log.txt, replaces the binary) and the daily brew
+# upgrade. While one may be running, the restart is deferred, not dropped.
+# ===========================================================================
+
+DEFERRED='\[TESTHOST\] Plex unreachable during an update; restart deferred'
+
+@test "update guard: no restart while a brew upgrade is running" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo '{"consecutive_failures": 2}' >"${HOME}/.config/plex-watchdog/state.json"
+  touch "${PROC_DIR}/main" "${PROC_DIR}/brew"
+
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
+  [ "$(subject_count "${DEFERRED}")" -eq 1 ]
+  grep -q "a brew upgrade is running" "${MAIL_LOG}"
+  [ "$(jq -r '.last_restart_epoch // "none"' <<<"$(WATCHDOG_STATE)")" = "none" ]
+}
+
+@test "update guard: no restart when the Plex binary changed recently" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo '{"consecutive_failures": 2}' >"${HOME}/.config/plex-watchdog/state.json"
+  mkdir -p "$(dirname "${PLEX_BIN}")"
+  touch "${PLEX_BIN}" "${PROC_DIR}/main"
+
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
+  grep -q "the Plex binary changed 0 min ago" <<<"$(watchdog_log)"
+}
+
+@test "update guard: no restart when Plex's updater wrote its log recently" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  echo '{"consecutive_failures": 2}' >"${HOME}/.config/plex-watchdog/state.json"
+  mkdir -p "${DATA_DIR}"
+  echo "INFO Update install completed" >"${DATA_DIR}/update-log.txt"
+  touch "${PROC_DIR}/main"
+
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
+  grep -q "updater wrote .*update-log.txt" <<<"$(watchdog_log)"
+}
+
+@test "update guard: an old update log does not block, and a deferred restart runs after the window" {
+  render_watchdog
+  write_curl_mock "${FAKE_BREW}/bin/curl"
+  write_msmtp_mock
+  # Past the threshold already, as after a deferral.
+  echo '{"consecutive_failures": 4}' >"${HOME}/.config/plex-watchdog/state.json"
+  mkdir -p "${DATA_DIR}"
+  touch -t 202601010000 "${DATA_DIR}/update-log.txt"
+  touch "${PROC_DIR}/main" "${PROC_DIR}/open-starts-plex"
+
+  PLEX_DOWN=1 run run_launchd_cycle
+  [ "$status" -eq 0 ]
+  proc_calls | grep -q '^open -a'
+  [ "$(subject_count "${RESTARTED}")" -eq 1 ]
+  [ "$(subject_count "${DEFERRED}")" -eq 0 ]
 }

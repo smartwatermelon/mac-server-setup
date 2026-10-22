@@ -227,6 +227,7 @@ Limits:
 | Plex does not answer within 90 s of the start | Email `Plex unreachable; automatic restart failed`. No more restarts until Plex answers. |
 | Plex fails again less than 1 hour after a restart | Email `Plex still unreachable after an automatic restart`. No more restarts until Plex answers. |
 | `~/.config/plex-watchdog/no-restart` exists | No restart. The plain `Plex server unreachable` email goes out once, at the threshold. |
+| An update may be running | No restart. Email `Plex unreachable during an update; restart deferred` once, at the threshold. "May be running" means any of: a `brew upgrade` process exists; the Plex binary's ctime is less than 30 minutes old (the installer sets the bundle mtime to 1969, so mtime is useless); Plex's updater wrote `update-log.txt` in the data directory less than 30 minutes ago. The first failed poll after that window restarts Plex. A stuck `brew upgrade` blocks restarts until it ends. |
 | Prefs fail but `/identity` answers | No restart: Plex is up, and the usual cause is a revoked token. Email `Plex answers, but the watchdog cannot read its settings` once, at the threshold. During the 2026-10-22 hang `/identity` did not answer either. |
 | Plex answers again after an alert | Email `RESOLVED: Plex server reachable again`. |
 
@@ -352,14 +353,14 @@ alert under launchd's PATH.
 
 ## Testing
 
-61 BATS tests in `tests/plex-watchdog.bats`, and 8 in `tests/plex-data-link.bats` for the setup side of the data link:
+65 BATS tests in `tests/plex-watchdog.bats`, and 8 in `tests/plex-data-link.bats` for the setup side of the data link:
 
 ```bash
 bats tests/plex-watchdog.bats
 bats tests/plex-data-link.bats
 ```
 
-Tests cover golden config parsing, XML parsing with entity handling, drift detection, state management, atomic writes, token file operations, full poll cycles under launchd's PATH, the media access check, automatic restart, and the data directory link. The curl mock answers each Plex URL from a fixture in `tests/fixtures/`. No live Plex server is required.
+Tests cover golden config parsing, XML parsing with entity handling, drift detection, state management, atomic writes, token file operations, full poll cycles under launchd's PATH, the media access check, automatic restart, the update guard, and the data directory link. The curl mock answers each Plex URL from a fixture in `tests/fixtures/`. No live Plex server is required.
 
 `pgrep`, `pkill`, `open` and `sleep` are mocked in every test, not only the restart tests. The tests also run on the Plex server itself, where a real `pkill` would stop the real Plex.
 

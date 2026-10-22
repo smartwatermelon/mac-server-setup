@@ -70,6 +70,12 @@ PLEX_MAIN_PATTERN='MacOS/Plex Media Server$'
 # Helpers outlive a killed server and keep its ports. Also matches the
 # server itself.
 PLEX_HELPER_PATTERN='Plex Media Server\.app/Contents/|Plex EAE Service'
+# Update guard, see update_in_progress. The bundle's mtime is useless (the
+# installer sets it to 1969); the binary's ctime is not.
+UPDATE_GRACE_SECONDS=1800
+PLEX_BINARY="${PLEX_APP}/Contents/MacOS/Plex Media Server"
+PLEX_UPDATE_LOG="${PLEX_DATA_DIR}/update-log.txt"
+BREW_UPGRADE_PATTERN='Homebrew/brew\.sh upgrade'
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -406,6 +412,26 @@ restart_plex() {
   return 1
 }
 
+# Prints why a restart could cut into a Plex update, or nothing. The
+# restart is deferred: it runs on the first failed poll after the window.
+update_in_progress() {
+  if pgrep -f "${BREW_UPGRADE_PATTERN}" >/dev/null; then
+    echo "a brew upgrade is running"
+    return 0
+  fi
+  local now changed
+  now=$(date +%s)
+  changed=$(stat -f %c "${PLEX_BINARY}" 2>/dev/null) || changed=0
+  if [[ $((now - changed)) -lt ${UPDATE_GRACE_SECONDS} ]]; then
+    echo "the Plex binary changed $(((now - changed) / 60)) min ago"
+    return 0
+  fi
+  changed=$(stat -f %m "${PLEX_UPDATE_LOG}" 2>/dev/null) || changed=0
+  if [[ $((now - changed)) -lt ${UPDATE_GRACE_SECONDS} ]]; then
+    echo "Plex's updater wrote ${PLEX_UPDATE_LOG} $(((now - changed) / 60)) min ago"
+  fi
+}
+
 # Set one top-level state key to a JSON value.
 state_set() {
   local state
@@ -436,6 +462,23 @@ Automatic restart is off (${NO_RESTART_FILE} exists).
 
 Please verify Plex is running:
   ssh operator@${host_lower} 'pgrep -f \"Plex Media Server\"'" || true
+    fi
+    return 0
+  fi
+
+  local updating
+  updating=$(update_in_progress)
+  if [[ -n "${updating}" ]]; then
+    log "Not restarting Plex: an update may be running (${updating})"
+    if [[ ${failures} -eq ${CONSECUTIVE_FAILURE_THRESHOLD} ]]; then
+      send_email \
+        "[${HOSTNAME_LABEL}] Plex unreachable during an update; restart deferred" \
+        "The Plex server at ${PLEX_URL} has been unreachable for ${failures} consecutive checks (${minutes} minutes).
+It was not restarted, because an update may be running: ${updating}.
+
+The watchdog restarts it on the first failed check after the update window
+($((UPDATE_GRACE_SECONDS / 60)) minutes after the last change). If a brew upgrade is stuck, restarts wait for it.
+Watchdog log: ${LOG_FILE}" || true
     fi
     return 0
   fi
