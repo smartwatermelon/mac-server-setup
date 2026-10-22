@@ -898,7 +898,7 @@ ensure_container() {
         -v "${OPERATOR_HOME}/containers/transmission/scripts:/scripts" \\
         -v "${OPERATOR_HOME}/containers/transmission/config:/config" \\
         -v "${OPERATOR_HOME}/containers/transmission/watch:/watch" \\
-        -p "${HOST_PORT}:9091" \\
+        -p "127.0.0.1:${HOST_PORT}:9091" \\
         --restart unless-stopped \\
         --health-cmd "curl -sf --max-time 5 http://localhost:9091/transmission/web/" \\
         --health-interval 60s \\
@@ -1275,7 +1275,7 @@ else
     -v "${CONTAINER_DIR}/scripts:/scripts" \
     -v "${CONTAINER_DIR}/config:/config" \
     -v "${CONTAINER_DIR}/watch:/watch" \
-    -p "${HOST_PORT}:9091" \
+    -p "127.0.0.1:${HOST_PORT}:9091" \
     --restart unless-stopped \
     --health-cmd "curl -sf --max-time 5 http://localhost:9091/transmission/web/" \
     --health-interval 60s \
@@ -1312,7 +1312,7 @@ else
     log "Verify with:"
     log "  podman logs transmission-vpn"
     log "  podman exec transmission-vpn curl -s ifconfig.io  (should return Panama PIA exit IP)"
-    log "  Transmission web UI: http://${HOSTNAME_LOWER}.local:${HOST_PORT}"
+    log "  Transmission web UI: https://${HOSTNAME_LOWER}.local/transmission/ (via Caddy; 9091 is loopback-only)"
   else
     collect_error "podman run failed — check 'podman logs transmission-vpn' for details"
   fi

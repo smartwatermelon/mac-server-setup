@@ -44,14 +44,16 @@
 		not remote_ip fd00::/8
 	}
 
-	# Authentication for external access only
+	# Authentication for external access only.
+	# Keyed on source IP alone, never on Host: the WAN forward reaches the
+	# same :443 listener as the internal site, so a host-keyed matcher let an
+	# external client send the internal hostname as Host/SNI and skip auth.
 	@external_auth_required {
 		not remote_ip 10.0.15.0/24
 		not remote_ip 127.0.0.1/8
 		not remote_ip ::1/128
 		not remote_ip fe80::/10
 		not remote_ip fd00::/8
-		host __EXTERNAL_HOSTNAME__
 	}
 
 	# Apply basic authentication for external access
@@ -83,7 +85,7 @@
 	file_server
 
 	# Transmission proxy - spoof localhost origin
-	reverse_proxy /transmission/* localhost:9091 {
+	reverse_proxy /transmission/* 127.0.0.1:9091 {
 		# Tell Transmission we're coming from localhost
 		header_up Host localhost
 		header_up X-Real-IP 127.0.0.1
