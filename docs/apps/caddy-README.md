@@ -46,7 +46,7 @@ Always restart through `launchctl kickstart`.
 The Caddyfile uses three site blocks with a shared snippet:
 
 1. **Catch-all `:443`** — Rejects direct IP access or unrecognized hostnames (403)
-2. **Internal block** (`{$HOSTNAME}.local localhost 10.0.15.4`) — Uses `tls internal` (Caddy's built-in CA). Imports `common_config`
+2. **Internal block** (`{$HOSTNAME}.local localhost <server LAN IP>` (`__SERVER_LAN_IP__`, currently 10.0.15.15)) — Uses `tls internal` (Caddy's built-in CA). Imports `common_config`
 3. **External block** (`tilsit.vip`) — Uses Let's Encrypt DNS-01 via Cloudflare for public TLS. Imports `common_config`
 
 The `(common_config)` snippet contains all shared logic:
@@ -154,7 +154,7 @@ Check current binary: `/opt/homebrew/bin/caddy list-modules | grep cloudflare` (
 
 ### LAN (Internal)
 
-Caddy's internal PKI with 90-day intermediate certs (`intermediate_lifetime 90d` in global config). Clients must install `caddy-root-ca.crt` to trust these certs. The internal block matches `{$HOSTNAME}.local localhost 10.0.15.4` and uses `tls internal`.
+Caddy's internal PKI with 90-day intermediate certs (`intermediate_lifetime 90d` in global config). Clients must install `caddy-root-ca.crt` to trust these certs. The internal block matches `{$HOSTNAME}.local localhost <server LAN IP>` (`__SERVER_LAN_IP__`, currently 10.0.15.15) and uses `tls internal`.
 
 ### WAN (Let's Encrypt DNS-01 via Cloudflare)
 
