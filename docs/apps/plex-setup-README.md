@@ -269,22 +269,45 @@ Even in `--force` mode, these elements remain interactive:
 
 ## Server Update Policy
 
-Plex Media Server's built-in updater (Settings → General → Server version)
-is set to **"Ask me"**, not automatic install. This is intentional, not an
-oversight:
+Plex updates itself, unattended. `configure_plex_updates` sets Settings →
+General → Server version updates to **"Automatically during scheduled
+maintenance"** (`ButlerTaskUpdateServer=always`), so an update installs
+between `ButlerStartHour` and `ButlerEndHour` (00:00–08:00 here).
 
-- On headless macOS, "Automatically download and install updates" still
-  relies on a GUI installer step. With no one logged into Plex Web to
-  approve/acknowledge it, an update can hang indefinitely mid-install,
-  taking the server down until someone logs in as `operator` to clear it.
-- "Ask me" avoids that failure mode. The tradeoff is that PMS version
-  updates are applied manually — see "Common Issues" below or update via
-  the Plex Web GUI when convenient.
+That only works because the operator owns the app. Plex's updater runs as
+the operator and first tries to write a test file into
+`/Applications/Plex Media Server.app`. Until 2026-10-22 the app was owned
+by root, so that failed and the updater asked for an admin password in a
+GUI prompt:
 
-There is no scripted/headless PMS updater in this repo (the auto-update
-tooling in `scripts/server/setup-auto-updates.sh` covers Homebrew, the Mac
-App Store, and macOS Software Update only — it does not touch Plex). If
-that changes in the future, update this section.
+```text
+checkAccess() on /Applications/Plex Media Server.app/_plexUpdaterTestFile failed ... Permission denied
+Insufficient rights to install app to /Applications/Plex Media Server.app requesting elevation
+```
+
+Plex had already stopped by then. With no one at the desktop it stayed
+down until someone answered, which is why the setting used to be "Ask me".
+Every update in `update-log.txt` up to 1.43.4 went through that prompt.
+`configure_plex_updates` runs `chown -R operator:staff` on the app;
+updates the updater installs keep that owner.
+
+The trade-off: the operator account can change the Plex binary. It
+already controls everything Plex runs with (data, LaunchAgent), so this
+adds little.
+
+Homebrew no longer upgrades Plex. The daily brew upgrade
+(`scripts/server/setup-auto-updates.sh`) skips the `plex-media-server`
+cask (`SKIP_CASKS`). On 2026-10-21 it tried to replace the running app,
+failed because Plex's elevated updater had left the app owned by root,
+and left a copy in the Caskroom that made every later run fail with "It seems there is already
+an App". The plex-watchdog does not restart Plex while an update may be
+running; see `plex-watchdog-README.md`.
+
+Check the last update with:
+
+```bash
+sudo tail -5 "/Users/operator/Library/Application Support/Plex Media Server/update-log.txt"
+```
 
 ## Manual Operations
 

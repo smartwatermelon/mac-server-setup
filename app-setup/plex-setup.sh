@@ -657,6 +657,29 @@ configure_plex_firewall() {
   fi
 }
 
+# Unattended Plex updates: an updater that cannot write the app waits for a
+# GUI password. See plex-setup-README.md.
+configure_plex_updates() {
+  section "Configuring Unattended Plex Updates"
+
+  local plex_app="/Applications/Plex Media Server.app"
+
+  log "Giving ${OPERATOR_USERNAME} ownership of ${plex_app}..."
+  if ! sudo -p "[Plex updates] Enter password to change the owner of the Plex app: " \
+    chown -R "${OPERATOR_USERNAME}:staff" "${plex_app}"; then
+    collect_warning "Could not change the owner of ${plex_app}; each Plex update will wait for an admin password"
+    return 1
+  fi
+  log "✅ ${OPERATOR_USERNAME} owns ${plex_app}"
+
+  # "always" = "Automatically during scheduled maintenance" (ButlerStartHour to ButlerEndHour)
+  if ! sudo -iu "${OPERATOR_USERNAME}" defaults write "${PLEX_PREFS}" ButlerTaskUpdateServer -string always; then
+    collect_warning "Could not turn on automatic Plex updates"
+    return 1
+  fi
+  log "✅ Plex updates install automatically during scheduled maintenance"
+}
+
 # Helper function for actual SSH testing
 _try_ssh_host() {
   local host="$1"
@@ -1581,6 +1604,9 @@ main() {
 
   # Configure firewall for Plex
   configure_plex_firewall
+
+  # Unattended updates (failures are warnings: Plex still runs)
+  configure_plex_updates || true
 
   # Setup shared configuration directory
   setup_shared_config
