@@ -45,6 +45,10 @@ setup() {
   CONTAINER_RUNNING_FILE="${TEST_TMPDIR}/container.running"
   export MACHINE_STATE_FILE CONTAINER_EXISTS_FILE CONTAINER_RUNNING_FILE
 
+  # The podman mock fails `machine start` only while this file exists.
+  MACHINE_START_FAIL_FILE="${TEST_TMPDIR}/machine-start.fail"
+  export MACHINE_START_FAIL_FILE
+
   set_mock_state "stopped" "false" "false"
 
   extract_and_render_wrapper
@@ -262,13 +266,13 @@ run_wrapper_briefly() {
 @test "wrapper extraction: deploy-time variables are substituted, not left literal" {
   run cat "${WRAPPER_SCRIPT}"
   [[ "${output}" == *"${NFS_MOUNT_POINT}"* ]]
-  [[ "${output}" != *'${NFS_MOUNT_POINT}'* ]]
+  [[ "${output}" != *"\${NFS_MOUNT_POINT}"* ]]
   [[ "${output}" == *"com.testhost.podman-transmission-vm"* ]]
 }
 
 @test "wrapper extraction: runtime variables remain escaped (not deploy-time substituted)" {
   run cat "${WRAPPER_SCRIPT}"
-  [[ "${output}" == *'SUPERVISE_INTERVAL=${SUPERVISE_INTERVAL:-300}'* ]]
+  [[ "${output}" == *"SUPERVISE_INTERVAL=\${SUPERVISE_INTERVAL:-300}"* ]]
 }
 
 @test "wrapper PATH: the stable-signed podman mirror is searched before Homebrew" {
@@ -363,6 +367,22 @@ MOCK_EOF
   grep -q -- '-e TRANSMISSION_START_ADDED_TORRENTS=true' <<<"${block}"
 }
 
+@test "supervisor: the recreated container publishes 9091 on loopback only" {
+  set_mock_state "running" "false" "false"
+
+  run run_wrapper_briefly
+
+  # Transmission's RPC has no auth of its own; only Caddy may reach it.
+  grep '^run -d' "${CALLS_FILE}" | grep -q -- '-p 127.0.0.1:9091:9091'
+}
+
+@test "setup: the initial podman run also publishes 9091 on loopback only" {
+  local block
+  block=$(awk '/^  if sudo -iu "\$\{OPERATOR_USERNAME\}" podman run -d \\$/{flag=1} flag{print} /haugene\/transmission-openvpn:latest; then$/{flag=0}' "${SETUP_SCRIPT}")
+  [ -n "${block}" ]
+  grep -q -- "-p \"127.0.0.1:\${HOST_PORT}:9091\"" <<<"${block}"
+}
+
 @test "supervisor: does not call podman run again once the container exists and is running" {
   set_mock_state "running" "true" "true"
 
@@ -452,7 +472,7 @@ MOCK_EOF
     [[ -z "${line}" ]] && continue
     # podman_t's own body is the one place a bare `podman` is correct — it is
     # what _timeout wraps.
-    [[ "${line}" == *'_timeout "${limit}" podman'* ]] && continue
+    [[ "${line}" == *"_timeout \"\${limit}\" podman"* ]] && continue
     echo "unbounded podman call: ${line}" >&2
     return 1
   done <<<"${output}"
@@ -589,7 +609,6 @@ status_file() {
 
 @test "status file: repeated machine start failures are counted, with the error" {
   set_mock_state "stopped" "true" "true"
-  export MACHINE_START_FAIL_FILE="${TEST_TMPDIR}/machine-start.fail"
   touch "${MACHINE_START_FAIL_FILE}"
 
   run run_wrapper_briefly
@@ -601,7 +620,6 @@ status_file() {
 
 @test "status file: a successful cycle resets the failure count" {
   set_mock_state "stopped" "true" "true"
-  export MACHINE_START_FAIL_FILE="${TEST_TMPDIR}/machine-start.fail"
   touch "${MACHINE_START_FAIL_FILE}"
   run run_wrapper_briefly
   [ "$(jq -r '.consecutive_failures' "$(status_file)")" -ge 1 ]

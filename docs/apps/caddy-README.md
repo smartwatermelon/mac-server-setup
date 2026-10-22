@@ -52,9 +52,9 @@ The Caddyfile uses three site blocks with a shared snippet:
 The `(common_config)` snippet contains all shared logic:
 
 - **Network matchers**: `@local_network` and `@external_network` based on `10.0.15.0/24`
-- **Basic auth**: Only applied to `@external_auth_required` (external + `host tilsit.vip`)
+- **Basic auth**: Applied to `@external_auth_required`: any non-LAN source IP, on both sites. It must never key on `host`: the WAN forward reaches the internal site too, and the client chooses the Host/SNI
 - **Media file browser**: `/media/*` reverse-proxied to `localhost:9880` (Python file server, local network only)
-- **Reverse proxies**: `/transmission/*` to `localhost:9091`
+- **Reverse proxies**: `/transmission/*` to `127.0.0.1:9091` (Transmission publishes 9091 on loopback only)
 - **Static files**: Served from `/usr/local/var/www`
 - **Logging**: JSON format to `/usr/local/var/log/caddy/access.log`
 
