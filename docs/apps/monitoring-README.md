@@ -9,7 +9,7 @@ msmtp (Gmail SMTP). They all send that email through one shared library,
 
 | Watchdog | LaunchAgent | Interval | Log | Deployed by |
 | --- | --- | --- | --- | --- |
-| `plex-watchdog` — Plex settings drift, Plex unreachable, Plex cannot read media files | `com.<host>.plex-watchdog` | 300 s, RunAtLoad | `~/.local/state/plex-watchdog.log` | `plex-watchdog-setup.sh` |
+| `plex-watchdog` — Plex settings drift, Plex unreachable (restarts it after 3 polls), Plex cannot read media files, Plex data directory link | `com.<host>.plex-watchdog` | 300 s, RunAtLoad | `~/.local/state/plex-watchdog.log` | `plex-watchdog-setup.sh` |
 | `pia-port-watchdog.sh` — PIA port forwarding lost | `com.<host>.pia-port-watchdog` | 900 s | `~/.local/state/<host>-pia-port-watchdog.log` | `podman-transmission-setup.sh` |
 | `stall-watchdog.sh` — server blocked on a privacy prompt, a long `transmission-done`, supervisor failing | `com.<host>.stall-watchdog` | 120 s, RunAtLoad | `~/.local/state/<host>-stall-watchdog.log` | `podman-transmission-setup.sh` |
 
@@ -118,9 +118,9 @@ identify or process. It is not a watchdog, and it reads the recipient from
 processed" in `transmission-filebot-README.md`.
 
 plex-watchdog and pia-port-watchdog use `alert_send` and the state functions,
-but keep their own alert, dedupe and heartbeat logic. The exception is
-plex-watchdog's media access check (key `media_unreachable`), which uses
-`alert_transition`. stall-watchdog uses `alert_transition` for all of its
+but keep their own alert, dedupe and heartbeat logic. The exceptions are
+plex-watchdog's media access check (key `media_unreachable`) and data
+directory link check (key `data_link`), which use `alert_transition`. stall-watchdog uses `alert_transition` for all of its
 checks.
 
 ## Send a test alert under launchd's PATH
@@ -333,6 +333,7 @@ log is the record of the failure.
 ```bash
 bats tests/alert-lib.bats
 bats tests/plex-watchdog.bats
+bats tests/plex-data-link.bats
 bats tests/pia-port-watchdog.bats
 bats tests/stall-watchdog.bats
 bats tests/msmtp-setup.bats

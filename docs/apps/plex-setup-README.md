@@ -76,6 +76,10 @@ ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"  # 1Password item for NAS credentials
    - Configures NFS mount scripts (NFS uses host-based auth, no credentials embedded)
    - Creates shared configuration directory (`/Users/Shared/PlexMediaServer`)
    - Migrates existing Plex configuration if requested
+   - Links `/Users/Shared/PlexMediaServer/Plex Media Server` to the real data
+     in `~operator/Library/Application Support/Plex Media Server`
+     (`ensure_plex_data_link`; see "Data directory link" in
+     `plex-watchdog-README.md`)
    - Deploys LaunchAgent and mount scripts to operator account
 
 2. **Operator runtime**: Automatic on operator login
@@ -86,7 +90,10 @@ ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"  # 1Password item for NAS credentials
 ### File Locations
 
 - **Application**: `/Applications/Plex Media Server.app`
-- **Shared config**: `/Users/Shared/PlexMediaServer/`
+- **Plex data**: `~operator/Library/Application Support/Plex Media Server/`
+- **Shared config**: `/Users/Shared/PlexMediaServer/`. Its `Plex Media Server`
+  entry is a link to the Plex data. It must never be a real directory: Plex
+  started by the LaunchAgent would run an empty server from it.
 - **Mount script**: `~/.local/bin/mount-nas-media.sh`
 - **LaunchAgent**: `~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist`
 - **Media mount**: `~/.local/mnt/${NAS_SHARE_NAME}`
@@ -94,7 +101,7 @@ ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"  # 1Password item for NAS credentials
 ### Log Locations
 
 - **Setup logs**: `~/.local/state/${HOSTNAME_LOWER}-apps.log`
-- **Plex logs**: `/Users/Shared/PlexMediaServer/Plex Media Server/Logs/`
+- **Plex logs**: `~operator/Library/Logs/Plex Media Server/`
 - **LaunchAgent logs**: `/tmp/plex-out.log`, `/tmp/plex-error.log`
 
 ## Migration

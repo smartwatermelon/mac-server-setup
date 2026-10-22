@@ -79,6 +79,12 @@ LAUNCH_AGENT_FILE="${LAUNCH_AGENTS_DIR}/${LAUNCH_AGENT}.plist"
 PLEX_OLD_CONFIG="${HOME}/plex-migration/Plex Media Server"
 PLEX_NEW_CONFIG="/Users/Shared/PlexMediaServer"
 
+# Real Plex data, and the link to it that the LaunchAgent's data dir
+# resolves through. See ensure_plex_data_link.
+PLEX_DATA_DIR="${OPERATOR_HOME}/Library/Application Support/Plex Media Server"
+PLEX_DATA_LINK="${PLEX_NEW_CONFIG}/Plex Media Server"
+MIGRATION_APPLIED=false
+
 # Parse command line arguments
 FORCE=false
 MIGRATE=false
@@ -1032,6 +1038,7 @@ migrate_plex_config() {
     check_success "Migrated configuration permissions"
 
     log "✅ Plex configuration migrated successfully"
+    MIGRATION_APPLIED=true
 
     # Update library paths immediately after migration
     update_migrated_library_paths
@@ -1046,6 +1053,49 @@ migrate_plex_config() {
     log "Configuration migration declined by user"
     return 1
   fi
+}
+
+# Make PLEX_DATA_LINK a link to PLEX_DATA_DIR. Moves a staged migration;
+# refuses when both are real dirs. See plex-watchdog-README.md.
+ensure_plex_data_link() {
+  section "Linking Plex Data Directory"
+
+  if [[ -L "${PLEX_DATA_LINK}" ]]; then
+    local target
+    target=$(readlink "${PLEX_DATA_LINK}")
+    if [[ "${target}" == "${PLEX_DATA_DIR}" ]]; then
+      log "✅ ${PLEX_DATA_LINK} already links to ${PLEX_DATA_DIR}"
+      return 0
+    fi
+    log "Repointing ${PLEX_DATA_LINK} (was ${target})"
+    sudo -p "[Plex setup] Enter password to repoint the Plex data link: " rm -f "${PLEX_DATA_LINK}"
+  elif [[ -d "${PLEX_DATA_LINK}" ]]; then
+    if [[ "${MIGRATION_APPLIED}" != "true" && -d "${PLEX_DATA_DIR}" ]]; then
+      collect_error "Both ${PLEX_DATA_LINK} and ${PLEX_DATA_DIR} are directories. Check which one the running Plex uses (lsof -p <pid> | grep library.db), move the other aside, and re-run this script."
+      return 1
+    fi
+    if [[ -d "${PLEX_DATA_DIR}" ]]; then
+      local backup_dir
+      backup_dir="${PLEX_DATA_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
+      log "Moving the existing ${PLEX_DATA_DIR} aside to ${backup_dir}"
+      sudo -p "[Plex setup] Enter password to back up the existing Plex data: " mv "${PLEX_DATA_DIR}" "${backup_dir}"
+    fi
+    log "Moving ${PLEX_DATA_LINK} to ${PLEX_DATA_DIR}"
+    sudo -p "[Plex setup] Enter password to create the operator's Application Support directory: " -u "${OPERATOR_USERNAME}" mkdir -p "$(dirname "${PLEX_DATA_DIR}")"
+    sudo -p "[Plex setup] Enter password to move the Plex data: " mv "${PLEX_DATA_LINK}" "${PLEX_DATA_DIR}"
+    sudo -p "[Plex setup] Enter password to set Plex data ownership: " chown -R "${OPERATOR_USERNAME}:staff" "${PLEX_DATA_DIR}"
+    check_success "Plex data move"
+  elif [[ -e "${PLEX_DATA_LINK}" ]]; then
+    collect_error "${PLEX_DATA_LINK} exists but is not a directory or a link. Remove it and re-run this script."
+    return 1
+  fi
+
+  # A fresh install: Plex creates its files on first start.
+  sudo -p "[Plex setup] Enter password to create the Plex data directory: " -u "${OPERATOR_USERNAME}" mkdir -p "${PLEX_DATA_DIR}"
+  sudo -p "[Plex setup] Enter password to create the Plex data link: " ln -s "${PLEX_DATA_DIR}" "${PLEX_DATA_LINK}"
+  sudo -p "[Plex setup] Enter password to set Plex data link ownership: " chown -h "${OPERATOR_USERNAME}:staff" "${PLEX_DATA_LINK}"
+  check_success "Plex data link creation"
+  log "✅ ${PLEX_DATA_LINK} -> ${PLEX_DATA_DIR}"
 }
 
 # Function to safely update library paths in migrated Plex database
@@ -1568,6 +1618,13 @@ main() {
   if [[ -n "${TARGET_PLEX_PORT:-}" && "${TARGET_PLEX_PORT}" != "32400" && -z "${MIGRATE_FROM}" && ! -d "${PLEX_OLD_CONFIG}" ]]; then
     log "Configuring custom port ${TARGET_PLEX_PORT} for fresh installation using macOS plist method..."
     configure_plex_port_plist "${TARGET_PLEX_PORT}"
+  fi
+
+  # The LaunchAgent below points Plex at PLEX_NEW_CONFIG; the link makes that
+  # the same data as Plex's default location.
+  if ! ensure_plex_data_link; then
+    collect_error "Plex data link not created; a Plex started by the LaunchAgent would use an empty server"
+    exit 1
   fi
 
   # Configure auto-start

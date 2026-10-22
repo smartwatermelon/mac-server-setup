@@ -8,6 +8,8 @@ The watchdog polls the Plex REST API every 5 minutes, comparing current settings
 
 Each poll also asks Plex whether it can read its newest movie or episode on disk. See [Media access check](#media-access-check).
 
+When Plex does not answer for 3 polls in a row, the watchdog restarts it. See [Automatic restart](#automatic-restart). Each poll also keeps the `/Users/Shared/PlexMediaServer` data link in place. See [Data directory link](#data-directory-link).
+
 Two setup scripts deploy four components:
 
 | Script                   | What it deploys                                       |
@@ -140,14 +142,15 @@ The template is at `app-setup/templates/plex-golden.conf.template`. Values are p
 
 The daemon runs once per LaunchAgent invocation (every 5 minutes):
 
-1. Fetch Plex prefs XML via REST API
-2. Run the [media access check](#media-access-check). This runs before the fast path, so it runs on every poll.
-3. **Fast path**: compare SHA-256 hash against stored hash — if unchanged, skip to heartbeat check (this is 99.9% of runs)
-4. Parse XML with `xmllint` (handles entities like `&amp;` correctly)
-5. Compare each monitored setting against golden config
-6. Send email on new drift; send "resolved" email when drift clears
-7. Save state atomically (temp file + mv). Only the drift keys are updated; the media check's keys are kept.
-8. Log a heartbeat once per hour when there's no drift
+1. Check the [data directory link](#data-directory-link)
+2. Fetch Plex prefs XML via REST API. If that fails, count the failure; at 3 in a row, go to [automatic restart](#automatic-restart). If it works, reset the count (and send a recovery email if an alert went out).
+3. Run the [media access check](#media-access-check). This runs before the fast path, so it runs on every poll.
+4. **Fast path**: compare SHA-256 hash against stored hash — if unchanged, skip to heartbeat check (this is 99.9% of runs)
+5. Parse XML with `xmllint` (handles entities like `&amp;` correctly)
+6. Compare each monitored setting against golden config
+7. Send email on new drift; send "resolved" email when drift clears
+8. Save state atomically (temp file + mv). Only the drift keys are updated; the media check's keys are kept.
+9. Log a heartbeat once per hour when there's no drift
 
 ### Media access check
 
@@ -186,6 +189,95 @@ State: `.media_check_failures` and `.transitions.media_unreachable` in
 `state.json`. The alert uses `alert_transition` from the shared alert library
 (see `monitoring-README.md`).
 
+### Automatic restart
+
+On 2026-10-22 Plex deadlocked at 00:00:24 during its nightly database
+maintenance. The Butler "Optimizing database" task finished, then an EPG
+migration took every database session while the scheduled library scan
+started. The process stayed up at 0% CPU and answered nothing (later only
+HTTP 503) until it was killed at 08:39. It cannot recover by itself, so the
+watchdog restarts it.
+
+When the prefs request fails for 3 polls in a row (10 to 15 minutes), the
+watchdog:
+
+1. Sends SIGTERM to `Plex Media Server`, waits 10 s, then sends SIGKILL.
+   Plex ignores SIGTERM even when healthy (on 2026-10-22 a fresh, working
+   instance was still running 30 s after SIGTERM), so expect SIGKILL.
+2. Stops the helper processes the same way (plug-ins, DLNA, tuner,
+   `Plex EAE Service`). They outlive a killed server and keep their ports.
+3. Checks the [data directory link](#data-directory-link).
+4. Starts Plex with `open -a "/Applications/Plex Media Server.app"`, and with
+   `PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR` removed from the environment
+   (`open` passes its environment to the app).
+5. Waits up to 90 s for `/identity` to answer, and emails the result.
+
+It uses `open`, not the binary, because an app started by `open` is its own
+launchd job. launchd stops a LaunchAgent's child processes when the agent
+exits (see the header of the supervisor wrapper in
+`podman-transmission-setup.sh`, about `vfkit`). It does not use
+`launchctl kickstart` on the Plex LaunchAgent: `open` on a running app does
+nothing, and a hung Plex is a running app.
+
+Limits:
+
+| Case | What happens |
+| --- | --- |
+| Restart works | Email `Plex was unresponsive and has been restarted`. The failure count is reset. |
+| Plex does not answer within 90 s of the start | Email `Plex unreachable; automatic restart failed`. No more restarts until Plex answers. |
+| Plex fails again less than 1 hour after a restart | Email `Plex still unreachable after an automatic restart`. No more restarts until Plex answers. |
+| `~/.config/plex-watchdog/no-restart` exists | No restart. The plain `Plex server unreachable` email goes out once, at the threshold. |
+| An update may be running | No restart. Email `Plex unreachable during an update; restart deferred` once, at the threshold. "May be running" means any of: a `brew upgrade` process exists; the Plex binary's ctime is less than 30 minutes old (the installer sets the bundle mtime to 1969, so mtime is useless); Plex's updater wrote `update-log.txt` in the data directory less than 30 minutes ago. The first failed poll after that window restarts Plex. A stuck `brew upgrade` blocks restarts until it ends. |
+| Prefs fail but `/identity` answers | No restart: Plex is up, and the usual cause is a revoked token. Email `Plex answers, but the watchdog cannot read its settings` once, at the threshold. During the 2026-10-22 hang `/identity` did not answer either. |
+| Plex answers again after an alert | Email `RESOLVED: Plex server reachable again`. |
+
+Turn restarts off for maintenance, and back on after:
+
+```bash
+sudo -u operator touch /Users/operator/.config/plex-watchdog/no-restart
+sudo -u operator rm /Users/operator/.config/plex-watchdog/no-restart
+```
+
+State: `.consecutive_failures`, `.last_restart_epoch` (the last attempt) and
+`.restart_gave_up` in `state.json`. A successful poll resets
+`.consecutive_failures` and clears `.restart_gave_up`. Before 2026-10-22 only
+Step 8 reset the count, and the fast path skips Step 8. After an outage with
+unchanged prefs the count stayed high, so the next outage was never alerted.
+
+To find out why Plex hung, read the Plex log
+(`~operator/Library/Logs/Plex Media Server/Plex Media Server.log`, rotated to
+`.1.log` to `.5.log`) for the time before the restart. Repeated `N threads are
+waiting on db connections held by threads: …` lines mean the database
+deadlock described above.
+
+### Data directory link
+
+`/Users/Shared/PlexMediaServer/Plex Media Server` must be a link to
+`~operator/Library/Application Support/Plex Media Server`, where Plex keeps
+its data.
+
+Two things start Plex at operator login. The Plex app's own login item starts
+it with its default data directory. The `com.<host>.plexmediaserver`
+LaunchAgent runs `start-plex.sh`, which runs `open` with
+`PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=/Users/Shared/PlexMediaServer`. On
+TILSIT the login item had always won, and the LaunchAgent's `open` only
+reached the running app. On 2026-10-22 the LaunchAgent started Plex while that
+path did not exist. Plex created a new, empty, unclaimed server there, and
+every client saw no libraries. The same path is Plex's
+`ButlerDatabaseBackupPath`, so the nightly database backups had never been
+written ("Database backup path … does not exist, skipping").
+
+With the link, both start paths and the backup path reach the real data.
+`plex-setup.sh` creates the link (`ensure_plex_data_link`). Each watchdog poll
+checks it:
+
+- Missing: created. Logs `REPAIRED: created …`.
+- A link to another place: repointed. Logs `REPAIRED: … pointed at …`.
+- A real directory: not changed, because Plex may be running from it. Alert
+  `Plex data directory link is broken` (key `data_link`, reminder every 12
+  hours), and a recovery email when it is fixed.
+- The real data directory does not exist: not checked. Logs a `WARNING`.
+
 ### Alert deduplication
 
 The watchdog tracks which drifts have been emailed in `state.json`. It only emails when:
@@ -195,7 +287,7 @@ The watchdog tracks which drifts have been emailed in `state.json`. It only emai
 
 ### Error handling
 
-- **Plex unreachable**: logs a warning, emails only after 3 consecutive failures (15 minutes)
+- **Plex unreachable**: logs a warning; after 3 consecutive failures (10 to 15 minutes) restarts Plex and emails the result, see [Automatic restart](#automatic-restart)
 - **Plex cannot read media**: emails after 2 consecutive failed media checks (10 minutes), see [Media access check](#media-access-check)
 - **msmtp failure**: logs error, continues monitoring (email failure doesn't block drift detection)
 - **xmllint failure**: logs error, preserves last known good state
@@ -261,12 +353,15 @@ alert under launchd's PATH.
 
 ## Testing
 
-45 BATS tests in `tests/plex-watchdog.bats`:
+65 BATS tests in `tests/plex-watchdog.bats`, and 8 in `tests/plex-data-link.bats` for the setup side of the data link:
 
 ```bash
 bats tests/plex-watchdog.bats
+bats tests/plex-data-link.bats
 ```
 
-Tests cover golden config parsing, XML parsing with entity handling, drift detection, state management, atomic writes, token file operations, full poll cycles under launchd's PATH, and the media access check. The curl mock answers each Plex URL from a fixture in `tests/fixtures/`. No live Plex server is required.
+Tests cover golden config parsing, XML parsing with entity handling, drift detection, state management, atomic writes, token file operations, full poll cycles under launchd's PATH, the media access check, automatic restart, the update guard, and the data directory link. The curl mock answers each Plex URL from a fixture in `tests/fixtures/`. No live Plex server is required.
+
+`pgrep`, `pkill`, `open` and `sleep` are mocked in every test, not only the restart tests. The tests also run on the Plex server itself, where a real `pkill` would stop the real Plex.
 
 Integration test tracking: #87 (email delivery), #88 (live Plex end-to-end), #89 (LaunchAgent/permissions).

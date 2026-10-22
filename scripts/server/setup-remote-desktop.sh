@@ -149,7 +149,7 @@ show_manual_setup_dialog() {
   # Give System Settings time to load
   sleep 2
 
-  if osascript <<'EOF'; then
+  if osascript <<'EOF'
 display dialog "Remote Desktop Manual Setup
 
 The script has disabled existing services to ensure a clean state.
@@ -169,6 +169,7 @@ Please complete the setup manually:
 
 After completing these steps, click OK to re-test the configuration." buttons {"OK"} default button "OK" with title "Remote Desktop Manual Setup" with icon caution
 EOF
+  then
     log "Manual setup dialog completed"
     return 0
   else
