@@ -8,7 +8,7 @@
 ## Goal
 
 - #210: one way to reach the home tools that works on and off the home
-  network, without a LAN authentication bypass that does not exist today.
+  network, without adding a new LAN authentication bypass.
 - #209: a me-only gateway with a sign-in that 1Password can fill, linked from
   projectinsomnia.com, with clear trust boundaries, revocation, and failure
   behavior.
@@ -48,18 +48,27 @@ Internet ─ 67.5.100.185 ─ 192.168.0.1 (ISP gateway, lighttpd UI)
 
 ### Caddy
 
-From `app-setup/templates/Caddyfile`:
+From `app-setup/templates/Caddyfile`, as of #220:
 
 | Site | Cert | Auth |
 | --- | --- | --- |
 | `:443` catch-all | — | 403 for unknown host or bare IP |
-| `tilsit.local localhost 10.0.15.15` | `tls internal` (clients install `caddy-root-ca.crt`) | none from LAN |
+| `tilsit.local localhost 10.0.15.15` | `tls internal` (clients install `caddy-root-ca.crt`) | `basic_auth` when not LAN |
 | `tilsit.vip` | Let's Encrypt, DNS-01 via Cloudflare (SAN: `tilsit.vip` only) | `basic_auth` when not LAN |
 
 - The LAN/external split is `remote_ip`: 10.0.15.0/24, loopback, `fe80::/10`,
   `fd00::/8`. Caddy sees the real client address because nothing proxies in
   front of it.
-- `/media/*` returns 403 to non-LAN clients, on both sites.
+- Both sites share one listener, and the WAN forward reaches both. Before
+  #220, the auth matcher also required `host tilsit.vip`, so a WAN client
+  that sent `Host: tilsit.local` reached `/transmission/` with no password.
+  This was reproduced from a PIA exit IP and fixed on 2026-10-22.
+- `/media/*` returns 403 to non-LAN clients, on both sites. After #220,
+  `basic_auth` answers 401 first.
+- Transmission's RPC has no auth of its own
+  (`TRANSMISSION_RPC_AUTHENTICATION_REQUIRED=false`). Since #220 the
+  container publishes 9091 on `127.0.0.1` only, so Caddy is the only way in.
+  Before that, gvproxy listened on `*:9091` (LAN-reachable, not WAN).
 - Routes: landing page, `/transmission/`, `/media/` (LAN only), and
   `/romano` and `/berkswell` redirects to Synology QuickConnect. Plex is not
   behind Caddy; clients use plex.tv.
@@ -78,7 +87,7 @@ repo as `smartwatermelon/projectinsomnia`; #209 names
 `twistedmelonman/projectinsomnia`. This document does not decide which is
 current.
 
-## Two traps every option must avoid
+## Three traps every option must avoid
 
 1. **A hop in front of Caddy that originates on loopback or the LAN removes
    all external auth.** If `cloudflared`, a local proxy, or any relay connects
@@ -91,6 +100,11 @@ current.
    to 10.0.15.15, then `https://tilsit.vip:24443` from the LAN hits a port
    Caddy does not listen on. One URL for both places needs the WAN forward on
    443, or Caddy also listening on 24443.
+3. **Auth keyed on the hostname.** The client chooses Host and SNI. Any
+   matcher that decides "needs auth" by hostname can be bypassed by asking
+   for a different name on the same listener. This was the #220 bug. Auth
+   decisions must use the source address, or live in a site that only the
+   trusted path can reach.
 
 ## #210: Routing options
 
@@ -168,10 +182,23 @@ email addresses"), and sends allowed requests down the tunnel.
   The tunnelled traffic is the Transmission UI and the landing page; Plex and
   the NAS do not pass through it.
 - Trap 1 applies. `cloudflared` connects from loopback. It must target a
-  dedicated Caddy listener (for example `http://127.0.0.1:8080`, bound to
-  loopback only) whose site block imports the routes **without** the
-  `remote_ip` bypass, and with `/media/*` denied. Keeping `basic_auth` on that
-  listener as a second layer is cheap and works if Access is misconfigured.
+  dedicated Caddy listener bound to loopback only, whose site block has the
+  routes **without** the `remote_ip` bypass, and with `/media/*` denied.
+  - Do not just `import common_config` there. Its auth matcher excludes
+    loopback, so every tunnel request would skip `basic_auth`.
+  - Use a site address without a hostname, such as `http://:8080` with
+    `bind 127.0.0.1`. A site address of `http://127.0.0.1:8080` adds a host
+    matcher, and `cloudflared` sends `Host: tilsit.vip`, so requests would
+    probably not match (untested). The other way is to set the tunnel's
+    `httpHostHeader`.
+  - Keep a `basic_auth` with **no matcher** on that listener as a second
+    layer. It still protects the tools if the Access policy is deleted or
+    misconfigured.
+- Origin check: `cloudflared` ingress can require a valid Access token before
+  it forwards a request (`originRequest.access` with `required: true`,
+  `teamName`, and `audTag`). That closes the gap if the Access application
+  is removed. Verify the option names against current `cloudflared` docs
+  before relying on them.
 - Upkeep: one more binary (`cloudflared`, Homebrew) and one LaunchDaemon. The
   stock Caddy build is enough; no new plugin. The Let's Encrypt cert for
   `tilsit.vip` is no longer needed once the forwards are removed. Cloudflare
@@ -187,7 +214,10 @@ email addresses"), and sends allowed requests down the tunnel.
 - Constraint: as far as I can tell, Access and tunnel public hostnames need
   the hostname in a Cloudflare zone. `tilsit.vip` is already there.
   `tools.projectinsomnia.com` is not (name.com), so projectinsomnia.com links
-  to `tilsit.vip` instead of hosting the tools under its own name.
+  to `tilsit.vip` instead of hosting the tools under its own name. Moving
+  projectinsomnia.com's DNS to Cloudflare would change that. A partial
+  (CNAME) setup for a zone hosted elsewhere is, as far as I recall, a
+  Business-plan feature; check before relying on it.
 
 A proxied record (orange cloud) without a tunnel is a weaker variant. It
 keeps the inbound forward open, so the origin IP (published by the A record's
@@ -227,8 +257,15 @@ is chosen instead, #130 stays, and #210 still needs R1 or R2.
 4. Point the tunnel's public hostname at the listener. The A record then
    gives way to the tunnel CNAME. Retire `cloudflare-ddns` only after the
    cutover works.
-5. Test from outside: no session gets the Access page; a session reaches
-   `/transmission/`; `/media/` returns 403.
+5. Test from outside. The transmission-vpn container's PIA exit is a real
+   outside vantage point; LAN tests of the public name prove nothing,
+   because hairpin times out.
+   - With no session: the Access page.
+   - With a session: `/transmission/` works; `/media/` is denied.
+   - Through the old forward, with `Host` set to `tilsit.vip`,
+     `tilsit.local`, `10.0.15.15`, and `localhost`: 401 for every one.
+     `tests/caddyfile.bats` guards the matcher. This checks the deployed
+     result.
 6. Remove the 24443 forwards on both routers. Confirm that
    `67.5.100.185:24443` no longer answers.
 7. Add a tunnel-health watchdog and update `docs/apps/caddy-README.md`.
