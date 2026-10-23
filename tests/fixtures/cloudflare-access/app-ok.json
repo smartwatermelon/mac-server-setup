@@ -1,0 +1,25 @@
+{
+  "success": true,
+  "errors": [],
+  "messages": [],
+  "result": {
+    "id": "app-0123",
+    "type": "self_hosted",
+    "name": "test.example",
+    "domain": "test.example",
+    "allowed_idps": ["idp-google"],
+    "auto_redirect_to_identity": true,
+    "session_duration": "24h",
+    "policies": [
+      {
+        "id": "pol-0123",
+        "name": "allow-one",
+        "decision": "allow",
+        "precedence": 1,
+        "include": [{ "email": { "email": "allowed@example.com" } }],
+        "exclude": [],
+        "require": []
+      }
+    ]
+  }
+}
