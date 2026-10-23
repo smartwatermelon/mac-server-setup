@@ -114,6 +114,7 @@ echo "=================================================="
 # launchd does not create log dirs; without one the daemon fails silently.
 # Made as operator, so a new ~/.local/state stays operator-owned.
 sudo -u "${OPERATOR_USERNAME}" mkdir -p "${DEPLOY_LOG_DIR}"
+chown "${OPERATOR_USERNAME}:staff" "${DEPLOY_LOG_DIR}"
 
 for tpl in cloudflared-wrapper.sh com.cloudflare-tunnel.plist; do
   if [[ ! -f "${TEMPLATE_DIR}/${tpl}" ]]; then
