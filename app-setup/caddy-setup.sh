@@ -25,6 +25,7 @@ BASICAUTH_HASH="${BASICAUTH_HASH:-}"
 QUICKCONNECT_ROMANO="${QUICKCONNECT_ROMANO:-}"
 QUICKCONNECT_BERKSWELL="${QUICKCONNECT_BERKSWELL:-}"
 NAS_SHARE_NAME="${NAS_SHARE_NAME:-Media}"
+ACCESS_ALLOWED_EMAIL="${ACCESS_ALLOWED_EMAIL:-}"
 
 # Validate required variables — empty values produce invalid Caddyfile syntax
 if [[ -z "${EXTERNAL_HOSTNAME}" ]]; then
@@ -41,6 +42,12 @@ for var in BASICAUTH_USERNAME BASICAUTH_HASH; do
     exit 1
   fi
 done
+# The tunnel site's only origin check. Empty would match any email at all,
+# and quotes or spaces would break the Caddyfile token.
+if [[ ! "${ACCESS_ALLOWED_EMAIL}" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$ ]]; then
+  echo "❌ ACCESS_ALLOWED_EMAIL must be one plain email address (got '${ACCESS_ALLOWED_EMAIL}')"
+  exit 1
+fi
 
 DEPLOY_CONFIG_DIR="/Users/${OPERATOR_USERNAME}/.config/caddy"
 DEPLOY_WEB_ROOT="/usr/local/var/www"
@@ -66,6 +73,7 @@ substitute_template() {
     -e "s|__QUICKCONNECT_ROMANO__|${QUICKCONNECT_ROMANO}|g" \
     -e "s|__QUICKCONNECT_BERKSWELL__|${QUICKCONNECT_BERKSWELL}|g" \
     -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
+    -e "s|__ACCESS_ALLOWED_EMAIL__|${ACCESS_ALLOWED_EMAIL}|g" \
     "${src}" >"${dst}"
 }
 

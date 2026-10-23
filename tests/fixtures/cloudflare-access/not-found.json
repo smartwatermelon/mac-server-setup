@@ -1,0 +1,6 @@
+{
+  "success": false,
+  "errors": [{ "code": 12130, "message": "access.api.error.not_found" }],
+  "messages": [],
+  "result": null
+}

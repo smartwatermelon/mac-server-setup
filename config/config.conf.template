@@ -78,6 +78,15 @@ EXTERNAL_HOSTNAME=""               # Public hostname (e.g. tilsit.vip)
 CLOUDFLARE_ZONE_ID=""              # Cloudflare zone ID for external hostname
 CLOUDFLARE_RECORD_ID=""            # Cloudflare A record ID for external hostname
 
+# Cloudflare Tunnel + Access (docs/apps/cloudflare-tunnel-README.md)
+# The ids are not secrets. Copy them from the Zero Trust dashboard or the API.
+TUNNEL_METRICS_PORT="20241"        # cloudflared /ready and /metrics, on 127.0.0.1 only
+CLOUDFLARE_ACCOUNT_ID=""           # Account that holds the Access application
+CLOUDFLARE_ACCESS_APP_ID=""        # Access application for EXTERNAL_HOSTNAME
+CLOUDFLARE_ACCESS_POLICY_ID=""     # The one reusable Allow policy attached to it
+CLOUDFLARE_ACCESS_IDP_ID=""        # The only identity provider the application allows
+ACCESS_ALLOWED_EMAIL=""            # The only email the policy allows; Caddy tunnel site checks it too
+
 # Caddy reverse proxy configuration
 SERVER_LAN_IP=""                   # Server's static LAN IP (e.g. 10.0.15.15)
 BASICAUTH_USERNAME=""              # Basic auth username for external access

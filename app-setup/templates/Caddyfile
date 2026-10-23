@@ -80,6 +80,16 @@
 	@media_noslash path /media
 	redir @media_noslash /media/ 301
 
+	# Landing page, Transmission, QuickConnect, and the access log.
+	import site_routes
+	import access_log
+}
+
+# Routes shared by every site, including the tunnel site below.
+# /media must never be here: through the tunnel every request comes from
+# loopback, so the @not_local guard above would let it through. Without the
+# handler, /media on the tunnel site falls through to file_server and 404s.
+(site_routes) {
 	# Root landing page
 	root * /usr/local/var/www
 	file_server
@@ -101,8 +111,11 @@
 	redir /romano/ __QUICKCONNECT_ROMANO__ 302
 	redir /berkswell __QUICKCONNECT_BERKSWELL__ 302
 	redir /berkswell/ __QUICKCONNECT_BERKSWELL__ 302
+}
 
-	# Standard access logging
+# Standard access logging. Separate from site_routes because log is a
+# site-level directive, and the tunnel site imports site_routes in a handle.
+(access_log) {
 	log {
 		output file /usr/local/var/log/caddy/access.log {
 			roll_size 100MB
@@ -139,4 +152,23 @@ __EXTERNAL_HOSTNAME__ {
 		}
 	}
 	import common_config
+}
+
+# Cloudflare Tunnel origin. See docs/apps/cloudflare-tunnel-README.md.
+# - bind 127.0.0.1: nothing off-host can reach this listener.
+# - No import common_config: it exempts loopback (cloudflared) from auth.
+# Every route sits behind the Access email check (layer 3). Cloudflare
+# overwrites a forged header (tested 2026-10-22, plan Task 2b). Routes stay
+# inside handle so redir cannot run ahead of the check.
+http://:8080 {
+	bind 127.0.0.1
+	import access_log
+
+	@access_user header Cf-Access-Authenticated-User-Email __ACCESS_ALLOWED_EMAIL__
+	handle @access_user {
+		import site_routes
+	}
+	handle {
+		respond 403
+	}
 }

@@ -12,11 +12,13 @@ msmtp (Gmail SMTP). They all send that email through one shared library,
 | `plex-watchdog` — Plex settings drift, Plex unreachable (restarts it after 3 polls), Plex cannot read media files, Plex data directory link | `com.<host>.plex-watchdog` | 300 s, RunAtLoad | `~/.local/state/plex-watchdog.log` | `plex-watchdog-setup.sh` |
 | `pia-port-watchdog.sh` — PIA port forwarding lost | `com.<host>.pia-port-watchdog` | 900 s | `~/.local/state/<host>-pia-port-watchdog.log` | `podman-transmission-setup.sh` |
 | `stall-watchdog.sh` — server blocked on a privacy prompt, a long `transmission-done`, supervisor failing | `com.<host>.stall-watchdog` | 120 s, RunAtLoad | `~/.local/state/<host>-stall-watchdog.log` | `podman-transmission-setup.sh` |
+| `access-policy-watchdog` — Cloudflare Access rule for `tilsit.vip` changed, missing, or unreadable | `com.<host>.access-policy-watchdog` | 900 s, RunAtLoad | `~/.local/state/access-policy-watchdog.log` | `access-policy-watchdog-setup.sh` |
 
 Paths are under the operator's home (`/Users/operator`). All the LaunchAgents run
 the script as `/bin/bash <script>` and send stdout and stderr to the same log
 file. For the details of each check, see `plex-watchdog-README.md`,
-`pia-vpn-README.md`, and [stall-watchdog](#stall-watchdog) below.
+`pia-vpn-README.md`, `cloudflare-tunnel-README.md` ("Drift watchdog"), and
+[stall-watchdog](#stall-watchdog) below.
 
 Other files:
 
@@ -120,8 +122,8 @@ processed" in `transmission-filebot-README.md`.
 plex-watchdog and pia-port-watchdog use `alert_send` and the state functions,
 but keep their own alert, dedupe and heartbeat logic. The exceptions are
 plex-watchdog's media access check (key `media_unreachable`) and data
-directory link check (key `data_link`), which use `alert_transition`. stall-watchdog uses `alert_transition` for all of its
-checks.
+directory link check (key `data_link`), which use `alert_transition`. stall-watchdog and
+access-policy-watchdog use `alert_transition` for all of their checks.
 
 ## Send a test alert under launchd's PATH
 
@@ -338,6 +340,7 @@ bats tests/pia-port-watchdog.bats
 bats tests/stall-watchdog.bats
 bats tests/msmtp-setup.bats
 bats tests/podman-machine-start.bats   # supervisor status file
+bats tests/access-policy-watchdog.bats
 ```
 
 Each watchdog test file has a "launchd PATH" test. It runs the rendered
