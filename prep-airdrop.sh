@@ -74,7 +74,9 @@ else
   echo "Using default values - you may want to create config.conf"
   # Set fallback defaults
   SERVER_NAME="MACMINI"
-  ONEPASSWORD_VAULT="personal"
+  # 1Password vault "Private", by ID so a rename cannot break it.
+  OP_VAULT_ID="bg5mciyy25cearfepehuh6nwmi"
+  ONEPASSWORD_VAULT="${OP_VAULT_ID}"
   ONEPASSWORD_OPERATOR_ITEM="operator"
   ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
   ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"

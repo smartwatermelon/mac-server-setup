@@ -119,7 +119,9 @@ else
   # Set fallback defaults
   SERVER_NAME="MACMINI"
   OPERATOR_USERNAME="operator"
-  ONEPASSWORD_VAULT="personal"
+  # 1Password vault "Private", by ID so a rename cannot break it.
+  OP_VAULT_ID="bg5mciyy25cearfepehuh6nwmi"
+  ONEPASSWORD_VAULT="${OP_VAULT_ID}"
   ONEPASSWORD_OPERATOR_ITEM="operator"
 fi
 
