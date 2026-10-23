@@ -12,7 +12,8 @@
 
 BATS_TEST_FILENAME="${BATS_TEST_FILENAME:-}"
 REPO_DIR="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
-CONFIG_SRC="${REPO_DIR}/config/logrotate.conf"
+# May be overridden to run these tests against a known-bad config.
+CONFIG_SRC="${CONFIG_SRC:-${REPO_DIR}/config/logrotate.conf}"
 
 setup() {
   if ! command -v logrotate >/dev/null 2>&1; then
@@ -96,6 +97,21 @@ considers_file() {
   local f="${STATE_DIR}/com.tilsit.operator-first-login.log"
   touch "${f}"
   considers_file "${f}"
+}
+
+@test "matches access-policy-watchdog.log" {
+  local f="${STATE_DIR}/access-policy-watchdog.log"
+  touch "${f}"
+  considers_file "${f}"
+}
+
+@test "matches cloudflared/cloudflared.log and cloudflared-error.log" {
+  mkdir -p "${STATE_DIR}/cloudflared"
+  local f
+  for f in "${STATE_DIR}/cloudflared/cloudflared.log" "${STATE_DIR}/cloudflared/cloudflared-error.log"; do
+    touch "${f}"
+    considers_file "${f}"
+  done
 }
 
 # ---------------------------------------------------------------------------

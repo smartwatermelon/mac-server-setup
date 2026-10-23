@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Not com.cloudflare.cloudflared: that is the label
+         `cloudflared service install` writes, and it must not collide. -->
+    <key>Label</key>
+    <string>com.__HOSTNAME_LOWER__.cloudflare-tunnel</string>
+
+    <!-- The wrapper reads the tunnel token from the System keychain and
+         exports TUNNEL_TOKEN. The token is never in this (world-readable)
+         plist or on a command line. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/usr/local/bin/cloudflared-wrapper.sh</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Restart on any exit: with the tunnel down, the public host shows a
+         Cloudflare error page. A brew upgrade takes effect on the next
+         restart. -->
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <!-- launchd does not create this directory; cloudflared-setup.sh does. -->
+    <key>StandardOutPath</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/state/cloudflared/cloudflared.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/state/cloudflared/cloudflared-error.log</string>
+
+    <key>ExitTimeOut</key>
+    <integer>30</integer>
+</dict>
+</plist>
