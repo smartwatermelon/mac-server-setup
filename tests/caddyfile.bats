@@ -135,10 +135,23 @@ site_routes() { top_block '(site_routes)'; }
 # Behaviour, not text: run the tunnel site on a scratch Caddy and probe it.
 # Skipped where caddy is not installed. The upstream is a dead port, so a
 # request that reaches the Transmission proxy shows as 502.
+LIVE_PID=""
+LIVE_DIR=""
+teardown() {
+  if [[ -n "${LIVE_PID}" ]]; then
+    kill "${LIVE_PID}" 2>/dev/null || true
+    wait "${LIVE_PID}" 2>/dev/null || true
+  fi
+  if [[ -n "${LIVE_DIR}" ]]; then
+    rm -rf "${LIVE_DIR}"
+  fi
+}
+
 @test "tunnel site (live caddy): 403 without the allowed email, routes with it" {
   command -v caddy >/dev/null || skip "caddy not installed"
-  local dir port pid code
+  local dir port code
   dir=$(mktemp -d)
+  LIVE_DIR="${dir}"
   port=$((20000 + RANDOM % 20000))
   mkdir -p "${dir}/www" && echo landing >"${dir}/www/index.html"
   {
@@ -152,7 +165,7 @@ site_routes() { top_block '(site_routes)'; }
     -e "s|/usr/local/var/log/caddy/|${dir}/|" \
     -e "s|/usr/local/var/www|${dir}/www|" >"${dir}/Caddyfile"
   caddy run --config "${dir}/Caddyfile" --adapter caddyfile >"${dir}/caddy.out" 2>&1 &
-  pid=$!
+  LIVE_PID=$!
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     curl -s -o /dev/null "http://127.0.0.1:${port}/" && break
     sleep 0.3
@@ -166,9 +179,6 @@ site_routes() { top_block '(site_routes)'; }
     results+=" bad=$(probe "${bad[@]}" "http://127.0.0.1:${port}${path}")"
     results+=" ok=$(probe "${ok[@]}" "http://127.0.0.1:${port}${path}")"$'\n'
   done
-  kill "${pid}"
-  wait "${pid}" 2>/dev/null || true
-  rm -rf "${dir}"
   echo "${results}"
   code=$(printf '%s' "${results}")
   [ "${code}" = "$(printf '%s\n' \

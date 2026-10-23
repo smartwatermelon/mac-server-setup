@@ -43,7 +43,7 @@ Always restart through `launchctl kickstart`.
 
 ### Caddyfile Structure
 
-The Caddyfile uses four site blocks and two snippets:
+The Caddyfile uses four site blocks and three snippets:
 
 1. **Catch-all `:443`** — Rejects direct IP access or unrecognized hostnames (403)
 2. **Internal block** (`{$HOSTNAME}.local localhost <server LAN IP>` (`__SERVER_LAN_IP__`, currently 10.0.15.15)) — Uses `tls internal` (Caddy's built-in CA). Imports `common_config`
