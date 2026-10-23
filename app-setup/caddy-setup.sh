@@ -87,6 +87,11 @@ chown -R "${OPERATOR_USERNAME}:staff" "${DEPLOY_CONFIG_DIR}"
 echo "Deploying web assets..."
 if [[ -d "${TEMPLATE_DIR}/www" ]]; then
   cp -r "${TEMPLATE_DIR}/www/"* "${DEPLOY_WEB_ROOT}/"
+  # Text files carry placeholders too (site.webmanifest has __HOSTNAME__).
+  for web_file in "${TEMPLATE_DIR}/www/"*.html "${TEMPLATE_DIR}/www/"*.webmanifest; do
+    [[ -f "${web_file}" ]] || continue
+    substitute_template "${web_file}" "${DEPLOY_WEB_ROOT}/$(basename "${web_file}")"
+  done
   echo "✓ Copied web assets to ${DEPLOY_WEB_ROOT}/"
 else
   echo "⚠ No www/ directory found — skipping web assets"
