@@ -401,8 +401,11 @@ main() {
   esac
 
   local diffs=""
+  # A malformed response makes jq fail. Under set -e that ended the run
+  # with no log and no alert, so count it as an API failure.
   if [[ -z "${api_error}" ]] && [[ -z "${missing}" ]]; then
-    diffs=$(evaluate_rule "${app_file}" "${policy_file}")
+    diffs=$(evaluate_rule "${app_file}" "${policy_file}") \
+      || api_error="the application or policy response has an unexpected shape"
   fi
 
   if [[ "${check_only}" == "true" ]]; then

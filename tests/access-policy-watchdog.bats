@@ -363,6 +363,21 @@ assert_drift_alert() {
   [ "${status}" -eq 2 ]
 }
 
+@test "api error: a response the rule check cannot parse counts as a failure" {
+  set_policy "$(fixture_variant policy-ok.json '.result.include = "x"')" 200
+  run run_check
+  [ "${status}" -eq 2 ]
+  # jq's own error also lands in ${output} (stderr); match the line we print.
+  grep -q "^API ERROR: .*unexpected shape" <<<"${output}"
+
+  run_cycle
+  run_cycle
+  run_cycle
+  [ "$(mail_count)" -eq 1 ]
+  grep -q "Subject: \[TESTHOST\] Access policy watchdog cannot read Cloudflare" "${MAIL_LOG}"
+  grep -q "unexpected shape" <<<"$(watchdog_log)"
+}
+
 @test "api error: does not resolve an open drift alert" {
   set_policy policy-everyone.json 200
   run_cycle
