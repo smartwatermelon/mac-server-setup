@@ -1,0 +1,33 @@
+name: BATS Tests
+
+# macOS, not Linux: the scripts use BSD tools, and the watchdogs run under
+# /bin/bash 3.2, which only a macOS runner has.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bats-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bats:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # coreutils: timeout(1) for podman-machine-start.bats.
+      # yq, xmlstarlet: transmission-filebot config and Plex XML parsing.
+      - name: Install test dependencies
+        run: brew install bats-core coreutils yq xmlstarlet
+
+      - name: Run BATS
+        run: bats --recursive --print-output-on-failure tests

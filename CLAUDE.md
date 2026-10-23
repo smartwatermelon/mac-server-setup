@@ -126,21 +126,11 @@ guard on non-strict movie matches, and the "could not process" email
 ## Testing
 
 ```bash
-# Run all BATS tests
-bats tests/alert-lib.bats
-bats tests/plex-watchdog.bats
-bats tests/plex-data-link.bats
-bats tests/plex-updates.bats
-bats tests/brew-upgrade.bats
-bats tests/pia-port-watchdog.bats
-bats tests/msmtp-setup.bats
-bats tests/stall-watchdog.bats
-bats tests/cloudflare-ddns.bats
-bats tests/stable-sign.bats
-bats tests/transmission-trigger-watcher.bats
-bats tests/podman-machine-start.bats
-bats tests/pending-move-cleanup.bats
-bats tests/transmission-filebot/**/*.bats
+# Run the BATS file(s) for what you changed
+bats tests/<name>.bats
+
+# The full suite runs in CI (.github/workflows/bats.yml) on every PR:
+bats --recursive tests
 
 # Lint all shell scripts
 shellcheck app-setup/**/*.sh scripts/**/*.sh
