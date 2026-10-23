@@ -85,7 +85,7 @@ CLOUDFLARE_ACCOUNT_ID=""           # Account that holds the Access application
 CLOUDFLARE_ACCESS_APP_ID=""        # Access application for EXTERNAL_HOSTNAME
 CLOUDFLARE_ACCESS_POLICY_ID=""     # The one reusable Allow policy attached to it
 CLOUDFLARE_ACCESS_IDP_ID=""        # The only identity provider the application allows
-ACCESS_ALLOWED_EMAIL=""            # The only email address the policy allows
+ACCESS_ALLOWED_EMAIL=""            # The only email the policy allows; Caddy tunnel site checks it too
 
 # Caddy reverse proxy configuration
 SERVER_LAN_IP=""                   # Server's static LAN IP (e.g. 10.0.15.15)

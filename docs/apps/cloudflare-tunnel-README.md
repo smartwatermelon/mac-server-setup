@@ -32,29 +32,43 @@ LAN only, unchanged:
    carries a valid token for **this** Access application. It blocks everyone
    if the application is deleted or replaced. It does **not** help if the
    policy is widened: every newly allowed visitor then gets a valid token.
-3. **Policy-drift watchdog** (below). It reads the application and policy
+3. **Origin email check** (Caddy). The tunnel site returns 403 unless
+   `Cf-Access-Authenticated-User-Email` is exactly `ACCESS_ALLOWED_EMAIL`.
+   This is the layer that still holds if the policy is widened. It is only
+   as strong as Cloudflare's handling of that header: if a signed-in client
+   can forge it, a widened policy gets through. Plan Task 2b tests this
+   before cutover. Restored by Andrew on 2026-10-22, after an earlier draft
+   dropped it.
+4. **Policy-drift watchdog** (below). It reads the application and policy
    every 15 minutes and emails on any change from the expected rule.
-4. **Loopback bind.** Caddy's tunnel listener is `127.0.0.1:8080`, so
+5. **Loopback bind.** Caddy's tunnel listener is `127.0.0.1:8080`, so
    nothing off-host can reach it.
 
 **Not used, by decision:**
 
-- An origin check of `Cf-Access-Authenticated-User-Email` (plan layer 3) and
-  an origin JWT check. Dropped by Andrew on 2026-10-22.
+- An origin JWT check in Caddy. cloudflared already checks the JWT.
 - `basic_auth` on the tunnel site. It brings back the browser password
   prompt after Google sign-in, which is the problem #209 exists to solve.
 
-**Accepted residual risk:** if the Access policy is widened, Transmission is
-exposed to the newly allowed identities until the drift watchdog alerts (at
-most one 15-minute interval, plus mail delivery) and the policy is fixed.
-Transmission has no login of its own.
+**Not yet covered:** nothing watches the tunnel's ingress rules. A new public
+hostname routed to `:8080` without Access, or `access.required` turned off,
+would still meet the email check, but would not raise an alert. A follow-up
+extends the drift watchdog to the ingress before cutover.
 
 ### The Caddy tunnel site
 
 ```caddyfile
 http://:8080 {
     bind 127.0.0.1
-    import site_routes
+    import access_log
+
+    @access_user header Cf-Access-Authenticated-User-Email <allowed email>
+    handle @access_user {
+        import site_routes
+    }
+    handle {
+        respond 403
+    }
 }
 ```
 
@@ -62,12 +76,18 @@ http://:8080 {
   and that snippet's auth matcher exempts loopback, so it would apply no
   auth. Its `/media` handler would also be reachable: the `@not_local` guard
   is keyed on `remote_ip`, and every tunnel request is local.
-- `(site_routes)` holds the landing page, `/transmission/`, the QuickConnect
-  redirects and the access log. It has no `/media` handler, so `/media` on
-  the tunnel site falls through to `file_server` and returns 404.
-- No `route` block. `log` is a site-level directive, and `route` accepts
-  only handler directives (`caddy adapt` fails). Without `route`, Caddy
-  orders the directives the same way on all three sites.
+- `(site_routes)` holds the landing page, `/transmission/` and the
+  QuickConnect redirects. It has no `/media` handler, so `/media` on the
+  tunnel site falls through to `file_server` and returns 404.
+- The routes sit inside `handle`, not at site level. Caddy sorts `redir`
+  and `reverse_proxy` ahead of `handle`, so a route at site level would run
+  before the email check. Inside a `handle`, Caddy sorts the routes the
+  same way as on the other sites.
+- Not a `route` block either: `route` runs directives in written order, and
+  `file_server` comes first in `site_routes`, so it would answer every path.
+- `(access_log)` is separate from `(site_routes)` because `log` is a
+  site-level directive, which `handle` does not accept. The 403s are logged
+  too.
 
 See `caddy-README.md` for the rest of the Caddyfile.
 

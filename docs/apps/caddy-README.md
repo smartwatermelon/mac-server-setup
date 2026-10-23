@@ -48,9 +48,9 @@ The Caddyfile uses four site blocks and two snippets:
 1. **Catch-all `:443`** — Rejects direct IP access or unrecognized hostnames (403)
 2. **Internal block** (`{$HOSTNAME}.local localhost <server LAN IP>` (`__SERVER_LAN_IP__`, currently 10.0.15.15)) — Uses `tls internal` (Caddy's built-in CA). Imports `common_config`
 3. **External block** (`tilsit.vip`) — Uses Let's Encrypt DNS-01 via Cloudflare for public TLS. Imports `common_config`. Kept as the rollback path after the move to the Cloudflare Tunnel
-4. **Tunnel block** (`http://:8080`, `bind 127.0.0.1`) — The Cloudflare Tunnel origin. Imports `site_routes` only. See below and `cloudflare-tunnel-README.md`
+4. **Tunnel block** (`http://:8080`, `bind 127.0.0.1`) — The Cloudflare Tunnel origin. Imports `site_routes` behind an email-header check, and `access_log`. See below and `cloudflare-tunnel-README.md`
 
-The `(common_config)` snippet holds the LAN/WAN access control, and imports `(site_routes)`:
+The `(common_config)` snippet holds the LAN/WAN access control, and imports `(site_routes)` and `(access_log)`:
 
 - **Network matchers**: `@local_network` and `@external_network` based on `10.0.15.0/24`
 - **Basic auth**: Applied to `@external_auth_required`: any non-LAN source IP, on both sites. It must never key on `host`: the WAN forward reaches the internal site too, and the client chooses the Host/SNI
@@ -61,7 +61,8 @@ The `(site_routes)` snippet holds the routes every site serves:
 - **Reverse proxies**: `/transmission/*` to `127.0.0.1:9091` (Transmission publishes 9091 on loopback only)
 - **Static files**: Served from `/usr/local/var/www`
 - **QuickConnect redirects**: `/romano`, `/berkswell`
-- **Logging**: JSON format to `/usr/local/var/log/caddy/access.log`. It is here, not in `common_config`, so that tunnel requests are logged too
+
+The `(access_log)` snippet holds the JSON access log (`/usr/local/var/log/caddy/access.log`). It is separate from `site_routes` because `log` is site-level only, and the tunnel site imports `site_routes` inside a `handle`.
 
 ### Tunnel site (`http://:8080`)
 
@@ -74,11 +75,16 @@ from loopback, so:
   every tunnel request through.
 - `/media` must **not** be in `site_routes`, for the same reason. Without the
   handler, `/media` on the tunnel site falls through to `file_server` (404).
-- It uses no `route` block. `log` is a site-level directive, which `route`
-  does not accept (`caddy adapt` fails). Without `route`, Caddy orders the
-  directives the same way on all three sites.
-- Its security comes from Cloudflare Access, the cloudflared JWT check, the
-  loopback bind, and the policy-drift watchdog, not from anything in Caddy.
+- Every route sits inside `handle @access_user`, which matches only when
+  `Cf-Access-Authenticated-User-Email` is exactly `ACCESS_ALLOWED_EMAIL`
+  (substituted by `caddy-setup.sh`, which refuses an empty or malformed
+  value). A catch-all `handle` returns 403. Nothing else may sit at site
+  level: Caddy sorts `redir` and `reverse_proxy` ahead of `handle`, so they
+  would run before the check.
+- It uses no `route` block: `route` runs directives in written order, and
+  `file_server` (first in `site_routes`) would then answer every path.
+- Cloudflare Access, the cloudflared JWT check, the loopback bind and the
+  policy-drift watchdog are the other layers.
 
 `tests/caddyfile.bats` pins all of this. `caddy validate` opens the access
 log, so run it as root, or on a copy with the log path pointed somewhere

@@ -57,6 +57,30 @@ replaces it, System keychain token reuse (same entry Caddy reads), public-IP
 provider fallback chain, change-detection vs heartbeat log cadence, Cloudflare
 API error modes, and the `TEST_RUNNER` hook that lets BATS mock network calls.
 
+### Cloudflare Tunnel + Access (tilsit.vip gateway)
+
+**Files**: `app-setup/cloudflared-setup.sh`,
+`app-setup/templates/cloudflared-wrapper.sh`,
+`app-setup/templates/com.cloudflare-tunnel.plist`,
+`app-setup/access-policy-watchdog-setup.sh`,
+`app-setup/templates/access-policy-watchdog.sh`,
+`app-setup/templates/com.access-policy-watchdog.plist`, the tunnel site,
+`(site_routes)` and `(access_log)` in `app-setup/templates/Caddyfile`,
+`tests/caddyfile.bats`, `tests/cloudflared-wrapper.bats`,
+`tests/access-policy-watchdog.bats`,
+`tests/fixtures/cloudflare-access/`
+
+**Documentation**: `docs/apps/cloudflare-tunnel-README.md` (and
+`docs/apps/caddy-README.md` for the Caddyfile)
+
+**Covers**: The tunnel path and what protects it (Access, cloudflared JWT
+check, origin email check, loopback bind, drift watchdog), why the tunnel
+site must not import `common_config` or serve `/media`, why its routes sit
+inside a `handle`, the tunnel token chain (System keychain →
+wrapper → `TUNNEL_TOKEN`, never `service install`), Cloudflare object ids,
+the policy-drift watchdog's expected rule and alert keys, why it is an
+operator LaunchAgent (msmtp config ownership), revocation, and rollback.
+
 ### Monitoring (watchdogs, alert email)
 
 **Files**: `app-setup/templates/alert-lib.sh`,
