@@ -80,6 +80,16 @@
 	@media_noslash path /media
 	redir @media_noslash /media/ 301
 
+	# Landing page, Transmission, QuickConnect and the access log.
+	import site_routes
+}
+
+# Routes shared by every site, including the tunnel site below.
+# /media must never be here: through the tunnel every request comes from
+# loopback, so the @not_local guard above would let it through. Without the
+# handler, /media on the tunnel site falls through to file_server and 404s.
+# log is here so that the tunnel site writes the same access log.
+(site_routes) {
 	# Root landing page
 	root * /usr/local/var/www
 	file_server
@@ -139,4 +149,18 @@ __EXTERNAL_HOSTNAME__ {
 		}
 	}
 	import common_config
+}
+
+# Cloudflare Tunnel origin. cloudflared connects from loopback and forwards
+# only requests that carry a valid Access JWT for this application. See
+# docs/apps/cloudflare-tunnel-README.md.
+# - bind 127.0.0.1: nothing off-host can reach this listener.
+# - No import common_config: its auth matcher exempts loopback, so it would
+#   apply no auth here, and its /media handler would expose /media.
+# - No route block: log (in site_routes) is a site-level directive, which
+#   route does not accept. Without route, Caddy orders the directives the
+#   same way as on the other two sites.
+http://:8080 {
+	bind 127.0.0.1
+	import site_routes
 }

@@ -43,20 +43,46 @@ Always restart through `launchctl kickstart`.
 
 ### Caddyfile Structure
 
-The Caddyfile uses three site blocks with a shared snippet:
+The Caddyfile uses four site blocks and two snippets:
 
 1. **Catch-all `:443`** — Rejects direct IP access or unrecognized hostnames (403)
 2. **Internal block** (`{$HOSTNAME}.local localhost <server LAN IP>` (`__SERVER_LAN_IP__`, currently 10.0.15.15)) — Uses `tls internal` (Caddy's built-in CA). Imports `common_config`
-3. **External block** (`tilsit.vip`) — Uses Let's Encrypt DNS-01 via Cloudflare for public TLS. Imports `common_config`
+3. **External block** (`tilsit.vip`) — Uses Let's Encrypt DNS-01 via Cloudflare for public TLS. Imports `common_config`. Kept as the rollback path after the move to the Cloudflare Tunnel
+4. **Tunnel block** (`http://:8080`, `bind 127.0.0.1`) — The Cloudflare Tunnel origin. Imports `site_routes` only. See below and `cloudflare-tunnel-README.md`
 
-The `(common_config)` snippet contains all shared logic:
+The `(common_config)` snippet holds the LAN/WAN access control, and imports `(site_routes)`:
 
 - **Network matchers**: `@local_network` and `@external_network` based on `10.0.15.0/24`
 - **Basic auth**: Applied to `@external_auth_required`: any non-LAN source IP, on both sites. It must never key on `host`: the WAN forward reaches the internal site too, and the client chooses the Host/SNI
 - **Media file browser**: `/media/*` reverse-proxied to `localhost:9880` (Python file server, local network only)
+
+The `(site_routes)` snippet holds the routes every site serves:
+
 - **Reverse proxies**: `/transmission/*` to `127.0.0.1:9091` (Transmission publishes 9091 on loopback only)
 - **Static files**: Served from `/usr/local/var/www`
-- **Logging**: JSON format to `/usr/local/var/log/caddy/access.log`
+- **QuickConnect redirects**: `/romano`, `/berkswell`
+- **Logging**: JSON format to `/usr/local/var/log/caddy/access.log`. It is here, not in `common_config`, so that tunnel requests are logged too
+
+### Tunnel site (`http://:8080`)
+
+`cloudflared` forwards `tilsit.vip` requests that carry a valid Cloudflare
+Access token to `http://127.0.0.1:8080`. Every request on this listener comes
+from loopback, so:
+
+- It must **not** import `common_config`. Its auth matcher exempts loopback,
+  so it would apply no auth, and its `/media` guard (`@not_local`) would let
+  every tunnel request through.
+- `/media` must **not** be in `site_routes`, for the same reason. Without the
+  handler, `/media` on the tunnel site falls through to `file_server` (404).
+- It uses no `route` block. `log` is a site-level directive, which `route`
+  does not accept (`caddy adapt` fails). Without `route`, Caddy orders the
+  directives the same way on all three sites.
+- Its security comes from Cloudflare Access, the cloudflared JWT check, the
+  loopback bind, and the policy-drift watchdog, not from anything in Caddy.
+
+`tests/caddyfile.bats` pins all of this. `caddy validate` opens the access
+log, so run it as root, or on a copy with the log path pointed somewhere
+writable.
 
 ### Environment Variables
 
