@@ -111,10 +111,9 @@ substitute_template() {
 echo "☁️  Deploying Cloudflare Tunnel daemon for ${HOSTNAME_VALUE}"
 echo "=================================================="
 
-# launchd does not create missing log directories: without this the daemon
-# fails to start with no log at all.
-mkdir -p "${DEPLOY_LOG_DIR}"
-chown "${OPERATOR_USERNAME}:staff" "${DEPLOY_LOG_DIR}"
+# launchd does not create log dirs; without one the daemon fails silently.
+# Made as operator, so a new ~/.local/state stays operator-owned.
+sudo -u "${OPERATOR_USERNAME}" mkdir -p "${DEPLOY_LOG_DIR}"
 
 for tpl in cloudflared-wrapper.sh com.cloudflare-tunnel.plist; do
   if [[ ! -f "${TEMPLATE_DIR}/${tpl}" ]]; then
