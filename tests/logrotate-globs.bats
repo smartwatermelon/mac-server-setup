@@ -32,7 +32,10 @@ setup() {
 }
 
 teardown() {
-  [[ -n "${TEST_TMPDIR:-}" ]] && rm -rf "${TEST_TMPDIR}"
+  # An if, not &&: after a skip in setup TEST_TMPDIR is unset, and a false && makes teardown fail the skipped test.
+  if [[ -n "${TEST_TMPDIR:-}" ]]; then
+    rm -rf "${TEST_TMPDIR}"
+  fi
 }
 
 # Returns 0 if logrotate -d lists the given absolute path as "considering log".
