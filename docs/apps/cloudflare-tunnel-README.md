@@ -34,11 +34,14 @@ LAN only, unchanged:
    policy is widened: every newly allowed visitor then gets a valid token.
 3. **Origin email check** (Caddy). The tunnel site returns 403 unless
    `Cf-Access-Authenticated-User-Email` is exactly `ACCESS_ALLOWED_EMAIL`.
-   This is the layer that still holds if the policy is widened. It is only
-   as strong as Cloudflare's handling of that header: if a signed-in client
-   can forge it, a widened policy gets through. Plan Task 2b tests this
-   before cutover. Restored by Andrew on 2026-10-22, after an earlier draft
-   dropped it.
+   This is the layer that still holds if the policy is widened. It depends
+   on Cloudflare overwriting the header, so a signed-in client cannot forge
+   it. Plan Task 2b tested that on 2026-10-22 through this tunnel (temporary
+   app `accesstest.tilsit.vip`, since deleted): a signed-in request that
+   sent `Cf-Access-Authenticated-User-Email: forgot@example.com` reached
+   the origin with exactly one value, the real signed-in email. The forged
+   value never arrived. Restored by Andrew on 2026-10-22, after an earlier
+   draft dropped it.
 4. **Policy-drift watchdog** (below). It reads the application and policy
    every 15 minutes and emails on any change from the expected rule.
 5. **Loopback bind.** Caddy's tunnel listener is `127.0.0.1:8080`, so

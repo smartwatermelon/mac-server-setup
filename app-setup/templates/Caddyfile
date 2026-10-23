@@ -157,9 +157,9 @@ __EXTERNAL_HOSTNAME__ {
 # Cloudflare Tunnel origin. See docs/apps/cloudflare-tunnel-README.md.
 # - bind 127.0.0.1: nothing off-host can reach this listener.
 # - No import common_config: it exempts loopback (cloudflared) from auth.
-# Every route sits behind the Access email check (layer 3). It holds against
-# a widened Access policy only if clients cannot forge the header (plan Task
-# 2b). Routes stay inside handle so redir cannot run ahead of the check.
+# Every route sits behind the Access email check (layer 3). Cloudflare
+# overwrites a forged header (tested 2026-10-22, plan Task 2b). Routes stay
+# inside handle so redir cannot run ahead of the check.
 http://:8080 {
 	bind 127.0.0.1
 	import access_log
