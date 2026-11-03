@@ -78,7 +78,7 @@ check, origin email check, loopback bind, drift watchdog), why the tunnel
 site must not import `common_config` or serve `/media`, why its routes sit
 inside a `handle`, the tunnel token chain (System keychain →
 wrapper → `TUNNEL_TOKEN`, never `service install`), Cloudflare object ids,
-the policy-drift watchdog's expected rule and alert keys, why it is an
+the drift watchdog's expected rule, tunnel ingress and alert keys, why it is an
 operator LaunchAgent (msmtp config ownership), revocation, and rollback.
 
 ### Monitoring (watchdogs, alert email)

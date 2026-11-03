@@ -1,0 +1,32 @@
+{
+  "success": true,
+  "errors": [],
+  "messages": [],
+  "result": {
+    "tunnel_id": "tun-0123",
+    "version": 5,
+    "config": {
+      "ingress": [
+        {
+          "service": "http://127.0.0.1:8080",
+          "hostname": "test.example",
+          "originRequest": {
+            "access": {
+              "audTag": ["aud0123"],
+              "required": true,
+              "teamName": "test-team"
+            }
+          }
+        },
+        {
+          "service": "http_status:404"
+        }
+      ],
+      "warp-routing": {
+        "enabled": false
+      }
+    },
+    "source": "cloudflare",
+    "created_at": "2026-10-23T03:05:27.438796Z"
+  }
+}

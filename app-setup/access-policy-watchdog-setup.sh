@@ -43,6 +43,9 @@ CLOUDFLARE_ACCESS_APP_ID="${CLOUDFLARE_ACCESS_APP_ID:-}"
 CLOUDFLARE_ACCESS_POLICY_ID="${CLOUDFLARE_ACCESS_POLICY_ID:-}"
 CLOUDFLARE_ACCESS_IDP_ID="${CLOUDFLARE_ACCESS_IDP_ID:-}"
 ACCESS_ALLOWED_EMAIL="${ACCESS_ALLOWED_EMAIL:-}"
+CLOUDFLARE_TUNNEL_ID="${CLOUDFLARE_TUNNEL_ID:-}"
+CLOUDFLARE_ACCESS_TEAM_NAME="${CLOUDFLARE_ACCESS_TEAM_NAME:-}"
+CLOUDFLARE_ACCESS_AUD_TAG="${CLOUDFLARE_ACCESS_AUD_TAG:-}"
 
 # Every value below is substituted into the watchdog with sed, using | as the
 # delimiter, so each is checked against a strict pattern first.
@@ -63,6 +66,9 @@ check_value CLOUDFLARE_ACCESS_APP_ID "${ID_PATTERN}"
 check_value CLOUDFLARE_ACCESS_POLICY_ID "${ID_PATTERN}"
 check_value CLOUDFLARE_ACCESS_IDP_ID "${ID_PATTERN}"
 check_value ACCESS_ALLOWED_EMAIL '^[^@|[:space:]]+@[^@|[:space:]]+$'
+check_value CLOUDFLARE_TUNNEL_ID "${ID_PATTERN}"
+check_value CLOUDFLARE_ACCESS_TEAM_NAME "${ID_PATTERN}"
+check_value CLOUDFLARE_ACCESS_AUD_TAG '^[0-9a-f]+$'
 if [[ ${#missing[@]} -gt 0 ]]; then
   echo "❌ Fix these values in ${CONFIG_FILE}:"
   for m in "${missing[@]}"; do
@@ -148,6 +154,9 @@ sed \
   -e "s|__CLOUDFLARE_ACCESS_POLICY_ID__|${CLOUDFLARE_ACCESS_POLICY_ID}|g" \
   -e "s|__CLOUDFLARE_ACCESS_IDP_ID__|${CLOUDFLARE_ACCESS_IDP_ID}|g" \
   -e "s|__ACCESS_ALLOWED_EMAIL__|${ACCESS_ALLOWED_EMAIL}|g" \
+  -e "s|__CLOUDFLARE_TUNNEL_ID__|${CLOUDFLARE_TUNNEL_ID}|g" \
+  -e "s|__CLOUDFLARE_ACCESS_TEAM_NAME__|${CLOUDFLARE_ACCESS_TEAM_NAME}|g" \
+  -e "s|__CLOUDFLARE_ACCESS_AUD_TAG__|${CLOUDFLARE_ACCESS_AUD_TAG}|g" \
   "${TEMPLATE_DIR}/access-policy-watchdog.sh" >"${WATCHDOG_DEST}"
 chown "${OPERATOR_USERNAME}:staff" "${WATCHDOG_DEST}"
 chmod 700 "${WATCHDOG_DEST}"
@@ -186,7 +195,8 @@ if [[ ${check_rc} -ne 0 ]]; then
   echo
   echo "❌ The check did not pass (exit ${check_rc}). The LaunchAgent was NOT loaded."
   echo "   Exit 1: the live rule differs from config.conf, or an object is missing."
-  echo "   Exit 2: the API could not be read (token, network)."
+  echo "   Exit 2: the API could not be read (token, network). The token needs"
+  echo "   Access: Apps and Policies Read and Cloudflare Tunnel: Read."
   echo "   Fix the rule or the expected values, then re-run this script."
   exit 1
 fi

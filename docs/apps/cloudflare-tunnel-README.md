@@ -42,8 +42,9 @@ LAN only, unchanged:
    the origin with exactly one value, the real signed-in email. The forged
    value never arrived. Restored by Andrew on 2026-10-22, after an earlier
    draft dropped it.
-4. **Policy-drift watchdog** (below). It reads the application and policy
-   every 15 minutes and emails on any change from the expected rule.
+4. **Drift watchdog** (below). It reads the application, the policy and the
+   tunnel ingress every 15 minutes and emails on any change from the
+   expected rule.
 5. **Loopback bind.** Caddy's tunnel listener is `127.0.0.1:8080`, so
    nothing off-host can reach it.
 
@@ -53,10 +54,9 @@ LAN only, unchanged:
 - `basic_auth` on the tunnel site. It brings back the browser password
   prompt after Google sign-in, which is the problem #209 exists to solve.
 
-**Not yet covered:** nothing watches the tunnel's ingress rules. A new public
-hostname routed to `:8080` without Access, or `access.required` turned off,
-would still meet the email check, but would not raise an alert. A follow-up
-extends the drift watchdog to the ingress before cutover.
+The watchdog also covers the tunnel's ingress rules. A new public hostname
+routed to `:8080` without Access, or `access.required` turned off, would
+still meet the email check (layer 3), but it now raises an alert as well.
 
 ### The Caddy tunnel site
 
@@ -122,7 +122,7 @@ line, shell history or a transcript.
 | Item (service / account) | What | Read by |
 | --- | --- | --- |
 | `cloudflare-tunnel-token` / `tilsit.vip` | Tunnel token: anyone with it can run the tunnel | `cloudflared-wrapper.sh` (root, every start) |
-| `cloudflare-access-readonly-token` / `tilsit.vip` | API token, Access: Apps and Policies Read | `access-policy-watchdog-setup.sh` (root, at deploy) |
+| `cloudflare-access-readonly-token` / `tilsit.vip` | API token, Access: Apps and Policies Read, and Cloudflare Tunnel: Read | `access-policy-watchdog-setup.sh` (root, at deploy) |
 
 ```text
 System keychain
@@ -164,7 +164,9 @@ are in `config/logrotate.conf`.
 20241, the first port cloudflared tries on its own; it was free on
 2026-10-22), `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ACCESS_APP_ID`,
 `CLOUDFLARE_ACCESS_POLICY_ID`, `CLOUDFLARE_ACCESS_IDP_ID`,
-`ACCESS_ALLOWED_EMAIL`, `MONITORING_EMAIL`.
+`ACCESS_ALLOWED_EMAIL`, `CLOUDFLARE_TUNNEL_ID`,
+`CLOUDFLARE_ACCESS_TEAM_NAME`, `CLOUDFLARE_ACCESS_AUD_TAG`,
+`MONITORING_EMAIL`.
 
 ## Tunnel daemon
 
@@ -193,9 +195,11 @@ from the next restart; kickstart the daemon to pick it up at once.
 
 - `GET /accounts/<account>/access/apps/<app id>`
 - `GET /accounts/<account>/access/policies/<policy id>`
+- `GET /accounts/<account>/cfd_tunnel/<tunnel id>/configurations`
 
 and compares them with an exact expected shape. It is not a list of bad
-selectors, so a selector Cloudflare adds later still counts as drift.
+selectors or rules, so a selector or setting Cloudflare adds later still
+counts as drift.
 
 | Check | Expected |
 | --- | --- |
@@ -205,14 +209,21 @@ selectors, so a selector Cloudflare adds later still counts as drift.
 | Policy `decision` | `allow` |
 | Policy `include` | exactly `[{"email": {"email": "<allowed email>"}}]` (email compared without case) |
 | Policy `require`, `exclude` | empty |
+| Tunnel `config.ingress` | exactly two rules: `tilsit.vip` (hostname compared without case) → `http://127.0.0.1:8080` with `originRequest` exactly `{access: {required: true, teamName: <team>, audTag: [<AUD>]}}`; then `http_status:404`. A second hostname, a path rule, or a catch-all that serves anything is drift. |
+| Tunnel `config["warp-routing"].enabled` | `false` or absent. When on, the tunnel routes private networks (the LAN) past Access and Caddy. |
+| Tunnel `config`, other keys | none (for example, a global `originRequest`) |
+
+The origin `http://127.0.0.1:8080` is a constant in the watchdog, not a
+config value, because the Caddyfile hard-codes the tunnel site's port. A
+test fails if the two differ.
 
 It sends mail through `alert_transition` (see `monitoring-README.md`):
 
 | Key | Bad when | Notes |
 | --- | --- | --- |
 | `policy_drift` | any check above fails | The email lists each difference. If the differences change while the alert is open, one more email ("changed again"). Reminder every 12 h. Recovery email when the rule matches again. |
-| `access_missing` | the application or the policy returns HTTP 404 | Alerts on the first poll: a 404 is a confirmed state, not a blip. |
-| `api_failing` | 3 polls in a row could not read the API (network, 401/403, 5xx, a non-success body, or no token file) | During a failure the drift and missing alerts are left exactly as they are. Resolving them would send a false all-clear while the policy may still be wide open. |
+| `access_missing` | the application, the policy or the tunnel returns HTTP 404 | Alerts on the first poll: a 404 is a confirmed state, not a blip. |
+| `api_failing` | 3 polls in a row could not read the API (network, 401/403, 5xx, a non-success body, or no token file). A 401/403 on the tunnel names the missing Cloudflare Tunnel: Read permission. | During a failure the drift and missing alerts are left exactly as they are. Resolving them would send a false all-clear while the policy may still be wide open. |
 
 State: `~operator/.config/access-policy-watchdog/state.json`. The API token
 reaches curl on stdin (`curl -K -`), never in its argument list, which `ps`
@@ -288,7 +299,7 @@ Stopping only the tunnel daemon makes Cloudflare show an error page for
 ```bash
 bats tests/caddyfile.bats              # tunnel site and site_routes
 bats tests/cloudflared-wrapper.bats    # token via env only; keychain miss
-bats tests/access-policy-watchdog.bats # expected rule, widenings, 404, API errors
+bats tests/access-policy-watchdog.bats # expected rule and ingress, widenings, 404, API errors
 ```
 
 The watchdog tests run the rendered script with `/bin/bash` (bash 3.2, as
