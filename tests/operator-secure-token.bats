@@ -35,7 +35,11 @@ case "$1" in
     ;;
   -secureTokenOn)
     # Real sysadminctl can exit 0 without granting the token.
-    if [[ "$(cat "${GRANT_FILE}")" == true ]]; then echo ENABLED >"${TOKEN_STATE}"; fi
+    if [[ "$(cat "${GRANT_FILE}")" == true ]]; then
+      echo ENABLED >"${TOKEN_STATE}"
+    else
+      echo "Operation is not permitted without secure token unlock (pw=$3 admin=$7)." >&2
+    fi
     ;;
 esac
 exit 0
@@ -105,7 +109,13 @@ teardown() {
   ! grep -q -- "-secureTokenOn" "${CALLS}"
 }
 
-@test "passwords never appear in the error text" {
+@test "failed grant: the error keeps sysadminctl's reason" {
+  echo false >"${GRANT_FILE}"
+  run ensure_operator_secure_token operator userpw admin adminpw
+  [[ "$output" == *"sysadminctl: Operation is not permitted without secure token unlock"* ]]
+}
+
+@test "passwords never appear in the error text, even when sysadminctl echoes them" {
   echo false >"${GRANT_FILE}"
   run ensure_operator_secure_token operator userpw admin adminpw
   [[ "$output" != *userpw* ]]

@@ -956,16 +956,22 @@ ensure_operator_secure_token() {
 
   # sysadminctl can exit 0 without granting, so re-read the status after.
   log "Granting a SecureToken to ${user}"
-  sudo -p "[Account setup] Enter password to grant SecureToken to ${user}: " \
+  local grant_output
+  grant_output=$(sudo -p "[Account setup] Enter password to grant SecureToken to ${user}: " \
     "${SYSADMINCTL_BIN}" -secureTokenOn "${user}" -password "${user_password}" \
-    -adminUser "${admin_user}" -adminPassword "${admin_password}" >/dev/null 2>&1 || true
+    -adminUser "${admin_user}" -adminPassword "${admin_password}" 2>&1) || true
 
   if operator_has_secure_token "${user}"; then
     log "✓ ${user} now has a SecureToken (log ${user} out and back in if it is logged in)"
     return 0
   fi
 
-  collect_error "Could not grant a SecureToken to ${user}. Does ${admin_user} have one? Run: ${fix_cmd}"
+  # Keep sysadminctl's reason, with the passwords removed.
+  local reason
+  reason=$(printf '%s\n' "${grant_output}" | tail -n 1)
+  reason="${reason//"${user_password}"/<redacted>}"
+  reason="${reason//"${admin_password}"/<redacted>}"
+  collect_error "Could not grant a SecureToken to ${user} (sysadminctl: ${reason:-no output}). Does ${admin_user} have one? Run: ${fix_cmd}"
   return 1
 }
 
