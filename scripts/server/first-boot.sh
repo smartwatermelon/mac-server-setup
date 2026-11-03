@@ -926,10 +926,62 @@ else
   "${SETUP_DIR}/scripts/setup-apple-id.sh"
 fi
 
+# -addUser with no admin credentials gives no SecureToken, and the Passwords
+# app then rejects the correct password (#231).
+SYSADMINCTL_BIN="${SYSADMINCTL_BIN:-sysadminctl}"
+
+operator_has_secure_token() {
+  local user="$1"
+  # sysadminctl prints the status line on stderr.
+  "${SYSADMINCTL_BIN}" -secureTokenStatus "${user}" 2>&1 | grep -q "Secure token is ENABLED"
+}
+
+# ensure_operator_secure_token USER USER_PASSWORD ADMIN_USER ADMIN_PASSWORD
+ensure_operator_secure_token() {
+  local user="$1"
+  local user_password="$2"
+  local admin_user="$3"
+  local admin_password="$4"
+  local fix_cmd="sudo sysadminctl -secureTokenOn ${user} -password - -adminUser ${admin_user} -adminPassword -"
+
+  if operator_has_secure_token "${user}"; then
+    log "✓ ${user} has a SecureToken"
+    return 0
+  fi
+
+  if [[ -z "${admin_password}" || -z "${user_password}" ]]; then
+    collect_error "${user} has no SecureToken and no passwords are available to grant one. Run: ${fix_cmd}"
+    return 1
+  fi
+
+  # sysadminctl can exit 0 without granting, so re-read the status after.
+  log "Granting a SecureToken to ${user}"
+  local grant_output
+  grant_output=$(sudo -p "[Account setup] Enter password to grant SecureToken to ${user}: " \
+    "${SYSADMINCTL_BIN}" -secureTokenOn "${user}" -password "${user_password}" \
+    -adminUser "${admin_user}" -adminPassword "${admin_password}" 2>&1) || true
+
+  if operator_has_secure_token "${user}"; then
+    log "✓ ${user} now has a SecureToken (log ${user} out and back in if it is logged in)"
+    return 0
+  fi
+
+  # Keep sysadminctl's reason, with the passwords removed.
+  local reason
+  reason=$(printf '%s\n' "${grant_output}" | tail -n 1)
+  reason="${reason//"${user_password}"/<redacted>}"
+  reason="${reason//"${admin_password}"/<redacted>}"
+  collect_error "Could not grant a SecureToken to ${user} (sysadminctl: ${reason:-no output}). Does ${admin_user} have one? Run: ${fix_cmd}"
+  return 1
+}
+
 # Create operator account if it doesn't exist
 set_section "Setting Up Operator Account"
 if dscl . -list /Users 2>/dev/null | grep -q "^${OPERATOR_USERNAME}$"; then
   log "Operator account already exists"
+  if ! operator_has_secure_token "${OPERATOR_USERNAME}"; then
+    collect_warning "${OPERATOR_USERNAME} has no SecureToken; Passwords will reject its password. Run: sudo sysadminctl -secureTokenOn ${OPERATOR_USERNAME} -password - -adminUser ${ADMIN_USERNAME} -adminPassword -"
+  fi
 else
   log "Creating operator account"
 
@@ -946,9 +998,15 @@ else
     exit 1
   fi
 
-  # Create the operator account
-  sudo -p "[Account setup] Enter password to create operator account: " sysadminctl -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${operator_password}" -hint "See 1Password ${ONEPASSWORD_OPERATOR_ITEM} for password" 2>/dev/null
+  # Create the operator account. The admin credentials let sysadminctl grant
+  # a SecureToken at creation (see ensure_operator_secure_token).
+  add_user_admin_args=()
+  if [[ -n "${ADMINISTRATOR_PASSWORD:-}" ]]; then
+    add_user_admin_args=(-adminUser "${ADMIN_USERNAME}" -adminPassword "${ADMINISTRATOR_PASSWORD}")
+  fi
+  sudo -p "[Account setup] Enter password to create operator account: " "${SYSADMINCTL_BIN}" -addUser "${OPERATOR_USERNAME}" -fullName "${OPERATOR_FULLNAME}" -password "${operator_password}" -hint "See 1Password ${ONEPASSWORD_OPERATOR_ITEM} for password" ${add_user_admin_args[@]+"${add_user_admin_args[@]}"} 2>/dev/null
   check_success "Operator account creation"
+  unset add_user_admin_args
 
   # Comprehensive verification of operator account creation
   verify_operator_account_creation() {
@@ -987,6 +1045,11 @@ else
         collect_warning "Operator home directory ownership may be incorrect: ${owner_info}"
       fi
     fi
+
+    # Test 4: SecureToken. Reported, but not fatal: only Passwords-type
+    # apps need it, and the error names the fix.
+    ensure_operator_secure_token "${OPERATOR_USERNAME}" "${operator_password}" \
+      "${ADMIN_USERNAME}" "${ADMINISTRATOR_PASSWORD:-}" || true
 
     # Overall status
     if [[ "${verification_failed}" == "true" ]]; then
