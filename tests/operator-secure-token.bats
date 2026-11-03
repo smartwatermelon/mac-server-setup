@@ -38,7 +38,7 @@ case "$1" in
     if [[ "$(cat "${GRANT_FILE}")" == true ]]; then
       echo ENABLED >"${TOKEN_STATE}"
     else
-      echo "Operation is not permitted without secure token unlock (pw=$3 admin=$7)." >&2
+      echo "Operation is not permitted without secure token unlock (pw=$4 admin=$8)." >&2
     fi
     ;;
 esac
