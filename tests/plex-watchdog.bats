@@ -268,7 +268,8 @@ EOF
   run parse_prefs_xml "${xml}"
   [ "$status" -eq 0 ]
   local count
-  count=$(echo "$output" | { wc -l || true; } | tr -d ' ')
+  count=$(wc -l <<<"${output}")
+  count="${count// /}"
   [ "$count" -eq 8 ]
 }
 
@@ -306,7 +307,9 @@ EOF
 
   # Verify no temp files left behind
   local tmp_count
-  tmp_count=$({ find "${CONFIG_DIR}" -name 'state.json.tmp.*' 2>/dev/null || true; } | { wc -l || true; } | tr -d ' ')
+  find "${CONFIG_DIR}" -name 'state.json.tmp.*' >"${TEST_TMPDIR}/found" 2>/dev/null
+  tmp_count=$(wc -l <"${TEST_TMPDIR}/found")
+  tmp_count="${tmp_count// /}"
   [ "$tmp_count" -eq 0 ]
 }
 
@@ -498,7 +501,8 @@ WanPerStreamMaxUploadRate=0"
   atomic_write "${GOLDEN_CONF}" "${long_content}"
 
   local line_count
-  line_count=$({ wc -l <"${GOLDEN_CONF}" || true; } | tr -d ' ')
+  line_count=$(wc -l <"${GOLDEN_CONF}")
+  line_count="${line_count// /}"
   # 100 lines + trailing newline from printf
   [ "$line_count" -ge 100 ]
 }
@@ -508,7 +512,9 @@ WanPerStreamMaxUploadRate=0"
   atomic_write "${STATE_FILE}" '{"test": true}'
 
   local leftover
-  leftover=$({ find "${CONFIG_DIR}" -name 'state.json.tmp.*' 2>/dev/null || true; } | { wc -l || true; } | tr -d ' ')
+  find "${CONFIG_DIR}" -name 'state.json.tmp.*' >"${TEST_TMPDIR}/found" 2>/dev/null
+  leftover=$(wc -l <"${TEST_TMPDIR}/found")
+  leftover="${leftover// /}"
   [ "$leftover" -eq 0 ]
 }
 
