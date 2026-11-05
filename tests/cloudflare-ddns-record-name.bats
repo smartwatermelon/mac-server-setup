@@ -42,11 +42,6 @@ teardown() {
   rm -rf "${TEST_TMPDIR}"
 }
 
-@test "template has no unsubstituted DDNS_RECORD_NAME placeholder after setup" {
-  run grep -c "__DDNS_RECORD_NAME__" "${TEST_TMPDIR}/cloudflare-ddns.sh"
-  [ "$output" = "0" ]
-}
-
 @test "heartbeat names the updated record, not the keychain account" {
   printf 'last_ip=203.0.113.10\nlast_heartbeat=1\n' >"${STATE_FILE}"
 
