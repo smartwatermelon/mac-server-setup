@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.__HOSTNAME_LOWER__.tunnel-watchdog</string>
+
+    <!-- /bin/bash is bash 3.2: the watchdog must stay compatible with it. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/__OPERATOR_USERNAME__/.local/bin/tunnel-watchdog</string>
+    </array>
+
+    <!-- 60 s x FAILURE_THRESHOLD (3) in the watchdog: an outage alerts after
+         about 3 minutes. -->
+    <key>StartInterval</key>
+    <integer>60</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/state/tunnel-watchdog.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/state/tunnel-watchdog.log</string>
+</dict>
+</plist>
