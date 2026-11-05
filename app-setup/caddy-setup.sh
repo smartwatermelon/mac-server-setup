@@ -77,11 +77,19 @@ substitute_template() {
     "${src}" >"${dst}"
 }
 
+# `sed > dst` keeps an existing file's mode, so set owner and mode explicitly.
+install_root_script() {
+  chown root:wheel "$1"
+  chmod 755 "$1"
+}
+
 echo "🧀 Setting up Caddy home server for ${HOSTNAME}.local"
 echo "=================================================="
 
 # Create directory structure
 echo "Creating directories..."
+# Root daemons run scripts from here; only root may write to it.
+install -d -o root -g wheel -m 755 /usr/local/bin
 mkdir -p "${DEPLOY_LOG_DIR}"
 chown -R "${OPERATOR_USERNAME}:staff" "${DEPLOY_LOG_DIR}"
 mkdir -p "${DEPLOY_STATE_DIR}"
@@ -131,7 +139,7 @@ fi
 echo "Deploying caddy-wrapper.sh..."
 if [[ -f "${TEMPLATE_DIR}/caddy-wrapper.sh" ]]; then
   substitute_template "${TEMPLATE_DIR}/caddy-wrapper.sh" "${DEPLOY_WRAPPER}"
-  chmod +x "${DEPLOY_WRAPPER}"
+  install_root_script "${DEPLOY_WRAPPER}"
   echo "✓ Copied caddy-wrapper.sh to ${DEPLOY_WRAPPER}"
 else
   echo "❌ No caddy-wrapper.sh found in ${TEMPLATE_DIR}"
@@ -142,7 +150,7 @@ fi
 echo "Deploying caddy-health.sh..."
 if [[ -f "${TEMPLATE_DIR}/caddy-health.sh" ]]; then
   substitute_template "${TEMPLATE_DIR}/caddy-health.sh" "${DEPLOY_HEALTH}"
-  chmod +x "${DEPLOY_HEALTH}"
+  install_root_script "${DEPLOY_HEALTH}"
   echo "✓ Copied caddy-health.sh to ${DEPLOY_HEALTH}"
 else
   echo "❌ No caddy-health.sh found in ${TEMPLATE_DIR}"
@@ -165,7 +173,7 @@ fi
 echo "Deploying media-server.py..."
 if [[ -f "${TEMPLATE_DIR}/media-server.py" ]]; then
   substitute_template "${TEMPLATE_DIR}/media-server.py" "${DEPLOY_MEDIA_SERVER}"
-  chmod +x "${DEPLOY_MEDIA_SERVER}"
+  install_root_script "${DEPLOY_MEDIA_SERVER}"
   echo "✓ Copied media-server.py to ${DEPLOY_MEDIA_SERVER}"
 else
   echo "❌ No media-server.py found in ${TEMPLATE_DIR}"

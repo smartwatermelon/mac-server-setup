@@ -1,6 +1,7 @@
 # G2 Implementation Plan: Cloudflare Tunnel + Access for tilsit.vip
 
-**Status:** plan, not executed.
+**Status:** executed; `tilsit.vip` cut over to the tunnel on 2026-11-03.
+Task 7 step 3 is amended (2026-11-04): the `cloudflare-ddns` daemon stays.
 **Date:** 2026-10-22
 **Issues:** #209 (gateway, decision G2), #210 (routing, decision R3).
 **Design:** `2026-10-22-tilsit-vip-routing-and-gateway.md`.
@@ -345,6 +346,14 @@ Nothing public changes yet: DNS still points at the home IP.
    Caddyfile as the rollback path. The follow-up then removes the block,
    the `cloudflare-ddns` daemon and its docs, and decides whether
    `CF_API_TOKEN` is still needed.
+
+   **Amended 2026-11-04: keep the `cloudflare-ddns` daemon and
+   `CF_API_TOKEN`.** This plan missed that the home VPN (OpenVPN on ROMANO,
+   Tunnelblick on the Macs) also connected through `tilsit.vip`, on port
+   34443. After the cutover that name resolved to Cloudflare, and the VPN
+   stopped connecting. The daemon now keeps a DNS-only `vpn.tilsit.vip`
+   record current instead. See `docs/apps/home-vpn-README.md`. The follow-up
+   still removes the `tilsit.vip` Caddy site block.
 
 ### Task 8: Monitoring and docs
 

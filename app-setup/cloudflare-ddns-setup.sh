@@ -39,6 +39,8 @@ OPERATOR_USERNAME="${OPERATOR_USERNAME:-operator}"
 EXTERNAL_HOSTNAME="${EXTERNAL_HOSTNAME:-}"
 CLOUDFLARE_ZONE_ID="${CLOUDFLARE_ZONE_ID:-}"
 CLOUDFLARE_RECORD_ID="${CLOUDFLARE_RECORD_ID:-}"
+# Record the daemon updates (vpn.tilsit.vip). EXTERNAL_HOSTNAME names the keychain account.
+DDNS_RECORD_NAME="${DDNS_RECORD_NAME:-${EXTERNAL_HOSTNAME}}"
 
 # Validate required config
 missing=()
@@ -94,6 +96,7 @@ substitute_template() {
     -e "s|__EXTERNAL_HOSTNAME__|${EXTERNAL_HOSTNAME}|g" \
     -e "s|__CLOUDFLARE_ZONE_ID__|${CLOUDFLARE_ZONE_ID}|g" \
     -e "s|__CLOUDFLARE_RECORD_ID__|${CLOUDFLARE_RECORD_ID}|g" \
+    -e "s|__DDNS_RECORD_NAME__|${DDNS_RECORD_NAME}|g" \
     "${src}" >"${dst}"
 }
 
@@ -102,6 +105,7 @@ echo "=================================================="
 echo "  External hostname: ${EXTERNAL_HOSTNAME}"
 echo "  Zone ID:           ${CLOUDFLARE_ZONE_ID}"
 echo "  Record ID:         ${CLOUDFLARE_RECORD_ID}"
+echo "  Record name:       ${DDNS_RECORD_NAME}"
 echo
 
 # Ensure operator state dir exists and is owned correctly.
@@ -149,6 +153,9 @@ if launchctl print "${SERVICE_TARGET}" >/dev/null 2>&1; then
   echo "↻ Reloading existing daemon (${SERVICE_TARGET})"
   launchctl bootout "${SERVICE_TARGET}" 2>/dev/null || true
 fi
+# A daemon disabled by hand (launchctl disable) refuses to bootstrap until
+# it is enabled again; the tunnel cutover left it that way.
+launchctl enable "${SERVICE_TARGET}"
 launchctl bootstrap system "${DEPLOY_PLIST}"
 echo "✓ Daemon bootstrapped: ${SERVICE_TARGET}"
 

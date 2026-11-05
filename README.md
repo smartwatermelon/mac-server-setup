@@ -38,7 +38,7 @@ After setup, these all start automatically on login (LaunchAgents):
 | NAS Mount | NFS mount to NAS on login |
 | Backblaze | Off-site backup |
 | Caddy | Reverse proxy with internal TLS and external HTTPS |
-| Cloudflare DDNS | Keeps the public A record in sync with the WAN IP |
+| Cloudflare DDNS | Keeps `vpn.tilsit.vip` (home VPN) in sync with the WAN IP |
 | Plex Watchdog | Monitors Plex settings against golden config, emails on drift |
 
 ### Media pipeline
@@ -330,6 +330,7 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 | How credentials move between machines | [Keychain Management](docs/keychain-credential-management.md) |
 | Plex settings watchdog | [Plex Watchdog](docs/apps/plex-watchdog-README.md) |
 | Caddy reverse proxy | [Caddy README](docs/apps/caddy-README.md) |
+| Home VPN (ROMANO + Tunnelblick) | [Home VPN](docs/apps/home-vpn-README.md) |
 | Media processing pipeline | [Transmission-FileBot](docs/apps/transmission-filebot-README.md) |
 
 ## Testing

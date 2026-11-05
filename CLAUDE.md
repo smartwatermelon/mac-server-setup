@@ -43,7 +43,7 @@ with cloudflare module, CF_API_TOKEN injection chain, media file server
 architecture (why Python not Caddy), DNS propagation timing, certmagic
 environment variable syntax (`{$VAR}` vs `{env.VAR}`), ACME state management
 
-### Cloudflare DDNS (public A-record updater)
+### Cloudflare DDNS (keeps vpn.tilsit.vip on the home IP)
 
 **Files**: `app-setup/cloudflare-ddns-setup.sh`,
 `app-setup/templates/cloudflare-ddns.sh`,
@@ -56,6 +56,9 @@ environment variable syntax (`{$VAR}` vs `{env.VAR}`), ACME state management
 replaces it, System keychain token reuse (same entry Caddy reads), public-IP
 provider fallback chain, change-detection vs heartbeat log cadence, Cloudflare
 API error modes, and the `TEST_RUNNER` hook that lets BATS mock network calls.
+Since the 2026-11-04 tunnel fix it updates the DNS-only `vpn.tilsit.vip`
+record that the home VPN uses (`docs/apps/home-vpn-README.md`), not
+`tilsit.vip`. Do not retire it while the VPN exists.
 
 ### Cloudflare Tunnel + Access (tilsit.vip gateway)
 
