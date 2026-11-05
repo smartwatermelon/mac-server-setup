@@ -133,11 +133,11 @@ source_ctl_functions() {
   local tmp="${TEST_TMPDIR}/ctl-functions.sh"
   # Replace placeholders, override CONFIG_DIR for CI, remove the case dispatch
   # at the bottom so sourcing only defines functions without executing a command.
-  sed \
+  { sed \
     -e 's/__HOSTNAME__/TESTHOST/g' \
     -e 's/__MONITORING_EMAIL__/test@example.com/g' \
     -e "s|^CONFIG_DIR=.*|CONFIG_DIR=\"${CONFIG_DIR}\"|" \
-    "${CTL_TEMPLATE}" | sed '/^case "\${1:-}"/,$ d' >"${tmp}"
+    "${CTL_TEMPLATE}" || true; } | sed '/^case "\${1:-}"/,$ d' >"${tmp}"
   # shellcheck source=/dev/null
   source "${tmp}"
 }
@@ -268,7 +268,7 @@ EOF
   run parse_prefs_xml "${xml}"
   [ "$status" -eq 0 ]
   local count
-  count=$(echo "$output" | wc -l | tr -d ' ')
+  count=$(echo "$output" | { wc -l || true; } | tr -d ' ')
   [ "$count" -eq 8 ]
 }
 
@@ -306,7 +306,7 @@ EOF
 
   # Verify no temp files left behind
   local tmp_count
-  tmp_count=$(find "${CONFIG_DIR}" -name 'state.json.tmp.*' 2>/dev/null | wc -l | tr -d ' ')
+  tmp_count=$({ find "${CONFIG_DIR}" -name 'state.json.tmp.*' 2>/dev/null || true; } | { wc -l || true; } | tr -d ' ')
   [ "$tmp_count" -eq 0 ]
 }
 
@@ -420,8 +420,8 @@ WanPerStreamMaxUploadRate=0"
   xml=$(cat "${FIXTURES_DIR}/plex-prefs-sample.xml")
 
   local hash1 hash2
-  hash1=$(printf '%s' "${xml}" | shasum -a 256 | cut -d' ' -f1)
-  hash2=$(printf '%s' "${xml}" | shasum -a 256 | cut -d' ' -f1)
+  hash1=$(printf '%s' "${xml}" | { shasum -a 256 || true; } | cut -d' ' -f1)
+  hash2=$(printf '%s' "${xml}" | { shasum -a 256 || true; } | cut -d' ' -f1)
 
   [ "${hash1}" = "${hash2}" ]
 }
@@ -432,8 +432,8 @@ WanPerStreamMaxUploadRate=0"
   xml2=$(echo "${xml1}" | sed 's/value="1"/value="0"/')
 
   local hash1 hash2
-  hash1=$(printf '%s' "${xml1}" | shasum -a 256 | cut -d' ' -f1)
-  hash2=$(printf '%s' "${xml2}" | shasum -a 256 | cut -d' ' -f1)
+  hash1=$(printf '%s' "${xml1}" | { shasum -a 256 || true; } | cut -d' ' -f1)
+  hash2=$(printf '%s' "${xml2}" | { shasum -a 256 || true; } | cut -d' ' -f1)
 
   [ "${hash1}" != "${hash2}" ]
 }
@@ -498,7 +498,7 @@ WanPerStreamMaxUploadRate=0"
   atomic_write "${GOLDEN_CONF}" "${long_content}"
 
   local line_count
-  line_count=$(wc -l <"${GOLDEN_CONF}" | tr -d ' ')
+  line_count=$({ wc -l <"${GOLDEN_CONF}" || true; } | tr -d ' ')
   # 100 lines + trailing newline from printf
   [ "$line_count" -ge 100 ]
 }
@@ -508,7 +508,7 @@ WanPerStreamMaxUploadRate=0"
   atomic_write "${STATE_FILE}" '{"test": true}'
 
   local leftover
-  leftover=$(find "${CONFIG_DIR}" -name 'state.json.tmp.*' 2>/dev/null | wc -l | tr -d ' ')
+  leftover=$({ find "${CONFIG_DIR}" -name 'state.json.tmp.*' 2>/dev/null || true; } | { wc -l || true; } | tr -d ' ')
   [ "$leftover" -eq 0 ]
 }
 
@@ -564,13 +564,13 @@ WanPerStreamMaxUploadRate=0"
   : >"${LOG_FILE}"
   cp "${FIXTURES_DIR}/golden-basic.conf" "${GOLDEN_CONF}"
   local two_hours_ago
-  two_hours_ago=$(date -u -r "$(($(date +%s) - 7200))" '+%Y-%m-%dT%H:%M:%SZ')
+  two_hours_ago=$(date -u -r "$(($(date +%s || true) - 7200))" '+%Y-%m-%dT%H:%M:%SZ')
   echo "{\"last_heartbeat\": \"${two_hours_ago}\"}" >"${STATE_FILE}"
 
   TZ=America/Los_Angeles maybe_heartbeat
 
   grep -q "OK: .* settings monitored, no drift" "${LOG_FILE}"
-  [ "$(alert_state_get last_heartbeat "")" != "${two_hours_ago}" ]
+  [ "$(alert_state_get last_heartbeat "" || true)" != "${two_hours_ago}" ]
 }
 
 @test "maybe_heartbeat: stays quiet when the last heartbeat is 30 minutes old" {
@@ -578,13 +578,13 @@ WanPerStreamMaxUploadRate=0"
   : >"${LOG_FILE}"
   cp "${FIXTURES_DIR}/golden-basic.conf" "${GOLDEN_CONF}"
   local half_hour_ago
-  half_hour_ago=$(date -u -r "$(($(date +%s) - 1800))" '+%Y-%m-%dT%H:%M:%SZ')
+  half_hour_ago=$(date -u -r "$(($(date +%s || true) - 1800))" '+%Y-%m-%dT%H:%M:%SZ')
   echo "{\"last_heartbeat\": \"${half_hour_ago}\"}" >"${STATE_FILE}"
 
   TZ=America/Los_Angeles maybe_heartbeat
 
-  [ "$(grep -c "settings monitored" "${LOG_FILE}")" -eq 0 ]
-  [ "$(alert_state_get last_heartbeat "")" = "${half_hour_ago}" ]
+  [ "$(grep -c "settings monitored" "${LOG_FILE}" || true)" -eq 0 ]
+  [ "$(alert_state_get last_heartbeat "" || true)" = "${half_hour_ago}" ]
 }
 
 # ===========================================================================
@@ -701,9 +701,9 @@ run_launchd_cycle() {
 
   run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Subject: \[TESTHOST\] Plex setting drift detected" "${MAIL_LOG}"
-  grep -q "Drift alert email sent" <<<"$(watchdog_log)"
+  grep -q "Drift alert email sent" <<<"$(watchdog_log || true)"
 }
 
 @test "launchd PATH: the Plex-unreachable email is built under /bin/bash 3.2" {
@@ -717,7 +717,7 @@ run_launchd_cycle() {
 
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Subject: \[TESTHOST\] Plex server unreachable" "${MAIL_LOG}"
   grep -q "ssh operator@testhost" "${MAIL_LOG}"
 }
@@ -734,8 +734,8 @@ MOCK
 
   run bash "${WATCHDOG}"
   [ "$status" -eq 0 ]
-  grep -q "cannot connect to smtp.gmail.com" <<<"$(watchdog_log)"
-  grep -q "ERROR: Failed to send drift alert email" <<<"$(watchdog_log)"
+  grep -q "cannot connect to smtp.gmail.com" <<<"$(watchdog_log || true)"
+  grep -q "ERROR: Failed to send drift alert email" <<<"$(watchdog_log || true)"
 }
 
 @test "a missing alert library stops the watchdog with an ERROR in its log" {
@@ -744,7 +744,7 @@ MOCK
 
   run bash "${WATCHDOG}"
   [ "$status" -eq 1 ]
-  grep -q "ERROR: alert library not found at ${HOME}/.local/lib/alert-lib.sh" <<<"$(watchdog_log)"
+  grep -q "ERROR: alert library not found at ${HOME}/.local/lib/alert-lib.sh" <<<"$(watchdog_log || true)"
 }
 
 @test "plex-watchdog-setup.sh deploys the alert library" {
@@ -780,16 +780,16 @@ MEDIA_ALERT='\[TESTHOST\] Plex cannot read media files'
 
   CHECKFILES=missing run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(subject_count "${MEDIA_ALERT}")" -eq 0 ]
-  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "1" ]
+  [ "$(subject_count "${MEDIA_ALERT}" || true)" -eq 0 ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE || true)" || true)" = "1" ]
 
   # Cycle 2 sees the same prefs, so it takes the hash fast path.
   CHECKFILES=missing run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(subject_count "${MEDIA_ALERT}")" -eq 1 ]
+  [ "$(subject_count "${MEDIA_ALERT}" || true)" -eq 1 ]
   grep -q "Sample Movie (2026).mkv" "${MAIL_LOG}"
   grep -q "privacy prompt" "${MAIL_LOG}"
-  grep -q "ALERT sent: media_unreachable" <<<"$(watchdog_log)"
+  grep -q "ALERT sent: media_unreachable" <<<"$(watchdog_log || true)"
 }
 
 @test "media check: picks the first movie or episode, not the first item" {
@@ -800,8 +800,8 @@ MEDIA_ALERT='\[TESTHOST\] Plex cannot read media files'
   run run_launchd_cycle
   [ "$status" -eq 0 ]
   grep -q "/library/metadata/24136?checkFiles=1" "${TEST_TMPDIR}/curl.log"
-  [ "$(grep -c "metadata/30001" "${TEST_TMPDIR}/curl.log")" -eq 0 ]
-  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "0" ]
+  [ "$(grep -c "metadata/30001" "${TEST_TMPDIR}/curl.log" || true)" -eq 0 ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE || true)" || true)" = "0" ]
 }
 
 @test "media check: accessible=0 alone counts as a failure" {
@@ -811,7 +811,7 @@ MEDIA_ALERT='\[TESTHOST\] Plex cannot read media files'
 
   CHECKFILES=inaccessible run run_launchd_cycle
   CHECKFILES=inaccessible run run_launchd_cycle
-  [ "$(subject_count "${MEDIA_ALERT}")" -eq 1 ]
+  [ "$(subject_count "${MEDIA_ALERT}" || true)" -eq 1 ]
 }
 
 @test "media check: a checkFiles timeout counts as a failure" {
@@ -821,7 +821,7 @@ MEDIA_ALERT='\[TESTHOST\] Plex cannot read media files'
 
   CHECKFILES=timeout run run_launchd_cycle
   CHECKFILES=timeout run run_launchd_cycle
-  [ "$(subject_count "${MEDIA_ALERT}")" -eq 1 ]
+  [ "$(subject_count "${MEDIA_ALERT}" || true)" -eq 1 ]
   grep -q "did not answer within" "${MAIL_LOG}"
 }
 
@@ -832,8 +832,8 @@ MEDIA_ALERT='\[TESTHOST\] Plex cannot read media files'
 
   CHECKFILES=missing run run_launchd_cycle
   run run_launchd_cycle
-  [ "$(subject_count "${MEDIA_ALERT}")" -eq 0 ]
-  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "0" ]
+  [ "$(subject_count "${MEDIA_ALERT}" || true)" -eq 0 ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE || true)" || true)" = "0" ]
 }
 
 @test "media check: a recovery email is sent once files are readable again" {
@@ -843,13 +843,13 @@ MEDIA_ALERT='\[TESTHOST\] Plex cannot read media files'
 
   CHECKFILES=missing run run_launchd_cycle
   CHECKFILES=missing run run_launchd_cycle
-  [ "$(subject_count "${MEDIA_ALERT}")" -eq 1 ]
+  [ "$(subject_count "${MEDIA_ALERT}" || true)" -eq 1 ]
 
   run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(subject_count 'RESOLVED: \[TESTHOST\] Plex can read media files again')" -eq 1 ]
-  grep -q "RESOLVED: media_unreachable" <<<"$(watchdog_log)"
-  [ "$(jq -r '.transitions.media_unreachable // "gone"' <<<"$(WATCHDOG_STATE)")" = "gone" ]
+  [ "$(subject_count 'RESOLVED: \[TESTHOST\] Plex can read media files again' || true)" -eq 1 ]
+  grep -q "RESOLVED: media_unreachable" <<<"$(watchdog_log || true)"
+  [ "$(jq -r '.transitions.media_unreachable // "gone"' <<<"$(WATCHDOG_STATE || true)" || true)" = "gone" ]
 }
 
 @test "media check: no movie or episode in recentlyAdded is skipped, not counted" {
@@ -860,9 +860,9 @@ MEDIA_ALERT='\[TESTHOST\] Plex cannot read media files'
 
   RECENT=seasons run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "1" ]
-  [ "$(grep -c checkFiles "${TEST_TMPDIR}/curl.log")" -eq 0 ]
-  grep -q "media check skipped" <<<"$(watchdog_log)"
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE || true)" || true)" = "1" ]
+  [ "$(grep -c checkFiles "${TEST_TMPDIR}/curl.log" || true)" -eq 0 ]
+  grep -q "media check skipped" <<<"$(watchdog_log || true)"
 }
 
 @test "media check: a 404 for the item (removed between calls) is skipped, not counted" {
@@ -873,9 +873,9 @@ MEDIA_ALERT='\[TESTHOST\] Plex cannot read media files'
 
   CHECKFILES=404 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "1" ]
-  [ "$(subject_count "${MEDIA_ALERT}")" -eq 0 ]
-  grep -q "media check skipped" <<<"$(watchdog_log)"
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE || true)" || true)" = "1" ]
+  [ "$(subject_count "${MEDIA_ALERT}" || true)" -eq 0 ]
+  grep -q "media check skipped" <<<"$(watchdog_log || true)"
 }
 
 @test "media check: Plex unreachable skips the check and sends no false recovery" {
@@ -889,9 +889,9 @@ MEDIA_ALERT='\[TESTHOST\] Plex cannot read media files'
 
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(grep -c "^Subject: RESOLVED" "${MAIL_LOG}")" -eq 0 ]
-  [ "$(jq -r '.transitions.media_unreachable.alerted' <<<"$(WATCHDOG_STATE)")" = "true" ]
-  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "3" ]
+  [ "$(grep -c "^Subject: RESOLVED" "${MAIL_LOG}" || true)" -eq 0 ]
+  [ "$(jq -r '.transitions.media_unreachable.alerted' <<<"$(WATCHDOG_STATE || true)" || true)" = "true" ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE || true)" || true)" = "3" ]
 }
 
 @test "state save after a prefs change keeps the media check's keys" {
@@ -908,10 +908,10 @@ MEDIA_ALERT='\[TESTHOST\] Plex cannot read media files'
   # No response_hash in the state, so this cycle takes the full path.
   CHECKFILES=missing run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(jq -r '.response_hash | length' <<<"$(WATCHDOG_STATE)")" -eq 64 ]
-  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "2" ]
-  [ "$(jq -r '.transitions.media_unreachable.alerted' <<<"$(WATCHDOG_STATE)")" = "true" ]
-  [ "$(subject_count "${MEDIA_ALERT}")" -eq 0 ]
+  [ "$(jq -r '.response_hash | length' <<<"$(WATCHDOG_STATE || true)" || true)" -eq 64 ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE || true)" || true)" = "2" ]
+  [ "$(jq -r '.transitions.media_unreachable.alerted' <<<"$(WATCHDOG_STATE || true)" || true)" = "true" ]
+  [ "$(subject_count "${MEDIA_ALERT}" || true)" -eq 0 ]
 }
 
 @test "a corrupt state.json is replaced in one cycle, not a stop on every run" {
@@ -925,8 +925,8 @@ MEDIA_ALERT='\[TESTHOST\] Plex cannot read media files'
 
   run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(jq -r '.response_hash | length' <<<"$(WATCHDOG_STATE)")" -eq 64 ]
-  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE)")" = "0" ]
+  [ "$(jq -r '.response_hash | length' <<<"$(WATCHDOG_STATE || true)" || true)" -eq 64 ]
+  [ "$(jq -r '.media_check_failures' <<<"$(WATCHDOG_STATE || true)" || true)" = "0" ]
 }
 
 # ===========================================================================
@@ -950,10 +950,10 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
 
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(proc_calls | grep -c '^pkill')" -eq 0 ]
-  [ "$(proc_calls | grep -c '^open')" -eq 0 ]
-  [ "$(mail_count)" -eq 0 ]
-  [ "$(jq -r '.consecutive_failures' <<<"$(WATCHDOG_STATE)")" = "2" ]
+  [ "$(proc_calls | grep -c '^pkill' || true)" -eq 0 ]
+  [ "$(proc_calls | grep -c '^open' || true)" -eq 0 ]
+  [ "$(mail_count || true)" -eq 0 ]
+  [ "$(jq -r '.consecutive_failures' <<<"$(WATCHDOG_STATE || true)" || true)" = "2" ]
 }
 
 @test "auto-restart: at the threshold Plex is stopped, started with open, and the email says so" {
@@ -965,16 +965,16 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
 
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  proc_calls | grep -q '^pkill -TERM MacOS/Plex Media Server\$$'
-  proc_calls | grep -q '^pkill -TERM Plex Media Server\\.app/Contents/|Plex EAE Service$'
-  [ "$(proc_calls | grep -c '^pkill -KILL')" -eq 0 ]
-  proc_calls | grep -q '^open -a /Applications/Plex Media Server.app$'
-  [ "$(mail_count)" -eq 1 ]
-  [ "$(subject_count "${RESTARTED}")" -eq 1 ]
+  { proc_calls || true; } | grep -q '^pkill -TERM MacOS/Plex Media Server\$$'
+  { proc_calls || true; } | grep -q '^pkill -TERM Plex Media Server\\.app/Contents/|Plex EAE Service$'
+  [ "$(proc_calls | grep -c '^pkill -KILL' || true)" -eq 0 ]
+  { proc_calls || true; } | grep -q '^open -a /Applications/Plex Media Server.app$'
+  [ "$(mail_count || true)" -eq 1 ]
+  [ "$(subject_count "${RESTARTED}" || true)" -eq 1 ]
   grep -q "touch .*/no-restart" "${MAIL_LOG}"
-  [ "$(jq -r '.consecutive_failures' <<<"$(WATCHDOG_STATE)")" = "0" ]
-  [[ "$(jq -r '.last_restart_epoch' <<<"$(WATCHDOG_STATE)")" =~ ^[0-9]+$ ]]
-  grep -q "RESTART: Plex answered" <<<"$(watchdog_log)"
+  [ "$(jq -r '.consecutive_failures' <<<"$(WATCHDOG_STATE || true)" || true)" = "0" ]
+  [[ "$(jq -r '.last_restart_epoch' <<<"$(WATCHDOG_STATE || true)" || true)" =~ ^[0-9]+$ ]]
+  grep -q "RESTART: Plex answered" <<<"$(watchdog_log || true)"
 }
 
 @test "auto-restart: Plex that ignores SIGTERM gets SIGKILL" {
@@ -986,9 +986,9 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
 
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  proc_calls | grep -q '^pkill -KILL MacOS/Plex Media Server\$$'
-  grep -q "ignored SIGTERM for 10 s; sending SIGKILL" <<<"$(watchdog_log)"
-  [ "$(subject_count "${RESTARTED}")" -eq 1 ]
+  { proc_calls || true; } | grep -q '^pkill -KILL MacOS/Plex Media Server\$$'
+  grep -q "ignored SIGTERM for 10 s; sending SIGKILL" <<<"$(watchdog_log || true)"
+  [ "$(subject_count "${RESTARTED}" || true)" -eq 1 ]
 }
 
 @test "auto-restart: open does not pass a data-directory override to Plex" {
@@ -1001,7 +1001,7 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
   PLEX_DOWN=1 PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=/Users/Shared/PlexMediaServer \
     run bash "${WATCHDOG}"
   [ "$status" -eq 0 ]
-  proc_calls | grep -q '^open env PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=unset$'
+  { proc_calls || true; } | grep -q '^open env PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=unset$'
 }
 
 @test "auto-restart: a restart that does not bring Plex back emails once and is not repeated" {
@@ -1013,15 +1013,15 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
 
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(subject_count '\[TESTHOST\] Plex unreachable; automatic restart failed')" -eq 1 ]
-  [ "$(jq -r '.restart_gave_up' <<<"$(WATCHDOG_STATE)")" = "true" ]
-  grep -q "did not answer within 90 s" <<<"$(watchdog_log)"
+  [ "$(subject_count '\[TESTHOST\] Plex unreachable; automatic restart failed' || true)" -eq 1 ]
+  [ "$(jq -r '.restart_gave_up' <<<"$(WATCHDOG_STATE || true)" || true)" = "true" ]
+  grep -q "did not answer within 90 s" <<<"$(watchdog_log || true)"
 
   : >"${PROC_DIR}/calls"
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 1 ]
-  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
+  [ "$(mail_count || true)" -eq 1 ]
+  [ "$(proc_calls | grep -c '^pkill\|^open' || true)" -eq 0 ]
 }
 
 @test "auto-restart: unreachable again within the cooldown emails once and does not restart" {
@@ -1036,11 +1036,11 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
 
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
-  [ "$(subject_count '\[TESTHOST\] Plex still unreachable after an automatic restart')" -eq 1 ]
+  [ "$(proc_calls | grep -c '^pkill\|^open' || true)" -eq 0 ]
+  [ "$(subject_count '\[TESTHOST\] Plex still unreachable after an automatic restart' || true)" -eq 1 ]
 
   PLEX_DOWN=1 run run_launchd_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 }
 
 @test "auto-restart: a restart older than the cooldown is not a reason to wait" {
@@ -1055,8 +1055,8 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
 
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  proc_calls | grep -q '^open -a'
-  [ "$(subject_count "${RESTARTED}")" -eq 1 ]
+  { proc_calls || true; } | grep -q '^open -a'
+  [ "$(subject_count "${RESTARTED}" || true)" -eq 1 ]
 }
 
 @test "auto-restart: the no-restart file turns restarts off" {
@@ -1068,8 +1068,8 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
 
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
-  [ "$(subject_count '\[TESTHOST\] Plex server unreachable')" -eq 1 ]
+  [ "$(proc_calls | grep -c '^pkill\|^open' || true)" -eq 0 ]
+  [ "$(subject_count '\[TESTHOST\] Plex server unreachable' || true)" -eq 1 ]
   grep -q "Automatic restart is off" "${MAIL_LOG}"
 }
 
@@ -1084,14 +1084,14 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
 
   PREFS_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
-  [ "$(subject_count '\[TESTHOST\] Plex answers, but the watchdog cannot read its settings')" -eq 1 ]
+  [ "$(proc_calls | grep -c '^pkill\|^open' || true)" -eq 0 ]
+  [ "$(subject_count '\[TESTHOST\] Plex answers, but the watchdog cannot read its settings' || true)" -eq 1 ]
   grep -q "A 401 means the token" "${MAIL_LOG}"
   grep -q "http_code}\\\\n" "${MAIL_LOG}"
 
   PREFS_DOWN=1 run run_launchd_cycle
-  [ "$(mail_count)" -eq 1 ]
-  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
+  [ "$(mail_count || true)" -eq 1 ]
+  [ "$(proc_calls | grep -c '^pkill\|^open' || true)" -eq 0 ]
 }
 
 @test "recovery: the failure count resets on the hash fast path, with one recovery email" {
@@ -1103,17 +1103,17 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
   write_msmtp_mock
   run run_launchd_cycle # stores response_hash
   local state
-  state=$(jq '.consecutive_failures = 5 | .restart_gave_up = true' <<<"$(WATCHDOG_STATE)")
+  state=$(jq '.consecutive_failures = 5 | .restart_gave_up = true' <<<"$(WATCHDOG_STATE || true)")
   echo "${state}" >"${HOME}/.config/plex-watchdog/state.json"
 
   run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(jq -r '.consecutive_failures' <<<"$(WATCHDOG_STATE)")" = "0" ]
-  [ "$(jq -r '.restart_gave_up // "gone"' <<<"$(WATCHDOG_STATE)")" = "gone" ]
-  [ "$(subject_count 'RESOLVED: \[TESTHOST\] Plex server reachable again')" -eq 1 ]
+  [ "$(jq -r '.consecutive_failures' <<<"$(WATCHDOG_STATE || true)" || true)" = "0" ]
+  [ "$(jq -r '.restart_gave_up // "gone"' <<<"$(WATCHDOG_STATE || true)" || true)" = "gone" ]
+  [ "$(subject_count 'RESOLVED: \[TESTHOST\] Plex server reachable again' || true)" -eq 1 ]
 
   run run_launchd_cycle
-  [ "$(subject_count 'RESOLVED: \[TESTHOST\] Plex server reachable again')" -eq 1 ]
+  [ "$(subject_count 'RESOLVED: \[TESTHOST\] Plex server reachable again' || true)" -eq 1 ]
 }
 
 @test "recovery: a count below the threshold resets without an email" {
@@ -1122,12 +1122,12 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
   write_msmtp_mock
   run run_launchd_cycle
   local state
-  state=$(jq '.consecutive_failures = 1' <<<"$(WATCHDOG_STATE)")
+  state=$(jq '.consecutive_failures = 1' <<<"$(WATCHDOG_STATE || true)")
   echo "${state}" >"${HOME}/.config/plex-watchdog/state.json"
 
   run run_launchd_cycle
-  [ "$(jq -r '.consecutive_failures' <<<"$(WATCHDOG_STATE)")" = "0" ]
-  [ "$(grep -c '^Subject: RESOLVED' "${MAIL_LOG}")" -eq 0 ]
+  [ "$(jq -r '.consecutive_failures' <<<"$(WATCHDOG_STATE || true)" || true)" = "0" ]
+  [ "$(grep -c '^Subject: RESOLVED' "${MAIL_LOG}" || true)" -eq 0 ]
 }
 
 # ===========================================================================
@@ -1146,9 +1146,9 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
   run run_launchd_cycle
   [ "$status" -eq 0 ]
   [ -L "${DATA_LINK}" ]
-  [ "$(readlink "${DATA_LINK}")" = "${DATA_DIR}" ]
-  grep -q "REPAIRED: created ${DATA_LINK}" <<<"$(watchdog_log)"
-  [ "$(subject_count '\[TESTHOST\] Plex data directory link')" -eq 0 ]
+  [ "$(readlink "${DATA_LINK}" || true)" = "${DATA_DIR}" ]
+  grep -q "REPAIRED: created ${DATA_LINK}" <<<"$(watchdog_log || true)"
+  [ "$(subject_count '\[TESTHOST\] Plex data directory link' || true)" -eq 0 ]
 }
 
 @test "data link: a link to the wrong place is repointed" {
@@ -1160,8 +1160,8 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
 
   run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(readlink "${DATA_LINK}")" = "${DATA_DIR}" ]
-  grep -q "REPAIRED: ${DATA_LINK} pointed at ${TEST_TMPDIR}/elsewhere" <<<"$(watchdog_log)"
+  [ "$(readlink "${DATA_LINK}" || true)" = "${DATA_DIR}" ]
+  grep -q "REPAIRED: ${DATA_LINK} pointed at ${TEST_TMPDIR}/elsewhere" <<<"$(watchdog_log || true)"
 }
 
 @test "data link: a correct link is left alone and logs nothing" {
@@ -1173,7 +1173,7 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
 
   run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(watchdog_log | grep -c 'data link\|REPAIRED')" -eq 0 ]
+  [ "$(watchdog_log | grep -c 'data link\|REPAIRED' || true)" -eq 0 ]
 }
 
 @test "data link: a real directory is never changed, and alerts once" {
@@ -1187,10 +1187,10 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
   [ "$status" -eq 0 ]
   run run_launchd_cycle
   [ -d "${DATA_LINK}" ] && [ ! -L "${DATA_LINK}" ]
-  [ "$(cat "${DATA_LINK}/Preferences.xml")" = "keep" ]
-  [ "$(subject_count '\[TESTHOST\] Plex data directory link is broken')" -eq 1 ]
+  [ "$(cat "${DATA_LINK}/Preferences.xml" || true)" = "keep" ]
+  [ "$(subject_count '\[TESTHOST\] Plex data directory link is broken' || true)" -eq 1 ]
   grep -q "is a real directory, not a link" "${MAIL_LOG}"
-  [ "$(jq -r '.transitions.data_link.alerted' <<<"$(WATCHDOG_STATE)")" = "true" ]
+  [ "$(jq -r '.transitions.data_link.alerted' <<<"$(WATCHDOG_STATE || true)" || true)" = "true" ]
 }
 
 @test "data link: not checked when the real data directory does not exist" {
@@ -1201,7 +1201,7 @@ RESTARTED='\[TESTHOST\] Plex was unresponsive and has been restarted'
   run run_launchd_cycle
   [ "$status" -eq 0 ]
   [ ! -e "${DATA_LINK}" ] && [ ! -L "${DATA_LINK}" ]
-  grep -q "WARNING: data link not checked" <<<"$(watchdog_log)"
+  grep -q "WARNING: data link not checked" <<<"$(watchdog_log || true)"
 }
 
 # ===========================================================================
@@ -1223,10 +1223,10 @@ DEFERRED='\[TESTHOST\] Plex unreachable during an update; restart deferred'
 
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
-  [ "$(subject_count "${DEFERRED}")" -eq 1 ]
+  [ "$(proc_calls | grep -c '^pkill\|^open' || true)" -eq 0 ]
+  [ "$(subject_count "${DEFERRED}" || true)" -eq 1 ]
   grep -q "a brew upgrade is running" "${MAIL_LOG}"
-  [ "$(jq -r '.last_restart_epoch // "none"' <<<"$(WATCHDOG_STATE)")" = "none" ]
+  [ "$(jq -r '.last_restart_epoch // "none"' <<<"$(WATCHDOG_STATE || true)" || true)" = "none" ]
 }
 
 @test "update guard: no restart when the Plex binary changed recently" {
@@ -1239,8 +1239,8 @@ DEFERRED='\[TESTHOST\] Plex unreachable during an update; restart deferred'
 
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
-  grep -q "the Plex binary changed 0 min ago" <<<"$(watchdog_log)"
+  [ "$(proc_calls | grep -c '^pkill\|^open' || true)" -eq 0 ]
+  grep -q "the Plex binary changed 0 min ago" <<<"$(watchdog_log || true)"
 }
 
 @test "update guard: no restart when Plex's updater wrote its log recently" {
@@ -1254,8 +1254,8 @@ DEFERRED='\[TESTHOST\] Plex unreachable during an update; restart deferred'
 
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  [ "$(proc_calls | grep -c '^pkill\|^open')" -eq 0 ]
-  grep -q "updater wrote .*update-log.txt" <<<"$(watchdog_log)"
+  [ "$(proc_calls | grep -c '^pkill\|^open' || true)" -eq 0 ]
+  grep -q "updater wrote .*update-log.txt" <<<"$(watchdog_log || true)"
 }
 
 @test "update guard: an old update log does not block, and a deferred restart runs after the window" {
@@ -1270,7 +1270,7 @@ DEFERRED='\[TESTHOST\] Plex unreachable during an update; restart deferred'
 
   PLEX_DOWN=1 run run_launchd_cycle
   [ "$status" -eq 0 ]
-  proc_calls | grep -q '^open -a'
-  [ "$(subject_count "${RESTARTED}")" -eq 1 ]
-  [ "$(subject_count "${DEFERRED}")" -eq 0 ]
+  { proc_calls || true; } | grep -q '^open -a'
+  [ "$(subject_count "${RESTARTED}" || true)" -eq 1 ]
+  [ "$(subject_count "${DEFERRED}" || true)" -eq 0 ]
 }
