@@ -2,12 +2,13 @@
 #
 # cloudflare-ddns — Cloudflare A-record DDNS updater
 #
-# Checks the host's current public IP against the A record for __EXTERNAL_HOSTNAME__
+# Checks the host's current public IP against the A record for __DDNS_RECORD_NAME__
 # in Cloudflare, and PATCHes the record if they differ. Runs as root via
 # LaunchDaemon so it can read CF_API_TOKEN from the System keychain.
 #
 # Template placeholders (substituted by cloudflare-ddns-setup.sh):
-#   __EXTERNAL_HOSTNAME__   → public hostname (e.g. tilsit.vip)
+#   __EXTERNAL_HOSTNAME__   → keychain token account (tilsit.vip)
+#   __DDNS_RECORD_NAME__    → A record it updates (vpn.tilsit.vip)
 #   __CLOUDFLARE_ZONE_ID__  → Cloudflare zone ID
 #   __CLOUDFLARE_RECORD_ID__→ Cloudflare A-record ID
 #   __OPERATOR_USERNAME__   → service-account name (for log path)
@@ -22,6 +23,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 
 EXTERNAL_HOSTNAME="__EXTERNAL_HOSTNAME__"
+DDNS_RECORD_NAME="__DDNS_RECORD_NAME__"
 CF_ZONE_ID="__CLOUDFLARE_ZONE_ID__"
 CF_RECORD_ID="__CLOUDFLARE_RECORD_ID__"
 OPERATOR_USERNAME="__OPERATOR_USERNAME__"
@@ -201,7 +203,7 @@ maybe_heartbeat() {
   now_epoch=$(date +%s)
   local elapsed=$((now_epoch - last_heartbeat))
   if [[ ${elapsed} -ge ${HEARTBEAT_INTERVAL_SECONDS} ]]; then
-    log "INFO" "heartbeat ok — public=${current_ip} matches ${EXTERNAL_HOSTNAME}"
+    log "INFO" "heartbeat ok — public=${current_ip} matches ${DDNS_RECORD_NAME}"
     write_state "${current_ip}" "${now_epoch}"
   else
     # Update last_ip only; preserve heartbeat timestamp
@@ -267,7 +269,7 @@ main() {
     exit 0
   fi
 
-  log "INFO" "IP change detected: ${EXTERNAL_HOSTNAME} ${current_ip} → ${public_ip}"
+  log "INFO" "IP change detected: ${DDNS_RECORD_NAME} ${current_ip} → ${public_ip}"
 
   local patch_response patch_curl_rc patch_success
   patch_response=$(cloudflare_patch_record "${token}" "${public_ip}" 2>/dev/null) \
@@ -282,7 +284,7 @@ main() {
     exit 1
   fi
 
-  log "INFO" "cloudflare A-record updated: ${EXTERNAL_HOSTNAME} → ${public_ip}"
+  log "INFO" "cloudflare A-record updated: ${DDNS_RECORD_NAME} → ${public_ip}"
   local now_epoch
   now_epoch=$(date +%s)
   write_state "${public_ip}" "${now_epoch}"

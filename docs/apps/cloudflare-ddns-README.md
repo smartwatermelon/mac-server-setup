@@ -1,7 +1,28 @@
 # Cloudflare DDNS Updater
 
-Keeps the public `A` record for `EXTERNAL_HOSTNAME` in sync with the server's
-current public IPv4 address. Runs every 5 minutes as a LaunchDaemon.
+Keeps one public `A` record in sync with the server's current public IPv4
+address. Runs every 5 minutes as a LaunchDaemon.
+
+## Current role: `vpn.tilsit.vip` (since 2026-11-04)
+
+The record it updates is now **`vpn.tilsit.vip`**, not `tilsit.vip`.
+
+- At the Cloudflare Tunnel cutover (2026-11-03), `tilsit.vip` became a
+  proxied CNAME to the tunnel, and this daemon was disabled.
+- That broke the home VPN. Tunnelblick connected to `tilsit.vip:34443`, which
+  then resolved to Cloudflare, and Cloudflare does not proxy port 34443.
+- The fix: a separate **DNS-only** record, `vpn.tilsit.vip`, which this daemon
+  keeps pointed at the home IP. See `docs/apps/home-vpn-README.md`.
+
+Rules that follow from this:
+
+- `vpn.tilsit.vip` must stay **DNS only** (grey cloud). A proxied record
+  breaks the VPN the same way.
+- Do not retire this daemon while the VPN exists. The G2 plan's follow-up
+  step that removes it is cancelled.
+- `CLOUDFLARE_RECORD_ID` is the ID of the `vpn.tilsit.vip` record.
+  `EXTERNAL_HOSTNAME` stays `tilsit.vip`: it names the keychain account of the
+  API token. `DDNS_RECORD_NAME` (`vpn.tilsit.vip`) is only used in log lines.
 
 ## Why this exists
 
@@ -108,15 +129,15 @@ sudo /usr/local/bin/cloudflare-ddns
 sudo launchctl bootout system/com.tilsit.cloudflare-ddns
 
 # Verify current A record from outside the LAN
-dig +short tilsit.vip @1.1.1.1
+dig +short vpn.tilsit.vip @1.1.1.1
 ```
 
 ## Expected log lines
 
 ```text
-[2026-04-19 10:00:01] [cloudflare-ddns] INFO heartbeat ok — public=67.5.105.43 matches tilsit.vip
-[2026-04-19 12:05:03] [cloudflare-ddns] INFO IP change detected: tilsit.vip 67.5.105.43 → 67.5.110.22
-[2026-04-19 12:05:04] [cloudflare-ddns] INFO cloudflare A-record updated: tilsit.vip → 67.5.110.22
+[2026-04-19 10:00:01] [cloudflare-ddns] INFO heartbeat ok — public=67.5.105.43 matches vpn.tilsit.vip
+[2026-04-19 12:05:03] [cloudflare-ddns] INFO IP change detected: vpn.tilsit.vip 67.5.105.43 → 67.5.110.22
+[2026-04-19 12:05:04] [cloudflare-ddns] INFO cloudflare A-record updated: vpn.tilsit.vip → 67.5.110.22
 [2026-04-19 13:10:02] [cloudflare-ddns] WARN could not determine public IP from any provider — will retry next cycle
 ```
 
