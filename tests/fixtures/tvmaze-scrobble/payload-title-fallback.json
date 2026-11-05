@@ -1,0 +1,35 @@
+{
+  "event": "media.scrobble",
+  "user": true,
+  "owner": true,
+  "Account": {
+    "id": 1234567,
+    "thumb": "https://plex.tv/users/abc/avatar",
+    "title": "Andrew Rich"
+  },
+  "Server": {
+    "title": "TESTHOST",
+    "uuid": "0000"
+  },
+  "Player": {
+    "local": true,
+    "publicAddress": "203.0.113.1",
+    "title": "Living Room",
+    "uuid": "p1"
+  },
+  "Metadata": {
+    "librarySectionType": "show",
+    "ratingKey": "6001",
+    "key": "/library/metadata/6001",
+    "parentRatingKey": "6000",
+    "grandparentRatingKey": "22096",
+    "type": "episode",
+    "title": "Episode Title",
+    "grandparentKey": "/library/metadata/22096",
+    "grandparentTitle": "The Great British Bake Off",
+    "parentTitle": "Series 15",
+    "index": 3,
+    "parentIndex": 15,
+    "lastViewedAt": 1793000000
+  }
+}

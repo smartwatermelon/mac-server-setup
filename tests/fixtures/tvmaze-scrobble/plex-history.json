@@ -1,0 +1,70 @@
+{
+  "MediaContainer": {
+    "size": 5,
+    "Metadata": [
+      {
+        "historyKey": "/status/sessions/history/905",
+        "ratingKey": "7003",
+        "type": "episode",
+        "grandparentTitle": "Taskmaster",
+        "grandparentKey": "/library/metadata/11208",
+        "parentIndex": 16,
+        "index": 9,
+        "viewedAt": "RECENT_3",
+        "accountID": 1
+      },
+      {
+        "historyKey": "/status/sessions/history/904",
+        "ratingKey": "7002",
+        "type": "episode",
+        "grandparentTitle": "Taskmaster",
+        "grandparentKey": "/library/metadata/11208",
+        "parentIndex": 16,
+        "index": 8,
+        "viewedAt": "RECENT_2",
+        "accountID": 1
+      },
+      {
+        "historyKey": "/status/sessions/history/903",
+        "ratingKey": "8001",
+        "type": "movie",
+        "title": "A Movie",
+        "viewedAt": "RECENT_2",
+        "accountID": 1
+      },
+      {
+        "historyKey": "/status/sessions/history/902",
+        "ratingKey": "7009",
+        "type": "episode",
+        "grandparentTitle": "Someone Else's Show",
+        "grandparentKey": "/library/metadata/33333",
+        "parentIndex": 1,
+        "index": 1,
+        "viewedAt": "RECENT_2",
+        "accountID": 2
+      },
+      {
+        "historyKey": "/status/sessions/history/901",
+        "ratingKey": "7001",
+        "type": "episode",
+        "grandparentTitle": "Taskmaster",
+        "grandparentKey": "/library/metadata/11208",
+        "parentIndex": 16,
+        "index": 7,
+        "viewedAt": "RECENT_1",
+        "accountID": 1
+      },
+      {
+        "historyKey": "/status/sessions/history/800",
+        "ratingKey": "6999",
+        "type": "episode",
+        "grandparentTitle": "Taskmaster",
+        "grandparentKey": "/library/metadata/11208",
+        "parentIndex": 15,
+        "index": 1,
+        "viewedAt": "OLD",
+        "accountID": 1
+      }
+    ]
+  }
+}

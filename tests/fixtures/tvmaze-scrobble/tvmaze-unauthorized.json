@@ -1,0 +1,6 @@
+{
+  "name": "Unauthorized",
+  "message": "Your request was made with invalid credentials.",
+  "code": 0,
+  "status": 401
+}

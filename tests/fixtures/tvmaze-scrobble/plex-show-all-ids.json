@@ -1,0 +1,17 @@
+{
+  "MediaContainer": {
+    "size": 1,
+    "Metadata": [
+      {
+        "ratingKey": "11208",
+        "type": "show",
+        "title": "Taskmaster",
+        "Guid": [
+          { "id": "imdb://tt4934214" },
+          { "id": "tmdb://63404" },
+          { "id": "tvdb://298905" }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.__HOSTNAME_LOWER__.tvmaze-scrobble</string>
+
+    <!-- Plex webhook listener, loopback only. It starts the worker with
+         /bin/bash (3.2), so the worker must stay compatible with it. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/__OPERATOR_USERNAME__/.local/bin/tvmaze-scrobble-listener</string>
+        <string>--port</string>
+        <string>__TVMAZE_SCROBBLE_PORT__</string>
+        <string>--worker</string>
+        <string>/Users/__OPERATOR_USERNAME__/.local/bin/tvmaze-scrobble</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <!-- A crash loop (e.g. the port is taken) restarts at most every 30 s. -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/state/tvmaze-scrobble.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/state/tvmaze-scrobble.log</string>
+</dict>
+</plist>

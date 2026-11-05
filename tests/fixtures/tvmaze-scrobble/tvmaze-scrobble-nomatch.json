@@ -1,0 +1,7 @@
+[
+  {
+    "code": 404,
+    "message": "Episode not found",
+    "input": { "season": 16, "episode": 10, "type": 0, "marked_at": 1793000000 }
+  }
+]

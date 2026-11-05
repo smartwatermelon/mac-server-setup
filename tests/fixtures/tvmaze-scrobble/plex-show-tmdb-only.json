@@ -1,0 +1,13 @@
+{
+  "MediaContainer": {
+    "size": 1,
+    "Metadata": [
+      {
+        "ratingKey": "22096",
+        "type": "show",
+        "title": "The Great British Bake Off",
+        "Guid": [{ "id": "tmdb://34549" }]
+      }
+    ]
+  }
+}

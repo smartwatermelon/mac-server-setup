@@ -105,6 +105,12 @@ considers_file() {
   considers_file "${f}"
 }
 
+@test "matches tvmaze-scrobble.log" {
+  local f="${STATE_DIR}/tvmaze-scrobble.log"
+  touch "${f}"
+  considers_file "${f}"
+}
+
 @test "matches cloudflared/cloudflared.log and cloudflared-error.log" {
   mkdir -p "${STATE_DIR}/cloudflared"
   local f
