@@ -43,8 +43,10 @@ EXTERNAL_HOSTNAME="${EXTERNAL_HOSTNAME:-}"
 TUNNEL_METRICS_PORT="${TUNNEL_METRICS_PORT:-20241}"
 
 # Every value below is substituted into the watchdog with sed, using | as the
-# delimiter, so each is checked against a strict pattern first.
-if [[ ! "${MONITORING_EMAIL}" =~ ^[^@|[:space:]]+@[^@|[:space:]]+$ ]] \
+# delimiter, so each is checked against a strict pattern first. & and \ are
+# special in a sed replacement.
+EMAIL_PATTERN='^[^@|&\[:space:]]+@[^@|&\[:space:]]+$'
+if [[ ! "${MONITORING_EMAIL}" =~ ${EMAIL_PATTERN} ]] \
   || [[ "${MONITORING_EMAIL}" == "your-email@example.com" ]]; then
   echo "❌ MONITORING_EMAIL is not set to a real address in ${CONFIG_FILE}"
   exit 1
