@@ -24,7 +24,7 @@ setup() {
   # Only the PATH block, with the stable dir and Homebrew prefix pointed at
   # the fakes so the result does not depend on this host's Homebrew.
   PATH_BLOCK="${TEST_TMPDIR}/path-block.sh"
-  sed -n '/^ARCH=/,/^export PATH=/p' "${TEMPLATE}" \
+  { sed -n '/^ARCH=/,/^export PATH=/p' "${TEMPLATE}" || true; } \
     | sed -e "s|^STABLE_BASH_BIN=.*|STABLE_BASH_BIN=\"${STABLE_DIR}\"|" \
       -e "s|HOMEBREW_PREFIX=\"[^\"]*\"|HOMEBREW_PREFIX=\"${BREW_DIR}\"|" >"${PATH_BLOCK}"
 }
@@ -36,7 +36,7 @@ teardown() {
 @test "the stable bash dir is first in the watcher's PATH" {
   run grep -E '^export PATH=' "${TEMPLATE}"
   [ "${status}" -eq 0 ]
-  [[ "${output}" == 'export PATH="${STABLE_BASH_BIN}:${HOMEBREW_PREFIX}/bin:'* ]]
+  [[ "${output}" == "export PATH=\"\${STABLE_BASH_BIN}:\${HOMEBREW_PREFIX}/bin:"* ]]
   run grep -E '^STABLE_BASH_BIN=' "${TEMPLATE}"
   [ "${output}" == 'STABLE_BASH_BIN="/usr/local/stable/bash/bin"' ]
 }

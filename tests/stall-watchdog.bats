@@ -141,7 +141,7 @@ log_ts() {
 # tcc_line FILE SECONDS_AGO TCCD_PID MESSAGE
 tcc_line() {
   local ts
-  ts="$(log_ts $(($(date +%s) - $2)))"
+  ts="$(log_ts $(($(date +%s || true) - $2)))"
   jq -nc --arg ts "${ts}" --argjson pid "$3" --arg m "$4" \
     '{timestamp: $ts, processID: $pid, userID: 502, subsystem: "com.apple.TCC", category: "access", eventMessage: $m}' >>"$1"
 }
@@ -174,9 +174,9 @@ write_state() {
 @test "tcc: no prompts in the log sends nothing and records the scan" {
   run run_cycle
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 0 ]
-  [ "$(state '.tcc_prompts // {} | length')" -eq 0 ]
-  [ "$(state '.tcc_last_scan')" != "null" ]
+  [ "$(mail_count || true)" -eq 0 ]
+  [ "$(state '.tcc_prompts // {} | length' || true)" -eq 0 ]
+  [ "$(state '.tcc_last_scan' || true)" != "null" ]
 }
 
 @test "tcc: a prompt open for 2 minutes is recorded but not alerted" {
@@ -184,9 +184,9 @@ write_state() {
 
   run run_cycle
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 0 ]
-  [ "$(state '.tcc_prompts["446/17928.48"].service')" = "kTCCServiceSystemPolicyNetworkVolumes" ]
-  [ "$(state '.tcc_prompts["446/17928.48"].subject')" = "/usr/local/stable/bash/bin/bash" ]
+  [ "$(mail_count || true)" -eq 0 ]
+  [ "$(state '.tcc_prompts["446/17928.48"].service' || true)" = "kTCCServiceSystemPolicyNetworkVolumes" ]
+  [ "$(state '.tcc_prompts["446/17928.48"].subject' || true)" = "/usr/local/stable/bash/bin/bash" ]
 }
 
 @test "tcc: since comes from the log timestamp, not from when the scan ran" {
@@ -206,29 +206,29 @@ write_state() {
 
   run run_cycle
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Subject: \[TESTHOST\] macOS privacy prompt is blocking the server" "${MAIL_LOG}"
   grep -q "for /usr/local/stable/bash/bin/bash" "${MAIL_LOG}"
   grep -q "click Allow" "${MAIL_LOG}"
 
   # The next cycle stays quiet: one alert per incident.
   run run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 }
 
 @test "tcc: the answer closes the prompt and sends one recovery email" {
   tcc_line "${PROMPT_FILE}" 360 "${USER_TCCD}" "${PROMPT_MSG}"
   run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 
   tcc_line "${RESULT_FILE}" 10 "${USER_TCCD}" "${RESULT_MSG}"
   run run_cycle
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
   grep -q "Subject: RESOLVED: \[TESTHOST\] macOS privacy prompt answered" "${MAIL_LOG}"
   # 350 s: measured to the answer's own timestamp, not to when the scan ran.
   grep -q "closed after 5m: answered" "${MAIL_LOG}"
-  [ "$(state '.tcc_prompts | length')" -eq 0 ]
+  [ "$(state '.tcc_prompts | length' || true)" -eq 0 ]
 }
 
 @test "tcc: a prompt answered inside 5 minutes never alerts" {
@@ -236,19 +236,19 @@ write_state() {
   tcc_line "${RESULT_FILE}" 10 "${USER_TCCD}" "${RESULT_MSG}"
 
   run run_cycle
-  [ "$(mail_count)" -eq 0 ]
-  [ "$(state '.tcc_prompts | length')" -eq 0 ]
+  [ "$(mail_count || true)" -eq 0 ]
+  [ "$(state '.tcc_prompts | length' || true)" -eq 0 ]
 }
 
 @test "tcc: a RESULT with the same msgID from the system tccd does not close it" {
   tcc_line "${PROMPT_FILE}" 360 "${USER_TCCD}" "${PROMPT_MSG}"
   run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 
   tcc_line "${RESULT_FILE}" 10 "${SYSTEM_TCCD}" "${RESULT_MSG}"
   run run_cycle
-  [ "$(mail_count)" -eq 1 ]
-  [ "$(state '.tcc_prompts["446/17928.48"].service')" = "kTCCServiceSystemPolicyNetworkVolumes" ]
+  [ "$(mail_count || true)" -eq 1 ]
+  [ "$(state '.tcc_prompts["446/17928.48"].service' || true)" = "kTCCServiceSystemPolicyNetworkVolumes" ]
 }
 
 @test "tcc: an unanswered prompt is never dropped and reminds every 12 hours" {
@@ -266,40 +266,40 @@ write_state() {
 
   run run_cycle
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Subject: \[reminder\] \[TESTHOST\] macOS privacy prompt is blocking the server" "${MAIL_LOG}"
-  [ "$(grep -c "RESOLVED" "${MAIL_LOG}")" -eq 0 ]
-  [ "$(state '.tcc_prompts["446/17928.48"].since')" -eq $((now - 86400)) ]
+  [ "$(grep -c "RESOLVED" "${MAIL_LOG}" || true)" -eq 0 ]
+  [ "$(state '.tcc_prompts["446/17928.48"].since' || true)" -eq $((now - 86400)) ]
 }
 
 @test "tcc: a prompt whose tccd has exited is closed, and the email says why" {
   tcc_line "${PROMPT_FILE}" 360 "${USER_TCCD}" "${PROMPT_MSG}"
   run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 
   : >"${PROMPT_FILE}"
   echo "${SYSTEM_TCCD}" >"${ALIVE_FILE}"
   run run_cycle
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
   grep -q "its tccd process exited" "${MAIL_LOG}"
-  [ "$(state '.tcc_prompts | length')" -eq 0 ]
+  [ "$(state '.tcc_prompts | length' || true)" -eq 0 ]
 }
 
 @test "tcc: log show failing keeps open prompts and alerts on the third failure" {
   tcc_line "${PROMPT_FILE}" 120 "${USER_TCCD}" "${PROMPT_MSG}"
   run_cycle
-  [ "$(state '.tcc_prompts | length')" -eq 1 ]
+  [ "$(state '.tcc_prompts | length' || true)" -eq 1 ]
 
   touch "${LOG_FAIL_FILE}"
   run_cycle
   run_cycle
-  [ "$(mail_count)" -eq 0 ]
+  [ "$(mail_count || true)" -eq 0 ]
   run run_cycle
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Subject: \[TESTHOST\] stall-watchdog cannot read the system log" "${MAIL_LOG}"
-  [[ "$(watchdog_log)" == *"exited 64: log: Could not open log archive"* ]]
-  [ "$(state '.tcc_prompts | length')" -eq 1 ]
+  [[ "$(watchdog_log || true)" == *"exited 64: log: Could not open log archive"* ]]
+  [ "$(state '.tcc_prompts | length' || true)" -eq 1 ]
 }
 
 @test "tcc: stderr noise from log show does not break parsing" {
@@ -307,7 +307,7 @@ write_state() {
   tcc_line "${PROMPT_FILE}" 360 "${USER_TCCD}" "${PROMPT_MSG}"
 
   run run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 }
 
 @test "tcc: the scan starts a minute before the last one" {
@@ -317,7 +317,7 @@ write_state() {
 
   run_cycle
   local start expected
-  start="$(head -1 "${LOG_CALLS}" | cut -d'|' -f1)"
+  start="$({ head -1 "${LOG_CALLS}" || true; } | cut -d'|' -f1)"
   expected="$(date -r $((now - 660)) '+%Y-%m-%d %H:%M')"
   [[ "${start}" == "${expected}"* ]]
 }
@@ -329,7 +329,7 @@ write_state() {
 
   run_cycle
   local start expected
-  start="$(head -1 "${LOG_CALLS}" | cut -d'|' -f1)"
+  start="$({ head -1 "${LOG_CALLS}" || true; } | cut -d'|' -f1)"
   expected="$(date -r $((now - 3600)) '+%Y-%m-%d %H:%M')"
   [[ "${start}" == "${expected}"* ]]
 }
@@ -350,7 +350,7 @@ write_state() {
 
 @test "done: etime parses mm:ss, hh:mm:ss and dd-hh:mm:ss" {
   run env TEST_RUNNER=true bash -c \
-    'source "$1" >/dev/null 2>&1; etime_seconds 05:10; echo; etime_seconds 01:02:03; echo; etime_seconds 1-00:00:08' \
+    "source \"\$1\" >/dev/null 2>&1; etime_seconds 05:10; echo; etime_seconds 01:02:03; echo; etime_seconds 1-00:00:08" \
     _ "${WATCHDOG}"
   [ "${lines[0]}" = "310" ]
   [ "${lines[1]}" = "3723" ]
@@ -361,23 +361,23 @@ write_state() {
   printf '  202       05:10 /usr/local/stable/bash/bin/bash /Users/operator/.local/bin/transmission-done\n' >>"${PS_FILE}"
 
   run run_cycle
-  [ "$(mail_count)" -eq 0 ]
+  [ "$(mail_count || true)" -eq 0 ]
 }
 
 @test "done: a run over 45 minutes sends one alert, and recovery when it ends" {
   printf '  202    01:02:03 /usr/local/stable/bash/bin/bash /Users/operator/.local/bin/transmission-done\n' >>"${PS_FILE}"
 
   run run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Subject: \[TESTHOST\] transmission-done has been running for over 45 minutes" "${MAIL_LOG}"
   grep -q "pid 202, running 1h 2m" "${MAIL_LOG}"
 
   run run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 
   printf '  101    03:17:33 /bin/bash /Users/operator/.local/bin/transmission-trigger-watcher.sh\n' >"${PS_FILE}"
   run run_cycle
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
   grep -q "Subject: RESOLVED: \[TESTHOST\] transmission-done" "${MAIL_LOG}"
 }
 
@@ -386,7 +386,7 @@ write_state() {
   printf '  101  3-03:17:33 /bin/bash /Users/operator/.local/bin/transmission-trigger-watcher.sh\n' >"${PS_FILE}"
 
   run run_cycle
-  [ "$(mail_count)" -eq 0 ]
+  [ "$(mail_count || true)" -eq 0 ]
 }
 
 # ===========================================================================
@@ -400,38 +400,38 @@ supervisor_status() {
 @test "supervisor: a missing status file is unknown and alerts nothing" {
   run run_cycle
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 0 ]
+  [ "$(mail_count || true)" -eq 0 ]
 }
 
 @test "supervisor: two consecutive failures are quiet" {
-  supervisor_status "{\"consecutive_failures\": 2, \"last_error\": \"ensure_container failed\", \"updated_at\": $(date +%s)}"
+  supervisor_status "{\"consecutive_failures\": 2, \"last_error\": \"ensure_container failed\", \"updated_at\": $(date +%s || true)}"
 
   run run_cycle
-  [ "$(mail_count)" -eq 0 ]
+  [ "$(mail_count || true)" -eq 0 ]
 }
 
 @test "supervisor: three consecutive failures alert with the last error" {
-  supervisor_status "{\"consecutive_failures\": 3, \"last_error\": \"ensure_machine failed\", \"updated_at\": $(date +%s)}"
+  supervisor_status "{\"consecutive_failures\": 3, \"last_error\": \"ensure_machine failed\", \"updated_at\": $(date +%s || true)}"
 
   run run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Subject: \[TESTHOST\] podman supervisor has failed 3 cycles in a row" "${MAIL_LOG}"
   grep -q "Last error: ensure_machine failed" "${MAIL_LOG}"
 }
 
 @test "supervisor: a status file not updated for over an hour alerts" {
-  supervisor_status "{\"consecutive_failures\": 0, \"last_error\": \"\", \"updated_at\": $(($(date +%s) - 4000))}"
+  supervisor_status "{\"consecutive_failures\": 0, \"last_error\": \"\", \"updated_at\": $(($(date +%s || true) - 4000))}"
 
   run run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Subject: \[TESTHOST\] podman supervisor has stopped reporting" "${MAIL_LOG}"
 }
 
 @test "supervisor: a healthy, fresh status is quiet" {
-  supervisor_status "{\"consecutive_failures\": 0, \"last_error\": \"\", \"updated_at\": $(date +%s)}"
+  supervisor_status "{\"consecutive_failures\": 0, \"last_error\": \"\", \"updated_at\": $(date +%s || true)}"
 
   run run_cycle
-  [ "$(mail_count)" -eq 0 ]
+  [ "$(mail_count || true)" -eq 0 ]
 }
 
 @test "supervisor: a corrupt status file is logged and skipped" {
@@ -439,8 +439,8 @@ supervisor_status() {
 
   run run_cycle
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 0 ]
-  [[ "$(watchdog_log)" == *"is not a JSON object"* ]]
+  [ "$(mail_count || true)" -eq 0 ]
+  [[ "$(watchdog_log || true)" == *"is not a JSON object"* ]]
 }
 
 # ===========================================================================
@@ -456,7 +456,7 @@ supervisor_status() {
     PS_FILE="${PS_FILE}" ALIVE_FILE="${ALIVE_FILE}" MAIL_LOG="${MAIL_LOG}" \
     /bin/bash "${WATCHDOG}"
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 }
 
 @test "a missing alert library stops the watchdog with an ERROR in its log" {
@@ -464,7 +464,7 @@ supervisor_status() {
 
   run run_cycle
   [ "$status" -eq 1 ]
-  [[ "$(watchdog_log)" == *"ERROR: alert library not found"* ]]
+  [[ "$(watchdog_log || true)" == *"ERROR: alert library not found"* ]]
 }
 
 # ===========================================================================
@@ -487,21 +487,21 @@ SETUP_SCRIPT="${REPO_DIR}/app-setup/podman-transmission-setup.sh"
       echo "stall-watchdog deploy never substitutes ${placeholder}" >&2
       return 1
     }
-  done < <(grep -oE '__[A-Z_]+__' "${TEMPLATE}" | sort -u)
+  done < <(grep -oE '__[A-Z_]+__' "${TEMPLATE}" | sort -u || true)
 }
 
 @test "deploy: only when it can send mail, and with the alert library" {
   run grep -A 16 'STALL_WATCHDOG_DEPLOY=true' "${SETUP_SCRIPT}"
   [[ "$output" == *"MONITORING_EMAIL"* ]]
   [[ "$output" == *"msmtp"* ]]
-  run grep -A 12 'if \[\[ "${STALL_WATCHDOG_DEPLOY}" == "true" \]\]; then' "${SETUP_SCRIPT}"
-  [[ "$output" == *'sudo cp "${ALERT_LIB_TEMPLATE}" "${ALERT_LIB_DEST}"'* ]]
+  run grep -A 12 "if \\[\\[ \"\${STALL_WATCHDOG_DEPLOY}\" == \"true\" \\]\\]; then" "${SETUP_SCRIPT}"
+  [[ "$output" == *"sudo cp \"\${ALERT_LIB_TEMPLATE}\" \"\${ALERT_LIB_DEST}\""* ]]
 }
 
 @test "deploy: the LaunchAgent runs /bin/bash every 2 minutes, starting at load" {
   run grep -A 26 'stall-watchdog.plist"' "${SETUP_SCRIPT}"
   [[ "$output" == *"<string>/bin/bash</string>"* ]]
-  [[ "$output" == *'<string>${OPERATOR_HOME}/.local/bin/stall-watchdog.sh</string>'* ]]
+  [[ "$output" == *"<string>\${OPERATOR_HOME}/.local/bin/stall-watchdog.sh</string>"* ]]
   [[ "$output" == *"<integer>120</integer>"* ]]
   [[ "$output" == *"<key>RunAtLoad</key>"*"<true/>"* ]]
 }

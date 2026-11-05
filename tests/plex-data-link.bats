@@ -50,7 +50,7 @@ teardown() {
   ensure_plex_data_link
   [ -d "${PLEX_DATA_DIR}" ]
   [ -L "${PLEX_DATA_LINK}" ]
-  [ "$(readlink "${PLEX_DATA_LINK}")" = "${PLEX_DATA_DIR}" ]
+  [ "$(readlink "${PLEX_DATA_LINK}" || true)" = "${PLEX_DATA_DIR}" ]
 }
 
 @test "existing data, no link (TILSIT before 2026-10-22): adds the link, keeps the data" {
@@ -58,8 +58,8 @@ teardown() {
   echo real >"${PLEX_DATA_DIR}/Preferences.xml"
 
   ensure_plex_data_link
-  [ "$(readlink "${PLEX_DATA_LINK}")" = "${PLEX_DATA_DIR}" ]
-  [ "$(cat "${PLEX_DATA_LINK}/Preferences.xml")" = "real" ]
+  [ "$(readlink "${PLEX_DATA_LINK}" || true)" = "${PLEX_DATA_DIR}" ]
+  [ "$(cat "${PLEX_DATA_LINK}/Preferences.xml" || true)" = "real" ]
 }
 
 @test "a correct link is left as it is" {
@@ -68,7 +68,7 @@ teardown() {
 
   run ensure_plex_data_link
   [ "$status" -eq 0 ]
-  [ "$(readlink "${PLEX_DATA_LINK}")" = "${PLEX_DATA_DIR}" ]
+  [ "$(readlink "${PLEX_DATA_LINK}" || true)" = "${PLEX_DATA_DIR}" ]
 }
 
 @test "a link to the wrong place is repointed" {
@@ -76,7 +76,7 @@ teardown() {
   ln -s "${TEST_TMPDIR}/elsewhere" "${PLEX_DATA_LINK}"
 
   ensure_plex_data_link
-  [ "$(readlink "${PLEX_DATA_LINK}")" = "${PLEX_DATA_DIR}" ]
+  [ "$(readlink "${PLEX_DATA_LINK}" || true)" = "${PLEX_DATA_DIR}" ]
   [ -d "${TEST_TMPDIR}/elsewhere" ]
 }
 
@@ -88,11 +88,11 @@ teardown() {
 
   ensure_plex_data_link
   [ -L "${PLEX_DATA_LINK}" ]
-  [ "$(cat "${PLEX_DATA_DIR}/Preferences.xml")" = "migrated" ]
+  [ "$(cat "${PLEX_DATA_DIR}/Preferences.xml" || true)" = "migrated" ]
   local backups
   backups=$(find "$(dirname "${PLEX_DATA_DIR}")" -maxdepth 1 -name 'Plex Media Server.backup.*')
   [ -n "${backups}" ]
-  [ "$(cat "${backups}/Preferences.xml")" = "old" ]
+  [ "$(cat "${backups}/Preferences.xml" || true)" = "old" ]
 }
 
 @test "a real directory with no data directory yet is adopted" {
@@ -101,7 +101,7 @@ teardown() {
 
   ensure_plex_data_link
   [ -L "${PLEX_DATA_LINK}" ]
-  [ "$(cat "${PLEX_DATA_DIR}/Preferences.xml")" = "only" ]
+  [ "$(cat "${PLEX_DATA_DIR}/Preferences.xml" || true)" = "only" ]
 }
 
 @test "two real directories without a migration: error, and nothing is moved" {
@@ -112,14 +112,14 @@ teardown() {
   run ensure_plex_data_link
   [ "$status" -eq 1 ]
   [ -d "${PLEX_DATA_LINK}" ] && [ ! -L "${PLEX_DATA_LINK}" ]
-  [ "$(cat "${PLEX_DATA_DIR}/Preferences.xml")" = "real" ]
-  [ "$(cat "${PLEX_DATA_LINK}/Preferences.xml")" = "stray" ]
+  [ "$(cat "${PLEX_DATA_DIR}/Preferences.xml" || true)" = "real" ]
+  [ "$(cat "${PLEX_DATA_LINK}/Preferences.xml" || true)" = "stray" ]
 }
 
 @test "main runs ensure_plex_data_link before the LaunchAgent is written" {
   local link_line agent_line
-  link_line=$(grep -n '^  if ! ensure_plex_data_link; then' "${SETUP_SCRIPT}" | cut -d: -f1)
-  agent_line=$(grep -n '^  configure_plex_autostart$' "${SETUP_SCRIPT}" | cut -d: -f1)
+  link_line=$({ grep -n '^  if ! ensure_plex_data_link; then' "${SETUP_SCRIPT}" || true; } | cut -d: -f1)
+  agent_line=$({ grep -n '^  configure_plex_autostart$' "${SETUP_SCRIPT}" || true; } | cut -d: -f1)
   [ -n "${link_line}" ] && [ -n "${agent_line}" ]
   [ "${link_line}" -lt "${agent_line}" ]
 }
