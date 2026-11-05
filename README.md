@@ -305,6 +305,8 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 
 **TouchID not working for operator**: By design. TouchID and automatic login are mutually exclusive on macOS. The admin account has TouchID; the operator account has auto-login.
 
+**Passwords app rejects the operator password after a reboot**: Known limitation of auto-login. In a session that auto-login started, the Passwords app rejects the correct password (the field shakes). Log out of the operator account and log back in by typing the password; Passwords then unlocks. Check the SecureToken first: `sysadminctl -secureTokenStatus operator` must say `ENABLED` (`first-boot.sh` grants it). Confirmed on 2026-11-05, see [#231](https://github.com/smartwatermelon/mac-server-setup/issues/231).
+
 **Homebrew not found**: Restart Terminal or `source ~/.bash_profile`.
 
 **1Password items not found**: Vault name and item titles in `config.conf` have to match exactly.
