@@ -67,10 +67,13 @@ record that the home VPN uses (`docs/apps/home-vpn-README.md`), not
 `app-setup/templates/com.cloudflare-tunnel.plist`,
 `app-setup/access-policy-watchdog-setup.sh`,
 `app-setup/templates/access-policy-watchdog.sh`,
-`app-setup/templates/com.access-policy-watchdog.plist`, the tunnel site,
+`app-setup/templates/com.access-policy-watchdog.plist`,
+`app-setup/tunnel-watchdog-setup.sh`,
+`app-setup/templates/tunnel-watchdog.sh`,
+`app-setup/templates/com.tunnel-watchdog.plist`, the tunnel site,
 `(site_routes)` and `(access_log)` in `app-setup/templates/Caddyfile`,
 `tests/caddyfile.bats`, `tests/cloudflared-wrapper.bats`,
-`tests/access-policy-watchdog.bats`,
+`tests/access-policy-watchdog.bats`, `tests/tunnel-watchdog.bats`,
 `tests/fixtures/cloudflare-access/`
 
 **Documentation**: `docs/apps/cloudflare-tunnel-README.md` (and
@@ -82,14 +85,16 @@ site must not import `common_config` or serve `/media`, why its routes sit
 inside a `handle`, the tunnel token chain (System keychain →
 wrapper → `TUNNEL_TOKEN`, never `service install`), Cloudflare object ids,
 the drift watchdog's expected rule, tunnel ingress and alert keys, why it is an
-operator LaunchAgent (msmtp config ownership), revocation, and rollback.
+operator LaunchAgent (msmtp config ownership), the tunnel health watchdog
+(`/ready`, 3-check streak), revocation, and rollback.
 
 ### Monitoring (watchdogs, alert email)
 
 **Files**: `app-setup/templates/alert-lib.sh`,
 `app-setup/templates/plex-watchdog.sh`,
 `app-setup/templates/pia-port-watchdog.sh`,
-`app-setup/templates/stall-watchdog.sh`, `app-setup/msmtp-setup.sh`,
+`app-setup/templates/stall-watchdog.sh`,
+`app-setup/templates/tunnel-watchdog.sh`, `app-setup/msmtp-setup.sh`,
 `app-setup/plex-watchdog-setup.sh`, the pia-port-watchdog and stall-watchdog
 sections and the supervisor status file in
 `app-setup/podman-transmission-setup.sh`, `tests/alert-lib.bats`,

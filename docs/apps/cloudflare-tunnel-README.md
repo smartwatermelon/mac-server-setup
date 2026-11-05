@@ -154,11 +154,15 @@ the path as the password.
 | `app-setup/access-policy-watchdog-setup.sh` | (run with sudo) |
 | `app-setup/templates/access-policy-watchdog.sh` | `~operator/.local/bin/access-policy-watchdog` (0700) |
 | `app-setup/templates/com.access-policy-watchdog.plist` | `~operator/Library/LaunchAgents/com.<host>.access-policy-watchdog.plist` |
-| `tests/cloudflared-wrapper.bats`, `tests/access-policy-watchdog.bats`, `tests/caddyfile.bats` | |
+| `app-setup/tunnel-watchdog-setup.sh` | (run with sudo) |
+| `app-setup/templates/tunnel-watchdog.sh` | `~operator/.local/bin/tunnel-watchdog` (0700) |
+| `app-setup/templates/com.tunnel-watchdog.plist` | `~operator/Library/LaunchAgents/com.<host>.tunnel-watchdog.plist` |
+| `tests/cloudflared-wrapper.bats`, `tests/access-policy-watchdog.bats`, `tests/tunnel-watchdog.bats`, `tests/caddyfile.bats` | |
 
 Logs: `~operator/.local/state/cloudflared/cloudflared-error.log` (cloudflared
-logs to stderr), `~operator/.local/state/access-policy-watchdog.log`. Both
-are in `config/logrotate.conf`.
+logs to stderr), `~operator/.local/state/access-policy-watchdog.log`,
+`~operator/.local/state/tunnel-watchdog.log`. All are in
+`config/logrotate.conf`.
 
 `config.conf` keys: `EXTERNAL_HOSTNAME`, `TUNNEL_METRICS_PORT` (default
 20241, the first port cloudflared tries on its own; it was free on
@@ -271,6 +275,43 @@ sudo launchctl kickstart -kp gui/$(id -u operator)/com.tilsit.access-policy-watc
 tail -f /Users/operator/.local/state/access-policy-watchdog.log
 ```
 
+## Tunnel health watchdog
+
+The drift watchdog checks the Cloudflare configuration, not whether the
+tunnel is up. When cloudflared stops or loses every edge connection,
+`tilsit.vip` shows a Cloudflare error page to every visitor, and nothing on
+the server notices. `tunnel-watchdog` covers that (issue #237).
+
+It runs every 60 s (operator LaunchAgent, `com.<host>.tunnel-watchdog`,
+RunAtLoad) and requests `http://127.0.0.1:<TUNNEL_METRICS_PORT>/ready`.
+cloudflared answers 200 while at least one edge connection is registered,
+and 503 when none is. No answer means the daemon is not running.
+
+| Key | Bad when | Notes |
+| --- | --- | --- |
+| `tunnel_down` | 3 checks in a row (about 3 minutes) got a non-200 answer or no answer | One check that fails is not an alert: a reconnect or a daemon restart (`KeepAlive`, `brew upgrade`) takes seconds. Reminder every 12 h. Recovery email when `/ready` returns 200 again. |
+
+It only alerts. It does not restart the daemon: launchd's `KeepAlive`
+already does that, so an alert means a restart did not fix it.
+
+The OK heartbeat (hourly) logs the number of ready connections, normally 4.
+A lower number is still ready, so it does not alert, but the log shows it.
+
+State: `~operator/.config/tunnel-watchdog/state.json`. Operator, not root,
+for the same msmtp reason as the drift watchdog. No token is needed: the
+metrics server listens on loopback with no authentication.
+
+```bash
+cd ~/Developer/mac-server-setup/app-setup
+sudo ./tunnel-watchdog-setup.sh
+sudo -H -u operator /bin/bash /Users/operator/.local/bin/tunnel-watchdog --check
+tail -f /Users/operator/.local/state/tunnel-watchdog.log
+```
+
+The setup script uses the same `TUNNEL_METRICS_PORT` default and check as
+`cloudflared-setup.sh` (a test keeps the defaults equal). It loads the agent
+only if `--check` passes (exit 0 ready, 1 not ready; no mail, no state).
+
 ## Revocation
 
 - Remove the email from the Access policy, or revoke active sessions in Zero
@@ -300,6 +341,7 @@ Stopping only the tunnel daemon makes Cloudflare show an error page for
 bats tests/caddyfile.bats              # tunnel site and site_routes
 bats tests/cloudflared-wrapper.bats    # token via env only; keychain miss
 bats tests/access-policy-watchdog.bats # expected rule and ingress, widenings, 404, API errors
+bats tests/tunnel-watchdog.bats        # /ready 200, 503, no answer; failure streak; recovery
 ```
 
 The watchdog tests run the rendered script with `/bin/bash` (bash 3.2, as
