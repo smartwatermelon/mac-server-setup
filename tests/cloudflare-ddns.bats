@@ -48,6 +48,15 @@ teardown() {
   rm -rf "${TEST_TMPDIR}"
 }
 
+# Mocks are sourced from a file: shellcheck 0.11 reports a function
+# redefined in a later @test as never invoked (SC2329).
+install_mocks() {
+  local mocks="${TEST_TMPDIR}/mocks.sh"
+  cat >"${mocks}"
+  # shellcheck source=/dev/null
+  source "${mocks}"
+}
+
 # ---------------------------------------------------------------------------
 # is_ipv4 validator
 # ---------------------------------------------------------------------------
@@ -122,6 +131,7 @@ teardown() {
 }
 
 @test "fetch_public_ip: rejects a provider returning a private IP" {
+  install_mocks <<'MOCKS'
   curl() {
     local url="${!#}"
     case "${url}" in
@@ -130,6 +140,7 @@ teardown() {
       *) return 6 ;;
     esac
   }
+MOCKS
   export -f curl
 
   run fetch_public_ip
@@ -176,6 +187,7 @@ teardown() {
 
 @test "main: no PATCH when public IP matches current A record" {
   # Mock keychain
+  install_mocks <<'MOCKS'
   read_cf_token() { echo "mock-token"; }
   # Mock public IP
   fetch_public_ip() { echo "203.0.113.10"; }
@@ -188,6 +200,7 @@ teardown() {
     echo "PATCH SHOULD NOT BE CALLED" >&2
     return 99
   }
+MOCKS
   export -f read_cf_token fetch_public_ip cloudflare_get_record cloudflare_patch_record
 
   run main
@@ -202,6 +215,7 @@ teardown() {
 # ---------------------------------------------------------------------------
 
 @test "main: PATCH called when public IP differs" {
+  install_mocks <<'MOCKS'
   read_cf_token() { echo "mock-token"; }
   fetch_public_ip() { echo "198.51.100.5"; }
   cloudflare_get_record() {
@@ -212,12 +226,13 @@ teardown() {
     echo "$2" >"${TEST_TMPDIR}/patched_ip"
     echo '{"success": true, "result": {"content": "'"$2"'"}}'
   }
+MOCKS
   export -f read_cf_token fetch_public_ip cloudflare_get_record cloudflare_patch_record
 
   run main
   [ "$status" -eq 0 ]
   [ -f "${TEST_TMPDIR}/patched_ip" ]
-  [ "$(cat "${TEST_TMPDIR}/patched_ip")" = "198.51.100.5" ]
+  [ "$(cat "${TEST_TMPDIR}/patched_ip" || true)" = "198.51.100.5" ]
   run grep -c "IP change detected" "${LOG_FILE}"
   [ "$output" = "1" ]
   run grep -c "cloudflare A-record updated" "${LOG_FILE}"
@@ -229,7 +244,9 @@ teardown() {
 # ---------------------------------------------------------------------------
 
 @test "main: fails when keychain token is missing" {
+  install_mocks <<'MOCKS'
   read_cf_token() { return 1; }
+MOCKS
   export -f read_cf_token
 
   run main
@@ -243,12 +260,14 @@ teardown() {
 # ---------------------------------------------------------------------------
 
 @test "main: public IP fetch failure is a soft-fail (warn, exit 0)" {
+  install_mocks <<'MOCKS'
   read_cf_token() { echo "mock-token"; }
   fetch_public_ip() { return 1; }
   cloudflare_get_record() {
     echo "CF GET SHOULD NOT RUN" >&2
     return 99
   }
+MOCKS
   export -f read_cf_token fetch_public_ip cloudflare_get_record
 
   run main
@@ -262,11 +281,13 @@ teardown() {
 # ---------------------------------------------------------------------------
 
 @test "main: cloudflare GET rejected (success:false) is a hard-fail" {
+  install_mocks <<'MOCKS'
   read_cf_token() { echo "mock-token"; }
   fetch_public_ip() { echo "198.51.100.5"; }
   cloudflare_get_record() {
     echo '{"success": false, "errors": [{"code": 10000, "message": "Authentication failed"}]}'
   }
+MOCKS
   export -f read_cf_token fetch_public_ip cloudflare_get_record
 
   run main
@@ -276,6 +297,7 @@ teardown() {
 }
 
 @test "main: cloudflare GET network failure is a soft-fail (WARN, exit 0)" {
+  install_mocks <<'MOCKS'
   read_cf_token() { echo "mock-token"; }
   fetch_public_ip() { echo "198.51.100.5"; }
   # Simulate transient: empty body + nonzero exit
@@ -285,6 +307,7 @@ teardown() {
     echo "SHOULD NOT RUN" >&2
     return 99
   }
+MOCKS
   export -f read_cf_token fetch_public_ip cloudflare_get_record cloudflare_patch_record
 
   run main
@@ -298,6 +321,7 @@ teardown() {
 # ---------------------------------------------------------------------------
 
 @test "main: cloudflare PATCH rejected (success:false) is a hard-fail" {
+  install_mocks <<'MOCKS'
   read_cf_token() { echo "mock-token"; }
   fetch_public_ip() { echo "198.51.100.5"; }
   cloudflare_get_record() {
@@ -306,6 +330,7 @@ teardown() {
   cloudflare_patch_record() {
     echo '{"success": false, "errors": [{"code": 9999, "message": "Rate limited"}]}'
   }
+MOCKS
   export -f read_cf_token fetch_public_ip cloudflare_get_record cloudflare_patch_record
 
   run main
@@ -317,12 +342,14 @@ teardown() {
 }
 
 @test "main: cloudflare PATCH network failure is a soft-fail (WARN, exit 0)" {
+  install_mocks <<'MOCKS'
   read_cf_token() { echo "mock-token"; }
   fetch_public_ip() { echo "198.51.100.5"; }
   cloudflare_get_record() {
     echo '{"success": true, "result": {"content": "203.0.113.10"}}'
   }
   cloudflare_patch_record() { return 28; } # curl timeout exit code
+MOCKS
   export -f read_cf_token fetch_public_ip cloudflare_get_record cloudflare_patch_record
 
   run main
@@ -337,6 +364,7 @@ teardown() {
 
 @test "fetch_public_ip: falls through to next provider when first returns garbage" {
   # Override curl: return garbage for first provider, valid IP for second.
+  install_mocks <<'MOCKS'
   curl() {
     local url="${!#}" # last positional
     case "${url}" in
@@ -345,6 +373,7 @@ teardown() {
       *) return 6 ;;
     esac
   }
+MOCKS
   export -f curl
 
   run fetch_public_ip
@@ -353,6 +382,7 @@ teardown() {
 }
 
 @test "fetch_public_ip: fails when every provider returns garbage or errors" {
+  install_mocks <<'MOCKS'
   curl() {
     local url="${!#}"
     case "${url}" in
@@ -362,6 +392,7 @@ teardown() {
       *) return 6 ;;
     esac
   }
+MOCKS
   export -f curl
 
   run fetch_public_ip
