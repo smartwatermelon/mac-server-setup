@@ -155,6 +155,24 @@ test architecture (BATS, TEST_RUNNER mode), file stability checks, the year
 guard on non-strict movie matches, and the "could not process" email
 (`alerts.email`)
 
+### TVmaze scrobble (Plex → TVmaze watched sync)
+
+**Files**: `app-setup/tvmaze-scrobble-setup.sh`,
+`app-setup/templates/tvmaze-scrobble.sh`,
+`app-setup/templates/tvmaze-scrobble-listener.py`,
+`app-setup/templates/com.tvmaze-scrobble.plist`,
+`app-setup/templates/com.tvmaze-reconcile.plist`,
+`tests/tvmaze-scrobble.bats`, `tests/fixtures/tvmaze-scrobble/`
+
+**Documentation**: `docs/apps/tvmaze-scrobble-README.md`
+
+**Covers**: The Plex webhook listener (loopback, multipart, hands off to the
+worker), the show matching order (TVDB → IMDb → exact title), why the webhook
+filters on Account.title but the hourly reconcile filters on the
+server-local accountID, the synced/failed/seeded state files and the
+first-run seed, one email per failing episode, credentials on curl's stdin
+(never argv), and key rotation.
+
 ## Testing
 
 ```bash
