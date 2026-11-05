@@ -187,11 +187,11 @@ sig_of() {
   [ -x "${STABLE_ROOT}/podman/bin/podman-mac-helper" ]
   [ -x "${STABLE_ROOT}/podman/libexec/podman/vfkit" ]
   [ -x "${STABLE_ROOT}/podman/libexec/podman/gvproxy" ]
-  [ "$(readlink "${STABLE_ROOT}/podman/bin/podman")" == "podman-remote" ]
+  [ "$(readlink "${STABLE_ROOT}/podman/bin/podman" || true)" == "podman-remote" ]
 
   # The target got the stable identifier and the local certificate.
-  [ "$(sig_of podman-remote)" == "local.testhost.stable.podman-remote|${CERT_SHA1}" ]
-  [ "$(cat "${STABLE_ROOT}/podman/.source-version")" == "../Cellar/podman/6.1.1" ]
+  [ "$(sig_of podman-remote || true)" == "local.testhost.stable.podman-remote|${CERT_SHA1}" ]
+  [ "$(cat "${STABLE_ROOT}/podman/.source-version" || true)" == "../Cellar/podman/6.1.1" ]
 }
 
 @test "the stable copy is a real file, not a link back into the Cellar" {
@@ -256,10 +256,10 @@ sig_of() {
   run "${SCRIPT}"
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"synced ../Cellar/podman/6.2.0"* ]]
-  [ "$(cat "${STABLE_ROOT}/podman/.source-version")" == "../Cellar/podman/6.2.0" ]
-  [ "$("${STABLE_ROOT}/podman/bin/podman-remote")" == "podman-remote 6.2.0" ]
+  [ "$(cat "${STABLE_ROOT}/podman/.source-version" || true)" == "../Cellar/podman/6.2.0" ]
+  [ "$("${STABLE_ROOT}/podman/bin/podman-remote" || true)" == "podman-remote 6.2.0" ]
   # Same identifier and certificate as before: the requirement is stable.
-  [ "$(sig_of podman-remote)" == "local.testhost.stable.podman-remote|${CERT_SHA1}" ]
+  [ "$(sig_of podman-remote || true)" == "local.testhost.stable.podman-remote|${CERT_SHA1}" ]
 }
 
 @test "--check exits 1 when the mirror is behind the installed formula" {
@@ -281,7 +281,7 @@ sig_of() {
 
   run "${SCRIPT}"
   [ "${status}" -eq 0 ]
-  [ "$(sig_of podman-remote)" == "local.testhost.stable.podman-remote|${CERT_SHA1}" ]
+  [ "$(sig_of podman-remote || true)" == "local.testhost.stable.podman-remote|${CERT_SHA1}" ]
 }
 
 @test "--force re-signs an up-to-date mirror" {
@@ -392,12 +392,12 @@ MOCK_EOF
   local dst="${STABLE_ROOT}/podman/bin/podman-mac-helper"
   printf '#!/bin/sh\necho helpeX\n' >"${src}"
   touch -r "${dst}" "${src}"
-  [ "$(stat -f %z "${src}")" -eq "$(stat -f %z "${dst}")" ]
-  [ "$(stat -f %m "${src}")" -eq "$(stat -f %m "${dst}")" ]
+  [ "$(stat -f %z "${src}" || true)" -eq "$(stat -f %z "${dst}" || true)" ]
+  [ "$(stat -f %m "${src}" || true)" -eq "$(stat -f %m "${dst}" || true)" ]
 
   run "${SCRIPT}" --force
   [ "${status}" -eq 0 ]
-  [ "$("${dst}")" == "helpeX" ]
+  [ "$("${dst}" || true)" == "helpeX" ]
 }
 
 @test "--check treats an uninstalled formula as skipped, not stale" {
@@ -428,9 +428,9 @@ make_fake_coreutils() {
   run "${SCRIPT}"
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"coreutils: synced ../Cellar/coreutils/9.11"* ]]
-  [ "$(grep '^#SIG:' "${STABLE_ROOT}/coreutils/bin/gtimeout" | sed 's/^#SIG://')" \
+  [ "$(grep '^#SIG:' "${STABLE_ROOT}/coreutils/bin/gtimeout" | sed 's/^#SIG://' || true)" \
     == "local.testhost.stable.gtimeout|${CERT_SHA1}" ]
-  [ "$(readlink "${STABLE_ROOT}/coreutils/bin/timeout")" == "gtimeout" ]
+  [ "$(readlink "${STABLE_ROOT}/coreutils/bin/timeout" || true)" == "gtimeout" ]
   run grep -l '^#SIG:' "${STABLE_ROOT}/coreutils/bin/gdate"
   [ -z "${output}" ]
 
@@ -466,7 +466,7 @@ make_fake_bash() {
   run "${SCRIPT}"
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"bash: synced ../Cellar/bash/5.3.20"* ]]
-  [ "$(grep '^#SIG:' "${STABLE_ROOT}/bash/bin/bash" | sed 's/^#SIG://')" \
+  [ "$(grep '^#SIG:' "${STABLE_ROOT}/bash/bin/bash" | sed 's/^#SIG://' || true)" \
     == "local.testhost.stable.bash|${CERT_SHA1}" ]
   run grep -l '^#SIG:' "${STABLE_ROOT}/bash/bin/bashbug"
   [ -z "${output}" ]
@@ -483,7 +483,7 @@ make_fake_bash() {
   run "${SCRIPT}"
   [ "${status}" -eq 0 ]
   [[ "${output}" == *"bash: synced ../Cellar/bash/5.3.21"* ]]
-  [ "$("${STABLE_ROOT}/bash/bin/bash")" == "bash 5.3.21" ]
-  [ "$(grep '^#SIG:' "${STABLE_ROOT}/bash/bin/bash" | sed 's/^#SIG://')" \
+  [ "$("${STABLE_ROOT}/bash/bin/bash" || true)" == "bash 5.3.21" ]
+  [ "$(grep '^#SIG:' "${STABLE_ROOT}/bash/bin/bash" | sed 's/^#SIG://' || true)" \
     == "local.testhost.stable.bash|${CERT_SHA1}" ]
 }

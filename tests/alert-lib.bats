@@ -90,7 +90,7 @@ state_field() {
 
   run alert_send "subject" "body"
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 }
 
 @test "alert_send: ALERT_MSMTP overrides the Homebrew path" {
@@ -101,13 +101,13 @@ state_field() {
 
   run alert_send "subject" "body"
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 }
 
 @test "alert_send: without HOMEBREW_PREFIX it derives the prefix from the CPU" {
   unset HOMEBREW_PREFIX
   local expected="/usr/local/bin/msmtp"
-  if [[ "$(uname -m)" == "arm64" ]]; then
+  if [[ "$(uname -m || true)" == "arm64" ]]; then
     expected="/opt/homebrew/bin/msmtp"
   fi
 
@@ -130,7 +130,7 @@ state_field() {
   run alert_send "subject" "body"
   [ "$status" -eq 1 ]
   grep -q "ERROR: msmtp config not found at ${HOME}/.config/msmtp/config" "${LOG_FILE}"
-  [ "$(mail_count)" -eq 0 ]
+  [ "$(mail_count || true)" -eq 0 ]
 }
 
 @test "alert_send: ALERT_MSMTP_CONFIG overrides the config path" {
@@ -164,7 +164,7 @@ state_field() {
   grep -q "authentication failed" "${LOG_FILE}"
   grep -q "535 5.7.8 Username and Password not accepted" "${LOG_FILE}"
   # Folded into one log line.
-  [ "$(grep -c 'exited 77' "${LOG_FILE}")" -eq 1 ]
+  [ "$(grep -c 'exited 77' "${LOG_FILE}" || true)" -eq 1 ]
 }
 
 @test "alert_send: without a caller log function, errors go to stderr" {
@@ -188,7 +188,7 @@ line two"
   local expected
   expected=$(printf '%s\n' "=== MAIL ===" "Subject: [HOST] Something broke" \
     "To: ops@example.com" "" "line one" "line two")
-  [ "$(cat "${MAIL_LOG}")" = "${expected}" ]
+  [ "$(cat "${MAIL_LOG}" || true)" = "${expected}" ]
   grep -q -- "-C ${HOME}/.config/msmtp/config ops@example.com" "${MSMTP_ARGS_LOG}"
 }
 
@@ -205,18 +205,18 @@ line two"
 @test "alert_state_write: writes atomically and leaves no temp file" {
   alert_state_write '{"a": 1}'
 
-  [ "$(state_field '.a')" = "1" ]
-  [ "$(find "${TEST_TMPDIR}" -name 'state.json.tmp.*' | wc -l | tr -d ' ')" -eq 0 ]
+  [ "$(state_field '.a' || true)" = "1" ]
+  [ "$(find "${TEST_TMPDIR}" -name 'state.json.tmp.*' | wc -l | tr -d ' ' || true)" -eq 0 ]
 }
 
 @test "alert_state_get: value, default for missing, default for false" {
   alert_state_write '{"n": 5, "s": "abc", "f": false}'
 
-  [ "$(alert_state_get n 0)" = "5" ]
-  [ "$(alert_state_get s)" = "abc" ]
-  [ "$(alert_state_get missing dflt)" = "dflt" ]
+  [ "$(alert_state_get n 0 || true)" = "5" ]
+  [ "$(alert_state_get s || true)" = "abc" ]
+  [ "$(alert_state_get missing dflt || true)" = "dflt" ]
   # jq's // treats false as absent; pia-port-watchdog relies on the default.
-  [ "$(alert_state_get f "false")" = "false" ]
+  [ "$(alert_state_get f "false" || true)" = "false" ]
 }
 
 @test "state helpers fail loudly when STATE_FILE is unset" {
@@ -234,11 +234,11 @@ line two"
 @test "alert_transition: entering the bad state sends one alert" {
   alert_transition tcc true "[HOST] TCC prompt pending" "click Allow"
 
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Subject: \[HOST\] TCC prompt pending" "${MAIL_LOG}"
-  [ "$(state_field '.transitions.tcc.alerted')" = "true" ]
-  [ "$(state_field '.transitions.tcc.since | type')" = "number" ]
-  [ "$(state_field '.transitions.tcc.last_sent | type')" = "number" ]
+  [ "$(state_field '.transitions.tcc.alerted' || true)" = "true" ]
+  [ "$(state_field '.transitions.tcc.since | type' || true)" = "number" ]
+  [ "$(state_field '.transitions.tcc.last_sent | type' || true)" = "number" ]
   # The watchdog's own log must show the alert went out, not just msmtp.log.
   grep -q "ALERT sent: tcc: \[HOST\] TCC prompt pending" "${LOG_FILE}"
 }
@@ -246,7 +246,7 @@ line two"
 @test "alert_transition: a failed send logs no ALERT sent line" {
   touch "${MSMTP_FAIL_FLAG}"
   run alert_transition tcc true "subject" "body"
-  [ "$(grep -c 'ALERT sent' "${LOG_FILE}")" -eq 0 ]
+  [ "$(grep -c 'ALERT sent' "${LOG_FILE}" || true)" -eq 0 ]
 }
 
 @test "alert_transition: staying bad sends nothing more" {
@@ -254,16 +254,16 @@ line two"
   alert_transition tcc true "subject" "body"
   alert_transition tcc true "subject" "body"
 
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 }
 
 @test "alert_transition: a failed send is not marked alerted and retries next call" {
   touch "${MSMTP_FAIL_FLAG}"
   run alert_transition tcc true "subject" "body"
   [ "$status" -eq 1 ]
-  [ "$(mail_count)" -eq 0 ]
-  [ "$(state_field '.transitions.tcc.alerted')" = "false" ]
-  [ "$(state_field '.transitions.tcc.last_sent')" = "null" ]
+  [ "$(mail_count || true)" -eq 0 ]
+  [ "$(state_field '.transitions.tcc.alerted' || true)" = "false" ]
+  [ "$(state_field '.transitions.tcc.last_sent' || true)" = "null" ]
   grep -q "exited 77" "${LOG_FILE}"
   local since
   since="$(state_field '.transitions.tcc.since')"
@@ -271,26 +271,26 @@ line two"
   rm -f "${MSMTP_FAIL_FLAG}"
   run alert_transition tcc true "subject" "body"
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 1 ]
-  [ "$(state_field '.transitions.tcc.alerted')" = "true" ]
+  [ "$(mail_count || true)" -eq 1 ]
+  [ "$(state_field '.transitions.tcc.alerted' || true)" = "true" ]
   # "since" is when the condition started, not when the mail finally went out.
-  [ "$(state_field '.transitions.tcc.since')" = "${since}" ]
+  [ "$(state_field '.transitions.tcc.since' || true)" = "${since}" ]
 }
 
 @test "alert_transition: recovery sends one email, then resets" {
   alert_transition tcc true "[HOST] TCC prompt pending" "body"
   alert_transition tcc false "[HOST] TCC prompt pending" "body"
 
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
   grep -q "Subject: RESOLVED: \[HOST\] TCC prompt pending" "${MAIL_LOG}"
-  [ "$(state_field '.transitions.tcc')" = "null" ]
+  [ "$(state_field '.transitions.tcc' || true)" = "null" ]
 
   alert_transition tcc false "[HOST] TCC prompt pending" "body"
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
 
   # Re-armed: the next bad state alerts again.
   alert_transition tcc true "[HOST] TCC prompt pending" "body"
-  [ "$(mail_count)" -eq 3 ]
+  [ "$(mail_count || true)" -eq 3 ]
 }
 
 @test "alert_transition: custom recovery subject and body are used" {
@@ -303,7 +303,7 @@ line two"
 
 @test "alert_transition: good without a prior alert sends nothing" {
   alert_transition k false "down" "body"
-  [ "$(mail_count)" -eq 0 ]
+  [ "$(mail_count || true)" -eq 0 ]
   [ ! -f "${STATE_FILE}" ]
 }
 
@@ -313,23 +313,23 @@ line two"
   rm -f "${MSMTP_FAIL_FLAG}"
 
   alert_transition k false "down" "body"
-  [ "$(mail_count)" -eq 0 ]
-  [ "$(state_field '.transitions.k')" = "null" ]
+  [ "$(mail_count || true)" -eq 0 ]
+  [ "$(state_field '.transitions.k' || true)" = "null" ]
 }
 
 @test "alert_transition: two keys are independent" {
   alert_transition a true "A down" "body"
   alert_transition b false "B down" "body"
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 
   alert_transition a true "A down" "body"
   alert_transition b true "B down" "body"
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
 
   alert_transition a false "A down" "body"
-  [ "$(mail_count)" -eq 3 ]
-  [ "$(state_field '.transitions.a')" = "null" ]
-  [ "$(state_field '.transitions.b.alerted')" = "true" ]
+  [ "$(mail_count || true)" -eq 3 ]
+  [ "$(state_field '.transitions.a' || true)" = "null" ]
+  [ "$(state_field '.transitions.b.alerted' || true)" = "true" ]
 }
 
 @test "alert_transition: other top-level state keys are preserved" {
@@ -338,31 +338,31 @@ line two"
   alert_transition k true "down" "body"
   alert_transition k false "down" "body"
 
-  [ "$(state_field '.open_prompts.m1.service')" = "x" ]
-  [ "$(state_field '.last_poll')" = "t" ]
+  [ "$(state_field '.open_prompts.m1.service' || true)" = "x" ]
+  [ "$(state_field '.last_poll' || true)" = "t" ]
 }
 
 @test "alert_transition: a corrupt state file is logged and replaced" {
   echo "not json" >"${STATE_FILE}"
 
   alert_transition k true "down" "body"
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "is not a JSON object" "${LOG_FILE}"
-  [ "$(state_field '.transitions.k.alerted')" = "true" ]
+  [ "$(state_field '.transitions.k.alerted' || true)" = "true" ]
 }
 
 @test "alert_transition: a non-object .transitions is replaced, not written out as an empty file" {
   alert_state_write '{"transitions": "oops", "last_poll": "t"}'
 
   alert_transition k true "down" "body"
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "\.transitions in .* is not a JSON object" "${LOG_FILE}"
-  [ "$(state_field '.transitions.k.alerted')" = "true" ]
-  [ "$(state_field '.last_poll')" = "t" ]
+  [ "$(state_field '.transitions.k.alerted' || true)" = "true" ]
+  [ "$(state_field '.last_poll' || true)" = "t" ]
 
   # State survived, so the next run stays quiet instead of re-alerting.
   alert_transition k true "down" "body"
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 }
 
 @test "alert_transition: timestamps with a leading zero are read as decimal" {
@@ -372,40 +372,40 @@ line two"
   run alert_transition k true "down" "body"
   [ "$status" -eq 0 ]
   # last_sent 9 is decades ago, so a reminder is due.
-  [ "$(mail_count)" -eq 1 ]
-  [ "$(state_field '.transitions.k.since')" = "8" ]
+  [ "$(mail_count || true)" -eq 1 ]
+  [ "$(state_field '.transitions.k.since' || true)" = "8" ]
   jq -e . "${STATE_FILE}" >/dev/null
 }
 
 @test "alert_transition: no reminder unless ALERT_REMINDER_SECONDS is set" {
   alert_transition k true "down" "body"
   # Backdate the last send by a day.
-  alert_state_write "$(jq '.transitions.k.last_sent -= 86400' "${STATE_FILE}")"
+  alert_state_write "$(jq '.transitions.k.last_sent -= 86400' "${STATE_FILE}" || true)"
 
   alert_transition k true "down" "body"
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 }
 
 @test "alert_transition: reminder is sent after ALERT_REMINDER_SECONDS, not before" {
-  export ALERT_REMINDER_SECONDS=3600
+  ALERT_REMINDER_SECONDS=3600
   alert_transition k true "down" "body"
 
   # Inside the interval: quiet.
   alert_transition k true "down" "body"
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 
   # Past the interval: one reminder, and last_sent moves forward.
-  alert_state_write "$(jq '.transitions.k.last_sent -= 3601' "${STATE_FILE}")"
+  alert_state_write "$(jq '.transitions.k.last_sent -= 3601' "${STATE_FILE}" || true)"
   local backdated
   backdated="$(state_field '.transitions.k.last_sent')"
   alert_transition k true "down" "body"
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
   grep -q "Subject: \[reminder\] down" "${MAIL_LOG}"
-  [ "$(state_field '.transitions.k.last_sent')" -gt "${backdated}" ]
+  [ "$(state_field '.transitions.k.last_sent' || true)" -gt "${backdated}" ]
 
   # And quiet again right after.
   alert_transition k true "down" "body"
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
 }
 
 # ---------------------------------------------------------------------------
@@ -417,11 +417,11 @@ line two"
     HOMEBREW_PREFIX="${HOMEBREW_PREFIX}" MAIL_LOG="${MAIL_LOG}" \
     MSMTP_ARGS_LOG="${MSMTP_ARGS_LOG}" STATE_FILE="${STATE_FILE}" \
     MONITORING_EMAIL="ops@example.com" \
-    /bin/bash -c '. "$1" && alert_transition k true "down" "body" \
-      && alert_transition k true "down" "body" \
-      && alert_transition k false "down" "body"' _ "${LIB}"
+    /bin/bash -c ". \"\$1\" && alert_transition k true \"down\" \"body\" \\
+      && alert_transition k true \"down\" \"body\" \\
+      && alert_transition k false \"down\" \"body\"" _ "${LIB}"
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
 }
 
 @test "running the library directly refuses and exits 1" {

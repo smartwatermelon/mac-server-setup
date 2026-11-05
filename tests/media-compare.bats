@@ -57,11 +57,11 @@ make_media() {
 
 # First line of compare_media is the verdict, second is the reason.
 verdict() {
-  compare_media "$1" "$2" | head -1
+  { compare_media "$1" "$2" || true; } | head -1
 }
 
 reason() {
-  compare_media "$1" "$2" | sed -n '2p'
+  { compare_media "$1" "$2" || true; } | sed -n '2p'
 }
 
 # ---------------------------------------------------------------------------
@@ -116,8 +116,8 @@ reason() {
   a="$(make_media "a.mp4" "640x360" "200k" 2)"
   cp "${a}" "${TEST_TMPDIR}/b.mp4"
 
-  [ "$(verdict "${a}" "${TEST_TMPDIR}/b.mp4")" = "keep" ]
-  [[ "$(reason "${a}" "${TEST_TMPDIR}/b.mp4")" == *"identical"* ]]
+  [ "$(verdict "${a}" "${TEST_TMPDIR}/b.mp4" || true)" = "keep" ]
+  [[ "$(reason "${a}" "${TEST_TMPDIR}/b.mp4" || true)" == *"identical"* ]]
 }
 
 # ---------------------------------------------------------------------------
@@ -129,8 +129,8 @@ reason() {
   hd="$(make_media "hd.mp4" "1920x1080" "2000k" 2)"
   sd="$(make_media "sd.mp4" "640x360" "2000k" 2)"
 
-  [ "$(verdict "${hd}" "${sd}")" = "replace" ]
-  [[ "$(reason "${hd}" "${sd}")" == *"resolution"* ]]
+  [ "$(verdict "${hd}" "${sd}" || true)" = "replace" ]
+  [[ "$(reason "${hd}" "${sd}" || true)" == *"resolution"* ]]
 }
 
 @test "a lower-resolution download is kept out of the library" {
@@ -140,7 +140,7 @@ reason() {
   hd="$(make_media "hd.mp4" "1920x1080" "2000k" 2)"
   sd="$(make_media "sd.mp4" "640x360" "2000k" 2)"
 
-  [ "$(verdict "${sd}" "${hd}")" = "keep" ]
+  [ "$(verdict "${sd}" "${hd}" || true)" = "keep" ]
 }
 
 @test "resolution outranks size" {
@@ -150,8 +150,8 @@ reason() {
   hd="$(make_media "hd.mp4" "1280x720" "100k" 2)"
   sd="$(make_media "sd.mp4" "320x180" "4000k" 2)"
 
-  [ "$(verdict "${sd}" "${hd}")" = "keep" ]
-  [[ "$(reason "${sd}" "${hd}")" == *"resolution"* ]]
+  [ "$(verdict "${sd}" "${hd}" || true)" = "keep" ]
+  [[ "$(reason "${sd}" "${hd}" || true)" == *"resolution"* ]]
 }
 
 # ---------------------------------------------------------------------------
@@ -163,8 +163,8 @@ reason() {
   high="$(make_media "high.mp4" "640x360" "3000k" 2)"
   low="$(make_media "low.mp4" "640x360" "80k" 2)"
 
-  [ "$(verdict "${high}" "${low}")" = "replace" ]
-  [[ "$(reason "${high}" "${low}")" == *"bitrate"* ]]
+  [ "$(verdict "${high}" "${low}" || true)" = "replace" ]
+  [[ "$(reason "${high}" "${low}" || true)" == *"bitrate"* ]]
 }
 
 @test "at equal resolution, a much lower bitrate loses" {
@@ -172,7 +172,7 @@ reason() {
   high="$(make_media "high.mp4" "640x360" "3000k" 2)"
   low="$(make_media "low.mp4" "640x360" "80k" 2)"
 
-  [ "$(verdict "${low}" "${high}")" = "keep" ]
+  [ "$(verdict "${low}" "${high}" || true)" = "keep" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -186,8 +186,8 @@ reason() {
 
   # Both encodes come from the same source at the same settings, so the video
   # rules tie and the decision falls through to audio.
-  [ "$(verdict "${surround}" "${stereo}")" = "replace" ]
-  [[ "$(reason "${surround}" "${stereo}")" == *"audio channels"* ]]
+  [ "$(verdict "${surround}" "${stereo}" || true)" = "replace" ]
+  [[ "$(reason "${surround}" "${stereo}" || true)" == *"audio channels"* ]]
 }
 
 # ---------------------------------------------------------------------------
@@ -200,19 +200,19 @@ reason() {
   echo "truncated garbage" >"${TEST_TMPDIR}/bad.mp4"
 
   # Nothing about the candidate is measurable except its size, which is tiny.
-  [ "$(verdict "${TEST_TMPDIR}/bad.mp4" "${inc}")" = "keep" ]
+  [ "$(verdict "${TEST_TMPDIR}/bad.mp4" "${inc}" || true)" = "keep" ]
 }
 
 @test "a missing candidate is kept, not replaced" {
   local inc
   inc="$(make_media "inc.mp4" "640x360" "200k" 2)"
-  [ "$(verdict "${TEST_TMPDIR}/absent.mp4" "${inc}")" = "keep" ]
+  [ "$(verdict "${TEST_TMPDIR}/absent.mp4" "${inc}" || true)" = "keep" ]
 }
 
 @test "a missing incumbent still returns keep rather than claiming an upgrade" {
   local cand
   cand="$(make_media "cand.mp4" "640x360" "200k" 2)"
-  [ "$(verdict "${cand}" "${TEST_TMPDIR}/absent.mp4")" = "keep" ]
+  [ "$(verdict "${cand}" "${TEST_TMPDIR}/absent.mp4" || true)" = "keep" ]
 }
 
 @test "compare_media always prints a verdict and a reason" {
@@ -222,9 +222,9 @@ reason() {
 
   run compare_media "${a}" "${b}"
   [ "$status" -eq 0 ]
-  [ "$(echo "$output" | wc -l | tr -d ' ')" -eq 2 ]
-  [[ "$(echo "$output" | head -1)" =~ ^(keep|replace)$ ]]
-  [ -n "$(echo "$output" | sed -n '2p')" ]
+  [ "$(echo "$output" | wc -l | tr -d ' ' || true)" -eq 2 ]
+  [[ "$(echo "$output" | head -1 || true)" =~ ^(keep|replace)$ ]]
+  [ -n "$(echo "$output" | sed -n '2p' || true)" ]
 }
 
 @test "compare_media never emits a verdict other than keep or replace" {
@@ -239,7 +239,7 @@ reason() {
   for c in "${candidates[@]}"; do
     for i in "${candidates[@]}"; do
       local v
-      v="$(compare_media "${c}" "${i}" | head -1)"
+      v="$({ compare_media "${c}" "${i}" || true; } | head -1)"
       [[ "${v}" =~ ^(keep|replace)$ ]] || {
         echo "unexpected verdict '${v}' for candidate=${c} incumbent=${i}" >&2
         return 1
@@ -257,20 +257,20 @@ reason() {
   cand="$(make_media "cand.mp4" "1920x1080" "2000k" 2)"
   inc="$(make_media "inc.mp4" "640x360" "200k" 2)"
   local cand_sum
-  cand_sum="$(shasum "${cand}" | awk '{print $1}')"
+  cand_sum="$({ shasum "${cand}" || true; } | awk '{print $1}')"
 
   run replace_media_file "${cand}" "${inc}" "${TEST_TMPDIR}/quarantine"
   [ "$status" -eq 0 ]
 
   # The library slot now holds what used to be the candidate...
   [ -f "${inc}" ]
-  [ "$(shasum "${inc}" | awk '{print $1}')" = "${cand_sum}" ]
+  [ "$(shasum "${inc}" | awk '{print $1}' || true)" = "${cand_sum}" ]
 
   # ...the candidate has been consumed, not copied...
   [ ! -f "${cand}" ]
 
   # ...and the displaced copy is recoverable.
-  [ "$(find "${TEST_TMPDIR}/quarantine" -type f | wc -l | tr -d ' ')" -eq 1 ]
+  [ "$(find "${TEST_TMPDIR}/quarantine" -type f | wc -l | tr -d ' ' || true)" -eq 1 ]
 }
 
 @test "dry run reports the replacement without touching either file" {
@@ -278,13 +278,13 @@ reason() {
   cand="$(make_media "cand.mp4" "1920x1080" "2000k" 2)"
   inc="$(make_media "inc.mp4" "640x360" "200k" 2)"
   local inc_sum
-  inc_sum="$(shasum "${inc}" | awk '{print $1}')"
+  inc_sum="$({ shasum "${inc}" || true; } | awk '{print $1}')"
 
   MEDIA_COMPARE_DRY_RUN=true run replace_media_file "${cand}" "${inc}" "${TEST_TMPDIR}/quarantine"
   [ "$status" -eq 0 ]
 
   [ -f "${cand}" ]
-  [ "$(shasum "${inc}" | awk '{print $1}')" = "${inc_sum}" ]
+  [ "$(shasum "${inc}" | awk '{print $1}' || true)" = "${inc_sum}" ]
   [ ! -d "${TEST_TMPDIR}/quarantine" ]
 }
 
@@ -314,12 +314,12 @@ reason() {
   mkdir -p "${libdir}" "${canddir}"
 
   inc="${libdir}/inc.mp4"
-  cp "$(make_media "src.mp4" "640x360" "200k" 2)" "${inc}"
+  cp "$(make_media "src.mp4" "640x360" "200k" 2 || true)" "${inc}"
   cand="${canddir}/cand.mp4"
-  cp "$(make_media "big.mp4" "1920x1080" "2000k" 2)" "${cand}"
+  cp "$(make_media "big.mp4" "1920x1080" "2000k" 2 || true)" "${cand}"
 
   local inc_sum
-  inc_sum="$(shasum "${inc}" | awk '{print $1}')"
+  inc_sum="$({ shasum "${inc}" || true; } | awk '{print $1}')"
 
   chmod 500 "${canddir}"
   run replace_media_file "${cand}" "${inc}" "${TEST_TMPDIR}/quarantine"
@@ -329,10 +329,10 @@ reason() {
 
   # The library slot still holds the original, byte for byte...
   [ -f "${inc}" ]
-  [ "$(shasum "${inc}" | awk '{print $1}')" = "${inc_sum}" ]
+  [ "$(shasum "${inc}" | awk '{print $1}' || true)" = "${inc_sum}" ]
 
   # ...and nothing was stranded in quarantine.
-  [ "$(find "${TEST_TMPDIR}/quarantine" -type f 2>/dev/null | wc -l | tr -d ' ')" -eq 0 ]
+  [ "$(find "${TEST_TMPDIR}/quarantine" -type f 2>/dev/null | wc -l | tr -d ' ' || true)" -eq 0 ]
 
   # Prove the restore path actually ran, rather than the function bailing out
   # before the first move -- which is how the earlier version of this test
@@ -350,7 +350,7 @@ reason() {
   mkdir -p "${q}"
   touch "${q}/old.mp4" "${q}/new.mp4"
   # -mtime +14 needs an mtime strictly older than 15 days.
-  touch -t "$(date -v-20d '+%Y%m%d%H%M')" "${q}/old.mp4"
+  touch -t "$(date -v-20d '+%Y%m%d%H%M' || true)" "${q}/old.mp4"
 
   run prune_quarantine "${q}" 14
   [ "$status" -eq 0 ]
@@ -362,7 +362,7 @@ reason() {
   local q="${TEST_TMPDIR}/quarantine"
   mkdir -p "${q}"
   touch "${q}/old.mp4"
-  touch -t "$(date -v-20d '+%Y%m%d%H%M')" "${q}/old.mp4"
+  touch -t "$(date -v-20d '+%Y%m%d%H%M' || true)" "${q}/old.mp4"
 
   MEDIA_COMPARE_DRY_RUN=true run prune_quarantine "${q}" 14
   [ "$status" -eq 0 ]
@@ -410,7 +410,7 @@ Processed 0 files')"
   out="$(parse_filebot_conflicts '[AUTO] Skipped [/src/ep1.mkv] because [/dst/ep1.mkv] already exists
 [AUTO] Skipped [/src/ep2.mkv] because [/dst/ep2.mkv] already exists
 Processed 0 files')"
-  [ "$(echo "${out}" | wc -l | tr -d ' ')" -eq 2 ]
+  [ "$(echo "${out}" | wc -l | tr -d ' ' || true)" -eq 2 ]
 }
 
 @test "keeps paths containing spaces intact" {
@@ -436,7 +436,7 @@ Processed 3 files')"
   local libdir="${TEST_TMPDIR}/library"
   mkdir -p "${libdir}"
   local inc="${libdir}/show.mp4"
-  cp "$(make_media "sd.mp4" "640x360" "200k" 2)" "${inc}"
+  cp "$(make_media "sd.mp4" "640x360" "200k" 2 || true)" "${inc}"
   local cand
   cand="$(make_media "hd.mp4" "1920x1080" "2000k" 2)"
 
@@ -449,14 +449,14 @@ Processed 3 files')"
 
   [ "${replaced}" -eq 1 ]
   # The library slot now holds the HD copy.
-  [ "$(media_resolution "${inc}")" -eq $((1920 * 1080)) ]
+  [ "$(media_resolution "${inc}" || true)" -eq $((1920 * 1080)) ]
 }
 
 @test "a worse download leaves the library alone and counts nothing" {
   local libdir="${TEST_TMPDIR}/library"
   mkdir -p "${libdir}"
   local inc="${libdir}/show.mp4"
-  cp "$(make_media "hd.mp4" "1920x1080" "2000k" 2)" "${inc}"
+  cp "$(make_media "hd.mp4" "1920x1080" "2000k" 2 || true)" "${inc}"
   local cand
   cand="$(make_media "sd.mp4" "640x360" "200k" 2)"
 
@@ -466,7 +466,7 @@ Processed 3 files')"
     "${TEST_TMPDIR}/quarantine" 2>/dev/null)"
 
   [ "${replaced}" -eq 0 ]
-  [ "$(media_resolution "${inc}")" -eq $((1920 * 1080)) ]
+  [ "$(media_resolution "${inc}" || true)" -eq $((1920 * 1080)) ]
   # The download is still there for triage to move.
   [ -f "${cand}" ]
 }
@@ -481,9 +481,9 @@ Processed 3 files')"
   local libdir="${TEST_TMPDIR}/library"
   mkdir -p "${libdir}"
   local inc="${libdir}/show.mp4"
-  cp "$(make_media "sd.mp4" "640x360" "200k" 2)" "${inc}"
+  cp "$(make_media "sd.mp4" "640x360" "200k" 2 || true)" "${inc}"
   local inc_sum
-  inc_sum="$(shasum "${inc}" | awk '{print $1}')"
+  inc_sum="$({ shasum "${inc}" || true; } | awk '{print $1}')"
   local cand
   cand="$(make_media "hd.mp4" "1920x1080" "2000k" 2)"
 
@@ -493,7 +493,7 @@ Processed 3 files')"
 
   # replace_media_file returns 0 in dry run, so the count reflects what WOULD
   # have happened -- but nothing on disk may have changed.
-  [ "$(shasum "${inc}" | awk '{print $1}')" = "${inc_sum}" ]
+  [ "$(shasum "${inc}" | awk '{print $1}' || true)" = "${inc_sum}" ]
   [ -f "${cand}" ]
 }
 
@@ -501,7 +501,7 @@ Processed 3 files')"
   local libdir="${TEST_TMPDIR}/library"
   mkdir -p "${libdir}"
   local inc="${libdir}/good.mp4"
-  cp "$(make_media "sd.mp4" "640x360" "200k" 2)" "${inc}"
+  cp "$(make_media "sd.mp4" "640x360" "200k" 2 || true)" "${inc}"
   local cand
   cand="$(make_media "hd.mp4" "1920x1080" "2000k" 2)"
 
@@ -521,7 +521,7 @@ Processed 3 files')"
   local libdir="${TEST_TMPDIR}/library"
   mkdir -p "${libdir}"
   local inc="${libdir}/show.mp4"
-  cp "$(make_media "sd.mp4" "640x360" "200k" 2)" "${inc}"
+  cp "$(make_media "sd.mp4" "640x360" "200k" 2 || true)" "${inc}"
   local cand
   cand="$(make_media "hd.mp4" "1920x1080" "2000k" 2)"
 
@@ -586,9 +586,9 @@ setup_pipeline_stubs() {
   setup_pipeline_stubs
 
   local inc="${TEST_TMPDIR}/library/Show.S01E01.mp4"
-  cp "$(make_media "sd.mp4" "640x360" "200k" 2)" "${inc}"
+  cp "$(make_media "sd.mp4" "640x360" "200k" 2 || true)" "${inc}"
   local cand="${TR_TORRENT_DIR}/Show.S01E01.mp4"
-  cp "$(make_media "hd.mp4" "1920x1080" "2000k" 6)" "${cand}"
+  cp "$(make_media "hd.mp4" "1920x1080" "2000k" 6 || true)" "${cand}"
 
   handle_duplicate_upgrades "already-in-plex" \
     "[AUTO] Skipped [${cand}] because [${inc}] already exists
@@ -596,9 +596,9 @@ Rename episodes using [TheTVDB] to TV Shows
 Processed 0 files"
 
   # The library holds the better copy...
-  [ "$(media_resolution "${inc}")" -eq $((1920 * 1080)) ]
+  [ "$(media_resolution "${inc}" || true)" -eq $((1920 * 1080)) ]
   # ...the displaced copy is recoverable...
-  [ "$(find "${TEST_TMPDIR}/downloads/triage/quarantine" -type f | wc -l | tr -d ' ')" -eq 1 ]
+  [ "$(find "${TEST_TMPDIR}/downloads/triage/quarantine" -type f | wc -l | tr -d ' ' || true)" -eq 1 ]
   # ...and Plex was told to rescan TV, not movies.
   grep -q "PLEX SCAN: show" "${PIPELINE_LOG}"
 }
@@ -607,9 +607,9 @@ Processed 0 files"
   setup_pipeline_stubs
 
   local inc="${TEST_TMPDIR}/library/Movie.mp4"
-  cp "$(make_media "sd.mp4" "640x360" "200k" 2)" "${inc}"
+  cp "$(make_media "sd.mp4" "640x360" "200k" 2 || true)" "${inc}"
   local cand="${TR_TORRENT_DIR}/Movie.mp4"
-  cp "$(make_media "hd.mp4" "1920x1080" "2000k" 2)" "${cand}"
+  cp "$(make_media "hd.mp4" "1920x1080" "2000k" 2 || true)" "${cand}"
 
   handle_duplicate_upgrades "already-in-plex" \
     "[AUTO] Skipped [${cand}] because [${inc}] already exists
@@ -625,9 +625,9 @@ Processed 0 files"
   setup_pipeline_stubs
 
   local inc="${TEST_TMPDIR}/library/Show.S01E01.mp4"
-  cp "$(make_media "hd.mp4" "1920x1080" "2000k" 2)" "${inc}"
+  cp "$(make_media "hd.mp4" "1920x1080" "2000k" 2 || true)" "${inc}"
   local cand="${TR_TORRENT_DIR}/Show.S01E01.mp4"
-  cp "$(make_media "sd.mp4" "640x360" "200k" 2)" "${cand}"
+  cp "$(make_media "sd.mp4" "640x360" "200k" 2 || true)" "${cand}"
 
   handle_duplicate_upgrades "already-in-plex" \
     "[AUTO] Skipped [${cand}] because [${inc}] already exists
@@ -648,15 +648,15 @@ Processed 0 files"
   setup_pipeline_stubs
 
   local inc="${TEST_TMPDIR}/library/Show.S01E01.mp4"
-  cp "$(make_media "sd.mp4" "640x360" "200k" 2)" "${inc}"
+  cp "$(make_media "sd.mp4" "640x360" "200k" 2 || true)" "${inc}"
   local cand="${TR_TORRENT_DIR}/Show.S01E01.mp4"
-  cp "$(make_media "hd.mp4" "1920x1080" "2000k" 2)" "${cand}"
+  cp "$(make_media "hd.mp4" "1920x1080" "2000k" 2 || true)" "${cand}"
 
   handle_duplicate_upgrades "no-match" \
     "[AUTO] Skipped [${cand}] because [${inc}] already exists"
 
   # Untouched: still the SD copy, and no scan.
-  [ "$(media_resolution "${inc}")" -eq $((640 * 360)) ]
+  [ "$(media_resolution "${inc}" || true)" -eq $((640 * 360)) ]
   [ ! -s "${PIPELINE_LOG}" ]
 }
 
@@ -707,15 +707,15 @@ Processed 0 files"
   setup_pipeline_stubs
 
   local inc="${TEST_TMPDIR}/library/Show.S01E01.mp4"
-  cp "$(make_media "sd.mp4" "640x360" "200k" 2)" "${inc}"
+  cp "$(make_media "sd.mp4" "640x360" "200k" 2 || true)" "${inc}"
   local cand="${TR_TORRENT_DIR}/Show.S01E01.mp4"
-  cp "$(make_media "hd.mp4" "1920x1080" "2000k" 2)" "${cand}"
+  cp "$(make_media "hd.mp4" "1920x1080" "2000k" 2 || true)" "${cand}"
 
   # A quarantined file well past retention: a real prune would remove it.
   local q="${TEST_TMPDIR}/downloads/triage/quarantine"
   mkdir -p "${q}"
   touch "${q}/old.mp4"
-  touch -t "$(date -v-40d '+%Y%m%d%H%M')" "${q}/old.mp4"
+  touch -t "$(date -v-40d '+%Y%m%d%H%M' || true)" "${q}/old.mp4"
 
   MEDIA_COMPARE_DRY_RUN=true handle_duplicate_upgrades "already-in-plex" \
     "[AUTO] Skipped [${cand}] because [${inc}] already exists
@@ -725,7 +725,7 @@ Rename episodes using [TheTVDB] to TV Shows"
   [ "$status" -ne 0 ]
   [ -f "${q}/old.mp4" ]
   # And the library is untouched.
-  [ "$(media_resolution "${inc}")" -eq $((640 * 360)) ]
+  [ "$(media_resolution "${inc}" || true)" -eq $((640 * 360)) ]
 }
 
 @test "the bitrate fallback fires for containers with no per-stream bitrate" {
@@ -777,7 +777,7 @@ Rename episodes using [TheTVDB] to TV Shows"
   local i
   for i in 1 2; do
     local inc="${libdir}/Show.mp4"
-    cp "$(make_media "sd${i}.mp4" "640x360" "200k" 2)" "${inc}"
+    cp "$(make_media "sd${i}.mp4" "640x360" "200k" 2 || true)" "${inc}"
     local cand
     cand="$(make_media "hd${i}.mp4" "1920x1080" "2000k" 2)"
     run replace_media_file "${cand}" "${inc}" "${q}"
@@ -785,5 +785,5 @@ Rename episodes using [TheTVDB] to TV Shows"
   done
 
   # Both displaced copies survive.
-  [ "$(find "${q}" -type f | wc -l | tr -d ' ')" -eq 2 ]
+  [ "$(find "${q}" -type f | wc -l | tr -d ' ' || true)" -eq 2 ]
 }

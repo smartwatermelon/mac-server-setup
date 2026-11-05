@@ -301,7 +301,7 @@ MOCK_EOF
 
   run run_wrapper_briefly
 
-  [ "$(call_count "STABLE-TIMEOUT --kill-after=10 180 podman machine start transmission-vm")" -eq 1 ]
+  [ "$(call_count "STABLE-TIMEOUT --kill-after=10 180 podman machine start transmission-vm" || true)" -eq 1 ]
 }
 
 @test "wrapper PATH: a podman in the stable mirror is the one the supervisor runs" {
@@ -319,7 +319,7 @@ MOCK_EOF
 
   run run_wrapper_briefly
 
-  [ "$(call_count "STABLE machine start transmission-vm")" -eq 1 ]
+  [ "$(call_count "STABLE machine start transmission-vm" || true)" -eq 1 ]
 }
 
 @test "supervisor: calls machine start exactly once when initial state is stopped" {
@@ -357,7 +357,7 @@ MOCK_EOF
 
   run run_wrapper_briefly
 
-  grep '^run -d' "${CALLS_FILE}" | grep -q -- '-e TRANSMISSION_START_ADDED_TORRENTS=true'
+  { grep '^run -d' "${CALLS_FILE}" || true; } | grep -q -- '-e TRANSMISSION_START_ADDED_TORRENTS=true'
 }
 
 @test "setup: the initial podman run also starts added torrents instead of pausing them" {
@@ -373,7 +373,7 @@ MOCK_EOF
   run run_wrapper_briefly
 
   # Transmission's RPC has no auth of its own; only Caddy may reach it.
-  grep '^run -d' "${CALLS_FILE}" | grep -q -- '-p 127.0.0.1:9091:9091'
+  { grep '^run -d' "${CALLS_FILE}" || true; } | grep -q -- '-p 127.0.0.1:9091:9091'
 }
 
 @test "setup: the initial podman run also publishes 9091 on loopback only" {
@@ -599,10 +599,10 @@ status_file() {
 
   run run_wrapper_briefly
 
-  [ -f "$(status_file)" ]
-  [ "$(jq -r '.consecutive_failures' "$(status_file)")" -eq 0 ]
+  [ -f "$(status_file || true)" ]
+  [ "$(jq -r '.consecutive_failures' "$(status_file || true)" || true)" -eq 0 ]
   local updated now
-  updated="$(jq -r '.updated_at' "$(status_file)")"
+  updated="$(jq -r '.updated_at' "$(status_file || true)")"
   now="$(date +%s)"
   [ $((now - updated)) -le 10 ]
 }
@@ -613,22 +613,22 @@ status_file() {
 
   run run_wrapper_briefly
 
-  [ -f "$(status_file)" ]
-  [ "$(jq -r '.consecutive_failures' "$(status_file)")" -ge 3 ]
-  [ "$(jq -r '.last_error' "$(status_file)")" = "ensure_machine failed" ]
+  [ -f "$(status_file || true)" ]
+  [ "$(jq -r '.consecutive_failures' "$(status_file || true)" || true)" -ge 3 ]
+  [ "$(jq -r '.last_error' "$(status_file || true)" || true)" = "ensure_machine failed" ]
 }
 
 @test "status file: a successful cycle resets the failure count" {
   set_mock_state "stopped" "true" "true"
   touch "${MACHINE_START_FAIL_FILE}"
   run run_wrapper_briefly
-  [ "$(jq -r '.consecutive_failures' "$(status_file)")" -ge 1 ]
+  [ "$(jq -r '.consecutive_failures' "$(status_file || true)" || true)" -ge 1 ]
 
   rm -f "${MACHINE_START_FAIL_FILE}"
   run run_wrapper_briefly
 
-  [ "$(jq -r '.consecutive_failures' "$(status_file)")" -eq 0 ]
-  [ "$(jq -r '.last_error' "$(status_file)")" = "" ]
+  [ "$(jq -r '.consecutive_failures' "$(status_file || true)" || true)" -eq 0 ]
+  [ "$(jq -r '.last_error' "$(status_file || true)" || true)" = "" ]
 }
 
 @test "status file: the path is rendered at deploy time, not left as a variable" {

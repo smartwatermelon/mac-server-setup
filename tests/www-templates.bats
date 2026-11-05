@@ -24,7 +24,7 @@ CADDYFILE="${REPO_DIR}/app-setup/templates/Caddyfile"
   while read -r token; do
     [[ -z "${token}" ]] && continue
     grep -qF "s|${token}|" "${SETUP}" || missing+="${token} "
-  done < <(cat "${WWW_DIR}"/*.html "${WWW_DIR}"/*.webmanifest | grep -oE '__[A-Z_]+__' | sort -u)
+  done < <(cat "${WWW_DIR}"/*.html "${WWW_DIR}"/*.webmanifest | grep -oE '__[A-Z_]+__' | sort -u || true)
   [ -z "${missing}" ] || {
     echo "not substituted: ${missing}"
     return 1
