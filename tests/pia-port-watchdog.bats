@@ -161,9 +161,9 @@ watchdog_log() {
 
   run run_cycle
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 0 ]
-  [ "$(state_field '.consecutive_failures')" -eq 0 ]
-  [ "$(state_field '.alerted')" = "false" ]
+  [ "$(mail_count || true)" -eq 0 ]
+  [ "$(state_field '.consecutive_failures' || true)" -eq 0 ]
+  [ "$(state_field '.alerted' || true)" = "false" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -177,8 +177,8 @@ watchdog_log() {
 
   run run_cycle
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 0 ]
-  [ "$(state_field '.consecutive_failures')" -eq 1 ]
+  [ "$(mail_count || true)" -eq 0 ]
+  [ "$(state_field '.consecutive_failures' || true)" -eq 1 ]
 }
 
 @test "two bad polls still do not alert" {
@@ -187,21 +187,21 @@ watchdog_log() {
   run_cycle
   run_cycle
 
-  [ "$(mail_count)" -eq 0 ]
-  [ "$(state_field '.consecutive_failures')" -eq 2 ]
+  [ "$(mail_count || true)" -eq 0 ]
+  [ "$(state_field '.consecutive_failures' || true)" -eq 2 ]
 }
 
 @test "a bad poll followed by a good one resets the streak" {
   set_rpc "0" "false"
   run_cycle
   run_cycle
-  [ "$(state_field '.consecutive_failures')" -eq 2 ]
+  [ "$(state_field '.consecutive_failures' || true)" -eq 2 ]
 
   set_rpc "51413" "true"
   run_cycle
 
-  [ "$(state_field '.consecutive_failures')" -eq 0 ]
-  [ "$(mail_count)" -eq 0 ]
+  [ "$(state_field '.consecutive_failures' || true)" -eq 0 ]
+  [ "$(mail_count || true)" -eq 0 ]
 }
 
 # ---------------------------------------------------------------------------
@@ -215,8 +215,8 @@ watchdog_log() {
   run_cycle
   run_cycle
 
-  [ "$(mail_count)" -eq 1 ]
-  [ "$(state_field '.alerted')" = "true" ]
+  [ "$(mail_count || true)" -eq 1 ]
+  [ "$(state_field '.alerted' || true)" = "true" ]
   grep -q "Transmission port forwarding lost" "${MAIL_LOG}"
 }
 
@@ -233,7 +233,7 @@ watchdog_log() {
     remaining=$((remaining - 1))
   done
 
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 }
 
 @test "recovery sends exactly one all-clear and re-arms" {
@@ -241,24 +241,24 @@ watchdog_log() {
   run_cycle
   run_cycle
   run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 
   set_rpc "51413" "true"
   run_cycle
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
   grep -q "port forwarding restored" "${MAIL_LOG}"
-  [ "$(state_field '.alerted')" = "false" ]
+  [ "$(state_field '.alerted' || true)" = "false" ]
 
   # Another cycle while healthy must stay quiet.
   run_cycle
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
 
   # A second loss has to alert again — the state was re-armed, not latched.
   set_rpc "0" "false"
   run_cycle
   run_cycle
   run_cycle
-  [ "$(mail_count)" -eq 3 ]
+  [ "$(mail_count || true)" -eq 3 ]
 }
 
 # ---------------------------------------------------------------------------
@@ -275,7 +275,7 @@ watchdog_log() {
   run_cycle
   run_cycle
 
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "not reachable from outside" "${MAIL_LOG}"
 }
 
@@ -288,8 +288,8 @@ watchdog_log() {
   run_cycle
   run_cycle
 
-  [ "$(mail_count)" -eq 0 ]
-  [ "$(state_field '.consecutive_failures')" -eq 0 ]
+  [ "$(mail_count || true)" -eq 0 ]
+  [ "$(state_field '.consecutive_failures' || true)" -eq 0 ]
 }
 
 # ---------------------------------------------------------------------------
@@ -301,8 +301,8 @@ watchdog_log() {
 
   run run_cycle
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 0 ]
-  [[ "$(watchdog_log)" == *"RPC unreachable"* ]]
+  [ "$(mail_count || true)" -eq 0 ]
+  [[ "$(watchdog_log || true)" == *"RPC unreachable"* ]]
 }
 
 @test "an unreachable Transmission does not advance the failure streak" {
@@ -312,15 +312,15 @@ watchdog_log() {
   set_rpc "0" "false"
   run_cycle
   run_cycle
-  [ "$(state_field '.consecutive_failures')" -eq 2 ]
+  [ "$(state_field '.consecutive_failures' || true)" -eq 2 ]
 
   echo "false" >"${RPC_REACHABLE_FILE}"
   run_cycle
   run_cycle
   run_cycle
 
-  [ "$(mail_count)" -eq 0 ]
-  [ "$(state_field '.consecutive_failures')" -eq 2 ]
+  [ "$(mail_count || true)" -eq 0 ]
+  [ "$(state_field '.consecutive_failures' || true)" -eq 2 ]
 }
 
 # ---------------------------------------------------------------------------
@@ -357,7 +357,7 @@ watchdog_log() {
         echo "setup script never substitutes ${placeholder}" >&2
         return 1
       }
-  done < <(grep -oE '__[A-Z_]+__' "${TEMPLATE}" | sort -u)
+  done < <(grep -oE '__[A-Z_]+__' "${TEMPLATE}" | sort -u || true)
 }
 
 @test "the watchdog is only deployed when it can actually send mail" {
@@ -385,7 +385,7 @@ watchdog_log() {
   tilde="$(printf '\176')"
 
   local referenced
-  referenced="$(grep -oE "${tilde}/[a-zA-Z0-9_./-]*pia-pf-probe\.sh" "${TEMPLATE}" | head -1)"
+  referenced="$({ grep -oE "${tilde}/[a-zA-Z0-9_./-]*pia-pf-probe\.sh" "${TEMPLATE}" || true; } | head -1)"
   [ -n "${referenced}" ]
 
   # Reduce the referenced path to the part below the container directory, which
@@ -393,12 +393,12 @@ watchdog_log() {
   local suffix="${referenced#"${tilde}"/containers/transmission/}"
   [ "${suffix}" = "scripts/pia-pf-probe.sh" ]
 
-  run grep -q 'PF_PROBE_DEST="\${CONTAINER_DIR}/scripts/pia-pf-probe.sh"' \
+  run grep -q "PF_PROBE_DEST=\"\\\${CONTAINER_DIR}/scripts/pia-pf-probe.sh\"" \
     "${REPO_DIR}/app-setup/podman-transmission-setup.sh"
   [ "$status" -eq 0 ]
 
   # And it must actually be copied, not just have a variable defined for it.
-  run grep -q 'sudo cp "\${PF_PROBE_TEMPLATE}" "\${PF_PROBE_DEST}"' \
+  run grep -q "sudo cp \"\\\${PF_PROBE_TEMPLATE}\" \"\\\${PF_PROBE_DEST}\"" \
     "${REPO_DIR}/app-setup/podman-transmission-setup.sh"
   [ "$status" -eq 0 ]
 }
@@ -446,10 +446,10 @@ watchdog_log() {
 
   # One consistent snapshot: the heartbeat is real, and it sits next to this
   # cycle's port rather than a previous cycle's.
-  [ "$(state_field '.last_heartbeat')" != "null" ]
-  [ "$(state_field '.last_heartbeat')" != "1970-01-01T00:00:00Z" ]
-  [ "$(state_field '.peer_port')" = "51413" ]
-  [ "$(state_field '.port_is_open')" = "yes" ]
+  [ "$(state_field '.last_heartbeat' || true)" != "null" ]
+  [ "$(state_field '.last_heartbeat' || true)" != "1970-01-01T00:00:00Z" ]
+  [ "$(state_field '.peer_port' || true)" = "51413" ]
+  [ "$(state_field '.port_is_open' || true)" = "yes" ]
 }
 
 @test "a heartbeat inside the interval is not rewritten" {
@@ -464,20 +464,20 @@ watchdog_log() {
   set_rpc "51414" "true"
   run run_cycle
   [ "$status" -eq 0 ]
-  [ "$(state_field '.last_heartbeat')" = "${first}" ]
+  [ "$(state_field '.last_heartbeat' || true)" = "${first}" ]
 
   # ...while the rest of the cycle's data still advances.
-  [ "$(state_field '.peer_port')" = "51414" ]
+  [ "$(state_field '.peer_port' || true)" = "51414" ]
 }
 
 @test "a 2-hour-old heartbeat is due, west of UTC" {
   # last_heartbeat is stored in UTC with a trailing Z. Parsed as local time,
   # it lands hours in the future west of UTC, and the hourly heartbeat stops.
   local two_hours_ago
-  two_hours_ago=$(date -u -r "$(($(date +%s) - 7200))" '+%Y-%m-%dT%H:%M:%SZ')
+  two_hours_ago=$(date -u -r "$(($(date +%s || true) - 7200))" '+%Y-%m-%dT%H:%M:%SZ')
 
   run env TZ=America/Los_Angeles TEST_RUNNER=true bash -c \
-    'source "$1" >/dev/null 2>&1; maybe_heartbeat "test" "$2"' \
+    "source \"\$1\" >/dev/null 2>&1; maybe_heartbeat \"test\" \"\$2\"" \
     _ "${WATCHDOG}" "${two_hours_ago}"
   [ "$status" -eq 0 ]
   [ -n "${output}" ]
@@ -492,8 +492,8 @@ watchdog_log() {
 
   run run_cycle
   [ "$status" -eq 0 ]
-  [ "$(state_field '.last_heartbeat')" = "1970-01-01T00:00:00Z" ]
-  ! grep -q 'OK: peer port' <<<"$(watchdog_log)"
+  [ "$(state_field '.last_heartbeat' || true)" = "1970-01-01T00:00:00Z" ]
+  ! grep -q 'OK: peer port' <<<"$(watchdog_log || true)"
 }
 
 @test "the first healthy cycle after a bad one logs its heartbeat immediately" {
@@ -503,8 +503,8 @@ watchdog_log() {
   set_rpc "51413" "true"
   run run_cycle
   [ "$status" -eq 0 ]
-  [ "$(state_field '.last_heartbeat')" != "1970-01-01T00:00:00Z" ]
-  grep -q 'OK: peer port 51413' <<<"$(watchdog_log)"
+  [ "$(state_field '.last_heartbeat' || true)" != "1970-01-01T00:00:00Z" ]
+  grep -q 'OK: peer port 51413' <<<"$(watchdog_log || true)"
 }
 
 # ---------------------------------------------------------------------------
@@ -542,9 +542,9 @@ watchdog_log() {
     /bin/bash "${WATCHDOG}"
 
   [ "$status" -eq 0 ]
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Transmission port forwarding lost" "${MAIL_LOG}"
-  [ "$(state_field '.alerted')" = "true" ]
+  [ "$(state_field '.alerted' || true)" = "true" ]
 }
 
 @test "a failed send is logged with msmtp's stderr and retried next cycle" {
@@ -558,16 +558,16 @@ MOCK
   run_cycle
   run_cycle
 
-  [ "$(mail_count)" -eq 0 ]
-  [ "$(state_field '.alerted')" = "false" ]
-  grep -q "cannot connect to smtp.gmail.com" <<<"$(watchdog_log)"
-  grep -q "ERROR: failed to send alert email" <<<"$(watchdog_log)"
+  [ "$(mail_count || true)" -eq 0 ]
+  [ "$(state_field '.alerted' || true)" = "false" ]
+  grep -q "cannot connect to smtp.gmail.com" <<<"$(watchdog_log || true)"
+  grep -q "ERROR: failed to send alert email" <<<"$(watchdog_log || true)"
 
   # Mail works again: the next bad cycle sends the alert that was missed.
   write_msmtp_mock
   run_cycle
-  [ "$(mail_count)" -eq 1 ]
-  [ "$(state_field '.alerted')" = "true" ]
+  [ "$(mail_count || true)" -eq 1 ]
+  [ "$(state_field '.alerted' || true)" = "true" ]
 }
 
 @test "a missing alert library stops the watchdog with an ERROR in its log" {
@@ -575,13 +575,13 @@ MOCK
 
   run run_cycle
   [ "$status" -eq 1 ]
-  grep -q "ERROR: alert library not found at ${HOME}/.local/lib/alert-lib.sh" <<<"$(watchdog_log)"
+  grep -q "ERROR: alert library not found at ${HOME}/.local/lib/alert-lib.sh" <<<"$(watchdog_log || true)"
 }
 
 @test "the setup script deploys the alert library with the watchdog" {
-  run grep -A 12 'if \[\[ "${PORT_WATCHDOG_DEPLOY}" == "true" \]\]; then' \
+  run grep -A 12 "if \\[\\[ \"\${PORT_WATCHDOG_DEPLOY}\" == \"true\" \\]\\]; then" \
     "${REPO_DIR}/app-setup/podman-transmission-setup.sh"
-  [[ "$output" == *'sudo cp "${ALERT_LIB_TEMPLATE}" "${ALERT_LIB_DEST}"'* ]]
-  grep -q 'ALERT_LIB_DEST="${OPERATOR_HOME}/.local/lib/alert-lib.sh"' \
+  [[ "$output" == *"sudo cp \"\${ALERT_LIB_TEMPLATE}\" \"\${ALERT_LIB_DEST}\""* ]]
+  grep -q "ALERT_LIB_DEST=\"\${OPERATOR_HOME}/.local/lib/alert-lib.sh\"" \
     "${REPO_DIR}/app-setup/podman-transmission-setup.sh"
 }

@@ -139,14 +139,14 @@ teardown() {
 # fail is worse than none, because it looks like coverage.
 
 @test "apply_port sets a valid port that differs from the current one" {
-  export STUB_CURRENT_PORT="33361"
+  STUB_CURRENT_PORT="33361"
   run apply_port 54321 "http://localhost:9091/transmission/rpc"
   [ "$status" -eq 0 ]
   grep -q -- "-p 54321" "${CALL_LOG}"
 }
 
 @test "apply_port skips the update when the port is unchanged" {
-  export STUB_CURRENT_PORT="54321"
+  STUB_CURRENT_PORT="54321"
   run apply_port 54321 "http://localhost:9091/transmission/rpc"
   [ "$status" -eq 0 ]
   [[ "$output" == *"no change needed"* ]]
@@ -155,7 +155,7 @@ teardown() {
 }
 
 @test "apply_port refuses an empty port and never calls -p" {
-  export STUB_CURRENT_PORT="33361"
+  STUB_CURRENT_PORT="33361"
   run apply_port "" "http://localhost:9091/transmission/rpc"
   [ "$status" -ne 0 ]
   [[ "$output" == *"REFUSING"* ]]
@@ -164,20 +164,20 @@ teardown() {
 }
 
 @test "apply_port reports the preserved port when refusing" {
-  export STUB_CURRENT_PORT="33361"
+  STUB_CURRENT_PORT="33361"
   run apply_port "" "http://localhost:9091/transmission/rpc"
   [[ "$output" == *"Keeping existing peer port 33361"* ]]
 }
 
 @test "apply_port warns when Transmission is already at port 0" {
-  export STUB_CURRENT_PORT="0"
+  STUB_CURRENT_PORT="0"
   run apply_port "" "http://localhost:9091/transmission/rpc"
   [ "$status" -ne 0 ]
   [[ "$output" == *"no valid peer port"* ]]
 }
 
 @test "apply_port refuses jq null without calling -p" {
-  export STUB_CURRENT_PORT="33361"
+  STUB_CURRENT_PORT="33361"
   run apply_port "null" "http://localhost:9091/transmission/rpc"
   [ "$status" -ne 0 ]
   run grep -q -- " -p " "${CALL_LOG}"
@@ -185,7 +185,7 @@ teardown() {
 }
 
 @test "apply_port passes auth arguments through without word splitting" {
-  export STUB_CURRENT_PORT="33361"
+  STUB_CURRENT_PORT="33361"
   run apply_port 54321 "http://localhost:9091/transmission/rpc" --auth "user:pass with spaces"
   [ "$status" -eq 0 ]
   # Assert on ARG_LOG, not CALL_LOG: one line per argument means the credential
@@ -197,7 +197,7 @@ teardown() {
 }
 
 @test "apply_port works with no auth arguments supplied" {
-  export STUB_CURRENT_PORT="33361"
+  STUB_CURRENT_PORT="33361"
   run apply_port 54321 "http://localhost:9091/transmission/rpc"
   [ "$status" -eq 0 ]
   # Both halves of this assertion matter. ARG_LOG (not CALL_LOG) because one
