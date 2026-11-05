@@ -33,11 +33,11 @@ tunnel_site() { top_block 'http://:8080'; }
 site_routes() { top_block '(site_routes)'; }
 
 @test "auth matcher: the @external_auth_required block exists" {
-  [ -n "$(auth_matcher_block)" ]
+  [ -n "$(auth_matcher_block || true)" ]
 }
 
 @test "auth matcher: is keyed on source IP, never on host" {
-  run grep -E '^[[:space:]]*host[[:space:]]' <<<"$(auth_matcher_block)"
+  run grep -E '^[[:space:]]*host[[:space:]]' <<<"$(auth_matcher_block || true)"
   [ "${status}" -ne 0 ]
 }
 
@@ -51,7 +51,7 @@ site_routes() { top_block '(site_routes)'; }
 
 @test "basic_auth: applies through the shared snippet, so both sites get it" {
   grep -qE '^[[:space:]]*basic_auth @external_auth_required \{$' "${CADDYFILE}"
-  [ "$(without_comments <"${CADDYFILE}" | grep -cE '^[[:space:]]*import common_config$')" -eq 2 ]
+  [ "$(without_comments <"${CADDYFILE}" | grep -cE '^[[:space:]]*import common_config$' || true)" -eq 2 ]
 }
 
 @test "transmission proxy: targets IPv4 loopback, matching the 127.0.0.1-only publish" {
@@ -66,7 +66,7 @@ site_routes() { top_block '(site_routes)'; }
 # ---------------------------------------------------------------------------
 
 @test "tunnel site: the http://:8080 block exists" {
-  [ -n "$(tunnel_site)" ]
+  [ -n "$(tunnel_site || true)" ]
 }
 
 @test "tunnel site: binds to 127.0.0.1 only" {
@@ -76,14 +76,14 @@ site_routes() { top_block '(site_routes)'; }
 }
 
 @test "tunnel site: does not import common_config" {
-  run grep -E 'import[[:space:]]+common_config' <<<"$(tunnel_site | without_comments)"
+  run grep -E 'import[[:space:]]+common_config' <<<"$(tunnel_site | without_comments || true)"
   [ "${status}" -ne 0 ]
 }
 
 @test "tunnel site: imports site_routes only inside the allowed-email handle" {
   local handle_body
-  handle_body=$(tunnel_site | awk '/^\thandle @access_user \{$/{f=1; next} f && /^\t\}$/{f=0} f')
-  [ "$(printf '%s\n' "${handle_body}" | without_comments | sed '/^[[:space:]]*$/d')" = "$(printf '\t\timport site_routes')" ]
+  handle_body=$({ tunnel_site || true; } | awk '/^\thandle @access_user \{$/{f=1; next} f && /^\t\}$/{f=0} f')
+  [ "$(printf '%s\n' "${handle_body}" | without_comments | sed '/^[[:space:]]*$/d' || true)" = "$(printf '\t\timport site_routes')" ]
 }
 
 @test "tunnel site: @access_user is an exact match on the allowed email header" {
@@ -102,34 +102,34 @@ site_routes() { top_block '(site_routes)'; }
 
 @test "tunnel site: the catch-all handle responds 403" {
   local body
-  body=$(tunnel_site | awk '/^\thandle \{$/{f=1; next} f && /^\t\}$/{f=0} f' | without_comments)
+  body=$({ tunnel_site || true; } | { awk '/^\thandle \{$/{f=1; next} f && /^\t\}$/{f=0} f' || true; } | without_comments)
   [ "${body}" = "$(printf '\t\trespond 403')" ]
 }
 
 @test "tunnel site: has no /media handler" {
-  run grep -F '/media' <<<"$(tunnel_site | without_comments)"
+  run grep -F '/media' <<<"$(tunnel_site | without_comments || true)"
   [ "${status}" -ne 0 ]
 }
 
 @test "tunnel site: does not key anything on remote_ip" {
-  run grep -F 'remote_ip' <<<"$(tunnel_site | without_comments)"
+  run grep -F 'remote_ip' <<<"$(tunnel_site | without_comments || true)"
   [ "${status}" -ne 0 ]
 }
 
 @test "site_routes: has no /media handler and no remote_ip matcher" {
   local body
-  body=$(site_routes | without_comments)
+  body=$({ site_routes || true; } | without_comments)
   [ -n "${body}" ]
   run grep -E '/media|remote_ip' <<<"${body}"
   [ "${status}" -ne 0 ]
 }
 
 @test "access_log: holds the log, imported by common_config and the tunnel site" {
-  top_block '(access_log)' | without_comments | grep -qE '^[[:space:]]*log \{$'
-  run grep -qE '^[[:space:]]*log \{$' <<<"$(site_routes | without_comments)"
+  { top_block '(access_log)' || true; } | { without_comments || true; } | grep -qE '^[[:space:]]*log \{$'
+  run grep -qE '^[[:space:]]*log \{$' <<<"$(site_routes | without_comments || true)"
   [ "${status}" -ne 0 ]
-  top_block '(common_config)' | without_comments | grep -qE '^[[:space:]]*import access_log$'
-  tunnel_site | without_comments | grep -qE '^[[:space:]]*import access_log$'
+  { top_block '(common_config)' || true; } | { without_comments || true; } | grep -qE '^[[:space:]]*import access_log$'
+  { tunnel_site || true; } | { without_comments || true; } | grep -qE '^[[:space:]]*import access_log$'
 }
 
 # Behaviour, not text: run the tunnel site on a scratch Caddy and probe it.
@@ -156,9 +156,9 @@ teardown() {
   mkdir -p "${dir}/www" && echo landing >"${dir}/www/index.html"
   {
     printf '{\n\tadmin off\n}\n'
-    top_block '(site_routes)' | sed '1s/^/(site_routes) {\n/;$s/$/\n}/'
-    top_block '(access_log)' | sed '1s/^/(access_log) {\n/;$s/$/\n}/'
-    top_block 'http://:8080' | sed "1s/^/http:\/\/:${port} {\n/;\$s/\$/\n}/"
+    { top_block '(site_routes)' || true; } | sed '1s/^/(site_routes) {\n/;$s/$/\n}/' || true
+    { top_block '(access_log)' || true; } | sed '1s/^/(access_log) {\n/;$s/$/\n}/' || true
+    { top_block 'http://:8080' || true; } | sed "1s/^/http:\/\/:${port} {\n/;\$s/\$/\n}/" || true
   } | sed -e "s|__ACCESS_ALLOWED_EMAIL__|allowed@example.com|" \
     -e "s|__QUICKCONNECT_[A-Z]*__|https://qc.example/|" \
     -e "s|127.0.0.1:9091|127.0.0.1:9|" \
@@ -190,10 +190,10 @@ teardown() {
 }
 
 @test "site_routes: imported by common_config and by the tunnel site only" {
-  [ "$(without_comments <"${CADDYFILE}" | grep -cE '^[[:space:]]*import site_routes$')" -eq 2 ]
-  top_block '(common_config)' | without_comments | grep -qE '^[[:space:]]*import site_routes$'
+  [ "$(without_comments <"${CADDYFILE}" | grep -cE '^[[:space:]]*import site_routes$' || true)" -eq 2 ]
+  { top_block '(common_config)' || true; } | { without_comments || true; } | grep -qE '^[[:space:]]*import site_routes$'
 }
 
 @test "common_config: still holds the LAN-only /media handler" {
-  top_block '(common_config)' | grep -qF 'handle_path /media/* {'
+  { top_block '(common_config)' || true; } | grep -qF 'handle_path /media/* {'
 }

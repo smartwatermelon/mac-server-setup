@@ -82,7 +82,7 @@ stub_token() {
 
   run main
   [ "${status}" -eq 0 ]
-  [ "$(cat "${TEST_TMPDIR}/env_token")" = "secret-tunnel-token" ]
+  [ "$(cat "${TEST_TMPDIR}/env_token" || true)" = "secret-tunnel-token" ]
   run grep -F 'secret-tunnel-token' "${TEST_TMPDIR}/argv"
   [ "${status}" -ne 0 ]
 }
@@ -92,7 +92,7 @@ stub_token() {
 
   run main
   [ "${status}" -eq 0 ]
-  [ "$(tr '\n' ' ' <"${TEST_TMPDIR}/argv")" = "tunnel --no-autoupdate --metrics 127.0.0.1:20241 run " ]
+  [ "$(tr '\n' ' ' <"${TEST_TMPDIR}/argv" || true)" = "tunnel --no-autoupdate --metrics 127.0.0.1:20241 run " ]
 }
 
 @test "cloudflared missing: exits non-zero with a message" {
@@ -135,7 +135,7 @@ render_plist() {
 
 @test "plist: runs the wrapper and carries no token or environment" {
   render_plist
-  [ "$(plutil -extract ProgramArguments.1 raw "${TEST_TMPDIR}/tunnel.plist")" = "/usr/local/bin/cloudflared-wrapper.sh" ]
+  [ "$(plutil -extract ProgramArguments.1 raw "${TEST_TMPDIR}/tunnel.plist" || true)" = "/usr/local/bin/cloudflared-wrapper.sh" ]
   run plutil -extract EnvironmentVariables raw "${TEST_TMPDIR}/tunnel.plist"
   [ "${status}" -ne 0 ]
   # JSON conversion drops the XML comments, which name TUNNEL_TOKEN.
@@ -148,6 +148,6 @@ render_plist() {
 
 @test "plist: KeepAlive and RunAtLoad are true" {
   render_plist
-  [ "$(plutil -extract KeepAlive raw "${TEST_TMPDIR}/tunnel.plist")" = "true" ]
-  [ "$(plutil -extract RunAtLoad raw "${TEST_TMPDIR}/tunnel.plist")" = "true" ]
+  [ "$(plutil -extract KeepAlive raw "${TEST_TMPDIR}/tunnel.plist" || true)" = "true" ]
+  [ "$(plutil -extract RunAtLoad raw "${TEST_TMPDIR}/tunnel.plist" || true)" = "true" ]
 }

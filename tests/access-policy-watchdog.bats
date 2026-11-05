@@ -183,9 +183,9 @@ watchdog_log() {
 @test "expected rule: passes, no email, no open alert" {
   run run_cycle
   [ "${status}" -eq 0 ]
-  [ "$(mail_count)" -eq 0 ]
-  [ "$(state_field '.transitions.policy_drift // "none"')" = "none" ]
-  grep -q "OK: test.example Access application, policy and tunnel ingress match" <<<"$(watchdog_log)"
+  [ "$(mail_count || true)" -eq 0 ]
+  [ "$(state_field '.transitions.policy_drift // "none"' || true)" = "none" ]
+  grep -q "OK: test.example Access application, policy and tunnel ingress match" <<<"$(watchdog_log || true)"
 }
 
 @test "expected rule: --check prints OK and exits 0" {
@@ -195,7 +195,7 @@ watchdog_log() {
 }
 
 @test "expected rule: the email comparison ignores case" {
-  set_policy "$(fixture_variant policy-ok.json '.result.include[0].email.email = "Allowed@Example.COM"')" 200
+  set_policy "$(fixture_variant policy-ok.json '.result.include[0].email.email = "Allowed@Example.COM"' || true)" 200
   run run_check
   [ "${status}" -eq 0 ]
 }
@@ -210,9 +210,9 @@ assert_drift_alert() {
   [ "${rc}" -eq 1 ]
   [[ "${out}" == DRIFT:* ]]
   run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Subject: \[TESTHOST\] Cloudflare Access or tunnel config for test.example changed" "${MAIL_LOG}"
-  [ "$(state_field '.transitions.policy_drift.alerted')" = "true" ]
+  [ "$(state_field '.transitions.policy_drift.alerted' || true)" = "true" ]
 }
 
 @test "drift: an 'everyone' include alerts" {
@@ -234,12 +234,12 @@ assert_drift_alert() {
 }
 
 @test "drift: a different single email alerts" {
-  set_policy "$(fixture_variant policy-ok.json '.result.include[0].email.email = "intruder@example.com"')" 200
+  set_policy "$(fixture_variant policy-ok.json '.result.include[0].email.email = "intruder@example.com"' || true)" 200
   assert_drift_alert
 }
 
 @test "drift: a selector not on any list (login_method) alerts" {
-  set_policy "$(fixture_variant policy-ok.json '.result.include += [{"login_method": {"id": "otp"}}]')" 200
+  set_policy "$(fixture_variant policy-ok.json '.result.include += [{"login_method": {"id": "otp"}}]' || true)" 200
   assert_drift_alert
 }
 
@@ -250,33 +250,33 @@ assert_drift_alert() {
 }
 
 @test "drift: an empty IdP list (every IdP allowed) alerts" {
-  set_app "$(fixture_variant app-ok.json '.result.allowed_idps = []')" 200
+  set_app "$(fixture_variant app-ok.json '.result.allowed_idps = []' || true)" 200
   assert_drift_alert
 }
 
 @test "drift: a second policy attached to the application alerts" {
-  set_app "$(fixture_variant app-ok.json '.result.policies += [{"id": "pol-bypass", "decision": "bypass", "include": [{"everyone": {}}]}]')" 200
+  set_app "$(fixture_variant app-ok.json '.result.policies += [{"id": "pol-bypass", "decision": "bypass", "include": [{"everyone": {}}]}]' || true)" 200
   assert_drift_alert
   grep -qF 'pol-bypass' "${MAIL_LOG}"
 }
 
 @test "drift: our policy detached from the application alerts" {
-  set_app "$(fixture_variant app-ok.json '.result.policies = []')" 200
+  set_app "$(fixture_variant app-ok.json '.result.policies = []' || true)" 200
   assert_drift_alert
 }
 
 @test "drift: a decision other than allow alerts" {
-  set_policy "$(fixture_variant policy-ok.json '.result.decision = "bypass"')" 200
+  set_policy "$(fixture_variant policy-ok.json '.result.decision = "bypass"' || true)" 200
   assert_drift_alert
 }
 
 @test "drift: a require or exclude rule alerts" {
-  set_policy "$(fixture_variant policy-ok.json '.result.require = [{"everyone": {}}]')" 200
+  set_policy "$(fixture_variant policy-ok.json '.result.require = [{"everyone": {}}]' || true)" 200
   assert_drift_alert
 }
 
 @test "drift: a different application domain alerts" {
-  set_app "$(fixture_variant app-ok.json '.result.domain = "other.example"')" 200
+  set_app "$(fixture_variant app-ok.json '.result.domain = "other.example"' || true)" 200
   assert_drift_alert
 }
 
@@ -285,28 +285,28 @@ assert_drift_alert() {
   run_cycle
   run_cycle
   run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 
   set_policy policy-ok.json 200
   run_cycle
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
   grep -q "Subject: RESOLVED: \[TESTHOST\] Cloudflare Access or tunnel config for test.example matches again" "${MAIL_LOG}"
-  [ "$(state_field '.transitions.policy_drift // "none"')" = "none" ]
-  [ "$(state_field '.drift_fingerprint // "none"')" = "none" ]
+  [ "$(state_field '.transitions.policy_drift // "none"' || true)" = "none" ]
+  [ "$(state_field '.drift_fingerprint // "none"' || true)" = "none" ]
 }
 
 @test "drift: a further change while alerted sends one more email" {
   set_policy policy-second-email.json 200
   run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 
   set_policy policy-everyone.json 200
   run_cycle
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
   grep -q "Subject: \[TESTHOST\] Cloudflare Access or tunnel config for test.example changed again" "${MAIL_LOG}"
 
   run_cycle
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
 }
 
 # ---------------------------------------------------------------------------
@@ -314,73 +314,73 @@ assert_drift_alert() {
 # ---------------------------------------------------------------------------
 
 @test "tunnel: the hostname comparison ignores case" {
-  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress[0].hostname = "Test.Example"')" 200
+  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress[0].hostname = "Test.Example"' || true)" 200
   run run_check
   [ "${status}" -eq 0 ]
 }
 
 @test "tunnel: no warp-routing key at all passes (off is the default)" {
-  set_tunnel "$(fixture_variant tunnel-ok.json 'del(.result.config["warp-routing"])')" 200
+  set_tunnel "$(fixture_variant tunnel-ok.json 'del(.result.config["warp-routing"])' || true)" 200
   run run_check
   [ "${status}" -eq 0 ]
 }
 
 @test "tunnel drift: access.required turned off alerts" {
-  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress[0].originRequest.access.required = false')" 200
+  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress[0].originRequest.access.required = false' || true)" 200
   assert_drift_alert
   grep -qF 'Tunnel ingress' "${MAIL_LOG}"
 }
 
 @test "tunnel drift: the access block removed alerts" {
-  set_tunnel "$(fixture_variant tunnel-ok.json 'del(.result.config.ingress[0].originRequest)')" 200
+  set_tunnel "$(fixture_variant tunnel-ok.json 'del(.result.config.ingress[0].originRequest)' || true)" 200
   assert_drift_alert
 }
 
 @test "tunnel drift: a different AUD tag alerts" {
-  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress[0].originRequest.access.audTag = ["aud-other"]')" 200
+  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress[0].originRequest.access.audTag = ["aud-other"]' || true)" 200
   assert_drift_alert
 }
 
 @test "tunnel drift: a different team name alerts" {
-  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress[0].originRequest.access.teamName = "other-team"')" 200
+  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress[0].originRequest.access.teamName = "other-team"' || true)" 200
   assert_drift_alert
 }
 
 @test "tunnel drift: a second public hostname alerts" {
-  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress |= [{"hostname": "open.test.example", "service": "http://127.0.0.1:8080"}] + .')" 200
+  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress |= [{"hostname": "open.test.example", "service": "http://127.0.0.1:8080"}] + .' || true)" 200
   assert_drift_alert
   grep -qF 'open.test.example' "${MAIL_LOG}"
 }
 
 @test "tunnel drift: a path rule under our hostname alerts" {
-  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress |= [{"hostname": "test.example", "path": "/transmission", "service": "http://127.0.0.1:9091"}] + .')" 200
+  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress |= [{"hostname": "test.example", "path": "/transmission", "service": "http://127.0.0.1:9091"}] + .' || true)" 200
   assert_drift_alert
 }
 
 @test "tunnel drift: a different origin service alerts" {
-  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress[0].service = "http://127.0.0.1:9091"')" 200
+  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress[0].service = "http://127.0.0.1:9091"' || true)" 200
   assert_drift_alert
 }
 
 @test "tunnel drift: a catch-all that serves something alerts" {
-  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress[1].service = "http://127.0.0.1:8080"')" 200
+  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.ingress[1].service = "http://127.0.0.1:8080"' || true)" 200
   assert_drift_alert
 }
 
 @test "tunnel drift: private-network (WARP) routing turned on alerts" {
-  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config["warp-routing"].enabled = true')" 200
+  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config["warp-routing"].enabled = true' || true)" 200
   assert_drift_alert
   grep -qF 'warp-routing' "${MAIL_LOG}"
 }
 
 @test "tunnel drift: an unexpected top-level config key alerts" {
-  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.originRequest = {"noTLSVerify": true}')" 200
+  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config.originRequest = {"noTLSVerify": true}' || true)" 200
   assert_drift_alert
   grep -qF 'originRequest' "${MAIL_LOG}"
 }
 
 @test "tunnel: a config the check cannot parse counts as an API failure" {
-  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config = "x"')" 200
+  set_tunnel "$(fixture_variant tunnel-ok.json '.result.config = "x"' || true)" 200
   run run_check
   [ "${status}" -eq 2 ]
   grep -q "^API ERROR: .*unexpected shape" <<<"${output}"
@@ -405,7 +405,7 @@ assert_drift_alert() {
   while IFS= read -r ph; do
     grep -qF "s|${ph}|" "${REPO_DIR}/app-setup/access-policy-watchdog-setup.sh" \
       || { echo "not substituted: ${ph}"; return 1; }
-  done < <(grep -o '__[A-Z_]*__' "${TEMPLATE}" | sort -u)
+  done < <(grep -o '__[A-Z_]*__' "${TEMPLATE}" | sort -u || true)
 }
 
 # ---------------------------------------------------------------------------
@@ -420,16 +420,16 @@ assert_drift_alert() {
 
   run run_cycle
   [ "${status}" -eq 0 ]
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Subject: \[TESTHOST\] Cloudflare Access or tunnel object for test.example is missing" "${MAIL_LOG}"
   grep -q "the Access application app-0123" "${MAIL_LOG}"
-  [ "$(state_field '.api_failures')" = "0" ]
+  [ "$(state_field '.api_failures' || true)" = "0" ]
 }
 
 @test "missing: a deleted policy alerts on the first poll" {
   set_policy not-found.json 404
   run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "the Access policy pol-0123" "${MAIL_LOG}"
 }
 
@@ -439,7 +439,7 @@ assert_drift_alert() {
   [ "${status}" -eq 1 ]
   [[ "${output}" == MISSING:*"the tunnel tun-0123"* ]]
   run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "the tunnel tun-0123" "${MAIL_LOG}"
 }
 
@@ -455,17 +455,17 @@ assert_drift_alert() {
 
   run_cycle
   run_cycle
-  [ "$(mail_count)" -eq 0 ]
+  [ "$(mail_count || true)" -eq 0 ]
   run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Subject: \[TESTHOST\] Access policy watchdog cannot read Cloudflare" "${MAIL_LOG}"
-  [ "$(state_field '.api_failures')" = "3" ]
+  [ "$(state_field '.api_failures' || true)" = "3" ]
 
   set_app app-ok.json 200
   run_cycle
-  [ "$(mail_count)" -eq 2 ]
+  [ "$(mail_count || true)" -eq 2 ]
   grep -q "Subject: RESOLVED: \[TESTHOST\] Access policy watchdog reads Cloudflare again" "${MAIL_LOG}"
-  [ "$(state_field '.api_failures')" = "0" ]
+  [ "$(state_field '.api_failures' || true)" = "0" ]
 }
 
 @test "api error: a network failure streak alerts too" {
@@ -473,18 +473,18 @@ assert_drift_alert() {
   run_cycle
   run_cycle
   run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "curl exit 7" "${MAIL_LOG}"
 }
 
 @test "api error: a 200 that is not a Cloudflare success counts as a failure" {
-  set_policy "$(fixture_variant policy-ok.json '.success = false')" 200
+  set_policy "$(fixture_variant policy-ok.json '.success = false' || true)" 200
   run run_check
   [ "${status}" -eq 2 ]
 }
 
 @test "api error: a response the rule check cannot parse counts as a failure" {
-  set_policy "$(fixture_variant policy-ok.json '.result.include = "x"')" 200
+  set_policy "$(fixture_variant policy-ok.json '.result.include = "x"' || true)" 200
   run run_check
   [ "${status}" -eq 2 ]
   # jq's own error also lands in ${output} (stderr); match the line we print.
@@ -493,25 +493,25 @@ assert_drift_alert() {
   run_cycle
   run_cycle
   run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Subject: \[TESTHOST\] Access policy watchdog cannot read Cloudflare" "${MAIL_LOG}"
-  grep -q "unexpected shape" <<<"$(watchdog_log)"
+  grep -q "unexpected shape" <<<"$(watchdog_log || true)"
 }
 
 @test "api error: does not resolve an open drift alert" {
   set_policy policy-everyone.json 200
   run_cycle
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
 
   touch "${TEST_TMPDIR}/curl_fail"
   run_cycle
   run_cycle
   # Two failures: below the threshold, so no email of any kind, and above
   # all no RESOLVED for the drift.
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   run grep -c "RESOLVED" "${MAIL_LOG}"
   [ "${output}" = "0" ]
-  [ "$(state_field '.transitions.policy_drift.alerted')" = "true" ]
+  [ "$(state_field '.transitions.policy_drift.alerted' || true)" = "true" ]
 }
 
 @test "api error: a missing token file counts as an API failure" {
@@ -520,7 +520,7 @@ assert_drift_alert() {
   [ "${status}" -eq 2 ]
   run_cycle || true
   run_cycle || true
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "token" "${MAIL_LOG}"
 }
 
@@ -550,7 +550,7 @@ assert_drift_alert() {
     MAIL_LOG="${MAIL_LOG}" \
     /bin/bash "${WATCHDOG}"
   [ "${status}" -eq 0 ]
-  [ "$(mail_count)" -eq 1 ]
+  [ "$(mail_count || true)" -eq 1 ]
   grep -q "Cloudflare Access or tunnel config for test.example changed" "${MAIL_LOG}"
 }
 
@@ -558,14 +558,14 @@ assert_drift_alert() {
   rm -f "${HOME}/.local/lib/alert-lib.sh"
   run run_cycle
   [ "${status}" -eq 1 ]
-  grep -q "ERROR: alert library not found" <<<"$(watchdog_log)"
+  grep -q "ERROR: alert library not found" <<<"$(watchdog_log || true)"
 }
 
 @test "plist: renders to a valid LaunchAgent that runs every 15 minutes" {
   sed -e 's|__HOSTNAME_LOWER__|testhost|g' -e 's|__OPERATOR_USERNAME__|operator|g' \
     "${REPO_DIR}/app-setup/templates/com.access-policy-watchdog.plist" >"${TEST_TMPDIR}/agent.plist"
   plutil -lint "${TEST_TMPDIR}/agent.plist"
-  [ "$(plutil -extract StartInterval raw "${TEST_TMPDIR}/agent.plist")" = "900" ]
-  [ "$(plutil -extract ProgramArguments.0 raw "${TEST_TMPDIR}/agent.plist")" = "/bin/bash" ]
-  [ "$(plutil -extract Label raw "${TEST_TMPDIR}/agent.plist")" = "com.testhost.access-policy-watchdog" ]
+  [ "$(plutil -extract StartInterval raw "${TEST_TMPDIR}/agent.plist" || true)" = "900" ]
+  [ "$(plutil -extract ProgramArguments.0 raw "${TEST_TMPDIR}/agent.plist" || true)" = "/bin/bash" ]
+  [ "$(plutil -extract Label raw "${TEST_TMPDIR}/agent.plist" || true)" = "com.testhost.access-policy-watchdog" ]
 }
