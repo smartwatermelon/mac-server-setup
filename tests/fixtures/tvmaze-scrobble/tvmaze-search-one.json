@@ -1,0 +1,18 @@
+[
+  {
+    "score": 0.9,
+    "show": {
+      "id": 1520,
+      "name": "The Great British Bake Off",
+      "premiered": "2010-08-17"
+    }
+  },
+  {
+    "score": 0.6,
+    "show": {
+      "id": 9999,
+      "name": "The Great British Bake Off: An Extra Slice",
+      "premiered": "2014-08-08"
+    }
+  }
+]

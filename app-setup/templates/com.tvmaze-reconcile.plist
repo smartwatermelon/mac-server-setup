@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.__HOSTNAME_LOWER__.tvmaze-reconcile</string>
+
+    <!-- Syncs plays the webhook missed (listener down, reboot). Plex does
+         not resend webhooks. /bin/bash is bash 3.2. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/__OPERATOR_USERNAME__/.local/bin/tvmaze-scrobble</string>
+        <string>--reconcile</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>3600</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/state/tvmaze-scrobble.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/__OPERATOR_USERNAME__/.local/state/tvmaze-scrobble.log</string>
+</dict>
+</plist>

@@ -1,0 +1,32 @@
+{
+  "event": "media.scrobble",
+  "user": true,
+  "owner": true,
+  "Account": {
+    "id": 1234567,
+    "thumb": "https://plex.tv/users/abc/avatar",
+    "title": "Andrew Rich"
+  },
+  "Server": { "title": "TESTHOST", "uuid": "0000" },
+  "Player": {
+    "local": true,
+    "publicAddress": "203.0.113.1",
+    "title": "Living Room",
+    "uuid": "p1"
+  },
+  "Metadata": {
+    "librarySectionType": "show",
+    "ratingKey": "5001",
+    "key": "/library/metadata/5001",
+    "parentRatingKey": "5000",
+    "grandparentRatingKey": "11208",
+    "type": "episode",
+    "title": "Episode Title",
+    "grandparentKey": "/library/metadata/11208",
+    "grandparentTitle": "Taskmaster",
+    "parentTitle": "Series 16",
+    "index": 10,
+    "parentIndex": 16,
+    "lastViewedAt": 1793000000
+  }
+}
