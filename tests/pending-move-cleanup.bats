@@ -133,3 +133,100 @@ MOCK
   [ -d "${PENDING_MOVE}/Orphan.Dir" ]
   [[ "$output" == *"Cannot reach Transmission RPC"* ]]
 }
+
+# rm mock that behaves like rm -rf on the NFS mount when a file is still held
+# open: it removes everything except .nfs.* files, then fails with "Directory
+# not empty" if any remain. It records its arguments and refuses any path
+# outside the test's temp dir.
+write_nfs_rm_mock() {
+  cat >"${MOCK_BIN_DIR}/rm-nfs" <<'MOCK'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${TEST_TMPDIR}/rm-calls"
+target="${*: -1}"
+case "${target}" in
+  "${TEST_TMPDIR}"/*) ;;
+  *) echo "rm-nfs: refusing ${target}" >&2; exit 99 ;;
+esac
+if [[ -d "${target}" ]]; then
+  find "${target}" -mindepth 1 ! -type d ! -name '.nfs.*' -exec /bin/rm -f {} +
+  find "${target}" -mindepth 1 -depth -type d -empty -exec /bin/rmdir {} +
+  if [[ -n "$(find "${target}" -name '.nfs.*' -print -quit)" ]]; then
+    echo "rm: ${target}: Directory not empty" >&2
+    exit 1
+  fi
+  /bin/rmdir "${target}"
+else
+  /bin/rm -f "${target}"
+fi
+MOCK
+  chmod +x "${MOCK_BIN_DIR}/rm-nfs"
+  export RM_BIN="${MOCK_BIN_DIR}/rm-nfs"
+}
+
+@test "an orphan held open by NFS does not abort the sweep or fail the run" {
+  write_nfs_rm_mock
+  : >"${RPC_NAMES_FILE}"
+  # find order is not guaranteed, so Z.Orphan may come first. The status
+  # check catches the old set -e abort either way: it exited 1.
+  mkdir -p "${PENDING_MOVE}/A.Held" "${PENDING_MOVE}/Z.Orphan"
+  echo "gone" >"${PENDING_MOVE}/A.Held/movie.avi"
+  echo "open" >"${PENDING_MOVE}/A.Held/.nfs.20051025.93a8"
+  echo "x" >"${PENDING_MOVE}/Z.Orphan/file.mkv"
+
+  run "${CLEANUP}"
+  [ "$status" -eq 0 ]
+  [ ! -e "${PENDING_MOVE}/Z.Orphan" ]
+  [ ! -e "${PENDING_MOVE}/A.Held/movie.avi" ]
+  [ -f "${PENDING_MOVE}/A.Held/.nfs.20051025.93a8" ]
+  [[ "$output" == *"Left in place: A.Held"* ]]
+  [[ "$output" == *"1 removed, 0 still tracked by Transmission, 1 held open"* ]]
+}
+
+@test "a directory holding only .nfs.* files is skipped without rm or a log line" {
+  write_nfs_rm_mock
+  : >"${RPC_NAMES_FILE}"
+  mkdir -p "${PENDING_MOVE}/Held.Dir/sub"
+  echo "open" >"${PENDING_MOVE}/Held.Dir/.nfs.20051026.93a8"
+  echo "open" >"${PENDING_MOVE}/Held.Dir/sub/.nfs.20051027.93a8"
+
+  run "${CLEANUP}"
+  [ "$status" -eq 0 ]
+  [ -d "${PENDING_MOVE}/Held.Dir" ]
+  [ ! -e "${TEST_TMPDIR}/rm-calls" ]
+  [ -z "$output" ]
+}
+
+@test "a directory with .nfs.* and a real file goes to rm, and the held file stays" {
+  write_nfs_rm_mock
+  : >"${RPC_NAMES_FILE}"
+  mkdir -p "${PENDING_MOVE}/Mixed.Dir"
+  echo "open" >"${PENDING_MOVE}/Mixed.Dir/.nfs.1"
+  echo "real" >"${PENDING_MOVE}/Mixed.Dir/real.mkv"
+
+  run "${CLEANUP}"
+  [ "$status" -eq 0 ]
+  grep -qF "${PENDING_MOVE}/Mixed.Dir" "${TEST_TMPDIR}/rm-calls"
+  [ ! -e "${PENDING_MOVE}/Mixed.Dir/real.mkv" ]
+  [ -f "${PENDING_MOVE}/Mixed.Dir/.nfs.1" ]
+  [[ "$output" == *"Left in place: Mixed.Dir"* ]]
+}
+
+@test "a removal that fails for another reason is logged and fails the run" {
+  cat >"${MOCK_BIN_DIR}/rm-fail" <<'MOCK'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${TEST_TMPDIR}/rm-calls"
+echo "rm: Permission denied" >&2
+exit 1
+MOCK
+  chmod +x "${MOCK_BIN_DIR}/rm-fail"
+  export RM_BIN="${MOCK_BIN_DIR}/rm-fail"
+  : >"${RPC_NAMES_FILE}"
+  mkdir -p "${PENDING_MOVE}/A.Stuck" "${PENDING_MOVE}/B.Stuck"
+  echo "x" >"${PENDING_MOVE}/A.Stuck/file.mkv"
+
+  run "${CLEANUP}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"ERROR: could not remove A.Stuck"* ]]
+  [[ "$output" == *"ERROR: could not remove B.Stuck"* ]]
+  [[ "$output" == *"2 failed"* ]]
+}
