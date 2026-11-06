@@ -166,7 +166,8 @@ MOCK
 @test "an orphan held open by NFS does not abort the sweep or fail the run" {
   write_nfs_rm_mock
   : >"${RPC_NAMES_FILE}"
-  # "A..." sorts first so a set -e abort would skip "Z.Orphan".
+  # find order is not guaranteed, so Z.Orphan may come first. The status
+  # check catches the old set -e abort either way: it exited 1.
   mkdir -p "${PENDING_MOVE}/A.Held" "${PENDING_MOVE}/Z.Orphan"
   echo "gone" >"${PENDING_MOVE}/A.Held/movie.avi"
   echo "open" >"${PENDING_MOVE}/A.Held/.nfs.20051025.93a8"
@@ -195,7 +196,7 @@ MOCK
   [ -z "$output" ]
 }
 
-@test "a directory with .nfs.* and a real file is still removed" {
+@test "a directory with .nfs.* and a real file goes to rm, and the held file stays" {
   write_nfs_rm_mock
   : >"${RPC_NAMES_FILE}"
   mkdir -p "${PENDING_MOVE}/Mixed.Dir"
@@ -206,6 +207,8 @@ MOCK
   [ "$status" -eq 0 ]
   grep -qF "${PENDING_MOVE}/Mixed.Dir" "${TEST_TMPDIR}/rm-calls"
   [ ! -e "${PENDING_MOVE}/Mixed.Dir/real.mkv" ]
+  [ -f "${PENDING_MOVE}/Mixed.Dir/.nfs.1" ]
+  [[ "$output" == *"Left in place: Mixed.Dir"* ]]
 }
 
 @test "a removal that fails for another reason is logged and fails the run" {
