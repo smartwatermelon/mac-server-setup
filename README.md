@@ -24,6 +24,8 @@ Automated setup for an Apple Silicon Mac Mini as a home server. Plex, Transmissi
 
 More detail in [Prerequisites](docs/prerequisites.md) and [Environment Variables](docs/environment-variables.md).
 
+Adapting this to your own setup? The [stack matrix](docs/stack-matrix.md) lists which parts are required, optional or replaceable.
+
 ## What's running
 
 After setup, these all start automatically on login (LaunchAgents):
