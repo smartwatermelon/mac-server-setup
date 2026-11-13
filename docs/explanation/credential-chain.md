@@ -31,7 +31,7 @@ flowchart LR
 2. **The package keychain.** `prep-airdrop.sh` creates a keychain named `mac-server-setup`, stores each secret in it, reads each one back to check it, locks the keychain, and copies the file into the package as `config/mac-server-setup-db`. Service names follow the pattern `<purpose>-<server name>`, for example `pia-account-macmini`. A login and password pair is stored as one `username:password` string.
 3. **First boot import.** `first-boot.sh` unlocks the package keychain and copies each item into the `admin` user's default keychain, which is the login keychain. An optional item that is missing gives a warning, not an error.
 4. **App setup.** Each setup script reads what it needs from the `admin` keychain and writes it into the form its service uses. For example, `podman-transmission-setup.sh` writes the PIA account to `~operator/containers/transmission/.env` with mode 600.
-5. **Runtime.** The service reads its own file. It does not read a keychain at run time. The secrets sit in the `admin` keychain, and the services run as `operator`, which cannot read it.
+5. **Runtime.** The service reads its own file. It does not read a keychain at run time. The secrets sit in the `admin` login keychain, and the services run as `operator`. That keychain opens only with the `admin` password. `operator` is in the `admin` group, but group membership does not unlock another user's keychain.
 
 ### What protects the package keychain
 

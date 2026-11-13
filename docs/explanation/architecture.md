@@ -32,14 +32,18 @@ The split keeps secrets and network access to 1Password on the dev Mac, keeps th
 | Account | Role | Logs in |
 | --- | --- | --- |
 | `admin` | Administrator. Runs setup, owns Homebrew, uses `sudo`. | By hand, for maintenance |
-| `operator` | Standard account. Runs the media apps and the watchdogs. | Automatically at boot |
+| `operator` | Service account, also in the `admin` group. Runs the media apps and the watchdogs. | Automatically at boot |
+
+`first-boot.sh` adds `operator` to the `admin` group, so `operator` can use `sudo` with its own password. The split is therefore not a privilege boundary. It keeps setup and the running services apart.
 
 The reasons for the split:
 
-- **The apps need a logged-in user.** Plex, the Podman VM and the macOS privacy (TCC) grants all belong to a GUI session. After a power cut the server must come back without a person at the keyboard, so one account logs in automatically. That account should not be an administrator.
-- **Automatic login has a cost.** It needs FileVault off, and `first-boot.sh` checks for that. An account that logs in with no password should have as few rights as possible, and `operator` does not need `sudo` for daily work.
+- **The apps need a logged-in user.** Plex, the Podman VM and the macOS privacy (TCC) grants all belong to a GUI session. After a power cut the server must come back without a person at the keyboard, so one account logs in automatically. That account is `operator`, and the services' LaunchAgents belong to it.
+- **Automatic login has a cost.** It needs FileVault off, and `first-boot.sh` checks for that. Touch ID does not work with automatic login, so `admin` keeps Touch ID for `sudo` and `operator` keeps automatic login.
+- **The imported secrets stay with `admin`.** First boot imports the credentials from the setup package into the `admin` login keychain. Setup scripts read them there and give each `operator` service only the file it needs. See [Credential chain](credential-chain.md).
 - **Homebrew belongs to one user.** Homebrew refuses to run as root and expects one owner. `admin` owns it. Setup scripts that run as root drop to the invoking user for `brew install`.
-- **Limited damage.** A compromise of an app that runs as `operator` does not give administrator rights directly.
+
+`operator` needs `sudo` for a few things at run time. `plex-setup.sh` writes `/etc/sudoers.d/nfs-mount`, which lets `operator` run `mount_nfs` and `umount` on its media mount with no password. Any other `sudo` command asks for the `operator` password.
 
 `first-boot.sh` creates `operator` with `sysadminctl` and passes the administrator credentials so that the account gets a SecureToken. Without a SecureToken, the Passwords app rejects the correct password for the account. See [`first-boot.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/scripts/server/first-boot.sh).
 

@@ -55,7 +55,7 @@ The script uses variables from `config.conf`:
 
 ```bash
 SERVER_NAME="MEDIA"              # Primary server identifier
-OPERATOR_USERNAME="operator"     # Non-admin user account
+OPERATOR_USERNAME="operator"     # Auto-login service account (admin group)
 NAS_HOSTNAME="nas.local"         # NAS hostname for NFS
 NAS_SHARE_NAME="Media"           # Media share name
 ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"  # 1Password item for NAS credentials
@@ -102,7 +102,7 @@ ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"  # 1Password item for NAS credentials
 
 - **Setup logs**: `~/.local/state/${HOSTNAME_LOWER}-apps.log`
 - **Plex logs**: `~operator/Library/Logs/Plex Media Server/`
-- **LaunchAgent logs**: `/tmp/plex-out.log`, `/tmp/plex-error.log`
+- **LaunchAgent log**: `~operator/.local/state/${HOSTNAME_LOWER}-plex-launchagent.log` (stdout and stderr)
 
 ## Migration
 
@@ -324,7 +324,7 @@ launchctl stop com.plexapp.plexmediaserver
 
 # View logs
 tail -f ~/.local/state/${HOSTNAME_LOWER}-apps.log
-tail -f /tmp/plex-out.log /tmp/plex-error.log
+tail -f ~/.local/state/${HOSTNAME_LOWER}-plex-launchagent.log
 
 # Check NAS mount
 mount | grep ${NAS_SHARE_NAME}
@@ -389,7 +389,7 @@ ping ${NAS_HOSTNAME}
 op item get ${ONEPASSWORD_NAS_ITEM}
 
 # Manual NFS mount test
-sudo mount_nfs -o resvport,rw,soft romano.local:/volume2/DSMedia ~/.local/mnt/${NAS_SHARE_NAME}
+sudo mount_nfs -o resvport,rw,soft your-nas.local:/volume1/Media ~/.local/mnt/${NAS_SHARE_NAME}
 
 # Check NFS exports from NAS
 showmount -e ${NAS_HOSTNAME}
