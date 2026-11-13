@@ -197,7 +197,7 @@ page() {
 
 @test "allowlist: an entry for another path does not apply" {
   p="$(page <<<'upstream 10.9.8.7')"
-  printf 'docs/other.md\t10.9.8.7\n' >"${BATS_TEST_TMPDIR}/allow.tsv"
+  printf 'elsewhere/other.md\t10.9.8.7\n' >"${BATS_TEST_TMPDIR}/allow.tsv"
   run "${CHECK}" --allowlist "${BATS_TEST_TMPDIR}/allow.tsv" "${p}"
   [ "${status}" -eq 1 ]
 }
