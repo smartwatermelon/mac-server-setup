@@ -11,8 +11,8 @@ Every key in `config/config.conf.template`. Copy the template to
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `SERVER_NAME` | `MACMINI` | Server hostname; lowercased for .local names and file names |
-| `OPERATOR_USERNAME` | `operator` | Service account that runs the media apps and auto-logs in |
+| `SERVER_NAME` | `MACMINI` | Server hostname; lowercased for .local names and file names<br>No spaces. It is also the system volume name, unless HOSTNAME_OVERRIDE is set<br>The package folder and keychain services always use it (~/macmini-setup, pia-account-macmini) |
+| `OPERATOR_USERNAME` | `operator` | Service account that runs the media apps and auto-logs in<br>Full name "&lt;SERVER_NAME&gt; Operator" and admin group membership; first-boot.sh sets both |
 
 ## 1Password configuration
 
@@ -30,7 +30,7 @@ Every key in `config/config.conf.template`. Copy the template to
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `MONITORING_EMAIL` | `your-email@example.com` | Where alert email goes |
+| `MONITORING_EMAIL` | `your-email@example.com` | Where alert email goes<br>If it is empty or still this example, msmtp-setup.sh and plex-watchdog-setup.sh ask for it and write it to the server's copy of config.conf |
 
 ## Media NAS configuration
 
@@ -43,11 +43,9 @@ Every key in `config/config.conf.template`. Copy the template to
 
 ## Plex migration configuration (optional)
 
-If migrating from an existing Plex server, specify the source hostname<br>Leave empty to prompt during setup or use --migrate-from command line option
-
 | Key | Default | Description |
 | --- | --- | --- |
-| `PLEX_MIGRATE_FROM` | (empty) | e.g., "old-server.local" |
+| `PLEX_MIGRATE_FROM` | (empty) | Not read by any script yet<br>To migrate from an earlier Plex server, run plex-setup.sh --migrate-from HOST |
 
 ## Dropbox configuration (optional)
 
@@ -55,7 +53,7 @@ If you want to sync a specific Dropbox folder to the server
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `DROPBOX_SYNC_FOLDER` | (empty) | Dropbox folder to sync (e.g., "Private/ServerSync") |
+| `DROPBOX_SYNC_FOLDER` | (empty) | Dropbox folder to sync (e.g., "Private/ServerSync")<br>When set, prep-airdrop.sh runs the Dropbox sign-in (rclone-airdrop-prep.sh) |
 | `DROPBOX_LOCAL_PATH` | (empty) | Local path where to sync (default: ~/.local/sync/dropbox) |
 | `DROPBOX_SYNC_INTERVAL` | `30` | Sync interval in minutes (default: 30) |
 
@@ -83,7 +81,7 @@ These settings improve terminal accessibility with better colors and fonts
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `TERMINAL_PROFILE_FILE` | (empty) | Terminal.app profile file (.terminal format) |
+| `TERMINAL_PROFILE_FILE` | (empty) | Terminal.app profile file (.terminal format)<br>File name only; put the file in config/ next to config.conf |
 | `USE_ITERM2` | `false` | Set to "true" to copy complete iTerm2 preferences from development machine<br>When USE_ITERM2 is "true", your entire iTerm2 configuration (profiles, settings, etc.) will be copied to the server during prep-airdrop and imported during first-boot<br>Set TERMINAL_PROFILE_FILE for Terminal.app profile, or leave empty to skip |
 
 ## VPN and Transmission configuration (optional)
@@ -153,4 +151,4 @@ The API key is not here: it is read from the admin keychain (service tvmaze-&lt;
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `HOSTNAME_OVERRIDE` | (empty) | If different from SERVER_NAME |
+| `HOSTNAME_OVERRIDE` | (empty) | If different from SERVER_NAME<br>Sets the hostname, .local name and volume name, for example when SERVER_NAME clashes on your LAN<br>The package folder, keychain services and operator full name still use SERVER_NAME |

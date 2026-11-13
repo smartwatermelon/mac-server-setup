@@ -5,7 +5,10 @@
 
 # Server identity
 SERVER_NAME="MACMINI"              # Server hostname; lowercased for .local names and file names
+  # No spaces. It is also the system volume name, unless HOSTNAME_OVERRIDE is set
+  # The package folder and keychain services always use it (~/macmini-setup, pia-account-macmini)
 OPERATOR_USERNAME="operator"       # Service account that runs the media apps and auto-logs in
+  # Full name "<SERVER_NAME> Operator" and admin group membership; first-boot.sh sets both
 
 # 1Password configuration
 OP_VAULT_ID="your-vault-id"        # 1Password vault, by ID so a rename cannot break it (op vault list)
@@ -18,6 +21,8 @@ ONEPASSWORD_OPENSUBTITLES_ITEM="Opensubtitles"  # Login item: OpenSubtitles acco
 
 # Monitoring
 MONITORING_EMAIL="your-email@example.com"  # Where alert email goes
+  # If it is empty or still this example, msmtp-setup.sh and plex-watchdog-setup.sh
+  # ask for it and write it to the server's copy of config.conf
 
 # Media NAS configuration
 NAS_HOSTNAME="nas.local"          # Media NAS hostname
@@ -26,13 +31,13 @@ NAS_SHARE_NAME="Media"            # NFS share name on the NAS
 NAS_VOLUME="volume2"              # Synology volume name for NFS export path (use showmount -e to verify)
 
 # Plex migration configuration (optional)
-# If migrating from an existing Plex server, specify the source hostname
-# Leave empty to prompt during setup or use --migrate-from command line option
-PLEX_MIGRATE_FROM=""  # e.g., "old-server.local"
+PLEX_MIGRATE_FROM=""  # Not read by any script yet
+  # To migrate from an earlier Plex server, run plex-setup.sh --migrate-from HOST
 
 # Dropbox configuration (optional)
 # If you want to sync a specific Dropbox folder to the server
 DROPBOX_SYNC_FOLDER=""               # Dropbox folder to sync (e.g., "Private/ServerSync")
+  # When set, prep-airdrop.sh runs the Dropbox sign-in (rclone-airdrop-prep.sh)
 DROPBOX_LOCAL_PATH=""                # Local path where to sync (default: ~/.local/sync/dropbox)
 DROPBOX_SYNC_INTERVAL="30"           # Sync interval in minutes (default: 30)
 
@@ -53,6 +58,7 @@ CATCH_HISTORY_CUTOFF_DAYS="7"
 # Terminal configuration (optional)
 # These settings improve terminal accessibility with better colors and fonts
 TERMINAL_PROFILE_FILE=""  # Terminal.app profile file (.terminal format)
+  # File name only; put the file in config/ next to config.conf
 USE_ITERM2="false"        # Set to "true" to copy complete iTerm2 preferences from development machine
   # When USE_ITERM2 is "true", your entire iTerm2 configuration (profiles, settings, etc.)
   # will be copied to the server during prep-airdrop and imported during first-boot
@@ -107,3 +113,5 @@ QUICKCONNECT_BERKSWELL=""          # QuickConnect URL for Berkswell NAS
 
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME
+  # Sets the hostname, .local name and volume name, for example when SERVER_NAME clashes on your LAN
+  # The package folder, keychain services and operator full name still use SERVER_NAME
