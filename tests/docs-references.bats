@@ -11,10 +11,21 @@ BATS_TEST_TMPDIR="${BATS_TEST_TMPDIR:-}"
 REPO_DIR="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
 SELF="tests/docs-references.bats"
 
-# Print "file<TAB>docs-path" for each docs/...md path named in the given
-# files. A path inside a URL or a longer path still counts.
+# Print "file<TAB>docs-path" for each repo docs/...md path named in the
+# given files. The path must start the word, so ~/.claude/docs/X.md and
+# other trees' docs folders are not counted.
 doc_refs() {
-  grep -oHE 'docs/[A-Za-z0-9_./-]+\.md' "$@" | sed -E 's/:/\t/' || true
+  grep -oHE '(^|[^A-Za-z0-9_./~-])docs/[A-Za-z0-9_./-]+\.md' "$@" \
+    | sed -E 's/:[^d]*docs\//\tdocs\//' || true
+}
+
+# Print "file: path" for each named docs path that does not exist,
+# relative to the current directory.
+missing_refs() {
+  local file path
+  while IFS=$'\t' read -r file path; do
+    [[ -f "${path}" ]] || printf '%s: %s\n' "${file}" "${path}"
+  done < <(doc_refs "$@" || true)
 }
 
 # Print the referencing files: tracked code, tests, config, CLAUDE.md and
@@ -35,13 +46,17 @@ sources() {
   [[ "${output}" == *$'\t'"docs/a/b.md"* ]]
 }
 
+@test "doc_refs: paths into other trees' docs folders are not counted" {
+  printf 'see ~/.claude/docs/X.md and site/docs/y.md\n' >"${BATS_TEST_TMPDIR}/s.sh"
+  run doc_refs "${BATS_TEST_TMPDIR}/s.sh"
+  [ -z "${output}" ]
+}
+
 @test "known bad: a reference to a missing doc is reported" {
-  printf '# See docs/no-such-page.md\n' >"${BATS_TEST_TMPDIR}/s.sh"
-  missing=0
-  while IFS=$'\t' read -r _ path; do
-    [[ -f "${REPO_DIR}/${path}" ]] || missing=$((missing + 1))
-  done < <(doc_refs "${BATS_TEST_TMPDIR}/s.sh" || true)
-  [ "${missing}" -eq 1 ]
+  cd "${REPO_DIR}"
+  printf '# See docs/no-such-page.md and docs/stack-matrix.md\n' >"${BATS_TEST_TMPDIR}/s.sh"
+  run missing_refs "${BATS_TEST_TMPDIR}/s.sh"
+  [ "${output}" = "${BATS_TEST_TMPDIR}/s.sh: docs/no-such-page.md" ]
 }
 
 @test "sources: the scan covers code, tests, config and CLAUDE.md" {
@@ -56,10 +71,7 @@ sources() {
   cd "${REPO_DIR}"
   mapfile -t files < <(sources || true)
   [ "${#files[@]}" -gt 0 ]
-  bad=()
-  while IFS=$'\t' read -r file path; do
-    [[ -f "${path}" ]] || bad+=("${file}: ${path}")
-  done < <(doc_refs "${files[@]}" || true)
-  printf '%s\n' "${bad[@]}"
-  [ "${#bad[@]}" -eq 0 ]
+  run missing_refs "${files[@]}"
+  echo "${output}"
+  [ -z "${output}" ]
 }
