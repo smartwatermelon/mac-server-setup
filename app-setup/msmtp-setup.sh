@@ -265,7 +265,7 @@ else
 
   # Write config with embedded password (mode 600, owned by operator).
   # This follows the same credential-embedding pattern used by other services
-  # in this repo (see docs/keychain-credential-management.md). The operator
+  # in this repo (see docs/explanation/credential-chain.md). The operator
   # keychain cannot be unlocked from non-interactive contexts (LaunchAgents,
   # sudo -iu), so credentials are embedded in config files with restrictive
   # permissions instead.
