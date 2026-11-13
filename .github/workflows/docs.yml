@@ -1,6 +1,7 @@
 name: Docs
 
 # Docs site checks (#205). standards-check already runs markdownlint.
+# No Pages deploy job until the scrub (Phase 2) merges.
 
 on:
   # No branch filter: stacked PRs target a phase branch, not main.
@@ -62,11 +63,3 @@ jobs:
           # A scheduled sweep only warns: a remote site going down must not
           # turn main red. On a PR a broken link fails the check.
           fail: ${{ github.event_name != 'schedule' }}
-
-  deploy:
-    # OFF until the scrub (Phase 2) merges; nothing reaches Pages before.
-    if: false
-    needs: [build, links]
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Pages deploy is disabled until the docs scrub merges."
