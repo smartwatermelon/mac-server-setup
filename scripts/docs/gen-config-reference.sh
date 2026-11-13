@@ -34,7 +34,7 @@ rows="$(awk '
     flush()
     t = $0; sub(/^#[[:space:]]?/, "", t)
     if (fresh) { sec = t; intro_txt = ""; fresh = 0; intro = 1 }
-    else if (intro) intro_txt = (intro_txt == "" ? t : intro_txt " " t)
+    else if (intro) intro_txt = add(intro_txt, t)
     else pending = add(pending, t)
     next
   }
@@ -76,7 +76,7 @@ Every key in `config/config.conf.template`. Copy the template to
 `prep-airdrop.sh`.
 EOF
   awk -F'\t' '
-    function esc(s) { gsub(/\|/, "\\|", s); gsub(/</, "\\&lt;", s); gsub(/>/, "\\&gt;", s); gsub(/\001/, "<br>", s); gsub(/https?:\/\/[^ )]+/, "`&`", s); return s }
+    function esc(s) { gsub(/\|/, "\\|", s); gsub(/</, "\\&lt;", s); gsub(/>/, "\\&gt;", s); gsub(/https?:\/\/[^ )\001]+/, "`&`", s); gsub(/\001/, "<br>", s); return s }
     function head() { if (!table) printf "\n| Key | Default | Description |\n| --- | --- | --- |\n"; table = 1 }
     $1 == "S" { printf "\n## %s\n", $2; table = 0; next }
     $1 == "I" { printf "\n%s\n", esc($2); next }
