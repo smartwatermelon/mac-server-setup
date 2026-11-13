@@ -30,7 +30,8 @@
 # - Existing directory overwrite confirmation
 # - 1Password credential retrieval (if missing)
 #
-# ENVIRONMENT VARIABLES (Optional):
+# OPTIONAL CONFIG.CONF KEYS (set them in config/config.conf, which this script
+# sources; exporting them in the shell has no effect):
 # - FILEBOT_LICENSE_FILE: Path to FileBot license file for inclusion
 # - USE_ITERM2: Set to "true" to export iTerm2 preferences
 # - TERMINAL_PROFILE_FILE: Terminal profile filename to include
@@ -100,8 +101,8 @@ fi
 # The vault has no default: it is specific to each 1Password account, and a
 # real vault id does not belong in the repo (#265).
 require_onepassword_vault() {
-  if [[ -z "${ONEPASSWORD_VAULT:-}" ]]; then
-    echo "ERROR: ONEPASSWORD_VAULT is not set." >&2
+  if [[ -z "${ONEPASSWORD_VAULT:-}" || "${ONEPASSWORD_VAULT}" == "your-vault-id" ]]; then
+    echo "ERROR: ONEPASSWORD_VAULT is not set (empty, or still the template's your-vault-id)." >&2
     echo "Set OP_VAULT_ID (and ONEPASSWORD_VAULT) in ${CONFIG_FILE}." >&2
     echo "Copy config/config.conf.template if the file does not exist; 'op vault list' shows vault ids." >&2
     return 1

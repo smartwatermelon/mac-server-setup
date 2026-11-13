@@ -46,6 +46,12 @@ check() {
   [ "${status}" -eq 1 ]
 }
 
+@test "the template placeholder vault fails" {
+  check ONEPASSWORD_VAULT=your-vault-id
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *"your-vault-id"* ]]
+}
+
 @test "a set vault passes" {
   check ONEPASSWORD_VAULT=example-vault
   [ "${status}" -eq 0 ]
@@ -53,6 +59,6 @@ check() {
 }
 
 @test "no 26-character vault id is hard-coded in the setup scripts" {
-  run grep -nE '_VAULT[A-Z_]*="[a-z0-9]{26}"' "${PREP}" "${REPO_DIR}/scripts/server/first-boot.sh"
+  run grep -nE "_VAULT[A-Z_]*=[\"']?[a-z0-9]{26}([^a-z0-9]|$)" "${PREP}" "${REPO_DIR}/scripts/server/first-boot.sh"
   [ "${status}" -eq 1 ]
 }
