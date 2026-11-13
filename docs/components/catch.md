@@ -91,7 +91,7 @@ Run these checks as `admin`.
 ## Related
 
 - [Transmission first install](transmission-first-install.md): the container and the magnet link handler.
-- [rclone setup](../apps/rclone-setup-README.md): the Dropbox sync that uses the same local folder.
+- [rclone setup](rclone.md): the Dropbox sync that uses the same local folder.
 - [Configuration keys](../reference/config-keys.md)
 - [LaunchAgents](../reference/launchagents.md)
 - [Logs](../reference/logs.md)

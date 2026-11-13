@@ -2,7 +2,7 @@
 
 This page covers what happens after a download finishes: the trigger watcher, `transmission-done` and FileBot, triage, the hourly `pending-move/` cleanup, and Catch. Run the checks as `admin` on the server.
 
-For how the pipeline works, see [Transmission and FileBot](../apps/transmission-filebot-README.md). In short, a finished download moves like this:
+For how the pipeline works, see [Transmission and FileBot](../components/transmission-filebot.md). In short, a finished download moves like this:
 
 1. Inside the container, `transmission-post-done.sh` writes a trigger file named after the torrent hash to `~operator/containers/transmission/config/triggers/`.
 2. The `com.<hostname>.transmission-trigger-watcher` LaunchAgent looks in that folder every 60 seconds. For each trigger it maps the container path `/data` to `/Users/operator/.local/mnt/<share>` and runs `~operator/.local/bin/transmission-done`.
@@ -139,7 +139,7 @@ sudo grep -E 'Access Denied|I/O error|Permission denied' /Users/operator/.local/
 
 1. Check the NFS rule of the shared folder on the NAS: read and write, map all users to admin, non-privileged ports allowed, subfolder access allowed.
 2. Fix folder permissions on the NAS itself, over SSH to the NAS. A `chmod` from the Mac does not work on this mount.
-3. See [NAS storage configuration](../apps/transmission-filebot-README.md#nas-storage-configuration).
+3. See [NAS storage configuration](../components/transmission-filebot.md#nas-storage-configuration).
 
 ## transmission-done has been running for over 45 minutes
 
@@ -162,7 +162,7 @@ The second column is the elapsed time. `--check` exits 1 if the stable bash copy
 2. Do not kill `transmission-done`. Stopping FileBot during a move can lose the file.
 3. If the stable copy is stale, run `/usr/local/bin/<hostname>-stable-sign.sh`.
 
-See [Stable signing](../apps/stable-signing-README.md).
+See [Stable signing](../components/stable-signing.md).
 
 ## A download was deleted from pending-move before it was processed
 

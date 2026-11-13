@@ -79,10 +79,10 @@ After setup:
 - The PIA port manager inside the container passes the PIA account to `curl` as arguments, each time it asks for a port-forwarding token, for as long as the container runs.
 - The PIA port-forwarding probe, which you run when you need it, passes the account to `podman exec -e` and to `curl`.
 
-See [PIA VPN](../apps/pia-vpn-README.md).
+See [PIA VPN](../components/pia-vpn.md).
 
 ## Rotating a secret
 
-A rotation must go through every stage that holds a copy, in order. For a package-chain secret: change it at the provider, update 1Password, update the `admin` keychain item on the server, then run the setup script again so that it rewrites the service file. For the PIA account, the container must then be recreated. [PIA VPN](../apps/pia-vpn-README.md) gives the full procedure. For a System keychain token, replace the keychain item and restart the daemon that reads it.
+A rotation must go through every stage that holds a copy, in order. For a package-chain secret: change it at the provider, update 1Password, update the `admin` keychain item on the server, then run the setup script again so that it rewrites the service file. For the PIA account, the container must then be recreated. [PIA VPN](../components/pia-vpn.md) gives the full procedure. For a System keychain token, replace the keychain item and restart the daemon that reads it.
 
 For the older description of the keychain format and service names, see [Keychain credential management](../keychain-credential-management.md).

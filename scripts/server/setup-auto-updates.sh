@@ -211,7 +211,7 @@ log "Running brew upgrade --formula..."
 brew upgrade --formula 2>&1 | tee -a "${LOG_FILE}" || true
 
 # Refresh the stably-signed copies of binaries whose macOS privacy (TCC)
-# grants must survive the upgrade. See docs/apps/stable-signing-README.md.
+# grants must survive the upgrade. See docs/components/stable-signing.md.
 STABLE_SIGN="/usr/local/bin/__HOSTNAME_LOWER__-stable-sign.sh"
 if [[ -x "${STABLE_SIGN}" ]]; then
   log "Running stable-sign..."
@@ -225,7 +225,7 @@ else
 fi
 
 # Upgrade casks separately; some need sudo. SKIP_CASKS update themselves
-# (Plex: see docs/apps/plex-setup-README.md).
+# (Plex: see docs/components/plex.md).
 SKIP_CASKS=" plex-media-server "
 if ! outdated=$(brew outdated --cask --quiet 2>>"${LOG_FILE}"); then
   log "ERROR: brew outdated --cask failed; no casks upgraded"
@@ -312,7 +312,7 @@ EOF
 # the next protected access blocks on a GUI prompt nobody is there to answer.
 # stable-sign.sh keeps re-signed copies at a fixed path under
 # /usr/local/stable; the upgrade script calls it after every formula upgrade.
-# Full write-up: docs/apps/stable-signing-README.md
+# Full write-up: docs/components/stable-signing.md
 
 setup_stable_sign() {
   set_section "Stable Signing"

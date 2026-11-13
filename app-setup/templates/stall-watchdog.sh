@@ -22,7 +22,7 @@
 #      the supervisor is restarted with the status-writing wrapper.
 #
 # Each invocation is a single poll cycle, driven by a LaunchAgent every two
-# minutes. See docs/apps/monitoring-README.md.
+# minutes. See docs/components/monitoring.md.
 #
 # Must stay compatible with /bin/bash 3.2: the LaunchAgent runs it with
 # /bin/bash.
@@ -38,7 +38,7 @@ set -euo pipefail
 
 # launchd starts this with PATH=/usr/bin:/bin:/usr/sbin:/sbin, which has no
 # Homebrew in it. Set PATH explicitly so the script behaves the same under
-# launchd as in a login shell. See docs/apps/monitoring-README.md.
+# launchd as in a login shell. See docs/components/monitoring.md.
 ARCH="$(arch)"
 case "${ARCH}" in
   arm64) HOMEBREW_PREFIX="/opt/homebrew" ;;
@@ -470,8 +470,8 @@ It was last updated ${age_text}. The loop is hung, or its LaunchAgent is not
 running.
 
 Check: launchctl print gui/$(id -u)/com.${HOSTNAME_LOWER}.podman-transmission-vm
-Restarting the supervisor restarts the VM: read docs/apps/monitoring-README.md
-first." || true
+Restarting the supervisor restarts the VM: read
+https://smartwatermelon.github.io/mac-server-setup/components/monitoring/ first." || true
 }
 
 # ---------------------------------------------------------------------------

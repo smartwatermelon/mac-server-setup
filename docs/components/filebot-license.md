@@ -81,7 +81,7 @@ cd ~/app-setup
 
 ## Related
 
-- [Transmission and FileBot](../apps/transmission-filebot-README.md): the processing pipeline that uses FileBot.
+- [Transmission and FileBot](transmission-filebot.md): the processing pipeline that uses FileBot.
 - [Build the package](../get-started/04-build-package.md)
 - [Configuration keys](../reference/config-keys.md)
 - [Logs](../reference/logs.md)

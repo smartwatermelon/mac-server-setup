@@ -90,4 +90,4 @@ These logs are written while you run the setup scripts.
 ## Related pages
 
 - [LaunchAgents and LaunchDaemons](launchagents.md): the jobs that write the launchd logs above.
-- [Monitoring](../apps/monitoring-README.md): how the watchdogs use these logs.
+- [Monitoring](../components/monitoring.md): how the watchdogs use these logs.

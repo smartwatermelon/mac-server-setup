@@ -154,7 +154,7 @@ __EXTERNAL_HOSTNAME__ {
 	import common_config
 }
 
-# Cloudflare Tunnel origin. See docs/apps/cloudflare-tunnel-README.md.
+# Cloudflare Tunnel origin. See docs/components/cloudflare-tunnel.md.
 # - bind 127.0.0.1: nothing off-host can reach this listener.
 # - No import common_config: it exempts loopback (cloudflared) from auth.
 # Every route sits behind the Access email check (layer 3). Cloudflare

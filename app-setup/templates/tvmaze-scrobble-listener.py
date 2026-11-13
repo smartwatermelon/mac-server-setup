@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Plex webhook listener for the TVmaze scrobbler (tvmaze-scrobble-README.md).
+"""Plex webhook listener for the TVmaze scrobbler (docs/components/tvmaze-scrobble.md).
 
 Hands media.scrobble episode payloads to the worker; always answers fast.
 """

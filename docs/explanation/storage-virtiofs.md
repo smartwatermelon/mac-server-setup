@@ -32,7 +32,7 @@ The Podman supervisor protects this path in two ways:
 
 The supervisor's recovery cycles the VM and the container. It leaves the host mount alone, because Plex reads the same mount and would lose its media.
 
-NAS-side settings, such as the NFS squash rule and directory permissions, are in [Transmission and FileBot](../apps/transmission-filebot-README.md).
+NAS-side settings, such as the NFS squash rule and directory permissions, are in [Transmission and FileBot](../components/transmission-filebot.md).
 
 ## Why the incomplete directory is off
 
@@ -49,7 +49,7 @@ macOS checks privacy (TCC) grants before a process reads a network volume. On th
 - **Network volume grant.** `kTCCServiceSystemPolicyNetworkVolumes` shows the dialog "would like to access files on a network volume". It is kept per user, so the `operator` session owns it. The Podman supervisor and FileBot both stopped on this dialog until someone clicked Allow, once for 19 hours.
 - **Full Disk Access.** The VirtioFS I/O is done by Apple's `com.apple.Virtualization.VirtualMachine` XPC service. When NFS handles expired after a long idle time, that service could no longer open directories on the mount (`opendir()` returned `EPERM`) until it had Full Disk Access. `/bin/bash`, used by the LaunchAgents, needed the same grant for the same reason.
 
-The two component pages describe these grants differently. [Stable signing](../apps/stable-signing-README.md) says that Full Disk Access does not cover network volumes on macOS Tahoe. [Transmission and FileBot](../apps/transmission-filebot-README.md) describes Full Disk Access as the fix for the `opendir()` failure. Both are observations from the server, and they can both be true if the two failures come from different checks. Treat both grants as needed.
+The two component pages describe these grants differently. [Stable signing](../components/stable-signing.md) says that Full Disk Access does not cover network volumes on macOS Tahoe. [Transmission and FileBot](../components/transmission-filebot.md) describes Full Disk Access as the fix for the `opendir()` failure. Both are observations from the server, and they can both be true if the two failures come from different checks. Treat both grants as needed.
 
 ### Which binary gets the grant
 
@@ -74,4 +74,4 @@ Some limits apply:
 - `vfkit` is copied but never signed again. It carries the `com.apple.security.virtualization` entitlement, and `codesign -f` without `--entitlements` would remove it.
 - The signing identity is a stable label, not a trust boundary. Any local user can sign with it. A forged binary does not get the grant because TCC also matches the path, and only an administrator can write to `/usr/local/stable`.
 
-For the evidence, the identity setup and the `--check` command, see [Stable signing](../apps/stable-signing-README.md).
+For the evidence, the identity setup and the `--check` command, see [Stable signing](../components/stable-signing.md).

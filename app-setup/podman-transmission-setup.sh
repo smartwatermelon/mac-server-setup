@@ -598,7 +598,7 @@ fi
 #
 # Alerts when the server is blocked rather than broken: a macOS privacy prompt
 # left open, transmission-done running for over 45 minutes, or the supervisor
-# loop below failing or going quiet. See docs/apps/monitoring-README.md.
+# loop below failing or going quiet. See docs/components/monitoring.md.
 # ---------------------------------------------------------------------------
 
 set_section "Deploy Stall Watchdog"
@@ -664,7 +664,7 @@ MACHINE_START_DEST="${OPERATOR_HOME}/.local/bin/podman-machine-start.sh"
 # re-prompts "... would like to access files on a network volume" and the
 # supervision loop blocks until someone clicks Allow. Measured 2026-09-03:
 # with only podman mirrored, the prompt simply moved to gtimeout.
-# See docs/apps/stable-signing-README.md.
+# See docs/components/stable-signing.md.
 STABLE_PODMAN_BIN="/usr/local/stable/podman/bin"
 STABLE_COREUTILS_BIN="/usr/local/stable/coreutils/bin"
 for stable_bin in "${STABLE_PODMAN_BIN}/podman-remote" "${STABLE_COREUTILS_BIN}/gtimeout"; do
@@ -709,7 +709,7 @@ set -uo pipefail
 # on that resolved path. stable-sign.sh --check shows where each link points.
 # The coreutils dir adds no unprefixed name that ${HOMEBREW_PREFIX}/bin does
 # not already put ahead of the system tools. Details:
-# docs/apps/stable-signing-README.md
+# docs/components/stable-signing.md
 export PATH="${STABLE_PODMAN_BIN}:${STABLE_COREUTILS_BIN}:${HOMEBREW_PREFIX}/bin:${HOMEBREW_PREFIX}/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 SUPERVISE_INTERVAL=\${SUPERVISE_INTERVAL:-300}
@@ -1245,7 +1245,7 @@ else
   else
     collect_warning "NAS bind mount: EMPTY — VirtioFS may not see the host NFS mount content"
     collect_warning "Check the host NFS mount (mount-nas-media.sh) and the network-volume privacy grant"
-    collect_warning "See docs/apps/stable-signing-README.md for the VirtioFS network-volume grant"
+    collect_warning "See docs/components/stable-signing.md for the VirtioFS network-volume grant"
   fi
 fi
 

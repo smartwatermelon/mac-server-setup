@@ -4,7 +4,7 @@
 # transmission-done (#!/usr/bin/env bash), and that bash is the binary macOS
 # holds responsible for FileBot's reads on the NFS mount. It must be the
 # stably-signed copy, or every Homebrew bash upgrade leaves a network-volume
-# prompt that blocks FileBot. See docs/apps/stable-signing-README.md.
+# prompt that blocks FileBot. See docs/components/stable-signing.md.
 
 BATS_TEST_FILENAME="${BATS_TEST_FILENAME:-}"
 REPO_DIR="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"

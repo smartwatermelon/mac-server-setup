@@ -106,7 +106,7 @@ This sends a PUT to the Plex API for each drifted setting and verifies the chang
 ### Refreshing after Plex updates
 
 Plex Media Server updates are applied manually (server version updates are
-set to "Ask me" — see `docs/apps/plex-setup-README.md#server-update-policy`).
+set to "Ask me" — see `docs/components/plex.md#server-update-policy`).
 After you install one, new settings may appear. Refresh the golden config to pick them up:
 
 ```bash
@@ -187,7 +187,7 @@ not count as a failure:
 
 State: `.media_check_failures` and `.transitions.media_unreachable` in
 `state.json`. The alert uses `alert_transition` from the shared alert library
-(see `monitoring-README.md`).
+(see `monitoring.md`).
 
 ### Automatic restart
 
@@ -344,7 +344,7 @@ sudo tail -20 /Users/operator/.local/state/msmtp.log
 ```
 
 Common issues: Gmail App Password expired or revoked, 2FA disabled on the Google account.
-See `monitoring-README.md` for the shared alert library and how to send a test
+See `monitoring.md` for the shared alert library and how to send a test
 alert under launchd's PATH.
 
 **Status shows drift on fresh deploy**: This shouldn't happen since the golden config is generated from current values at setup time. Run `plex-watchdog-ctl refresh` to regenerate.

@@ -113,7 +113,7 @@ Plex Media Server --POST multipart (payload=JSON)--> 127.0.0.1:<port>
     window.
 - **LaunchAgent** `com.__HOSTNAME_LOWER__.tvmaze-scrobble` (operator, KeepAlive,
   RunAtLoad) running the listener. Log: `~/.local/state/tvmaze-scrobble.log`.
-  Must set PATH / use absolute paths (see `docs/apps/monitoring-README.md`
+  Must set PATH / use absolute paths (see `docs/components/monitoring.md`
   on launchd PATH and msmtp).
 - **Setup script** `app-setup/tvmaze-scrobble-setup.sh`, modelled on
   `tunnel-watchdog-setup.sh`: sudo, reads `config.conf`, validates
@@ -129,7 +129,7 @@ Plex Media Server --POST multipart (payload=JSON)--> 127.0.0.1:<port>
   email, which TVmaze rejects. Do NOT read the username from 1Password; it comes
   from `TVMAZE_USERNAME` in config. If prep-airdrop gains a TVmaze step, it
   copies only the `API Key` field.
-- **Docs**: `docs/apps/tvmaze-scrobble-README.md` (what it does, matching order,
+- **Docs**: `docs/components/tvmaze-scrobble.md` (what it does, matching order,
   where logs are, how to set the Plex webhook, how to test with a canned
   payload, how to rotate the key) and a CLAUDE.md "Service-Specific
   Documentation" entry.

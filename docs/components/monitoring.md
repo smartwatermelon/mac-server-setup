@@ -17,8 +17,8 @@ msmtp (Gmail SMTP). They all send that email through one shared library,
 
 Paths are under the operator's home (`/Users/operator`). All the LaunchAgents run
 the script as `/bin/bash <script>` and send stdout and stderr to the same log
-file. For the details of each check, see `plex-watchdog-README.md`,
-`pia-vpn-README.md`, `cloudflare-tunnel-README.md` ("Drift watchdog"), and
+file. For the details of each check, see `plex-watchdog.md`,
+`pia-vpn.md`, `cloudflare-tunnel.md` ("Drift watchdog"), and
 [stall-watchdog](#stall-watchdog) below.
 
 Other files:
@@ -118,7 +118,7 @@ it as `alert_transition ... || true`.
 `transmission-done` also calls `alert_send`, once per download that it cannot
 identify or process. It is not a watchdog, and it reads the recipient from
 `alerts.email` in its own `config.yml`. See "Email when a download cannot be
-processed" in `transmission-filebot-README.md`.
+processed" in `transmission-filebot.md`.
 
 plex-watchdog and pia-port-watchdog use `alert_send` and the state functions,
 but keep their own alert, dedupe and heartbeat logic. The exceptions are
@@ -292,7 +292,7 @@ Expect an outage of Transmission, and possibly of Plex, for as long as a
 test prompt stays open.
 
 If a prompt blocks Plex's own reads, plex-watchdog's media access check
-(`[<host>] Plex cannot read media files`, see `plex-watchdog-README.md`) is
+(`[<host>] Plex cannot read media files`, see `plex-watchdog.md`) is
 expected to alert after 10 minutes. This is not tested against a real
 prompt, and the spot check above shows `checkFiles=1` can still answer while
 a prompt is open.

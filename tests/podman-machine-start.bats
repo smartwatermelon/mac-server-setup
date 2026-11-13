@@ -142,7 +142,7 @@ extract_and_render_wrapper() {
   export PGID="20"
   export TZ_VALUE="America/Los_Angeles"
   export HOMEBREW_PREFIX="${TEST_TMPDIR}"
-  # The stable-signed podman mirror (docs/apps/stable-signing-README.md) is
+  # The stable-signed podman mirror (docs/components/stable-signing.md) is
   # prepended to the wrapper's PATH. Point it at a directory that does not
   # exist so the mocks in ${HOMEBREW_PREFIX}/bin still win.
   export STABLE_PODMAN_BIN="${TEST_TMPDIR}/stable-podman-bin"

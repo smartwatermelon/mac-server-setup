@@ -30,7 +30,7 @@ set -euo pipefail
 # process chain, so macOS holds it responsible for FileBot's reads on the NFS
 # mount. Homebrew's own bash changes path and cdhash on every upgrade, which
 # voids the network-volume grant and leaves FileBot blocked on a prompt.
-# See docs/apps/stable-signing-README.md.
+# See docs/components/stable-signing.md.
 ARCH="$(arch)"
 case "${ARCH}" in
   arm64) HOMEBREW_PREFIX="/opt/homebrew" ;;

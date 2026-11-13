@@ -92,7 +92,7 @@ http://:8080 {
   site-level directive, which `handle` does not accept. The 403s are logged
   too.
 
-See `caddy-README.md` for the rest of the Caddyfile.
+See `caddy.md` for the rest of the Caddyfile.
 
 ## Cloudflare objects
 
@@ -223,7 +223,7 @@ The origin `http://127.0.0.1:8080` is a constant in the watchdog, not a
 config value, because the Caddyfile hard-codes the tunnel site's port. A
 test fails if the two differ.
 
-It sends mail through `alert_transition` (see `monitoring-README.md`):
+It sends mail through `alert_transition` (see `monitoring.md`):
 
 | Key | Bad when | Notes |
 | --- | --- | --- |
@@ -242,7 +242,7 @@ Mail goes out through msmtp with operator's config
 such a file unless the invoking user owns it ("contains secrets and therefore
 must be owned by you"). A root daemon could read the API token from the
 System keychain but could never send the alert: the silent failure this
-repo already had once (`monitoring-README.md`, "The launchd PATH problem").
+repo already had once (`monitoring.md`, "The launchd PATH problem").
 So the watchdog follows `plex-watchdog`: the setup script (root) copies the
 read-only token from the keychain to `~operator/.config/access-policy-watchdog/token`
 (mode 600, through a redirect, never an argument). The token can only read

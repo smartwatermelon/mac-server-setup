@@ -154,7 +154,7 @@ key. The free account can scrobble.
 - The agents run with launchd's PATH; the worker uses absolute paths
   (`/usr/bin/curl`, `/usr/bin/jq`) and is bash 3.2 compatible. Email goes
   through `alert-lib.sh`, which finds msmtp by absolute path. See
-  `monitoring-README.md`.
+  `monitoring.md`.
 - The listener uses `/usr/bin/python3` (3.9) and the `email` package for
   multipart, not the deprecated `cgi` module. It ignores SIGCHLD so the
   workers it never waits for do not become zombies.

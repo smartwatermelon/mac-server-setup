@@ -4,7 +4,7 @@ This page covers the watchdogs and the alert email that they send through msmtp.
 
 The watchdogs are `operator` LaunchAgents: `plex-watchdog`, `pia-port-watchdog`, `stall-watchdog`, `access-policy-watchdog` and `tunnel-watchdog`. Each run is one poll: check, maybe send email, exit. All of them send email through the shared library `~/.local/lib/alert-lib.sh` and the msmtp config `~/.config/msmtp/config` in the `operator` account. Do not print the msmtp config: it holds the SMTP app password.
 
-For how this works, see [Monitoring](../apps/monitoring-README.md). For the labels and logs, see [LaunchAgents and LaunchDaemons](../reference/launchagents.md) and [Log files](../reference/logs.md).
+For how this works, see [Monitoring](../components/monitoring.md). For the labels and logs, see [LaunchAgents and LaunchDaemons](../reference/launchagents.md) and [Log files](../reference/logs.md).
 
 ## No alert email arrives
 
@@ -104,7 +104,7 @@ sudo grep -E 'TCC prompt (opened|closed)' /Users/operator/.local/state/<hostname
 **Fix**
 
 1. Answer the prompt on the desktop, at the Mac mini or through Screen Sharing. Click Allow for a binary that you expect.
-2. If the binary is a Homebrew copy of podman, gtimeout or bash, run `/usr/local/bin/<hostname>-stable-sign.sh` so that the stable copy is current. See [Stable signing](../apps/stable-signing-README.md).
+2. If the binary is a Homebrew copy of podman, gtimeout or bash, run `/usr/local/bin/<hostname>-stable-sign.sh` so that the stable copy is current. See [Stable signing](../components/stable-signing.md).
 3. If the email repeats but no prompt is on the desktop, the watchdog may have missed the answer. Find the prompt key, then remove it. The recovery email goes out on the next run:
 
     ```bash

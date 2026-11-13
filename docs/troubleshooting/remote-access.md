@@ -2,7 +2,7 @@
 
 This page covers Caddy and its certificates, the `/media` file server, Cloudflare Tunnel and Access, the DDNS updater, and the home VPN. Run the checks as `admin` on the server unless a step says otherwise. In the examples, `example.com` is the public hostname (`EXTERNAL_HOSTNAME`).
 
-For how these parts work, see [Caddy](../apps/caddy-README.md), [TLS strategy](../explanation/tls-strategy.md), [Cloudflare Tunnel](../apps/cloudflare-tunnel-README.md), [Tunnel security layers](../explanation/tunnel-security-layers.md), [Cloudflare DDNS](../apps/cloudflare-ddns-README.md) and [Home VPN](../apps/home-vpn-README.md).
+For how these parts work, see [Caddy](../components/caddy.md), [TLS strategy](../explanation/tls-strategy.md), [Cloudflare Tunnel](../components/cloudflare-tunnel.md), [Tunnel security layers](../explanation/tunnel-security-layers.md), [Cloudflare DDNS](../components/cloudflare-ddns.md) and [Home VPN](../components/home-vpn.md).
 
 ## The LAN site does not load
 
@@ -35,7 +35,7 @@ sudo HOSTNAME="$(hostname -s)" CF_API_TOKEN=dummy /opt/homebrew/bin/caddy valida
 
 **Fix**
 
-1. If the token is missing, add it to the System keychain again. See [Cloudflare DDNS](../apps/cloudflare-ddns-README.md) and [Credential chain](../explanation/credential-chain.md).
+1. If the token is missing, add it to the System keychain again. See [Cloudflare DDNS](../components/cloudflare-ddns.md) and [Credential chain](../explanation/credential-chain.md).
 2. If the Caddyfile is not valid, run `sudo ./caddy-setup.sh` from `~/app-setup` to deploy it again from the template.
 3. Restart Caddy:
 
@@ -122,7 +122,7 @@ sudo security find-generic-password -s cloudflare-api-token -a example.com /Libr
     sudo launchctl kickstart -kp system/com.caddyserver.caddy
     ```
 
-See "Troubleshooting Cert Issuance" in [Caddy](../apps/caddy-README.md).
+See "Troubleshooting Cert Issuance" in [Caddy](../components/caddy.md).
 
 ## The public hostname shows a Cloudflare error page
 
@@ -153,7 +153,7 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/
 
 **Fix**
 
-1. If the token is missing, store it in the System keychain again. See [Cloudflare Tunnel](../apps/cloudflare-tunnel-README.md).
+1. If the token is missing, store it in the System keychain again. See [Cloudflare Tunnel](../components/cloudflare-tunnel.md).
 2. If Caddy does not answer, see [The LAN site does not load](#the-lan-site-does-not-load).
 3. Restart the tunnel daemon:
 
@@ -198,7 +198,7 @@ sudo grep -E 'DRIFT|MISSING|WARNING' /Users/operator/.local/state/access-policy-
 **Fix**
 
 1. If the change was not yours, treat it as a security event. Revoke the active Access sessions in Zero Trust, and check who changed the policy.
-2. Put the policy, the application or the tunnel ingress back to the expected rule in the Cloudflare dashboard. The rule is in "Drift watchdog" in [Cloudflare Tunnel](../apps/cloudflare-tunnel-README.md).
+2. Put the policy, the application or the tunnel ingress back to the expected rule in the Cloudflare dashboard. The rule is in "Drift watchdog" in [Cloudflare Tunnel](../components/cloudflare-tunnel.md).
 3. If the API cannot be read, check the read-only token in `~/.config/access-policy-watchdog/token` of the `operator` account, and run `access-policy-watchdog-setup.sh` again.
 
 ## The DDNS record shows an old IP address

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # cloudflared-setup.sh: deploy the Cloudflare Tunnel daemon (wrapper and
-# LaunchDaemon). See docs/apps/cloudflare-tunnel-README.md.
+# LaunchDaemon). See docs/components/cloudflare-tunnel.md.
 
 # Usage: sudo ./cloudflared-setup.sh
 # Run caddy-setup.sh first, so Caddy listens on 127.0.0.1:8080.
@@ -80,7 +80,7 @@ if ! security find-generic-password \
   echo "   service=cloudflare-tunnel-token account=${EXTERNAL_HOSTNAME}"
   echo "   (System keychain). Store the token with security prompting for it,"
   echo "   never as a command-line argument. See \"Token chain\" in"
-  echo "   docs/apps/cloudflare-tunnel-README.md."
+  echo "   docs/components/cloudflare-tunnel.md."
   exit 1
 fi
 echo "✓ Tunnel token found in the System keychain"

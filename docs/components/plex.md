@@ -79,7 +79,7 @@ ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"  # 1Password item for NAS credentials
    - Links `/Users/Shared/PlexMediaServer/Plex Media Server` to the real data
      in `~operator/Library/Application Support/Plex Media Server`
      (`ensure_plex_data_link`; see "Data directory link" in
-     `plex-watchdog-README.md`)
+     `plex-watchdog.md`)
    - Deploys LaunchAgent and mount scripts to operator account
 
 2. **Operator runtime**: Automatic on operator login
@@ -301,7 +301,7 @@ cask (`SKIP_CASKS`). On 2026-10-21 it tried to replace the running app,
 failed because Plex's elevated updater had left the app owned by root,
 and left a copy in the Caskroom that made every later run fail with "It seems there is already
 an App". The plex-watchdog does not restart Plex while an update may be
-running; see `plex-watchdog-README.md`.
+running; see `plex-watchdog.md`.
 
 Check the last update with:
 

@@ -103,11 +103,11 @@ Run these checks as `admin`.
 
     The output starts with `-rw-------` and shows `operator`.
 
-If no email arrives, look for `ERROR` lines in the watchdog's log. The [Monitoring](../apps/monitoring-README.md#troubleshooting) page explains each error. An authentication failure in the error text often means that the App Password was revoked. Create a new one and run `./msmtp-setup.sh --force`.
+If no email arrives, look for `ERROR` lines in the watchdog's log. The [Monitoring](monitoring.md#troubleshooting) page explains each error. An authentication failure in the error text often means that the App Password was revoked. Create a new one and run `./msmtp-setup.sh --force`.
 
 ## Related
 
-- [Monitoring](../apps/monitoring-README.md): the watchdogs, the `alert-lib.sh` functions, and the launchd PATH problem.
+- [Monitoring](monitoring.md): the watchdogs, the `alert-lib.sh` functions, and the launchd PATH problem.
 - [Transmission first install](transmission-first-install.md): deploys the PIA port watchdog and the stall watchdog.
 - [Configuration keys](../reference/config-keys.md)
 - [Logs](../reference/logs.md)

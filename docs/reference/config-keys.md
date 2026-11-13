@@ -112,7 +112,7 @@ Used by podman-transmission-setup.sh to configure the containerized Transmission
 | `CLOUDFLARE_RECORD_ID` | (empty) | ID of the A record DDNS updates (vpn.example.com since the tunnel cutover) |
 | `DDNS_RECORD_NAME` | (empty) | Name of that record, for log lines (default: EXTERNAL_HOSTNAME) |
 
-## Cloudflare Tunnel + Access (docs/apps/cloudflare-tunnel-README.md)
+## Cloudflare Tunnel + Access (docs/components/cloudflare-tunnel.md)
 
 The ids are not secrets. Copy them from the Zero Trust dashboard or the API.
 
@@ -128,7 +128,7 @@ The ids are not secrets. Copy them from the Zero Trust dashboard or the API.
 | `CLOUDFLARE_ACCESS_TEAM_NAME` | (empty) | Zero Trust team name (&lt;team&gt;.cloudflareaccess.com) |
 | `CLOUDFLARE_ACCESS_AUD_TAG` | (empty) | The Access application AUD tag (64 hex characters) |
 
-## Plex → TVmaze watched sync (docs/apps/tvmaze-scrobble-README.md)
+## Plex → TVmaze watched sync (docs/components/tvmaze-scrobble.md)
 
 The API key is not here: it is read from the admin keychain (service tvmaze-&lt;host&gt;, account TVMAZE_USERNAME) by tvmaze-scrobble-setup.sh.
 
