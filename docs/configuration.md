@@ -15,7 +15,7 @@ OPERATOR_USERNAME="operator"
 
 # 1Password configuration
 # 1Password vault "Private", by ID so a rename cannot break it.
-OP_VAULT_ID="bg5mciyy25cearfepehuh6nwmi"
+OP_VAULT_ID="your-vault-id"
 ONEPASSWORD_VAULT="${OP_VAULT_ID}"
 ONEPASSWORD_OPERATOR_ITEM="operator"
 ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
@@ -156,7 +156,7 @@ ONEPASSWORD_VAULT="IT Infrastructure"
 ONEPASSWORD_OPERATOR_ITEM="Mac Mini Infrastructure Operator"
 ONEPASSWORD_TIMEMACHINE_ITEM="Enterprise Backup - Mac Mini"
 ONEPASSWORD_APPLEID_ITEM="Apple ID Corporate"
-MONITORING_EMAIL="it-alerts@company.com"
+MONITORING_EMAIL="it-alerts@example.com"
 ```
 
 ### Home Lab Integration
@@ -297,12 +297,12 @@ Create environment-specific configuration files:
 # config-production.conf
 SERVER_NAME="PRODSERVER"
 ONEPASSWORD_VAULT="Production Infrastructure"
-MONITORING_EMAIL="production-alerts@company.com"
+MONITORING_EMAIL="production-alerts@example.com"
 
 # config-staging.conf
 SERVER_NAME="STAGINGSERVER"
 ONEPASSWORD_VAULT="Staging Infrastructure"
-MONITORING_EMAIL="staging-alerts@company.com"
+MONITORING_EMAIL="staging-alerts@example.com"
 ```
 
 Use with prep-airdrop.sh by copying the appropriate config:

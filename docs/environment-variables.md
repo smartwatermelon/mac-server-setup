@@ -33,7 +33,7 @@ OPERATOR_FULLNAME="${SERVER_NAME} Operator"
 ```bash
 # 1Password vault containing server credentials
 # 1Password vault "Private", by ID so a rename cannot break it.
-OP_VAULT_ID="bg5mciyy25cearfepehuh6nwmi"
+OP_VAULT_ID="your-vault-id"
 ONEPASSWORD_VAULT="${OP_VAULT_ID}"
 
 # 1Password item names (customizable)

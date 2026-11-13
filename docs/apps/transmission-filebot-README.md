@@ -550,7 +550,7 @@ changes make the resulting mismatch recoverable rather than fatal; they do not
 prevent the drift itself. After upgrading podman, cycle the machine:
 
 ```bash
-launchctl kickstart -k "gui/$(id -u)/com.tilsit.podman-transmission-vm"
+launchctl kickstart -k "gui/$(id -u)/com.<hostname>.podman-transmission-vm"
 ```
 
 ## Common Gotchas

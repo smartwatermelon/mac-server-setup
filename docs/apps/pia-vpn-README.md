@@ -35,7 +35,7 @@ during a rotation, in order.
 | Stage | Location | Notes |
 | --- | --- | --- |
 | Source of truth | 1Password item (`ONEPASSWORD_PIA_ITEM`) | Read only during prep, on the dev Mac |
-| Server storage | Keychain `pia-account-<hostname>` | Stored as `username:password`, colon-delimited |
+| Server storage | Keychain `pia-account-<server name, lowercase>` | Stored as `username:password`, colon-delimited |
 | Container input | `~operator/containers/transmission/.env` | Mode `0600`, owned `operator:staff` |
 | Runtime | Container environment | Unavoidably plaintext; OpenVPN needs it |
 
@@ -56,12 +56,13 @@ provisioning runs pick up the new value.
 
 ### 2. Update the keychain on the server
 
-On TILSIT, as the account that owns the entry:
+On YOUR_SERVER, as the account that owns the entry:
 
 ```bash
+HOST=yourserver   # SERVER_NAME from config.conf, in lowercase
 security add-generic-password -U \
-  -s "pia-account-tilsit" \
-  -a "tilsit" \
+  -s "pia-account-${HOST}" \
+  -a "${HOST}" \
   -w
 ```
 
@@ -70,7 +71,7 @@ keeps the password out of shell history and the process table. At the prompt,
 enter the full colon-delimited pair:
 
 ```
-p3462742:NEW_PASSWORD_HERE
+PIA_USERNAME:NEW_PASSWORD_HERE
 ```
 
 `-U` updates the existing entry instead of failing on a duplicate.
@@ -78,7 +79,7 @@ p3462742:NEW_PASSWORD_HERE
 Verify the entry is present (this prints metadata, not the secret):
 
 ```bash
-security find-generic-password -s "pia-account-tilsit" -a "tilsit"
+security find-generic-password -s "pia-account-${HOST}" -a "${HOST}"
 ```
 
 ### 3. Regenerate `.env` and recreate the container
@@ -147,13 +148,13 @@ operator account has no repo checkout:
 
 ```bash
 # Probe the default shortlist
-ssh operator@tilsit ~/containers/transmission/scripts/pia-pf-probe.sh
+ssh operator@your-server ~/containers/transmission/scripts/pia-pf-probe.sh
 
 # Probe specific regions
-ssh operator@tilsit ~/containers/transmission/scripts/pia-pf-probe.sh ca_vancouver netherlands
+ssh operator@your-server ~/containers/transmission/scripts/pia-pf-probe.sh ca_vancouver netherlands
 
 # Sweep everything advertising PF (slow — roughly 90s per region)
-ssh operator@tilsit ~/containers/transmission/scripts/pia-pf-probe.sh --all --out results.csv
+ssh operator@your-server ~/containers/transmission/scripts/pia-pf-probe.sh --all --out results.csv
 ```
 
 From a repo checkout on the server, `sudo -u operator
@@ -222,7 +223,7 @@ only one observed serving no port forwarding at all.
 
 ### Region choice: measure, don't assume
 
-**TILSIT runs `ca_vancouver`**, the physically closest endpoint.
+**YOUR_SERVER runs `ca_vancouver`**, the physically closest endpoint.
 
 Working port forwarding is a prerequisite, not a ranking. All eight regions
 above pass that test equally, and the probe deliberately says nothing about
@@ -230,7 +231,7 @@ speed. Picking among them by intuition produced a bad answer once already:
 `ca_toronto` was chosen because it was first in a hand-written shortlist and
 its probe passed, then measured 4x slower on both metrics.
 
-Measured 2026-08-23, from TILSIT:
+Measured 2026-08-23, from YOUR_SERVER:
 
 | Region | Latency | Throughput (10 MB) |
 | --- | --- | --- |

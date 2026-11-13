@@ -43,7 +43,7 @@ In browser: `http://tilsit.local:9092/transmission/web/` → select debian torre
 ```bash
 # On dev Mac, from repo root:
 rsync -av app-setup/containers/transmission/compose.yml \
-  operator@tilsit.local:~/containers/transmission/compose.yml
+  operator@your-server.local:~/containers/transmission/compose.yml
 ```
 
 Wait — this is the template file with `__PLACEHOLDERS__`. The deployed file on TILSIT already has substituted values. **Do NOT rsync the template directly.**
@@ -51,7 +51,7 @@ Wait — this is the template file with `__PLACEHOLDERS__`. The deployed file on
 Instead, SSH in and add the two env vars manually to the already-deployed `compose.yml`:
 
 ```bash
-ssh operator@tilsit.local
+ssh operator@your-server.local
 # Edit ~/containers/transmission/compose.yml
 # Add these two lines after TRANSMISSION_ENCRYPTION=2:
 #   - TRANSMISSION_BLOCKLIST_ENABLED=true
@@ -61,7 +61,7 @@ ssh operator@tilsit.local
 ### Step 3: Restart the container stack to pick up new env vars
 
 ```bash
-ssh operator@tilsit.local
+ssh operator@your-server.local
 podman compose -f ~/containers/transmission/compose.yml \
   --env-file ~/containers/transmission/.env down
 podman compose -f ~/containers/transmission/compose.yml \
@@ -86,7 +86,7 @@ podman exec transmission-vpn curl -s ifconfig.io  # should return PIA exit IP
 **Recommended approach:** Re-run `podman-transmission-setup.sh --force` from the `app-setup/` directory on TILSIT. It is fully idempotent — it will skip the running container (Section 11 only starts if no errors), recompile the app, and re-register the handler.
 
 ```bash
-ssh operator@tilsit.local
+ssh operator@your-server.local
 cd ~/setup/app-setup   # or wherever the setup package landed
 ./podman-transmission-setup.sh --force
 ```
@@ -94,7 +94,7 @@ cd ~/setup/app-setup   # or wherever the setup package landed
 **If setup package is not available on TILSIT**, do it manually:
 
 ```bash
-ssh operator@tilsit.local
+ssh operator@your-server.local
 ```
 
 ```applescript
@@ -150,7 +150,7 @@ In the web UI, start a well-seeded public torrent so there's active traffic.
 ### Step 2: Force VPN disconnect from TILSIT
 
 ```bash
-ssh andrewrich@tilsit.local  # as administrator
+ssh admin@your-server.local  # as administrator
 piactl disconnect
 ```
 
@@ -163,7 +163,7 @@ In the web UI, download rate should drop to 0 immediately. The container should 
 ```bash
 piactl connect
 # Wait ~10s, then check:
-ssh operator@tilsit.local
+ssh operator@your-server.local
 podman exec transmission-vpn curl -s ifconfig.io  # should return PIA IP again
 # Transmission should resume downloading
 ```
@@ -179,7 +179,7 @@ podman exec transmission-vpn curl -s ifconfig.io  # should return PIA IP again
 ### Step 1: Check container logs for forwarded port
 
 ```bash
-ssh operator@tilsit.local
+ssh operator@your-server.local
 podman logs transmission-vpn 2>&1 | grep -i "port\|forward" | tail -20
 ```
 
@@ -204,7 +204,7 @@ Use a small public domain file (e.g., a CC-licensed short film or a small Linux 
 ### Step 2: Monitor the pipeline
 
 ```bash
-ssh operator@tilsit.local
+ssh operator@your-server.local
 # Container side:
 podman logs -f transmission-vpn
 # Watcher side:
@@ -235,7 +235,7 @@ Update any Caddy reverse proxy rules that reference port 9092 to point to 9091.
 # On dev Mac:
 # Edit config/config.conf: set TRANSMISSION_HOST_PORT=9091
 # AirDrop updated package to TILSIT (or rsync app-setup/ directory)
-ssh andrewrich@tilsit.local
+ssh admin@your-server.local
 cd ~/setup/app-setup
 ./podman-transmission-setup.sh --force
 ```
@@ -245,7 +245,7 @@ This redeploys `compose.yml` with port 9091, recreates the `podman-machine-start
 ### Step 3: Restart container on new port
 
 ```bash
-ssh operator@tilsit.local
+ssh operator@your-server.local
 podman compose -f ~/containers/transmission/compose.yml \
   --env-file ~/containers/transmission/.env down
 podman compose -f ~/containers/transmission/compose.yml \
@@ -255,7 +255,7 @@ podman compose -f ~/containers/transmission/compose.yml \
 ### Step 4: Decommission native Transmission
 
 ```bash
-ssh operator@tilsit.local
+ssh operator@your-server.local
 launchctl bootout "gui/$(id -u)" ~/Library/LaunchAgents/com.tilsit.transmission.plist
 rm ~/Library/LaunchAgents/com.tilsit.transmission.plist
 # Stop vpn-monitor (it managed the native process):

@@ -11,7 +11,7 @@ watched on his TVmaze account. Failures email him.
 
 - The Plex server has Plex Pass (`myPlexSubscription: True`), so webhooks are available.
   The webhook URL is set by hand in the Plex web app (Settings → Webhooks, account level).
-- TVmaze auth: HTTP Basic, username `andrewrich`, password = API key. The account is
+- TVmaze auth: HTTP Basic, username `admin`, password = API key. The account is
   free (`GET /v1/auth/validate` → `{"premium":0}`).
 - `POST /v1/scrobble/shows?thetvdb_id=298905` with body
   `[{"season":16,"episode":10,"type":0,"marked_at":<epoch>}]` returned 200 on the
@@ -22,8 +22,8 @@ watched on his TVmaze account. Failures email him.
 - Show-level GUIDs come from `GET /library/metadata/<grandparentRatingKey>`
   (`Guid[].id`: `tvdb://N`, `imdb://ttN`, `tmdb://N`). Some shows have only
   `tmdb://` (The Great British Bake Off, key 22096). Taskmaster (11208) has all three.
-- API key is in the admin keychain: service `tvmaze-tilsit`, account `andrewrich`.
-  Source of truth: `op://Automation/TVMaze/API Key`.
+- API key is in the admin keychain: service `tvmaze-tilsit`, account `admin`.
+  Source of truth: `op://<vault>/<item>/API Key`.
 - `/usr/bin/python3` is 3.9.6 (no `cgi` removal issue, but do not rely on `cgi`);
   `/usr/bin/jq` exists. LaunchAgents run `/bin/bash` 3.2.
 
@@ -86,7 +86,7 @@ Plex Media Server --POST multipart (payload=JSON)--> 127.0.0.1:<port>
     via sourcing `ALERT_LIB` path. `TEST_RUNNER=true` skips the entry point
     (same pattern as `cloudflare-ddns.sh`).
   - Credentials: `~/.config/tvmaze-scrobble/credentials` (mode 600, operator),
-    one line `andrewrich:<key>`. Passed to curl with `-K -` on stdin, never on
+    one line `admin:<key>`. Passed to curl with `-K -` on stdin, never on
     argv, never logged.
 - **Reconcile** (`tvmaze-scrobble.sh --reconcile`), run hourly by a second
   LaunchAgent `com.__HOSTNAME_LOWER__.tvmaze-reconcile` (StartInterval 3600,

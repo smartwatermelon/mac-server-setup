@@ -310,7 +310,7 @@ cat ~/.ssh/id_ed25519_operator.pub >> ~/.ssh/authorized_keys
 
 **TouchID is not available** for sudo commands, because TouchID cannot coexist with automatic login.
 
-**Password location**: `op://personal/operator/password` in 1Password
+**Password location**: `op://<vault>/<item>/password` in 1Password
 
 ### Firewall Status
 

@@ -70,7 +70,7 @@ All monitored settings match golden configuration.
 The watchdog sends an email like:
 
 ```text
-Subject: [TILSIT] Plex setting drift detected
+Subject: [YOUR_SERVER] Plex setting drift detected
 
 The following Plex settings have drifted from the golden configuration:
 
@@ -78,9 +78,9 @@ The following Plex settings have drifted from the golden configuration:
     Golden:  0
     Current: 1
 
-To review:   ssh operator@tilsit plex-watchdog-ctl status
-To accept:   ssh operator@tilsit plex-watchdog-ctl accept
-To revert:   ssh operator@tilsit plex-watchdog-ctl revert
+To review:   ssh operator@your-server plex-watchdog-ctl status
+To accept:   ssh operator@your-server plex-watchdog-ctl accept
+To revert:   ssh operator@your-server plex-watchdog-ctl revert
 ```
 
 ### Accepting changes
@@ -260,7 +260,7 @@ Two things start Plex at operator login. The Plex app's own login item starts
 it with its default data directory. The `com.<host>.plexmediaserver`
 LaunchAgent runs `start-plex.sh`, which runs `open` with
 `PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR=/Users/Shared/PlexMediaServer`. On
-TILSIT the login item had always won, and the LaunchAgent's `open` only
+YOUR_SERVER the login item had always won, and the LaunchAgent's `open` only
 reached the running app. On 2026-10-22 the LaunchAgent started Plex while that
 path did not exist. Plex created a new, empty, unclaimed server there, and
 every client saw no libraries. The same path is Plex's
@@ -306,7 +306,7 @@ Credentials are embedded in config files with restrictive permissions (mode 600,
 | Variable | Source | Description |
 | ---------- | -------- | ------------- |
 | `MONITORING_EMAIL` | `config/config.conf` | Email address for alert delivery |
-| `SERVER_NAME` | `config/config.conf` | Used in email subject prefix (e.g., `[TILSIT]`) |
+| `SERVER_NAME` | `config/config.conf` | Used in email subject prefix (e.g., `[YOUR_SERVER]`) |
 | `OPERATOR_USERNAME` | `config/config.conf` | User account that runs the watchdog |
 
 ## Logs

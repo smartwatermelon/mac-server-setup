@@ -87,7 +87,7 @@ Expected: `dns.providers.cloudflare` AND at least `security`, `http.handlers.aut
 ### Step 2: Stage on TILSIT, keep the old binary as rollback
 
 ```bash
-rsync /tmp/caddy-forms operator@tilsit.local:/tmp/caddy-forms
+rsync /tmp/caddy-forms operator@your-server.local:/tmp/caddy-forms
 ```
 
 On TILSIT as `operator`:
@@ -103,7 +103,7 @@ sudo cp /tmp/caddy-forms /opt/homebrew/bin/caddy
 
 ### Step 3: Re-pin in Homebrew **on TILSIT**
 
-The pin prevents TILSIT's `brew upgrade caddy` from stomping the custom binary we just installed; pinning on the dev machine is irrelevant since we build via the Caddy download API there, not through brew. Run as `andrewrich` on TILSIT (Homebrew refuses root):
+The pin prevents TILSIT's `brew upgrade caddy` from stomping the custom binary we just installed; pinning on the dev machine is irrelevant since we build via the Caddy download API there, not through brew. Run as `admin` on TILSIT (Homebrew refuses root):
 
 ```bash
 /opt/homebrew/bin/brew unpin caddy || true
@@ -141,10 +141,10 @@ Create 1Password item `Caddy JWT signing key - tilsit.vip`, Password field = the
 
 ### Step 3: Install into System keychain on TILSIT
 
-From the dev machine. **Use the `andrewrich` account, not `operator`** — non-interactive SSH as `operator` cannot run `sudo` without a TTY and the System keychain requires root:
+From the dev machine. **Use the `admin` account, not `operator`** — non-interactive SSH as `operator` cannot run `sudo` without a TTY and the System keychain requires root:
 
 ```bash
-ssh -t andrewrich@tilsit.local "sudo security add-generic-password -U \
+ssh -t admin@your-server.local "sudo security add-generic-password -U \
   -s 'caddy-jwt-signing-key' \
   -a 'tilsit.vip' \
   -w '${JWT_KEY}' \
@@ -154,7 +154,7 @@ unset JWT_KEY
 
 ### Step 4: Verify retrieval
 
-On TILSIT as `andrewrich`:
+On TILSIT as `admin`:
 
 ```bash
 sudo security find-generic-password -s caddy-jwt-signing-key -a tilsit.vip \
@@ -541,7 +541,7 @@ curl -ksI https://tilsit.vip/ | grep -qi "^www-authenticate" \
   || echo "basic_auth gone"
 ```
 
-If the dev machine happens to share the `10.0.15.0/24` subnet with TILSIT, run the external tests from cellular (phone hotspot) or any VPN tunneling through a non-LAN address instead.
+If the dev machine happens to share the `192.168.21.0/24` subnet with TILSIT, run the external tests from cellular (phone hotspot) or any VPN tunneling through a non-LAN address instead.
 
 ### Step 6: Browser test
 

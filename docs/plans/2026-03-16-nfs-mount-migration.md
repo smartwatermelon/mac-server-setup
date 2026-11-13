@@ -14,7 +14,7 @@
 
 Synology DSM: Enable NFS, create export rule for DSMedia:
 
-- Hostname/IP: `10.0.12.0/22`, Privilege: Read/Write, Squash: Map all to admin, Security: sys, Async: enabled
+- Hostname/IP: `192.168.20.0/22`, Privilege: Read/Write, Squash: Map all to admin, Security: sys, Async: enabled
 
 ---
 
@@ -350,7 +350,7 @@ Expected: NFS mount visible, Media directories listed.
 ### Step 5: Deploy and run updated mount script for admin
 
 ```bash
-sudo -u andrewrich cp /tmp/mount-nas-media-configured.sh ~/.local/bin/mount-nas-media.sh
+sudo -u admin cp /tmp/mount-nas-media-configured.sh ~/.local/bin/mount-nas-media.sh
 chmod 700 ~/.local/bin/mount-nas-media.sh
 ~/.local/bin/mount-nas-media.sh
 ```
