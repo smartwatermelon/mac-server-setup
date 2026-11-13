@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # access-policy-watchdog-setup.sh: deploy the Access policy-drift watchdog.
-# See "Drift watchdog" in docs/apps/cloudflare-tunnel-README.md.
+# See "Drift watchdog" in docs/components/cloudflare-tunnel.md.
 
 # An operator agent, not a root daemon: msmtp refuses a config file the
 # invoking user does not own, so root could not send the alert.
@@ -130,7 +130,7 @@ if ! security find-generic-password \
   || [[ ! -s "${token_tmp}" ]]; then
   echo "❌ Keychain item not found or empty:"
   echo "   service=cloudflare-access-readonly-token account=${EXTERNAL_HOSTNAME}"
-  echo "   (System keychain). See \"Drift watchdog\" in docs/apps/cloudflare-tunnel-README.md."
+  echo "   (System keychain). See \"Drift watchdog\" in docs/components/cloudflare-tunnel.md."
   exit 1
 fi
 chown "${OPERATOR_USERNAME}:staff" "${token_tmp}"

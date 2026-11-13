@@ -69,7 +69,7 @@
 # writable by the administrator only. That is the same boundary Homebrew's
 # own binaries already have.
 #
-# Documentation: docs/apps/stable-signing-README.md
+# Documentation: docs/components/stable-signing.md
 
 set -euo pipefail
 

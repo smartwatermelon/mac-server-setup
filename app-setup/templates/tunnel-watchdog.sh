@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # tunnel-watchdog: emails when the tunnel for __EXTERNAL_HOSTNAME__ is down.
-# See docs/apps/cloudflare-tunnel-README.md.
+# See docs/components/cloudflare-tunnel.md.
 
 # Usage: tunnel-watchdog [--check]
 # --check prints the result only (no email, no state change). Exit 0 ready,
@@ -18,7 +18,7 @@
 
 set -euo pipefail
 
-# launchd's PATH has no Homebrew. See docs/apps/monitoring-README.md.
+# launchd's PATH has no Homebrew. See docs/components/monitoring.md.
 ARCH="$(arch)"
 case "${ARCH}" in
   arm64) HOMEBREW_PREFIX="/opt/homebrew" ;;
@@ -193,7 +193,7 @@ Check the daemon:
 Restart it:
   sudo launchctl kickstart -kp system/com.__HOSTNAME_LOWER__.cloudflare-tunnel
 
-See docs/apps/cloudflare-tunnel-README.md in mac-server-setup.
+See https://smartwatermelon.github.io/mac-server-setup/components/cloudflare-tunnel/
 Log: ${LOG_FILE}" \
     "RESOLVED: [${HOSTNAME_LABEL}] Cloudflare Tunnel for ${APP_DOMAIN} is ready again" \
     "The Cloudflare Tunnel for ${APP_DOMAIN} is ready again: ${PROBE_DETAIL}.

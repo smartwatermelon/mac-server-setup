@@ -34,7 +34,7 @@ set -euo pipefail
 
 # launchd starts this with PATH=/usr/bin:/bin:/usr/sbin:/sbin, which has no
 # Homebrew in it. Set PATH explicitly so the script behaves the same under
-# launchd as in a login shell. See docs/apps/monitoring-README.md.
+# launchd as in a login shell. See docs/components/monitoring.md.
 ARCH="$(arch)"
 case "${ARCH}" in
   arm64) HOMEBREW_PREFIX="/opt/homebrew" ;;

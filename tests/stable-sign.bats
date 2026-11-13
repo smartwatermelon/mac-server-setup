@@ -4,7 +4,7 @@
 #
 # stable-sign.sh mirrors selected Homebrew formulae into a fixed prefix and
 # re-signs named binaries with a local identity so macOS TCC grants survive
-# `brew upgrade` (docs/apps/stable-signing-README.md).
+# `brew upgrade` (docs/components/stable-signing.md).
 #
 # codesign, security and sudo are mocked in ${TEST_TMPDIR}/bin. The codesign
 # mock records each signature as a trailing "#SIG:" line inside the binary

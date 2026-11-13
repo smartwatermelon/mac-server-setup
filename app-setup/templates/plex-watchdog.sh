@@ -20,7 +20,7 @@ set -euo pipefail
 
 # launchd starts this with PATH=/usr/bin:/bin:/usr/sbin:/sbin, which has no
 # Homebrew in it. Set PATH explicitly so the script behaves the same under
-# launchd as in a login shell. See docs/apps/monitoring-README.md.
+# launchd as in a login shell. See docs/components/monitoring.md.
 ARCH="$(arch)"
 case "${ARCH}" in
   arm64) HOMEBREW_PREFIX="/opt/homebrew" ;;
@@ -60,7 +60,7 @@ PLEX_DATA_DIR="${HOME}/Library/Application Support/Plex Media Server"
 PLEX_DATA_LINK="/Users/Shared/PlexMediaServer/Plex Media Server"
 
 # Automatic restart, see handle_unreachable and "Automatic restart" in
-# plex-watchdog-README.md.
+# docs/components/plex-watchdog.md.
 RESTART_COOLDOWN_SECONDS=3600
 RESTART_TERM_WAIT_SECONDS=10
 RESTART_READY_WAIT_SECONDS=90
@@ -300,7 +300,7 @@ Log:   ${LOG_FILE}" \
 
 # ---------------------------------------------------------------------------
 # Plex data directory link. Creates or repoints the link; never touches a
-# real directory. See plex-watchdog-README.md.
+# real directory. See docs/components/plex-watchdog.md.
 # ---------------------------------------------------------------------------
 
 ensure_data_link() {
@@ -442,7 +442,7 @@ state_set() {
 }
 
 # Polls at or over the threshold: restart, or email why not. The cases
-# are in plex-watchdog-README.md.
+# are in docs/components/plex-watchdog.md.
 handle_unreachable() {
   local failures="$1"
   local minutes=$((failures * 5))

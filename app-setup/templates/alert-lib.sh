@@ -4,7 +4,7 @@
 #
 # SOURCED, not executed. Deployed to ~operator/.local/lib/alert-lib.sh (mode
 # 0644) by msmtp-setup.sh, plex-watchdog-setup.sh and
-# podman-transmission-setup.sh. See docs/apps/monitoring-README.md.
+# podman-transmission-setup.sh. See docs/components/monitoring.md.
 #
 # Why this exists: the watchdogs used to call a bare `msmtp ... 2>/dev/null`.
 # launchd starts agents with PATH=/usr/bin:/bin:/usr/sbin:/sbin, which does not

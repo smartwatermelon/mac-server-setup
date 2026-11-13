@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # access-policy-watchdog: emails when Access or tunnel config for
-# __EXTERNAL_HOSTNAME__ changes. See docs/apps/cloudflare-tunnel-README.md.
+# __EXTERNAL_HOSTNAME__ changes. See docs/components/cloudflare-tunnel.md.
 
 # Usage: access-policy-watchdog [--check]
 # --check prints the result only. Exit 0 match, 1 drift or missing, 2 API
@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-# launchd's PATH has no Homebrew. See docs/apps/monitoring-README.md.
+# launchd's PATH has no Homebrew. See docs/components/monitoring.md.
 ARCH="$(arch)"
 case "${ARCH}" in
   arm64) HOMEBREW_PREFIX="/opt/homebrew" ;;
@@ -269,7 +269,7 @@ dashboard_hint() {
 Access > Policies, and Networks > Tunnels (published application routes).
 To cut off current sessions, revoke them in Zero Trust (Users / Access
 sessions). To cut off the origin, stop the tunnel daemon on the server.
-See docs/apps/cloudflare-tunnel-README.md in mac-server-setup."
+See https://smartwatermelon.github.io/mac-server-setup/components/cloudflare-tunnel/"
 }
 
 handle_api_result() {

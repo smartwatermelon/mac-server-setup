@@ -78,7 +78,7 @@ CLOUDFLARE_ZONE_ID=""              # Cloudflare zone ID for external hostname
 CLOUDFLARE_RECORD_ID=""            # ID of the A record DDNS updates (vpn.example.com since the tunnel cutover)
 DDNS_RECORD_NAME=""                # Name of that record, for log lines (default: EXTERNAL_HOSTNAME)
 
-# Cloudflare Tunnel + Access (docs/apps/cloudflare-tunnel-README.md)
+# Cloudflare Tunnel + Access (docs/components/cloudflare-tunnel.md)
 # The ids are not secrets. Copy them from the Zero Trust dashboard or the API.
 TUNNEL_METRICS_PORT="20241"        # cloudflared /ready and /metrics, on 127.0.0.1 only
 CLOUDFLARE_ACCOUNT_ID=""           # Account that holds the Access application
@@ -90,7 +90,7 @@ CLOUDFLARE_TUNNEL_ID=""            # Remotely managed tunnel; the watchdog check
 CLOUDFLARE_ACCESS_TEAM_NAME=""     # Zero Trust team name (<team>.cloudflareaccess.com)
 CLOUDFLARE_ACCESS_AUD_TAG=""       # The Access application AUD tag (64 hex characters)
 
-# Plex → TVmaze watched sync (docs/apps/tvmaze-scrobble-README.md)
+# Plex → TVmaze watched sync (docs/components/tvmaze-scrobble.md)
 # The API key is not here: it is read from the admin keychain
 # (service tvmaze-<host>, account TVMAZE_USERNAME) by tvmaze-scrobble-setup.sh.
 TVMAZE_USERNAME=""                 # TVmaze username (NOT the email; TVmaze rejects the email)

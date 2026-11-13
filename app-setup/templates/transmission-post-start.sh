@@ -54,7 +54,7 @@ fi
 GUARD_LIB="/scripts/pia-port-guard.sh"
 
 # Token endpoints in order: v2 as in PIA's get_token.sh, then legacy gtoken
-# (HTTP 500s on 2026-10-12; see pia-vpn-README).
+# (HTTP 500s on 2026-10-12; see docs/components/pia-vpn.md).
 PIA_TOKEN_URL="https://www.privateinternetaccess.com/api/client/v2/token"
 PIA_TOKEN_URL_LEGACY="https://www.privateinternetaccess.com/gtoken/generateToken"
 

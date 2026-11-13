@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # tvmaze-scrobble-setup.sh: deploy the Plex → TVmaze watched sync.
-# See docs/apps/tvmaze-scrobble-README.md.
+# See docs/components/tvmaze-scrobble.md.
 
 # Installs the listener, worker, credentials and two LaunchAgents for operator.
 

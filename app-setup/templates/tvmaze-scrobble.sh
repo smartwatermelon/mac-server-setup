@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # tvmaze-scrobble: mark a Plex TV episode watched on TVmaze.
-# See docs/apps/tvmaze-scrobble-README.md.
+# See docs/components/tvmaze-scrobble.md.
 
 # Usage: tvmaze-scrobble [--reconcile | --check] < payload.json
 
@@ -24,7 +24,7 @@
 
 set -euo pipefail
 
-# launchd's PATH has no Homebrew. See docs/apps/monitoring-README.md.
+# launchd's PATH has no Homebrew. See docs/components/monitoring.md.
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 
 # ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ config_problem() {
   if alert_send "[${HOSTNAME_LABEL}] TVmaze sync is not working" "$2
 
 Plex plays are not being synced to TVmaze until this is fixed. Re-run
-tvmaze-scrobble-setup.sh; see docs/apps/tvmaze-scrobble-README.md.
+tvmaze-scrobble-setup.sh; see https://smartwatermelon.github.io/mac-server-setup/components/tvmaze-scrobble/
 The hourly reconcile run will catch up on plays from the last
 ${RECONCILE_LOOKBACK_DAYS} days. This is the only email until it is fixed.
 Log: ${LOG_FILE}"; then
@@ -401,7 +401,7 @@ ${FIND_DETAIL}"
   if [[ "${outcome}" == "auth" ]]; then
     hint="
 TVmaze rejected the credentials. Rotate the key: see
-docs/apps/tvmaze-scrobble-README.md in mac-server-setup."
+https://smartwatermelon.github.io/mac-server-setup/components/tvmaze-scrobble/"
   fi
   if alert_send "TVmaze sync failed: ${label}" "[${HOSTNAME_LABEL}] Could not mark this episode watched on TVmaze:
 

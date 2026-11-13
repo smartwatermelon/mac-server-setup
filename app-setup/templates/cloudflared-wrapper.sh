@@ -4,7 +4,7 @@
 # cloudflared. Run as root by the LaunchDaemon.
 
 # Never in a plist or on a command line, so never `service install <token>`.
-# See docs/apps/cloudflare-tunnel-README.md.
+# See docs/components/cloudflare-tunnel.md.
 
 # Placeholders are filled in by cloudflared-setup.sh.
 

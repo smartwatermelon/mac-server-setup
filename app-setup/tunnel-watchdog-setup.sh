@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # tunnel-watchdog-setup.sh: deploy the tunnel health watchdog.
-# See docs/apps/cloudflare-tunnel-README.md.
+# See docs/components/cloudflare-tunnel.md.
 
 # An operator agent, not a root daemon: msmtp refuses a config file the
 # invoking user does not own, so root could not send the alert.

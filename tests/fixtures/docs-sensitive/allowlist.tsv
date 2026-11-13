@@ -1,14 +1,14 @@
 # Real values in public docs that are not secret. One per line:
 # <repo-relative path><TAB><exact match>
 # PIA port-forwarding gateways (third-party, probed 2026-08-23).
-docs/apps/pia-vpn-README.md	10.17.112.1
-docs/apps/pia-vpn-README.md	10.7.112.1
-docs/apps/pia-vpn-README.md	10.13.112.1
-docs/apps/pia-vpn-README.md	10.135.192.1
-docs/apps/pia-vpn-README.md	10.34.192.1
-docs/apps/pia-vpn-README.md	10.116.192.1
-docs/apps/pia-vpn-README.md	10.107.192.1
-docs/apps/pia-vpn-README.md	10.80.192.1
+docs/components/pia-vpn.md	10.17.112.1
+docs/components/pia-vpn.md	10.7.112.1
+docs/components/pia-vpn.md	10.13.112.1
+docs/components/pia-vpn.md	10.135.192.1
+docs/components/pia-vpn.md	10.34.192.1
+docs/components/pia-vpn.md	10.116.192.1
+docs/components/pia-vpn.md	10.107.192.1
+docs/components/pia-vpn.md	10.80.192.1
 # plex.tv edge addresses and a PIA-assigned tunnel address in a retired bug report.
 docs/archive/pia-split-tunnel-bug.md	54.172.39.248
 docs/archive/pia-split-tunnel-bug.md	44.210.41.33

@@ -44,7 +44,7 @@ primary checkout. That file is gitignored; Andrew keeps a copy in 1Password.
 `app-setup/templates/www/`, `app-setup/templates/com.caddyserver.caddy.plist`,
 `app-setup/templates/com.media-server.plist`
 
-**Documentation**: `docs/apps/caddy-README.md`
+**Documentation**: `docs/components/caddy.md`
 
 **Covers**: TLS strategy (internal PKI + DNS-01 Cloudflare), custom Caddy build
 with cloudflare module, CF_API_TOKEN injection chain, media file server
@@ -58,14 +58,14 @@ environment variable syntax (`{$VAR}` vs `{env.VAR}`), ACME state management
 `app-setup/templates/com.cloudflare-ddns.plist`,
 `tests/cloudflare-ddns.bats`
 
-**Documentation**: `docs/apps/cloudflare-ddns-README.md`
+**Documentation**: `docs/components/cloudflare-ddns.md`
 
 **Covers**: Why the PIA-era DDNS was retired and how the standalone daemon
 replaces it, System keychain token reuse (same entry Caddy reads), public-IP
 provider fallback chain, change-detection vs heartbeat log cadence, Cloudflare
 API error modes, and the `TEST_RUNNER` hook that lets BATS mock network calls.
 Since the 2026-11-04 tunnel fix it updates the DNS-only `vpn.tilsit.vip`
-record that the home VPN uses (`docs/apps/home-vpn-README.md`), not
+record that the home VPN uses (`docs/components/home-vpn.md`), not
 `tilsit.vip`. Do not retire it while the VPN exists.
 
 ### Cloudflare Tunnel + Access (tilsit.vip gateway)
@@ -84,8 +84,8 @@ record that the home VPN uses (`docs/apps/home-vpn-README.md`), not
 `tests/access-policy-watchdog.bats`, `tests/tunnel-watchdog.bats`,
 `tests/fixtures/cloudflare-access/`
 
-**Documentation**: `docs/apps/cloudflare-tunnel-README.md` (and
-`docs/apps/caddy-README.md` for the Caddyfile)
+**Documentation**: `docs/components/cloudflare-tunnel.md` (and
+`docs/components/caddy.md` for the Caddyfile)
 
 **Covers**: The tunnel path and what protects it (Access, cloudflared JWT
 check, origin email check, loopback bind, drift watchdog), why the tunnel
@@ -109,7 +109,7 @@ sections and the supervisor status file in
 `tests/plex-watchdog.bats`, `tests/pia-port-watchdog.bats`,
 `tests/stall-watchdog.bats`, `tests/msmtp-setup.bats`
 
-**Documentation**: `docs/apps/monitoring-README.md`
+**Documentation**: `docs/components/monitoring.md`
 
 **Covers**: Which watchdogs exist (LaunchAgents, intervals, logs), the shared
 `alert-lib.sh` API (`alert_send`, state helpers, `alert_transition`), why
@@ -125,7 +125,7 @@ hand, and the supervisor status file
 `app-setup/templates/pia-pf-probe.sh`,
 `app-setup/templates/pia-port-guard.sh`, `tests/pia-port-guard.bats`
 
-**Documentation**: `docs/apps/pia-vpn-README.md`
+**Documentation**: `docs/components/pia-vpn.md`
 
 **Covers**: PIA credential chain (1Password → keychain → .env → container) and
 the password rotation procedure, next-generation port-forwarding flow, why
@@ -141,7 +141,7 @@ diagnosing tunnel-vs-port-forwarding failures
 wrapper in `app-setup/podman-transmission-setup.sh`, and the `export PATH=`
 line of `app-setup/templates/transmission-trigger-watcher.sh`
 
-**Documentation**: `docs/apps/stable-signing-README.md`
+**Documentation**: `docs/components/stable-signing.md`
 
 **Covers**: Why macOS privacy grants for Homebrew binaries die on every
 upgrade (path + cdhash keyed TCC rows), responsible-process attribution for
@@ -155,7 +155,7 @@ verification
 `app-setup/transmission-filebot-setup.sh`, `app-setup/templates/config.yml.template`,
 `app-setup/templates/process-media.command`, `tests/transmission-filebot/`
 
-**Documentation**: `docs/apps/transmission-filebot-README.md`
+**Documentation**: `docs/components/transmission-filebot.md`
 
 **Covers**: FileBot invocation and output parsing, Plex API section IDs,
 NFS/VirtioFS cache invalidation, Transmission's limited execution environment,
@@ -172,7 +172,7 @@ guard on non-strict movie matches, and the "could not process" email
 `app-setup/templates/com.tvmaze-reconcile.plist`,
 `tests/tvmaze-scrobble.bats`, `tests/fixtures/tvmaze-scrobble/`
 
-**Documentation**: `docs/apps/tvmaze-scrobble-README.md`
+**Documentation**: `docs/components/tvmaze-scrobble.md`
 
 **Covers**: The Plex webhook listener (loopback, multipart, hands off to the
 worker), the show matching order (TVDB → IMDb → exact title), why the webhook

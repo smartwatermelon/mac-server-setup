@@ -658,7 +658,7 @@ configure_plex_firewall() {
 }
 
 # Unattended Plex updates: an updater that cannot write the app waits for a
-# GUI password. See docs/apps/plex-setup-README.md.
+# GUI password. See docs/components/plex.md.
 configure_plex_updates() {
   section "Configuring Unattended Plex Updates"
 
@@ -1079,7 +1079,7 @@ migrate_plex_config() {
 }
 
 # Make PLEX_DATA_LINK a link to PLEX_DATA_DIR. Moves a staged migration;
-# refuses when both are real dirs. See plex-watchdog-README.md.
+# refuses when both are real dirs. See docs/components/plex-watchdog.md.
 ensure_plex_data_link() {
   section "Linking Plex Data Directory"
 
