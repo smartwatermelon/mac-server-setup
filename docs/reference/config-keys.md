@@ -43,7 +43,7 @@ Every key in `config/config.conf.template`. Copy the template to
 
 ## Plex migration configuration (optional)
 
-If migrating from an existing Plex server, specify the source hostname Leave empty to prompt during setup or use --migrate-from command line option
+If migrating from an existing Plex server, specify the source hostname<br>Leave empty to prompt during setup or use --migrate-from command line option
 
 | Key | Default | Description |
 | --- | --- | --- |
