@@ -43,7 +43,7 @@ The reasons for the split:
 - **The imported secrets stay with `admin`.** First boot imports the credentials from the setup package into the `admin` login keychain. Setup scripts read them there and give each `operator` service only the file it needs. See [Credential chain](credential-chain.md).
 - **Homebrew belongs to one user.** Homebrew refuses to run as root and expects one owner. `admin` owns it. Setup scripts that run as root drop to the invoking user for `brew install`.
 
-`operator` needs `sudo` for a few things at run time. `plex-setup.sh` writes `/etc/sudoers.d/nfs-mount`, which lets `operator` run `mount_nfs` and `umount` on its media mount with no password. Any other `sudo` command asks for the `operator` password.
+For `operator`, only the NFS mount commands skip the password. `plex-setup.sh` writes `/etc/sudoers.d/nfs-mount`, which lets `operator` run `mount_nfs` and `umount` on its media mount with no password. Any other `sudo` command asks for the `operator` password.
 
 `first-boot.sh` creates `operator` with `sysadminctl` and passes the administrator credentials so that the account gets a SecureToken. Without a SecureToken, the Passwords app rejects the correct password for the account. See [`first-boot.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/scripts/server/first-boot.sh).
 

@@ -324,7 +324,7 @@ launchctl stop com.plexapp.plexmediaserver
 
 # View logs
 tail -f ~/.local/state/${HOSTNAME_LOWER}-apps.log
-tail -f ~/.local/state/${HOSTNAME_LOWER}-plex-launchagent.log
+tail -f ~operator/.local/state/${HOSTNAME_LOWER}-plex-launchagent.log
 
 # Check NAS mount
 mount | grep ${NAS_SHARE_NAME}
