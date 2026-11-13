@@ -12,11 +12,13 @@ REPO_DIR="$(cd "$(dirname "${BATS_TEST_FILENAME}")/.." && pwd)"
 SELF="tests/docs-references.bats"
 
 # Print "file<TAB>docs-path" for each repo docs/...md path named in the
-# given files. The path must start the word, so ~/.claude/docs/X.md and
-# other trees' docs folders are not counted.
+# given files. Repo-relative forms count: docs/x.md, ./docs/x.md and
+# ${VAR}/docs/x.md. Another tree's docs folder (~/.claude/docs/x.md,
+# site/docs/x.md) does not.
 doc_refs() {
-  grep -oHE '(^|[^A-Za-z0-9_./~-])docs/[A-Za-z0-9_./-]+\.md' "$@" \
-    | sed -E 's/:[^d]*docs\//\tdocs\//' || true
+  grep -oHE '[-A-Za-z0-9_.~/{}$]*docs/[A-Za-z0-9_./-]+\.md' "$@" \
+    | awk -F: '{ t = $2; p = index(t, "docs/"); pre = substr(t, 1, p - 1)
+        if (pre == "" || pre == "./" || pre ~ /\}\/$/) print $1 "\t" substr(t, p) }' || true
 }
 
 # Print "file: path" for each named docs path that does not exist,
@@ -39,11 +41,14 @@ sources() {
 }
 
 @test "doc_refs: finds a path in a comment and in alert text" {
-  printf '# See docs/apps/x-README.md\necho "docs: docs/a/b.md"\n' >"${BATS_TEST_TMPDIR}/s.sh"
+  printf '%s\n' '# See docs/apps/x-README.md' 'echo "docs: docs/a/b.md"' \
+    "cp \"\${D}/docs/c.md\" ./docs/e.md" >"${BATS_TEST_TMPDIR}/s.sh"
   run doc_refs "${BATS_TEST_TMPDIR}/s.sh"
   [ "${status}" -eq 0 ]
   [[ "${output}" == *$'\t'"docs/apps/x-README.md"* ]]
   [[ "${output}" == *$'\t'"docs/a/b.md"* ]]
+  [[ "${output}" == *$'\t'"docs/c.md"* ]]
+  [[ "${output}" == *$'\t'"docs/e.md"* ]]
 }
 
 @test "doc_refs: paths into other trees' docs folders are not counted" {
