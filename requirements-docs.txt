@@ -1,0 +1,17 @@
+# Docs site build (issue #205). Every package is pinned, transitive ones too,
+# so a CI build is reproducible. Dependabot (pip ecosystem) proposes bumps.
+#
+# Local setup:
+#   python3 -m venv ~/.cache/zensical-venv
+#   ~/.cache/zensical-venv/bin/pip install -r requirements-docs.txt
+zensical==0.1.0
+zensical-ui==0.0.41
+click==8.5.1
+Jinja2==3.1.6
+Markdown==3.11.3
+MarkupSafe==3.0.4
+pathspec==1.1.1
+Pygments==2.21.0
+pymdown-extensions==13.1
+PyYAML==6.0.3
+tomli==2.5.0

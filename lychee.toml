@@ -1,0 +1,39 @@
+# Docs link check (#205): lychee --config lychee.toml docs README.md
+# Code blocks and inline code are skipped by default.
+
+# Cache results between runs so CI does not hammer the same hosts.
+cache = true
+max_cache_age = "2d"
+
+max_concurrency = 8
+max_retries = 3
+retry_wait_time = 2
+timeout = 20
+
+# 403 and 429 come from sites that refuse bots or rate-limit CI runners;
+# they do not mean the page is gone.
+accept = ["200..=299", "403", "429"]
+
+# Loopback, link-local and RFC 1918 addresses only resolve on the server's LAN.
+exclude_all_private = true
+exclude_loopback = true
+
+exclude = [
+  # Hosts that exist only on the operator's network or behind Cloudflare Access.
+  '\.local(:\d+)?(/|$)',
+  '^https?://tilsit\.vip',
+  # Template placeholders and documentation example domains.
+  '__[A-Z_]+__',
+  '^https?://(www\.)?(example\.(com|org|net)|yourdomain\.com)',
+  # API endpoints: they answer only authenticated, well-formed requests.
+  '^https://api\.cloudflare\.com',
+  '^https://api\.tvmaze\.com',
+  '^https://acme(-staging)?-v02\.api\.letsencrypt\.org',
+  '^https://serverlist\.piaservers\.net',
+  # Pages that need a signed-in session.
+  '^https://dash\.cloudflare\.com',
+  '^https://myaccount\.google\.com',
+]
+
+# Links into the repo outside docs/ (for example ../../app-setup/...) are
+# checked as local files. Anchors are left to the strict site build.

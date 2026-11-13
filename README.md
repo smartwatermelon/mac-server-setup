@@ -358,4 +358,4 @@ Scripts must be idempotent (re-runnable without breaking things). Use `log()`/`s
 
 ## License
 
-MIT; see [LICENSE](license.md)
+MIT; see [LICENSE](LICENSE.md)
