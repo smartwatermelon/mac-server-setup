@@ -62,5 +62,6 @@ flowchart TB
 - New install: the [get-started tutorial](get-started/index.md), eight
   pages from a spare Mac mini to the first play in Plex.
 - Every config key: the [configuration key reference](reference/config-keys.md).
+- Why it is built this way: the [explanation pages](explanation/index.md).
 - Which parts you need: the [stack matrix](stack-matrix.md).
 - The code: [smartwatermelon/mac-server-setup](https://github.com/smartwatermelon/mac-server-setup).
