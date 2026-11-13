@@ -1,6 +1,7 @@
 # Proposal: Containerized Transmission with gluetun VPN
 
-**Status:** Done on 2026-03-10 (#78), with haugene/transmission-openvpn.
+**History.** Done on 2026-03-10 (#78), with haugene/transmission-openvpn instead of gluetun. `app-setup/podman-transmission-setup.sh` runs that image in the `transmission-vm` Podman VM. The Panama endpoint named below is no longer the default; the region is now set by `PIA_VPN_REGION`. For the current install see [Transmission first install](../components/transmission-first-install.md), and for credentials, port forwarding and regions see [PIA VPN](../components/pia-vpn.md). This page was at `docs/container-transmission-proposal.md` until 2026-11-13.
+
 **Decision:** haugene/transmission-openvpn (not gluetun + linuxserver/transmission)
   Rationale: single container, automatic PIA port forwarding, battle-tested.
   Server uses Panama PIA endpoint (non-US = port forwarding supported with OpenVPN).

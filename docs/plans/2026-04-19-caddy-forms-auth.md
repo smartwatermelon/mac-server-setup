@@ -1,10 +1,7 @@
 # Caddy Forms-Based Authentication Implementation Plan
 
-> **Superseded (2026-10-22). Do not execute.** #130 is closed. The
-> 1Password-friendly sign-in now comes from Cloudflare Access (G2); see
-> `2026-10-22-g2-tunnel-access-implementation.md`. This plan is kept for
-> history only.
->
+**History.** Superseded on 2026-10-22, when #130 was closed. Do not execute it. The 1Password-friendly sign-in now comes from Cloudflare Access, through the [G2 tunnel and Access plan](2026-10-22-g2-tunnel-access-implementation.md). For the current setup see [Cloudflare Tunnel](../components/cloudflare-tunnel.md). This plan is kept for history only.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Replace Caddy's browser-native `basic_auth` challenge for external access with a form-based login that 1Password (and other password managers) can auto-fill.

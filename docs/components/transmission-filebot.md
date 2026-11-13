@@ -453,7 +453,7 @@ When Transmission runs in a container (e.g., podman/haugene), it cannot directly
 ### VirtioFS NFS Access and Full Disk Access
 
 The Podman VM shares host directories into the container via VirtioFS. For NFS-backed
-paths (like `/Users/operator/.local/mnt/DSMedia`), macOS enforces TCC/sandbox
+paths (like `/Users/operator/.local/mnt/<share>`), macOS enforces TCC/sandbox
 restrictions on the `com.apple.Virtualization.VirtualMachine` XPC service that
 handles VirtioFS I/O.
 

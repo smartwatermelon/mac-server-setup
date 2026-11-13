@@ -1,20 +1,8 @@
 # Cloudflare Migration — TILSIT Deployment Checklist
 
+**History.** Done. This is the deployment checklist for the 2026-02-23 [Cloudflare DNS-01 plan](../plans/2026-02-23-cloudflare-dns01.md), and every task below is marked done. #106 (2026-04-03) imported it from the `tilsit-caddy` repository as a completed migration. Tasks 9 and 10 changed the host-level PIA Desktop and split-tunnel stack. That stack was retired after Transmission moved into the haugene/transmission-openvpn container (#78, 2026-03-10), and those tasks were marked obsolete on 2026-04-15 (#121). Do not follow them. DDNS is now a separate daemon, not part of `plex-vpn-bypass.sh`. For the current setup see [Caddy](../components/caddy.md), [Cloudflare DDNS](../components/cloudflare-ddns.md) and [TLS strategy](../explanation/tls-strategy.md).
+
 Commands run in your SSH session on TILSIT unless marked **Dev machine**.
-
-**Status as of 2026-02-23:** Tasks 1, 2, 6, 7-1, 7-2 complete. Resume at **Task 7 retry**.
-**Skip Tasks 9 & 10** — they target the retired host-level PIA stack (see obsolescence notice below).
-
-> **⚠️ Historical — PIA sections obsolete (2026-04-15)**
->
-> Tasks 9 (`plex-vpn-bypass.sh` live patch) and 10 (removing NoIP DUC from the
-> PIA split-tunnel bypass list) refer to the host-level PIA Desktop + split-
-> tunnel stack that was retired when Transmission moved inside the
-> haugene/transmission-openvpn container. PIA Desktop, the `plex-vpn-bypass`
-> LaunchDaemon, the PF anchor, and the split-tunnel reference files have all
-> been removed from TILSIT. Do not follow those tasks. Cloudflare DNS-01,
-> DDNS, and Caddy TLS tasks (1–8) remain accurate. VPN now runs entirely
-> inside the Transmission container.
 
 ---
 

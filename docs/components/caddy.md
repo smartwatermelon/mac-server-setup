@@ -9,8 +9,8 @@ dashboard, and media file server components.
 ## Project Overview
 
 Caddy web server configuration for the home server (Mac Mini). Serves a dashboard
-landing page and reverse-proxies local services (Transmission, Romano Synology DSM,
-Berkswell Synology DSM), with split internal/external access control.
+landing page and reverse-proxies local services (Transmission and the Synology DSM pages
+of your NAS units), with split internal/external access control.
 
 ## Key Commands
 
@@ -128,7 +128,7 @@ sudo launchctl kickstart -k system/com.<hostname>.media-server
 
 ### Media File Server
 
-The `/media/` path serves a file browser for the DSMedia NFS mount at `/Users/operator/.local/mnt/DSMedia`. Due to a macOS security restriction, Caddy cannot access NFS mounts directly — macOS blocks all launchd-spawned processes from NFS mounts unless the binary has **Full Disk Access** (FDA) granted in System Preferences → Privacy & Security → Full Disk Access.
+The `/media/` path serves a file browser for the NAS NFS mount at `/Users/operator/.local/mnt/<share>`. Due to a macOS security restriction, Caddy cannot access NFS mounts directly — macOS blocks all launchd-spawned processes from NFS mounts unless the binary has **Full Disk Access** (FDA) granted in System Preferences → Privacy & Security → Full Disk Access.
 
 Architecture: `media-server.py` (Python `http.server`) runs as a LaunchDaemon (`com.<hostname>.media-server`) on `127.0.0.1:9880`. Caddy reverse-proxies `/media/*` to it. The `@not_local` matcher blocks external access with a 403.
 
