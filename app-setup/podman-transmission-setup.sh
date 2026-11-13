@@ -1243,9 +1243,9 @@ else
     SAMPLE=$(printf '%s' "${TEST_RESULT}" | head -3 | tr '\n' ' ' || true)
     log "   Sample contents: ${SAMPLE}"
   else
-    collect_warning "NAS bind mount: EMPTY — VirtioFS may not see SMB mount content"
-    collect_warning "Fallback required: mount SMB from within Podman VM /etc/fstab"
-    collect_warning "See docs/container-transmission-proposal.md §5.1 for fallback instructions"
+    collect_warning "NAS bind mount: EMPTY — VirtioFS may not see the host NFS mount content"
+    collect_warning "Check the host NFS mount (mount-nas-media.sh) and the network-volume privacy grant"
+    collect_warning "See docs/apps/stable-signing-README.md for the VirtioFS network-volume grant"
   fi
 fi
 

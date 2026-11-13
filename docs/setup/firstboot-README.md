@@ -18,7 +18,7 @@ This directory contains all the necessary files for setting up the Mac Mini serv
 3. **Open Terminal from the Mac Mini's desktop session** and run:
 
    ```bash
-   cd ~/Downloads/${SERVER_NAME_LOWER}-setup/scripts
+   cd ~/Downloads/${SERVER_NAME_LOWER}-setup
    chmod +x first-boot.sh
    ./first-boot.sh
    ```

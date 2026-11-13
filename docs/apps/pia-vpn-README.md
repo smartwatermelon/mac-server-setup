@@ -136,7 +136,7 @@ for that region. 103 of 158 regions carry the flag, so it is useful as a
 first-pass filter and nothing more.
 
 The only reliable test is to establish a tunnel and ask. That is what
-[`app-setup/templates/pia-pf-probe.sh`](../../app-setup/templates/pia-pf-probe.sh)
+[`app-setup/templates/pia-pf-probe.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/app-setup/templates/pia-pf-probe.sh)
 does:
 
 `podman-transmission-setup.sh` deploys it to
@@ -347,11 +347,11 @@ region configs, so mounting over that directory to swap one file would hide
 the configs and break region selection.
 
 Instead `DISABLE_PORT_UPDATER=true` keeps it dormant, and
-[`transmission-post-start.sh`](../../app-setup/templates/transmission-post-start.sh)
+[`transmission-post-start.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/app-setup/templates/transmission-post-start.sh)
 runs our own port-forwarding manager from the already-mounted `/scripts`
 volume. It performs the same token → getSignature → bindPort flow, but hands
 the result to
-[`pia-port-guard.sh`](../../app-setup/templates/pia-port-guard.sh), which
+[`pia-port-guard.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/app-setup/templates/pia-port-guard.sh), which
 refuses empty, non-numeric, `null`, zero, privileged, and out-of-range values
 and leaves the existing port intact instead.
 
