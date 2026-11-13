@@ -99,10 +99,10 @@ Run these checks as `admin`, after `operator` has logged in.
 
     A port number other than 0 means port forwarding works. `Listen port: 0` means it failed. See [Diagnosing "torrents won't start"](../apps/pia-vpn-README.md#diagnosing-torrents-wont-start).
 
-4. The VPN signed in. No lines here means no authentication failures:
+4. The PIA credentials were not rejected. A wrong password shows up as `AUTH_FAILED` in the container log, so this command must print nothing. An empty result does not prove the tunnel is up; check 3 does that:
 
     ```bash
-    sudo -iu operator podman logs --tail 50 transmission-vpn | grep -i 'auth_failed'
+    sudo -iu operator podman logs transmission-vpn 2>&1 | grep -i 'auth_failed'
     ```
 
 5. The supervisor is running its loop. The log shows `entering supervision loop`:
