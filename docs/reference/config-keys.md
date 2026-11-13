@@ -99,11 +99,9 @@ Used by podman-transmission-setup.sh to configure the containerized Transmission
 
 ## Catch magnet handling (optional)
 
-Set to "false" to have Catch download .torrent files instead of using magnet links
-
 | Key | Default | Description |
 | --- | --- | --- |
-| `CATCH_USE_MAGNETS` | `true` | "true" = Catch passes magnet links via TransmissionMagnetHandler.app → container RPC<br>"false" = Catch downloads .torrent files to watch directory (rclone syncs to container) |
+| `CATCH_USE_MAGNETS` | `true` | Not read by any script yet. Magnet links reach the container through TransmissionMagnetHandler.app; set Catch's own preference in the app. |
 
 ## External access (Cloudflare DDNS)
 
