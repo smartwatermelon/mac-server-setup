@@ -46,13 +46,13 @@ Always restart through `launchctl kickstart`.
 The Caddyfile uses four site blocks and three snippets:
 
 1. **Catch-all `:443`** — Rejects direct IP access or unrecognized hostnames (403)
-2. **Internal block** (`{$HOSTNAME}.local localhost <server LAN IP>` (`__SERVER_LAN_IP__`, currently 10.0.15.15)) — Uses `tls internal` (Caddy's built-in CA). Imports `common_config`
-3. **External block** (`tilsit.vip`) — Uses Let's Encrypt DNS-01 via Cloudflare for public TLS. Imports `common_config`. Kept as the rollback path after the move to the Cloudflare Tunnel
+2. **Internal block** (`{$HOSTNAME}.local localhost <server LAN IP>` (`__SERVER_LAN_IP__`, currently 192.168.21.10)) — Uses `tls internal` (Caddy's built-in CA). Imports `common_config`
+3. **External block** (`example.com`) — Uses Let's Encrypt DNS-01 via Cloudflare for public TLS. Imports `common_config`. Kept as the rollback path after the move to the Cloudflare Tunnel
 4. **Tunnel block** (`http://:8080`, `bind 127.0.0.1`) — The Cloudflare Tunnel origin. Imports `site_routes` behind an email-header check, and `access_log`. See below and `cloudflare-tunnel-README.md`
 
 The `(common_config)` snippet holds the LAN/WAN access control, and imports `(site_routes)` and `(access_log)`:
 
-- **Network matchers**: `@local_network` and `@external_network` based on `10.0.15.0/24`
+- **Network matchers**: `@local_network` and `@external_network` based on `192.168.21.0/24`
 - **Basic auth**: Applied to `@external_auth_required`: any non-LAN source IP, on both sites. It must never key on `host`: the WAN forward reaches the internal site too, and the client chooses the Host/SNI
 - **Media file browser**: `/media/*` reverse-proxied to `localhost:9880` (Python file server, local network only)
 
@@ -66,7 +66,7 @@ The `(access_log)` snippet holds the JSON access log (`/usr/local/var/log/caddy/
 
 ### Tunnel site (`http://:8080`)
 
-`cloudflared` forwards `tilsit.vip` requests that carry a valid Cloudflare
+`cloudflared` forwards `example.com` requests that carry a valid Cloudflare
 Access token to `http://127.0.0.1:8080`. Every request on this listener comes
 from loopback, so:
 
@@ -105,7 +105,7 @@ writable.
 - `app-setup/templates/media-server.py` — Python HTTP file server for NFS media volume (binds to `127.0.0.1:9880`)
 - `app-setup/templates/www/` — Static web root (dashboard `index.html`, favicons, manifest)
 - `app-setup/templates/com.caddyserver.caddy.plist` — Caddy LaunchDaemon
-- `app-setup/templates/com.tilsit.media-server.plist` — Media server LaunchDaemon
+- `app-setup/templates/com.media-server.plist` — Media server LaunchDaemon
 - `app-setup/templates/caddy-root-ca.crt` — Internal CA root certificate for client trust
 
 ### Deployment Path
@@ -123,20 +123,20 @@ After deploying, restart both services:
 
 ```bash
 sudo launchctl kickstart -k system/com.caddyserver.caddy
-sudo launchctl kickstart -k system/com.tilsit.media-server
+sudo launchctl kickstart -k system/com.<hostname>.media-server
 ```
 
 ### Media File Server
 
 The `/media/` path serves a file browser for the DSMedia NFS mount at `/Users/operator/.local/mnt/DSMedia`. Due to a macOS security restriction, Caddy cannot access NFS mounts directly — macOS blocks all launchd-spawned processes from NFS mounts unless the binary has **Full Disk Access** (FDA) granted in System Preferences → Privacy & Security → Full Disk Access.
 
-Architecture: `media-server.py` (Python `http.server`) runs as a LaunchDaemon (`com.tilsit.media-server`) on `127.0.0.1:9880`. Caddy reverse-proxies `/media/*` to it. The `@not_local` matcher blocks external access with a 403.
+Architecture: `media-server.py` (Python `http.server`) runs as a LaunchDaemon (`com.<hostname>.media-server`) on `127.0.0.1:9880`. Caddy reverse-proxies `/media/*` to it. The `@not_local` matcher blocks external access with a 403.
 
 **Prerequisite:** `/usr/bin/python3` must have Full Disk Access granted (done 2026-03-25). Without FDA, the media server will start but return "No permission to list directory" errors.
 
 ```bash
 # Check media server status
-sudo launchctl print system/com.tilsit.media-server | grep state
+sudo launchctl print system/com.<hostname>.media-server | grep state
 
 # Test directly
 curl http://127.0.0.1:9880/
@@ -161,10 +161,10 @@ chmod +x /tmp/caddy-cloudflare
 /tmp/caddy-cloudflare list-modules | grep cloudflare
 # Expected: dns.providers.cloudflare
 
-rsync /tmp/caddy-cloudflare operator@tilsit.local:/tmp/caddy-cloudflare
+rsync /tmp/caddy-cloudflare operator@your-server.local:/tmp/caddy-cloudflare
 ```
 
-On TILSIT (as `operator`):
+On YOUR_SERVER (as `operator`):
 
 ```bash
 sudo cp /opt/homebrew/bin/caddy /opt/homebrew/bin/caddy.homebrew-backup
@@ -174,7 +174,7 @@ sudo chmod +x /opt/homebrew/bin/caddy
 /opt/homebrew/bin/caddy list-modules | grep cloudflare
 ```
 
-**Caddy is pinned** (`brew pin caddy`) to prevent `brew upgrade` from overwriting the custom build. Run `brew pin caddy` as the `andrewrich` account (not `operator`) since Homebrew requires the admin account.
+**Caddy is pinned** (`brew pin caddy`) to prevent `brew upgrade` from overwriting the custom build. Run `brew pin caddy` as the `admin` account (not `operator`) since Homebrew requires the admin account.
 
 To update after a Caddy version bump: download a fresh binary from the API above, replace, and re-pin.
 
@@ -186,11 +186,11 @@ Check current binary: `/opt/homebrew/bin/caddy list-modules | grep cloudflare` (
 
 ### LAN (Internal)
 
-Caddy's internal PKI with 90-day intermediate certs (`intermediate_lifetime 90d` in global config). Clients must install `caddy-root-ca.crt` to trust these certs. The internal block matches `{$HOSTNAME}.local localhost <server LAN IP>` (`__SERVER_LAN_IP__`, currently 10.0.15.15) and uses `tls internal`.
+Caddy's internal PKI with 90-day intermediate certs (`intermediate_lifetime 90d` in global config). Clients must install `caddy-root-ca.crt` to trust these certs. The internal block matches `{$HOSTNAME}.local localhost <server LAN IP>` (`__SERVER_LAN_IP__`, currently 192.168.21.10) and uses `tls internal`.
 
 ### WAN (Let's Encrypt DNS-01 via Cloudflare)
 
-No inbound ports needed — the DNS-01 challenge proves domain ownership by creating a TXT record at `_acme-challenge.tilsit.vip` via the Cloudflare API rather than serving a file over HTTP.
+No inbound ports needed — the DNS-01 challenge proves domain ownership by creating a TXT record at `_acme-challenge.example.com` via the Cloudflare API rather than serving a file over HTTP.
 
 **Token injection chain:**
 
@@ -219,7 +219,7 @@ sudo launchctl print system/com.caddyserver.caddy | grep -A3 "program ="
 
 ```bash
 CF_TOKEN=$(sudo security find-generic-password \
-  -s cloudflare-api-token -a tilsit.vip -w \
+  -s cloudflare-api-token -a example.com -w \
   /Library/Keychains/System.keychain)
 curl -s -H "Authorization: Bearer $CF_TOKEN" \
   "https://api.cloudflare.com/client/v4/user/tokens/verify" \
@@ -255,7 +255,7 @@ import sys, json
 cfg = json.load(sys.stdin)
 policies = cfg.get('automation', {}).get('policies', [])
 for p in policies:
-    if 'tilsit.vip' in p.get('subjects', []):
+    if 'example.com' in p.get('subjects', []):
         print(json.dumps(p, indent=2))
 "
 ```
@@ -268,7 +268,7 @@ If `api_token` shows `{env.CF_API_TOKEN}` (literal), the substitution failed. If
 
 Controls how long certmagic will **poll** the authoritative nameservers itself before giving up and signaling LE. Default is a few minutes.
 
-**Setting on TILSIT:** `propagation_timeout -1` disables certmagic's own propagation poll entirely. certmagic creates the TXT record via the Cloudflare API, then immediately signals LE that the challenge is ready — without checking propagation itself. Let's Encrypt performs its own independent check from their servers.
+**Setting on YOUR_SERVER:** `propagation_timeout -1` disables certmagic's own propagation poll entirely. certmagic creates the TXT record via the Cloudflare API, then immediately signals LE that the challenge is ready — without checking propagation itself. Let's Encrypt performs its own independent check from their servers.
 
 This avoids issues where certmagic's direct TCP/53 queries to Cloudflare's authoritative nameservers may be blocked by network configuration or VPN routing.
 
@@ -278,10 +278,10 @@ A fixed sleep inserted **after** creating the TXT record via the API and **befor
 
 **Why this matters:** With `propagation_timeout -1`, certmagic notifies LE the instant the Cloudflare API call returns successfully. Cloudflare's authoritative nameservers may not have propagated the new TXT record to all resolvers by the time LE's servers query them. This creates a race: if LE polls before the record propagates, it gets a 403 "No TXT record found."
 
-**`propagation_delay 30s` is required on TILSIT.** Without it, certmagic notifies LE immediately after the Cloudflare API call returns; LE's resolvers check before Cloudflare has propagated the record to its authoritative nameservers, resulting in HTTP 403 "No TXT record found" on every attempt. The current Caddyfile includes this.
+**`propagation_delay 30s` is required on YOUR_SERVER.** Without it, certmagic notifies LE immediately after the Cloudflare API call returns; LE's resolvers check before Cloudflare has propagated the record to its authoritative nameservers, resulting in HTTP 403 "No TXT record found" on every attempt. The current Caddyfile includes this.
 
 ```caddyfile
-tilsit.vip {
+example.com {
     tls {
         issuer acme {
             dir https://acme-v02.api.letsencrypt.org/directory
@@ -371,7 +371,7 @@ certmagic cannot reach Cloudflare's authoritative nameservers on TCP/53. This ca
 
 Fix: `propagation_timeout -1` in the `issuer acme` block.
 
-### Symptom: "No TXT record found at _acme-challenge.tilsit.vip" (HTTP 403)
+### Symptom: "No TXT record found at _acme-challenge.example.com" (HTTP 403)
 
 certmagic created the TXT record via the Cloudflare API but LE's resolvers checked before the record propagated from Cloudflare's authoritative NS.
 
@@ -386,22 +386,22 @@ If it fails all 3 attempts: add `propagation_delay 30s` to the `issuer acme` blo
 ### Reading cert issuance logs
 
 ```bash
-tail -f ~/.local/state/caddy/caddy-error.log | grep -i 'tilsit\|acme\|certif\|cloudflare\|obtain\|error'
+tail -f ~/.local/state/caddy/caddy-error.log | grep -i 'example\.com\|acme\|certif\|cloudflare\|obtain\|error'
 ```
 
 Key log messages in order of a successful issuance:
 
 ```text
-"msg":"obtaining certificate","identifier":"tilsit.vip"
+"msg":"obtaining certificate","identifier":"example.com"
 "msg":"using ACME account","account_id":"https://acme-v02.api.letsencrypt.org/acme/acct/..."
 "msg":"trying to solve challenge","challenge_type":"dns-01"
-"msg":"certificate obtained successfully","identifier":"tilsit.vip"
+"msg":"certificate obtained successfully","identifier":"example.com"
 ```
 
 ### Verifying a live cert
 
 ```bash
-curl -sk https://tilsit.vip:24443 -o /dev/null -w '%{http_code} %{ssl_verify_result}\n'
+curl -sk https://example.com:24443 -o /dev/null -w '%{http_code} %{ssl_verify_result}\n'
 # Expected: 200 0  or  401 0
 # ssl_verify_result=0 means the cert is trusted by the system
 ```

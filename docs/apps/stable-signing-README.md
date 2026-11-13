@@ -27,7 +27,7 @@ the container over VirtioFS. The VirtioFS I/O is performed by Apple's
 a file on a network volume, macOS Tahoe checks the
 `kTCCServiceSystemPolicyNetworkVolumes` privacy grant. XPC services are not
 their own TCC client. macOS attributes the access to the *responsible
-process*, and the rule observed on TILSIT is: **the first non-Apple binary
+process*, and the rule observed on YOUR_SERVER is: **the first non-Apple binary
 below the LaunchAgent's `/bin/bash`**. Everything under it inherits.
 
 For the podman supervisor that chain is `timeout` (coreutils `gtimeout`)
@@ -75,7 +75,7 @@ symlinks: the stored client path still pointed at the versioned Cellar path.
 
 ### What was verified before building this
 
-All four rows below were measured on TILSIT on 2026-09-03, not inferred:
+All four rows below were measured on YOUR_SERVER on 2026-09-03, not inferred:
 experiments with a tiny C program (`nvtest`) that opens a file on the NFS
 mount from a LaunchAgent (rows 1 to 3, each cycled more than once), plus
 re-signing the live `podman-remote` while its VM was running (row 4: one more
@@ -172,13 +172,13 @@ Notes learned the hard way:
 ```bash
 # State of every target; exit 1 if anything is stale. Also lists every
 # other entry in bin/: symlinks with their target, and unsigned files.
-/usr/local/bin/tilsit-stable-sign.sh --check
+/usr/local/bin/<hostname>-stable-sign.sh --check
 
 # Did the daily upgrade job's stable-sign step fail?
-grep -E 'stable-sign|ERROR' ~/.local/state/tilsit-brew-upgrade.log | tail
+grep -E 'stable-sign|ERROR' ~/.local/state/<hostname>-brew-upgrade.log | tail
 
 # Refresh after a manual brew upgrade (the daily daemon does this itself)
-/usr/local/bin/tilsit-stable-sign.sh
+/usr/local/bin/<hostname>-stable-sign.sh
 
 # Confirm the grant is keyed on the stable path and identity
 sudo sqlite3 /Users/operator/Library/Application\ Support/com.apple.TCC/TCC.db \

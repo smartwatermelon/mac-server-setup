@@ -203,10 +203,10 @@ page() {
 }
 
 # git pathspec * matches across /, so 'docs/*.md' covers every subdirectory.
-# README-named pages join this scan when their scrub is approved (#205).
+# Same file set as the deploy job's check in .github/workflows/docs.yml.
 @test "docs: no public page holds a sensitive value" {
   cd "${REPO_DIR}"
-  mapfile -t pages < <(git ls-files 'docs/*.md' | grep -v 'README' || true)
+  mapfile -t pages < <(git ls-files 'docs/*.md' README.md)
   [ "${#pages[@]}" -gt 0 ]
   run "${CHECK}" --allowlist "${ALLOWLIST}" "${pages[@]}"
   echo "${output}"

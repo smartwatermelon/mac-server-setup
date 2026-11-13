@@ -1,11 +1,11 @@
-# Cloudflare Tunnel and Access (tilsit.vip)
+# Cloudflare Tunnel and Access (example.com)
 
-`tilsit.vip` reaches the server through a Cloudflare Tunnel, behind
+`example.com` reaches the server through a Cloudflare Tunnel, behind
 Cloudflare Access with Google sign-in. There is no inbound port and no
-browser password prompt. `tilsit.local` on the LAN does not change.
+browser password prompt. `your-server.local` on the LAN does not change.
 
 Issue #209 (gateway, decision G2). This build also delivers the routing
-from #210 (decision R3): `tilsit.vip` works the same on the LAN and outside it,
+from #210 (decision R3): `example.com` works the same on the LAN and outside it,
 because it no longer resolves to the home IP. Plan:
 `docs/plans/2026-10-22-g2-tunnel-access-implementation.md`.
 
@@ -13,15 +13,15 @@ because it no longer resolves to the home IP. Plan:
 
 ```text
 Browser (anywhere, including LAN)
-  → tilsit.vip  (proxied CNAME → <tunnel-id>.cfargotunnel.com)
+  → example.com  (proxied CNAME → <tunnel-id>.cfargotunnel.com)
   → Cloudflare Access  (Google sign-in; allow: one email address)
-  → Cloudflare Tunnel  (outbound connection from TILSIT)
-  → cloudflared on TILSIT  (rejects requests without a valid Access JWT)
+  → Cloudflare Tunnel  (outbound connection from YOUR_SERVER)
+  → cloudflared on YOUR_SERVER  (rejects requests without a valid Access JWT)
   → Caddy http://127.0.0.1:8080  (tunnel-only site, loopback bind)
   → / landing page, /transmission/ → 127.0.0.1:9091
 
 LAN only, unchanged:
-  tilsit.local → Caddy :443 (tls internal) → no auth from LAN
+  your-server.local → Caddy :443 (tls internal) → no auth from LAN
 ```
 
 ### What protects the tunnel path
@@ -37,7 +37,7 @@ LAN only, unchanged:
    This is the layer that still holds if the policy is widened. It depends
    on Cloudflare overwriting the header, so a signed-in client cannot forge
    it. Plan Task 2b tested that on 2026-10-22 through this tunnel (temporary
-   app `accesstest.tilsit.vip`, since deleted): a signed-in request that
+   app `accesstest.example.com`, since deleted): a signed-in request that
    sent `Cf-Access-Authenticated-User-Email: forgot@example.com` reached
    the origin with exactly one value, the real signed-in email. The forged
    value never arrived. Restored by Andrew on 2026-10-22, after an earlier
@@ -96,20 +96,22 @@ See `caddy-README.md` for the rest of the Caddyfile.
 
 ## Cloudflare objects
 
-All in the Cloudflare account that holds `tilsit.vip` (Free plan). None of
-these ids are secrets. The repo templates take them from `config.conf`.
+All in the Cloudflare account that holds `example.com` (Free plan). The ids
+are not secrets, but they are specific to one server, so they are not listed
+here. The operator keeps them in `local/operator-notes.md` (gitignored). The
+repo templates take them from `config.conf`.
 
 | Object | Name | Id |
 | --- | --- | --- |
-| Account | `Andrew.rich@gmail.com's Account` | `36e63f08a319513d2e3827ddf440fc71` |
-| Zero Trust team | `tiny-pond-a15e` (`tiny-pond-a15e.cloudflareaccess.com`) | |
-| Access application (self-hosted) | `tilsit.vip` | `fe8dcc7a-1780-4188-85f7-9e616399c721` |
-| Application AUD tag | | `c88730643f7e5723b386e4f1c5d01a94951f7716336e16645a4387596876a37a` |
-| Reusable Access policy (Allow) | `tilsit-allow-andrew` | `d19c2ab1-83b3-4037-8576-1ed1d0ed16ef` |
-| Identity provider | Google | `1a5a2d40-f042-4543-a590-97095828cef7` |
-| Tunnel (remotely managed) | `tilsit` | `f5373cb8-a4e3-4eff-b8ca-575b97faa36a` |
+| Account | `you@example.com's Account` | in the operator note |
+| Zero Trust team | `your-team` (`your-team.cloudflareaccess.com`) | |
+| Access application (self-hosted) | `example.com` | in the operator note |
+| Application AUD tag | | in the operator note |
+| Reusable Access policy (Allow) | `<hostname>-allow-<you>` | in the operator note |
+| Identity provider | Google | in the operator note |
+| Tunnel (remotely managed) | `<hostname>` | in the operator note |
 
-The tunnel ingress (set in Cloudflare, not in this repo): `tilsit.vip` →
+The tunnel ingress (set in Cloudflare, not in this repo): `example.com` →
 `http://127.0.0.1:8080` with `originRequest.access.required: true`, the team
 name and the AUD tag; catch-all → `http_status:404`.
 
@@ -121,8 +123,8 @@ line, shell history or a transcript.
 
 | Item (service / account) | What | Read by |
 | --- | --- | --- |
-| `cloudflare-tunnel-token` / `tilsit.vip` | Tunnel token: anyone with it can run the tunnel | `cloudflared-wrapper.sh` (root, every start) |
-| `cloudflare-access-readonly-token` / `tilsit.vip` | API token, Access: Apps and Policies Read, and Cloudflare Tunnel: Read | `access-policy-watchdog-setup.sh` (root, at deploy) |
+| `cloudflare-tunnel-token` / `example.com` | Tunnel token: anyone with it can run the tunnel | `cloudflared-wrapper.sh` (root, every start) |
+| `cloudflare-access-readonly-token` / `example.com` | API token, Access: Apps and Policies Read, and Cloudflare Tunnel: Read | `access-policy-watchdog-setup.sh` (root, at deploy) |
 
 ```text
 System keychain
@@ -139,7 +141,7 @@ with it.
 
 To rotate the tunnel token: rotate it in the dashboard (Networks > Tunnels),
 replace the keychain item, then `sudo launchctl kickstart -k
-system/com.tilsit.cloudflare-tunnel`. The keychain command must let
+system/com.<hostname>.cloudflare-tunnel`. The keychain command must let
 `security` prompt for the value. Test the argument order on a scratch
 keychain first: if a keychain path follows a bare `-w`, `security` may take
 the path as the password.
@@ -182,9 +184,9 @@ the wrapper and plist, bootstraps the daemon, and waits up to 60 s for
 `/ready`.
 
 ```bash
-sudo launchctl print system/com.tilsit.cloudflare-tunnel | head
+sudo launchctl print system/com.<hostname>.cloudflare-tunnel | head
 curl -s http://127.0.0.1:20241/ready          # 200 once connected to the edge
-sudo launchctl kickstart -k system/com.tilsit.cloudflare-tunnel
+sudo launchctl kickstart -k system/com.<hostname>.cloudflare-tunnel
 tail -f /Users/operator/.local/state/cloudflared/cloudflared-error.log
 ```
 
@@ -207,13 +209,13 @@ counts as drift.
 
 | Check | Expected |
 | --- | --- |
-| Application `domain` | `tilsit.vip` |
+| Application `domain` | `example.com` |
 | Application `allowed_idps` | exactly `[<Google IdP id>]` (an empty list allows every IdP, including one-time PIN) |
 | Application `policies[].id` | exactly `[<policy id>]`: no second policy, ours not detached |
 | Policy `decision` | `allow` |
 | Policy `include` | exactly `[{"email": {"email": "<allowed email>"}}]` (email compared without case) |
 | Policy `require`, `exclude` | empty |
-| Tunnel `config.ingress` | exactly two rules: `tilsit.vip` (hostname compared without case) → `http://127.0.0.1:8080` with `originRequest` exactly `{access: {required: true, teamName: <team>, audTag: [<AUD>]}}`; then `http_status:404`. A second hostname, a path rule, or a catch-all that serves anything is drift. |
+| Tunnel `config.ingress` | exactly two rules: `example.com` (hostname compared without case) → `http://127.0.0.1:8080` with `originRequest` exactly `{access: {required: true, teamName: <team>, audTag: [<AUD>]}}`; then `http_status:404`. A second hostname, a path rule, or a catch-all that serves anything is drift. |
 | Tunnel `config["warp-routing"].enabled` | `false` or absent. When on, the tunnel routes private networks (the LAN) past Access and Caddy. |
 | Tunnel `config`, other keys | none (for example, a global `originRequest`) |
 
@@ -271,7 +273,7 @@ the policy, confirm the alert arrives, remove it, confirm the recovery email.
 
 ```bash
 sudo -u operator /bin/bash /Users/operator/.local/bin/access-policy-watchdog --check
-sudo launchctl kickstart -kp gui/$(id -u operator)/com.tilsit.access-policy-watchdog
+sudo launchctl kickstart -kp gui/$(id -u operator)/com.<hostname>.access-policy-watchdog
 tail -f /Users/operator/.local/state/access-policy-watchdog.log
 ```
 
@@ -279,7 +281,7 @@ tail -f /Users/operator/.local/state/access-policy-watchdog.log
 
 The drift watchdog checks the Cloudflare configuration, not whether the
 tunnel is up. When cloudflared stops or loses every edge connection,
-`tilsit.vip` shows a Cloudflare error page to every visitor, and nothing on
+`example.com` shows a Cloudflare error page to every visitor, and nothing on
 the server notices. `tunnel-watchdog` covers that (issue #237).
 
 It runs every 60 s (operator LaunchAgent, `com.<host>.tunnel-watchdog`,
@@ -317,23 +319,23 @@ only if `--check` passes (exit 0 ready, 1 not ready; no mail, no state).
 - Remove the email from the Access policy, or revoke active sessions in Zero
   Trust (Users / Access sessions).
 - To cut off the origin entirely, stop the daemon
-  (`sudo launchctl bootout system/com.tilsit.cloudflare-tunnel`), or delete
+  (`sudo launchctl bootout system/com.<hostname>.cloudflare-tunnel`), or delete
   or rotate the tunnel.
 
 ## Rollback
 
 Until the old WAN path is removed (plan Task 7):
 
-1. Delete the `tilsit.vip` CNAME and recreate the A record with the recorded
+1. Delete the `example.com` CNAME and recreate the A record with the recorded
    values, `proxied: false`. A proxied record cannot carry port 24443.
 2. The new record has a new id. Update `CLOUDFLARE_RECORD_ID`, re-run
    `cloudflare-ddns-setup.sh`, then `sudo launchctl enable
-   system/com.tilsit.cloudflare-ddns` and bootstrap it.
-3. The old `tilsit.vip:24443` path, with `basic_auth`, works again. The
-   `tilsit.vip` site block stays in the Caddyfile for this reason.
+   system/com.<hostname>.cloudflare-ddns` and bootstrap it.
+3. The old `example.com:24443` path, with `basic_auth`, works again. The
+   `example.com` site block stays in the Caddyfile for this reason.
 
 Stopping only the tunnel daemon makes Cloudflare show an error page for
-`tilsit.vip`. `tilsit.local` does not change.
+`example.com`. `your-server.local` does not change.
 
 ## Tests
 

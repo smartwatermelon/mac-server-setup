@@ -12,7 +12,7 @@ msmtp (Gmail SMTP). They all send that email through one shared library,
 | `plex-watchdog` — Plex settings drift, Plex unreachable (restarts it after 3 polls), Plex cannot read media files, Plex data directory link | `com.<host>.plex-watchdog` | 300 s, RunAtLoad | `~/.local/state/plex-watchdog.log` | `plex-watchdog-setup.sh` |
 | `pia-port-watchdog.sh` — PIA port forwarding lost | `com.<host>.pia-port-watchdog` | 900 s | `~/.local/state/<host>-pia-port-watchdog.log` | `podman-transmission-setup.sh` |
 | `stall-watchdog.sh` — server blocked on a privacy prompt, a long `transmission-done`, supervisor failing | `com.<host>.stall-watchdog` | 120 s, RunAtLoad | `~/.local/state/<host>-stall-watchdog.log` | `podman-transmission-setup.sh` |
-| `access-policy-watchdog` — Cloudflare Access rule for `tilsit.vip` changed, missing, or unreadable | `com.<host>.access-policy-watchdog` | 900 s, RunAtLoad | `~/.local/state/access-policy-watchdog.log` | `access-policy-watchdog-setup.sh` |
+| `access-policy-watchdog` — Cloudflare Access rule for `example.com` changed, missing, or unreadable | `com.<host>.access-policy-watchdog` | 900 s, RunAtLoad | `~/.local/state/access-policy-watchdog.log` | `access-policy-watchdog-setup.sh` |
 | `tunnel-watchdog` — Cloudflare Tunnel not ready (`/ready` not 200 for 3 checks) | `com.<host>.tunnel-watchdog` | 60 s, RunAtLoad | `~/.local/state/tunnel-watchdog.log` | `tunnel-watchdog-setup.sh` |
 
 Paths are under the operator's home (`/Users/operator`). All the LaunchAgents run
@@ -136,7 +136,7 @@ sudo -u operator /usr/bin/env -i \
   PATH=/usr/bin:/bin:/usr/sbin:/sbin \
   HOME=/Users/operator \
   MONITORING_EMAIL=you@example.com \
-  /bin/bash -c 'cd ~ && . ~/.local/lib/alert-lib.sh && alert_send "[TILSIT] test" "launchd-PATH test"'
+  /bin/bash -c 'cd ~ && . ~/.local/lib/alert-lib.sh && alert_send "[YOUR_SERVER] test" "launchd-PATH test"'
 ```
 
 Replace `you@example.com` with the `MONITORING_EMAIL` value from
@@ -184,7 +184,7 @@ The first is logged when the dialog opens, the second when someone answers it
 (Allow or Don't Allow). Each run reads new `AUTHREQ_PROMPTING` lines since the
 previous run (with 1 minute of overlap, and at most 1 hour of catch-up after a
 gap), and records each prompt in `.tcc_prompts`. While a prompt is open, it
-also reads `AUTHREQ_RESULT` lines over the same window. On TILSIT there are
+also reads `AUTHREQ_RESULT` lines over the same window. On YOUR_SERVER there are
 about 39,000 RESULT lines a day, mostly from the system `tccd`, and about one
 PROMPTING line, so RESULT lines are read only when needed.
 
@@ -252,7 +252,7 @@ now, `sudo launchctl kickstart -kp gui/$(id -u operator)/com.<host>.stall-watchd
 
 ### Live test (2026-09-23)
 
-Run on TILSIT with an ad-hoc-signed copy of Homebrew bash at
+Run on YOUR_SERVER with an ad-hoc-signed copy of Homebrew bash at
 `/Users/Shared/tcc-canary/probe2`, started by a temporary operator
 LaunchAgent that ran `/bin/ls` on the NAS mount:
 

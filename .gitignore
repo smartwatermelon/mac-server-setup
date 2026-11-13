@@ -101,7 +101,7 @@ plan.md
 AGENTS.md
 
 # Server-specific values kept out of the public docs (#205)
-local/
+/local/
 
 # Docs site build output and lychee cache
 site/
