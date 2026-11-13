@@ -4,26 +4,25 @@
 #
 
 # Server identity
-SERVER_NAME="MACMINI"
-OPERATOR_USERNAME="operator"
+SERVER_NAME="MACMINI"              # Server hostname; lowercased for .local names and file names
+OPERATOR_USERNAME="operator"       # Service account that runs the media apps and auto-logs in
 
 # 1Password configuration
-# 1Password vault "Private", by ID so a rename cannot break it.
-OP_VAULT_ID="bg5mciyy25cearfepehuh6nwmi"
-ONEPASSWORD_VAULT="${OP_VAULT_ID}"
-ONEPASSWORD_OPERATOR_ITEM="Mac Mini operator"
-ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine NAS"
-ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"
-ONEPASSWORD_APPLEID_ITEM="Apple"
-ONEPASSWORD_OPENSUBTITLES_ITEM="Opensubtitles"
+OP_VAULT_ID="your-vault-id"        # 1Password vault, by ID so a rename cannot break it (op vault list)
+ONEPASSWORD_VAULT="${OP_VAULT_ID}" # Vault that prep-airdrop.sh reads the items below from
+ONEPASSWORD_OPERATOR_ITEM="Mac Mini operator"   # Login item: operator password (created if missing)
+ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine NAS"  # Login item: Time Machine share credentials (URL in the item)
+ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"            # Login item: media NAS credentials
+ONEPASSWORD_APPLEID_ITEM="Apple"                # Favorite Login item: Apple Account for the server
+ONEPASSWORD_OPENSUBTITLES_ITEM="Opensubtitles"  # Login item: OpenSubtitles account for FileBot
 
 # Monitoring
-MONITORING_EMAIL="your-email@example.com"
+MONITORING_EMAIL="your-email@example.com"  # Where alert email goes
 
 # Media NAS configuration
-NAS_HOSTNAME="nas.local"
-NAS_USERNAME="plex"
-NAS_SHARE_NAME="Media"
+NAS_HOSTNAME="nas.local"          # Media NAS hostname
+NAS_USERNAME="plex"               # NAS account that owns the media share
+NAS_SHARE_NAME="Media"            # NFS share name on the NAS
 NAS_VOLUME="volume2"              # Synology volume name for NFS export path (use showmount -e to verify)
 
 # Plex migration configuration (optional)
@@ -45,6 +44,7 @@ FILEBOT_LICENSE_FILE=""
 # Catch feeds URL (optional)
 CATCH_FEEDS_URL=""
   # from ShowRSS or your preferred RSS provider
+
 # Catch history cutoff (optional)
 CATCH_HISTORY_CUTOFF_DAYS="7"
   # Number of days back to prevent re-downloading old torrents
@@ -74,9 +74,9 @@ CATCH_USE_MAGNETS="true"
   # "false" = Catch downloads .torrent files to watch directory (rclone syncs to container)
 
 # External access (Cloudflare DDNS)
-EXTERNAL_HOSTNAME=""               # Public hostname (e.g. tilsit.vip)
+EXTERNAL_HOSTNAME=""               # Public hostname (e.g. example.com)
 CLOUDFLARE_ZONE_ID=""              # Cloudflare zone ID for external hostname
-CLOUDFLARE_RECORD_ID=""            # ID of the A record DDNS updates (vpn.tilsit.vip since the tunnel cutover)
+CLOUDFLARE_RECORD_ID=""            # ID of the A record DDNS updates (vpn.example.com since the tunnel cutover)
 DDNS_RECORD_NAME=""                # Name of that record, for log lines (default: EXTERNAL_HOSTNAME)
 
 # Cloudflare Tunnel + Access (docs/apps/cloudflare-tunnel-README.md)
@@ -100,7 +100,7 @@ PLEX_ACCOUNT_ID="1"                # Same account's server-local id in Plex watc
 TVMAZE_SCROBBLE_PORT="32599"       # Webhook listener, on 127.0.0.1 only
 
 # Caddy reverse proxy configuration
-SERVER_LAN_IP=""                   # Server's static LAN IP (e.g. 10.0.15.15)
+SERVER_LAN_IP=""                   # Server's static LAN IP (e.g. 192.168.21.10)
 BASICAUTH_USERNAME=""              # Basic auth username for external access
 BASICAUTH_HASH=""                  # bcrypt hash of password (generate with: caddy hash-password)
 QUICKCONNECT_ROMANO=""             # QuickConnect URL for Romano NAS (e.g. https://quickconnect.to/user123)
