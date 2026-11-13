@@ -221,25 +221,17 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
 │   ├── logrotate.conf            # Log rotation rules
 │   ├── com.googlecode.iterm2.plist  # iTerm2 profile
 │   └── Orangebrew.terminal       # Terminal.app profile
-└── docs/
-    ├── prerequisites.md          # Setup requirements
-    ├── environment-variables.md  # Configuration reference
-    ├── configuration.md          # Customization guide
-    ├── operator.md               # Post-reboot operator setup
-    ├── keychain-credential-management.md  # Credential system
-    ├── setup/
-    │   ├── prep-airdrop.md       # Package preparation details
-    │   ├── first-boot.md         # Provisioning details
-    │   └── apple-first-boot-dialogs.md  # macOS setup wizard notes
-    └── apps/
-        ├── caddy-README.md            # Caddy reverse proxy operations
-        ├── caddy-cloudflare-checklist.md  # Cloudflare migration checklist
-        ├── caddy-dns01-migration.md   # DNS-01 migration guide
-        ├── plex-setup-README.md
-        ├── plex-watchdog-README.md
-        ├── rclone-setup-README.md
-        ├── transmission-filebot-README.md  # Media processing pipeline
-        └── transmission-filebot-automator.md  # Automator drag-and-drop
+└── docs/                         # The docs site: https://smartwatermelon.github.io/mac-server-setup/
+    ├── index.md                  # Landing page
+    ├── *.md                      # Other pages: prerequisites, configuration, operator, ...
+    ├── get-started/              # Tutorial, start to finish
+    ├── components/               # One page per component
+    ├── reference/                # Config keys, LaunchAgents, logs, ports, scripts
+    ├── explanation/              # Design decisions
+    ├── troubleshooting/          # Symptom, cause, fix
+    ├── setup/firstboot-README.md # Copied into the setup package by prep-airdrop.sh
+    ├── plans/                    # Design plans (history)
+    └── archive/                  # Retired write-ups (history)
 ```
 
 ## Configuration
@@ -318,7 +310,7 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 
 **Transmission container not starting**: Check `podman machine list` and `podman logs transmission-vpn`. If the VPN can't connect, verify PIA credentials in the keychain. The container has a health check that restarts it after 3 minutes of unresponsiveness. The supervisor LaunchAgent (`podman-machine-start.sh`) checks the VM and container every 5 minutes. Its log is `~/.local/state/<hostname>-podman-vm-stdout.log` in the operator account, and its last result is in `~/.local/state/<hostname>-supervisor-status.json`. Check health status with `sudo -u operator -i bash -c 'podman inspect transmission-vpn --format "{{.State.Health.Status}}"'`.
 
-**Transmission "Permission denied" adding torrents**: The container's `/data` usually can't reach the NAS. `/data` is the host's NFS mount, passed into the Podman VM over VirtioFS. There's no NFS mount inside the VM. Check the host mount first, with `mount | grep /Users/operator/.local/mnt`. The mount log is `~/.local/state/<hostname>-mount.log` in the operator account. Next, check the container with `sudo -u operator -i bash -c 'podman exec transmission-vpn ls /data/'`. The supervisor runs the same check. After 3 failures in a row it cycles the VM to refresh the VirtioFS handles. Let the supervisor do that rather than starting the VM from a shell. [Monitoring](docs/apps/monitoring-README.md) covers the supervisor. Never unmount the host NFS share: Plex reads from it.
+**Transmission "Permission denied" adding torrents**: The container's `/data` usually can't reach the NAS. `/data` is the host's NFS mount, passed into the Podman VM over VirtioFS. There's no NFS mount inside the VM. Check the host mount first, with `mount | grep /Users/operator/.local/mnt`. The mount log is `~/.local/state/<hostname>-mount.log` in the operator account. Next, check the container with `sudo -u operator -i bash -c 'podman exec transmission-vpn ls /data/'`. The supervisor runs the same check. After 3 failures in a row it cycles the VM to refresh the VirtioFS handles. Let the supervisor do that rather than starting the VM from a shell. [Monitoring](docs/components/monitoring.md) covers the supervisor. Never unmount the host NFS share: Plex reads from it.
 
 **Plex watchdog not running**: The LaunchAgent only runs in GUI sessions. Verify with `sudo launchctl print gui/$(id -u operator)/com.<hostname>.plex-watchdog`. Check status with `sudo -iu operator plex-watchdog-ctl status`. If it's not loaded, bootstrap it: `sudo launchctl bootstrap gui/$(id -u operator) /Users/operator/Library/LaunchAgents/com.<hostname>.plex-watchdog.plist`.
 
@@ -331,14 +323,14 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 | What you need before starting | [Prerequisites](docs/prerequisites.md) |
 | Configuration options | [Environment Variables](docs/environment-variables.md) |
 | Customizing parameters | [Configuration Reference](docs/configuration.md) |
-| Building the deployment package | [Prep-AirDrop](docs/setup/prep-airdrop.md) |
-| Running system provisioning | [First Boot](docs/setup/first-boot.md) |
+| Building the deployment package | [Prep-AirDrop](docs/get-started/prep-airdrop.md) |
+| Running system provisioning | [First Boot](docs/get-started/first-boot.md) |
 | Post-reboot setup | [Operator Setup](docs/operator.md) |
 | How credentials move between machines | [Keychain Management](docs/keychain-credential-management.md) |
-| Plex settings watchdog | [Plex Watchdog](docs/apps/plex-watchdog-README.md) |
-| Caddy reverse proxy | [Caddy README](docs/apps/caddy-README.md) |
-| Home VPN (Synology NAS + Tunnelblick) | [Home VPN](docs/apps/home-vpn-README.md) |
-| Media processing pipeline | [Transmission-FileBot](docs/apps/transmission-filebot-README.md) |
+| Plex settings watchdog | [Plex Watchdog](docs/components/plex-watchdog.md) |
+| Caddy reverse proxy | [Caddy README](docs/components/caddy.md) |
+| Home VPN (Synology NAS + Tunnelblick) | [Home VPN](docs/components/home-vpn.md) |
+| Media processing pipeline | [Transmission-FileBot](docs/components/transmission-filebot.md) |
 
 ## Testing
 
