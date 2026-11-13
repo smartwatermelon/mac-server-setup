@@ -20,18 +20,18 @@ The two issues share one answer, so this document covers both.
 ### Network path
 
 ```text
-Internet ─ 67.5.100.185 ─ 192.168.0.1 (ISP gateway, lighttpd UI)
-                              └─ 10.0.15.1 (LAN router, DHCP)
-                                     └─ 10.0.15.15 TILSIT (Caddy :80, :443)
+Internet ─ 203.0.113.13 ─ 192.168.0.1 (ISP gateway, lighttpd UI)
+                              └─ 192.168.21.1 (LAN router, DHCP)
+                                     └─ 192.168.21.10 TILSIT (Caddy :80, :443)
 ```
 
-- The network is double-NATed. `traceroute` shows 10.0.15.1, then
+- The network is double-NATed. `traceroute` shows 192.168.21.1, then
   192.168.0.1, then the ISP. External access therefore needs a port-forward
   rule on both routers. Those rules are not visible from the shell.
 - External clients use `tilsit.vip:24443`. This is inferred from the `Host`
   header (`tilsit.vip:24443`) on every external request in the access log.
   Caddy listens only on 443, so the routers forward WAN 24443 to TILSIT 443.
-- `tilsit.vip` has an A record (67.5.100.185, the current public IP) and no
+- `tilsit.vip` has an A record (203.0.113.13, the current public IP) and no
   AAAA record. TILSIT has no global IPv6 address, only ULA (`fd09:…`). The
   record is DNS-only (grey cloud): resolvers return the origin IP.
   `cloudflare-ddns.sh` updates `content` only and keeps `proxied` as set.
@@ -41,7 +41,7 @@ Internet ─ 67.5.100.185 ─ 192.168.0.1 (ISP gateway, lighttpd UI)
 
 ### DNS on the LAN
 
-- DHCP (from 10.0.15.1) hands out two resolvers: 192.168.0.1 and
+- DHCP (from 192.168.21.1) hands out two resolvers: 192.168.0.1 and
   149.112.112.112 (Quad9).
 - 192.168.0.1 returns the public IP for `tilsit.vip`. It is the ISP gateway.
   Whether it can hold a local override record is unknown.
@@ -53,10 +53,10 @@ From `app-setup/templates/Caddyfile`, as of #220:
 | Site | Cert | Auth |
 | --- | --- | --- |
 | `:443` catch-all | — | 403 for unknown host or bare IP |
-| `tilsit.local localhost 10.0.15.15` | `tls internal` (clients install `caddy-root-ca.crt`) | `basic_auth` when not LAN |
+| `tilsit.local localhost 192.168.21.10` | `tls internal` (clients install `caddy-root-ca.crt`) | `basic_auth` when not LAN |
 | `tilsit.vip` | Let's Encrypt, DNS-01 via Cloudflare (SAN: `tilsit.vip` only) | `basic_auth` when not LAN |
 
-- The LAN/external split is `remote_ip`: 10.0.15.0/24, loopback, `fe80::/10`,
+- The LAN/external split is `remote_ip`: 192.168.21.0/24, loopback, `fe80::/10`,
   `fd00::/8`. Caddy sees the real client address because nothing proxies in
   front of it.
 - Both sites share one listener, and the WAN forward reaches both. Before
@@ -91,13 +91,13 @@ current.
 
 1. **A hop in front of Caddy that originates on loopback or the LAN removes
    all external auth.** If `cloudflared`, a local proxy, or any relay connects
-   to Caddy from 127.0.0.1 or 10.0.15.0/24, `remote_ip` sees a "local"
+   to Caddy from 127.0.0.1 or 192.168.21.0/24, `remote_ip` sees a "local"
    client. `basic_auth` is then skipped and the `/media/*` guard opens. Any
    option that adds such a hop must either give that traffic its own site
    block with no LAN bypass, or move the matchers to `client_ip` with
    `trusted_proxies`.
 2. **Split-horizon DNS with a port mismatch.** If LAN DNS maps `tilsit.vip`
-   to 10.0.15.15, then `https://tilsit.vip:24443` from the LAN hits a port
+   to 192.168.21.10, then `https://tilsit.vip:24443` from the LAN hits a port
    Caddy does not listen on. One URL for both places needs the WAN forward on
    443, or Caddy also listening on 24443.
 3. **Auth keyed on the hostname.** The client chooses Host and SNI. Any
@@ -110,7 +110,7 @@ current.
 
 ### R1. Split-horizon DNS
 
-LAN resolver answers `tilsit.vip → 10.0.15.15`. External DNS stays as is.
+LAN resolver answers `tilsit.vip → 192.168.21.10`. External DNS stays as is.
 
 - For: LAN clients get the Let's Encrypt cert through SNI, so the internal CA
   install is no longer needed for that name. DNS-01 renewal does not care
@@ -118,7 +118,7 @@ LAN resolver answers `tilsit.vip → 10.0.15.15`. External DNS stays as is.
 - Against: three blockers.
   - The ISP gateway may not support override records. The alternative is a
     new resolver (dnsmasq on TILSIT, or Synology DNS Server) and a DHCP change
-    on 10.0.15.1.
+    on 192.168.21.1.
   - DHCP also hands out Quad9. A client that uses the secondary resolver gets
     the public IP and times out. Results vary by client and by moment.
   - The port mismatch (trap 2) needs a router change too.
@@ -263,11 +263,11 @@ is chosen instead, #130 stays, and #210 still needs R1 or R2.
    - With no session: the Access page.
    - With a session: `/transmission/` works; `/media/` is denied.
    - Through the old forward, with `Host` set to `tilsit.vip`,
-     `tilsit.local`, `10.0.15.15`, and `localhost`: 401 for every one.
+     `tilsit.local`, `192.168.21.10`, and `localhost`: 401 for every one.
      `tests/caddyfile.bats` guards the matcher. This checks the deployed
      result.
 6. Remove the 24443 forwards on both routers. Confirm that
-   `67.5.100.185:24443` no longer answers.
+   `203.0.113.13:24443` no longer answers.
 7. Add a tunnel-health watchdog and update `docs/apps/caddy-README.md`.
 
 Rollback: re-add the forwards and restore the A record. The existing

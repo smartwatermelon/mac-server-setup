@@ -50,7 +50,7 @@ Split tunnel mode: **Bypass VPN** (exclude) with these apps:
   "killswitch": "on",
   "allowLAN": true,
   "blockIPv6": true,
-  "bypassSubnets": [{"mode": "exclude", "subnet": "10.0.15.0/24"}]
+  "bypassSubnets": [{"mode": "exclude", "subnet": "192.168.21.0/24"}]
 }
 ```
 
@@ -59,7 +59,7 @@ Split tunnel mode: **Bypass VPN** (exclude) with these apps:
 1. App (e.g., Plex) initiates a network connection
 2. Network Extension intercepts the flow
 3. Proxy identifies the app by bundle ID (e.g., `com.plexapp.plexmediaserver`)
-4. Proxy creates a new TCP/UDP socket bound to the physical interface IP (`bindIp: 10.0.15.15`)
+4. Proxy creates a new TCP/UDP socket bound to the physical interface IP (`bindIp: 192.168.21.10`)
 5. Proxy forwards data between the app's flow and the new outbound socket
 6. Traffic exits via physical interface, bypassing VPN
 
@@ -74,7 +74,7 @@ From `/Library/Application Support/com.privateinternetaccess.vpn/transparent_pro
 **1. `ioOnClosedChannel` — socket closed before data could be forwarded**
 
 ```text
-[2026-02-16 11:49:40:7270] [ChannelCreatorTCP.swift:50] debug: id: 133 com.plexapp.plexmediaserver Creating, binding and connecting a new TCP socket - endpoint: 54.172.39.248:443 with bindIp: 10.0.15.15
+[2026-02-16 11:49:40:7270] [ChannelCreatorTCP.swift:50] debug: id: 133 com.plexapp.plexmediaserver Creating, binding and connecting a new TCP socket - endpoint: 54.172.39.248:443 with bindIp: 192.168.21.10
 [2026-02-16 11:49:50:9400] [InboundHandlerTCP.swift:25] debug: id: 133 Destructor called for InboundHandlerTCP
 [2026-02-16 11:50:07:9760] [FlowForwarderTCP.swift:56] error: id: 133 ioOnClosedChannel while sending a TCP datagram through the socket com.plexapp.plexmediaserver
 [2026-02-16 11:50:07:9770] [ProxySession.swift:25] info: id: 133 Terminating the session
@@ -116,7 +116,7 @@ The failure is not app-specific. Every bypass app exhibits the same behavior:
 
 ## Root Cause Hypothesis
 
-The proxy binds outbound sockets to the physical IP (`10.0.15.15` on `en0`) but the OS routing table still routes traffic through the VPN tunnel (`utun4`) because PIA's `0/1` catch-all route takes precedence over the default route. The socket has the correct source IP but packets are still routed through the VPN interface, causing the connection to fail or time out.
+The proxy binds outbound sockets to the physical IP (`192.168.21.10` on `en0`) but the OS routing table still routes traffic through the VPN tunnel (`utun4`) because PIA's `0/1` catch-all route takes precedence over the default route. The socket has the correct source IP but packets are still routed through the VPN interface, causing the connection to fail or time out.
 
 This would explain why:
 
@@ -133,7 +133,7 @@ PF (Packet Filter) rules loaded into a custom anchor bypass the issue entirely b
 ```text
 table <rfc1918> const { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 }
 pass in quick on en0 proto tcp to port 32400
-pass out quick route-to (en0 10.0.15.1) from 10.0.15.15 to ! <rfc1918>
+pass out quick route-to (en0 192.168.21.1) from 192.168.21.10 to ! <rfc1918>
 ```
 
 Loaded into anchor `com.apple/100.tilsit.vpn-bypass`:
@@ -145,7 +145,7 @@ echo "${RULES}" | sudo pfctl -a "com.apple/100.tilsit.vpn-bypass" -f -
 Verification:
 
 ```bash
-curl --interface 10.0.15.15 http://checkip.amazonaws.com
+curl --interface 192.168.21.10 http://checkip.amazonaws.com
 # Returns: <HOME_IP> (home IP, NOT VPN IP <VPN_IP>)
 ```
 
@@ -171,11 +171,11 @@ From the `pia-foss/mac-split-tunnel` repository:
 | Item | Value |
 |------|-------|
 | Physical interface | en0 |
-| Physical IP | 10.0.15.15 |
+| Physical IP | 192.168.21.10 |
 | VPN tunnel interface | utun4 |
 | VPN tunnel IP | 10.16.11.143 |
 | VPN exit IP | <VPN_IP> |
-| Default gateway | 10.0.15.1 |
+| Default gateway | 192.168.21.1 |
 | Home public IP | <HOME_IP> |
 | VPN region | Panama |
 
@@ -214,7 +214,7 @@ The macOS transparent proxy (Network Extension) fails to forward data for all by
 **Actual:** All connections fail. Proxy log shows:
 
 ```text
-[ChannelCreatorTCP.swift:50] debug: id: 133 com.plexapp.plexmediaserver Creating, binding and connecting a new TCP socket - endpoint: 54.172.39.248:443 with bindIp: 10.0.15.15
+[ChannelCreatorTCP.swift:50] debug: id: 133 com.plexapp.plexmediaserver Creating, binding and connecting a new TCP socket - endpoint: 54.172.39.248:443 with bindIp: 192.168.21.10
 [FlowForwarderTCP.swift:56] error: id: 133 ioOnClosedChannel while sending a TCP datagram through the socket com.plexapp.plexmediaserver
 [ProxySessionTCP.swift:31] debug: id: 133 Destructor: ProxySession closed. rxBytes=0 MB txBytes=0 MB com.plexapp.plexmediaserver
 ```
@@ -230,14 +230,14 @@ Every session destructor shows `rxBytes=0 txBytes=0`.
 
 **Affected apps:** All bypass apps tested — Plex Media Server, Safari, Safari.SafeBrowsing (UDP). This is not app-specific.
 
-**Root cause hypothesis:** The proxy binds the outbound socket to the physical IP (10.0.15.15 on en0) but the routing table still sends packets through utun because the 0/1 VPN catch-all route has higher priority than the default route. Source IP binding alone does not control the outbound interface on macOS; a policy routing mechanism like PF `route-to` is needed.
+**Root cause hypothesis:** The proxy binds the outbound socket to the physical IP (192.168.21.10 on en0) but the routing table still sends packets through utun because the 0/1 VPN catch-all route has higher priority than the default route. Source IP binding alone does not control the outbound interface on macOS; a policy routing mechanism like PF `route-to` is needed.
 
 **Workaround:** PF `route-to` rules in a custom anchor force traffic from the physical IP through the physical interface at the kernel level:
 
 ```text
 table <rfc1918> const { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8 }
 pass in quick on en0 proto tcp to port 32400
-pass out quick route-to (en0 10.0.15.1) from 10.0.15.15 to ! <rfc1918>
+pass out quick route-to (en0 192.168.21.1) from 192.168.21.10 to ! <rfc1918>
 ```
 
 This works because PF evaluates before the routing table decision, overriding the VPN catch-all route for matched traffic.

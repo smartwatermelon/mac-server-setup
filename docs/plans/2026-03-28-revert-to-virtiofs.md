@@ -225,7 +225,7 @@ set -euo pipefail
 #   __TRANSMISSION_HOST_PORT__   → Transmission RPC port (e.g. 9091)
 #   __OPERATOR_HOME__            → operator home directory
 #
-# Author: Andrew Rich <andrew.rich@gmail.com>
+# Author: Andrew Rich <you@example.com>
 
 SERVER_NAME="__SERVER_NAME__"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
@@ -460,7 +460,7 @@ sudo -iu operator podman run -d \
     --env-file "/Users/operator/containers/transmission/.env" \
     -e OPENVPN_PROVIDER=PIA \
     -e "OPENVPN_CONFIG=panama" \
-    -e "LOCAL_NETWORK=10.0.15.0/24" \
+    -e "LOCAL_NETWORK=192.168.21.0/24" \
     -e "PUID=502" \
     -e "PGID=20" \
     -e "TZ=America/Los_Angeles" \

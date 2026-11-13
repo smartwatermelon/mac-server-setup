@@ -24,8 +24,8 @@ Commands run in your SSH session on TILSIT unless marked **Dev machine**.
 
 ```bash
 # Dev machine
-CF_TOKEN=$(op read "op://Personal/i3ld7outxdx2pxmw7w6zefhnta/API/zone DNS API token")
-ssh operator@tilsit.local "sudo security add-generic-password \
+CF_TOKEN=$(op read "op://<vault>/<item>/API/zone DNS API token")
+ssh operator@your-server.local "sudo security add-generic-password \
   -U \
   -s 'cloudflare-api-token' \
   -a 'tilsit.vip' \
@@ -58,7 +58,7 @@ curl -L "https://caddyserver.com/api/download?os=darwin&arch=arm64&p=github.com%
   -o /tmp/caddy-cloudflare
 chmod +x /tmp/caddy-cloudflare
 /tmp/caddy-cloudflare list-modules | grep cloudflare
-rsync /tmp/caddy-cloudflare operator@tilsit.local:/tmp/caddy-cloudflare
+rsync /tmp/caddy-cloudflare operator@your-server.local:/tmp/caddy-cloudflare
 ```
 
 **As `operator`:**
@@ -71,7 +71,7 @@ sudo chmod +x /opt/homebrew/bin/caddy
 /opt/homebrew/bin/caddy list-modules | grep cloudflare
 ```
 
-**As `andrewrich`:**
+**As `admin`:**
 
 ```bash
 /opt/homebrew/bin/brew pin caddy
@@ -88,8 +88,8 @@ Expected: `dns.providers.cloudflare` listed, `caddy` shown as pinned.
 
 ```bash
 # Dev machine
-rsync /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1/caddy-wrapper.sh \
-    operator@tilsit.local:/tmp/caddy-wrapper.sh
+rsync /Users/admin/Developer/tilsit/tilsit-caddy-v1/caddy-wrapper.sh \
+    operator@your-server.local:/tmp/caddy-wrapper.sh
 ```
 
 ```bash
@@ -120,8 +120,8 @@ cp ~/.config/caddy/Caddyfile ~/.config/caddy/Caddyfile.pre-cloudflare-$(date +%Y
 
 ```bash
 # Dev machine
-rsync /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1/LaunchDaemons/com.caddyserver.caddy.plist \
-    operator@tilsit.local:/tmp/com.caddyserver.caddy.plist
+rsync /Users/admin/Developer/tilsit/tilsit-caddy-v1/LaunchDaemons/com.caddyserver.caddy.plist \
+    operator@your-server.local:/tmp/com.caddyserver.caddy.plist
 ```
 
 ```bash
@@ -152,8 +152,8 @@ sudo chmod 644 /Library/LaunchDaemons/com.caddyserver.caddy.plist
 
 ```bash
 # Dev machine
-rsync /Users/andrewrich/Developer/tilsit/tilsit-caddy-v1/Caddyfile \
-    operator@tilsit.local:/tmp/Caddyfile.new
+rsync /Users/admin/Developer/tilsit/tilsit-caddy-v1/Caddyfile \
+    operator@your-server.local:/tmp/Caddyfile.new
 ```
 
 Validate on TILSIT:
@@ -244,20 +244,23 @@ Expected: `200 0` or `401 0` — `ssl_verify_result=0` means valid trusted cert.
 
 ```bash
 # Dev machine
-cp /Users/andrewrich/Developer/mac-server-setup/app-setup/templates/plex-vpn-bypass.sh \
+cp /Users/admin/Developer/mac-server-setup/app-setup/templates/plex-vpn-bypass.sh \
    /tmp/plex-vpn-bypass-new.sh
 
+# Ids from local/operator-notes.md; stop if either is unset.
+: "${CLOUDFLARE_ZONE_ID:?set it from the operator note}"
+: "${CLOUDFLARE_RECORD_ID:?set it from the operator note}"
 sed -i '' 's|__SERVER_NAME__|TILSIT|g'                                      /tmp/plex-vpn-bypass-new.sh
 sed -i '' 's|__OPERATOR_USERNAME__|operator|g'                              /tmp/plex-vpn-bypass-new.sh
 sed -i '' 's|__EXTERNAL_HOSTNAME__|tilsit.vip|g'                            /tmp/plex-vpn-bypass-new.sh
-sed -i '' 's|__CLOUDFLARE_ZONE_ID__|32a24114b4febebab7385a9cdcf25842|g'     /tmp/plex-vpn-bypass-new.sh
-sed -i '' 's|__CLOUDFLARE_RECORD_ID__|591eb1b23bfb66508417a5d27f7f77d1|g'   /tmp/plex-vpn-bypass-new.sh
+sed -i '' "s|__CLOUDFLARE_ZONE_ID__|${CLOUDFLARE_ZONE_ID}|g"     /tmp/plex-vpn-bypass-new.sh
+sed -i '' "s|__CLOUDFLARE_RECORD_ID__|${CLOUDFLARE_RECORD_ID}|g"   /tmp/plex-vpn-bypass-new.sh
 
 grep '__[A-Z]' /tmp/plex-vpn-bypass-new.sh \
   && echo "ERROR: unsubstituted placeholders" \
   || echo "All substituted"
 
-rsync /tmp/plex-vpn-bypass-new.sh operator@tilsit.local:/tmp/plex-vpn-bypass-new.sh
+rsync /tmp/plex-vpn-bypass-new.sh operator@your-server.local:/tmp/plex-vpn-bypass-new.sh
 ```
 
 ### Step 2 — deploy
@@ -283,7 +286,7 @@ tail -20 /var/log/tilsit-plex-vpn-bypass.log
 Expected:
 
 ```text
-Cloudflare DNS updated: tilsit.vip -> 67.5.106.16
+Cloudflare DNS updated: tilsit.vip -> 203.0.113.10
 Updating Plex customConnections to https://tilsit.vip:32400
 Plex customConnections updated successfully
 ```
@@ -297,7 +300,7 @@ Run from **dev machine** — PIA blocks UDP/53 to external resolvers from TILSIT
 dig +short tilsit.vip @1.1.1.1
 ```
 
-Expected: `67.5.106.16`
+Expected: `203.0.113.10`
 
 ---
 

@@ -19,8 +19,8 @@ Task 7 step 3 is amended (2026-11-04): the `cloudflare-ddns` daemon stays.
 
 ## Facts this plan depends on (checked 2026-10-22)
 
-- `tilsit.vip` is in Cloudflare account **`Andrew.rich@gmail.com's Account`**
-  (`36e63f08…`, Free plan). The Cloudflare MCP connection in Claude Code was
+- `tilsit.vip` is in Cloudflare account **`you@example.com's Account`**
+  (`<account-id>…`, Free plan). The Cloudflare MCP connection in Claude Code was
   authenticated to a different account (`nightowlstudio`), which has no
   zones. It must be reconnected to the personal account before Task 1.
 - `cloudflare-ddns.sh` updates one fixed record ID (`CF_RECORD_ID`). Once the
@@ -44,7 +44,7 @@ Task 7 step 3 is amended (2026-11-04): the `cloudflare-ddns` daemon stays.
 ```text
 Browser (anywhere, including LAN)
   → tilsit.vip  (proxied CNAME → <tunnel-uuid>.cfargotunnel.com)
-  → Cloudflare Access  (Google sign-in, allow: andrew.rich@gmail.com)
+  → Cloudflare Access  (Google sign-in, allow: you@example.com)
   → Cloudflare Tunnel  (outbound connection from TILSIT)
   → cloudflared on TILSIT  (rejects requests without a valid Access JWT)
   → Caddy http://127.0.0.1:8080  (tunnel-only site, loopback bind)
@@ -104,7 +104,7 @@ routers).
 ### Task 0: Prerequisites (Andrew, about 20 minutes)
 
 1. Reconnect the Cloudflare MCP to the personal account (`/mcp`, sign in as
-   `andrew.rich@gmail.com`). Claude verifies with `whoami` and a zone lookup
+   `you@example.com`). Claude verifies with `whoami` and a zone lookup
    for `tilsit.vip`.
 2. If Zero Trust is not yet set up on that account, open Zero Trust in the
    dashboard and pick a **team name** and the Free plan. Claude can then read
@@ -129,7 +129,7 @@ Creating these first means the hostname is protected the moment it starts
 routing through the tunnel.
 
 1. Create a reusable Access policy (`/access/policies`): action Allow,
-   include email `andrew.rich@gmail.com`. Session duration 24 h (adjust
+   include email `you@example.com`. Session duration 24 h (adjust
    later if it prompts too often).
 2. Create a self-hosted Access application for `tilsit.vip` (whole host).
    Attach the policy. Allow only the Google IdP and turn on instant
@@ -194,7 +194,7 @@ never touched.
    `tilsit.vip` has no DNS record pointing at the tunnel yet, so only
    `accesstest` is reachable through it.
 3. Sign in as the second account. Send a request that carries a forged
-   `Cf-Access-Authenticated-User-Email: andrew.rich@gmail.com` header, for
+   `Cf-Access-Authenticated-User-Email: you@example.com` header, for
    example with curl and the session cookie, or a browser header extension.
 4. Read the scratch Caddy log.
    - If the logged value is the second account's real email, Cloudflare
@@ -282,7 +282,7 @@ never touched.
      `/transmission/web/` return 200 and `/media/` returns 404.
    - If layer 3 was dropped: the same paths without the header return 200,
      200 and 404.
-   - In both cases, `10.0.15.15:8080` must refuse the connection from
+   - In both cases, `192.168.21.10:8080` must refuse the connection from
      another LAN host.
 3. Run `cloudflared-setup.sh`. Confirm in the dashboard that the tunnel
    shows healthy and that `/ready` on the metrics port returns 200.
@@ -325,7 +325,7 @@ Nothing public changes yet: DNS still points at the home IP.
 5. **Test the rule against its own contents.** Claude reads the
    application and policy back through the API and checks them against the
    expected rule. The check is the same one the drift watchdog will run:
-   - Action allow, one include rule, email `andrew.rich@gmail.com`.
+   - Action allow, one include rule, email `you@example.com`.
    - No `everyone`, `email_domain`, `any_valid_service_token` or group
      selectors.
    - IdP list is Google only.
@@ -339,8 +339,8 @@ Nothing public changes yet: DNS still points at the home IP.
 
 ### Task 7: Close the inbound port (Andrew, routers)
 
-1. Remove the WAN 24443 forward on 192.168.0.1 and on 10.0.15.1.
-2. Claude confirms from the PIA exit that `67.5.100.185:24443` times out.
+1. Remove the WAN 24443 forward on 192.168.0.1 and on 192.168.21.1.
+2. Claude confirms from the PIA exit that `203.0.113.13:24443` times out.
 3. Until a follow-up PR (two weeks after cutover, if nothing went wrong),
    keep the `tilsit.vip` site block and its Let's Encrypt config in the
    Caddyfile as the rollback path. The follow-up then removes the block,

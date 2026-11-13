@@ -398,7 +398,7 @@ paths, and invokes the existing `transmission-done.sh` for each completed torren
 # Template placeholders (replaced during deployment):
 #   __SERVER_NAME__ → server hostname for logging
 #
-# Author: Andrew Rich <andrew.rich@gmail.com>
+# Author: Andrew Rich <you@example.com>
 
 set -euo pipefail
 

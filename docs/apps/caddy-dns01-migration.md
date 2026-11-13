@@ -11,7 +11,7 @@ constant scanning on a well-known port.
 **DNS-01 challenge** proves domain ownership by creating a DNS TXT record — no
 inbound ports needed. Caddy handles this automatically with a DNS provider plugin.
 
-This migration also replaces `wellington.sytes.net` (No-IP) with your own domain on
+This migration also replaces `old-ddns.example.net` (No-IP) with your own domain on
 Cloudflare's free DNS, giving you full DNS control and free dynamic DNS updates.
 
 ## Overview
@@ -219,7 +219,7 @@ Replace:
 
 ```caddyfile
 # External access with automatic HTTPS (Let's Encrypt)
-wellington.sytes.net {
+old-ddns.example.net {
  tls {
   issuer acme {
    dir https://acme-v02.api.letsencrypt.org/directory
@@ -249,10 +249,10 @@ Replace:
 
 ```caddyfile
  @external_auth_required {
-  not remote_ip 10.0.15.0/24
+  not remote_ip 192.168.21.0/24
   not remote_ip 127.0.0.1/8
   not remote_ip fe80::/10
-  host wellington.sytes.net
+  host old-ddns.example.net
  }
 ```
 
@@ -260,7 +260,7 @@ With:
 
 ```caddyfile
  @external_auth_required {
-  not remote_ip 10.0.15.0/24
+  not remote_ip 192.168.21.0/24
   not remote_ip 127.0.0.1/8
   not remote_ip fe80::/10
   host yourdomain.com
@@ -305,7 +305,7 @@ rm -rf "/Users/operator/Library/Application Support/Caddy/acme/"
 rm -rf "/Users/operator/Library/Application Support/Caddy/certificates/acme-v02.api.letsencrypt.org-directory"
 ```
 
-The internal/local certificates (for tilsit.local, localhost, 10.0.15.15) will be
+The internal/local certificates (for tilsit.local, localhost, 192.168.21.10) will be
 untouched.
 
 ### Validate the new config
@@ -354,7 +354,7 @@ curl -sk https://yourdomain.com:24443 --resolve yourdomain.com:24443:127.0.0.1
 Once verified:
 
 1. Disable or remove the No-IP DUC client
-2. Update any bookmarks or clients from `wellington.sytes.net:24443` to
+2. Update any bookmarks or clients from `old-ddns.example.net:24443` to
    `yourdomain.com:24443`
 3. No changes needed to port forwarding rules (24443 stays as-is)
 
@@ -370,7 +370,7 @@ If something goes wrong:
    sudo cp /opt/homebrew/bin/caddy.orig /opt/homebrew/bin/caddy
    ```
 
-2. Revert the Caddyfile changes (restore `wellington.sytes.net` block with the
+2. Revert the Caddyfile changes (restore `old-ddns.example.net` block with the
    original ACME issuer config)
 
 3. Remove `CF_API_TOKEN` from the LaunchDaemon plist

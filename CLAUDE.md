@@ -29,6 +29,14 @@ Read-only operations (logs, status, config inspection) are always safe.
 **MANDATORY: Before modifying any files related to these services,
 read the corresponding documentation first.**
 
+**Server-specific values are not in the docs.** The docs are a public site
+and use placeholders (`YOUR_SERVER`, `example.com`, the `192.168.20.0/22`
+example LAN). This server's real values (Cloudflare object ids, the LAN map,
+1Password references, account labels) are in `local/operator-notes.md` in the
+primary checkout. That file is gitignored; Andrew keeps a copy in 1Password.
+`tests/docs-sensitive.bats` scans the docs with
+`scripts/docs/check-sensitive.sh` and fails if a real value returns.
+
 ### Caddy (reverse proxy, TLS, dashboard)
 
 **Files**: `app-setup/caddy-setup.sh`, `app-setup/templates/Caddyfile`,
