@@ -128,9 +128,10 @@ fdesetup status
 
 **Fix**
 
-1. Let `first-boot.sh` turn FileVault off when it asks, and enter the `admin` password. This can take 30 to 60 minutes or more.
-2. If the script reports that FileVault is still on after the command, check that you typed the right password, and try again.
-3. If you do not want to turn it off on this Mac, erase the Mac and set up macOS again without FileVault.
+1. At the script's offer to turn FileVault off, press Control-C to stop the script. Do not accept the offer: it records an error even when it works, and it can repeat while the disk is still decrypting. Answering `N` continues setup with FileVault on, and automatic login then fails.
+2. Turn FileVault off in System Settings > Privacy & Security > FileVault.
+3. Wait until `fdesetup status` prints `FileVault is Off.` This can take an hour or more.
+4. Run `first-boot.sh` again. See [step 5 of the tutorial](../get-started/05-first-boot.md).
 
 ## SSH to the server is refused or asks for a password
 
