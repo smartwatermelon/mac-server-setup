@@ -153,12 +153,12 @@ ls -l ~/.ssh/authorized_keys
 sudo /usr/libexec/ApplicationFirewall/socketfilterfw --listapps
 ```
 
-`Remote Login: Off` means SSH is off. `No such file or directory` means no key was installed for this account. If `/usr/sbin/sshd` is not in the firewall list, or the list shows it as blocked, the firewall stops SSH.
+`Remote Login: Off` means SSH is off. `No such file or directory` means no key was installed for this account. If the firewall list shows `/usr/sbin/sshd` as blocked, the firewall stops SSH.
 
 **Fix**
 
 1. On the dev Mac, make sure that `~/.ssh/id_ed25519` and `~/.ssh/id_ed25519.pub` exist before you run `prep-airdrop.sh`.
-2. Build the package again and run `first-boot.sh` again. It turns on Remote Login and installs the keys for `admin` and `operator`.
+2. Build the package again and run `first-boot.sh` again. It turns on Remote Login, installs the keys for `admin` and `operator`, and runs `setup-firewall.sh`, which allows `/usr/sbin/sshd` through the firewall.
 
 ## Touch ID does not work for operator
 
