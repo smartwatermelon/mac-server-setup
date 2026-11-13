@@ -1,7 +1,7 @@
 # Repo Consolidation: Merge tilsit-caddy and transmission-filebot into mac-server-setup
 
 **Date**: 2026-04-03
-**Status**: Planned
+**Status**: Done on 2026-04-03. tilsit-caddy (#106) and transmission-filebot (#108) were imported, and both source repos were archived.
 **Author**: Andrew Rich + Claude
 
 ## Motivation

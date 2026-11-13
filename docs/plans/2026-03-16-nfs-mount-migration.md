@@ -1,5 +1,7 @@
 # NFS Mount Migration: DSMedia Share — Implementation Plan
 
+**History.** Done on 2026-03-16 (#82), then reverted on 2026-03-29 (#102, `2026-03-28-revert-to-virtiofs.md`). The Podman VM no longer mounts NFS; it reads the host's mount through VirtioFS.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Replace SMB mount with NFS for the DSMedia share to eliminate VirtioFS/SMB `.smbdelete` lock conflicts.

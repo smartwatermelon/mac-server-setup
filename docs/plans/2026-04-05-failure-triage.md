@@ -1,6 +1,8 @@
 <!-- markdownlint-disable MD013 MD036 MD060 -->
 # Failure Triage Implementation Plan
 
+**History.** Done on 2026-04-05 (#113): `triage_failed_torrent()` in `transmission-done.sh`.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use
 > superpowers:executing-plans to implement this plan
 > task-by-task.

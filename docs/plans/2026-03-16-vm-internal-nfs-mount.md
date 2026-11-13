@@ -1,5 +1,7 @@
 # VM-Internal NFS Mount Implementation Plan
 
+**History.** Done on 2026-03-16 (#82), then reverted on 2026-03-29 (#102, `2026-03-28-revert-to-virtiofs.md`). The Podman VM no longer mounts NFS; it reads the host's mount through VirtioFS.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Mount NFS directly inside the Podman VM so Transmission bypasses VirtioFS, eliminating stale file descriptor / `.nfs.*` silly-rename issues.

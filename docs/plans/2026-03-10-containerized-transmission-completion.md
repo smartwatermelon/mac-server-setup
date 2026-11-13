@@ -1,5 +1,7 @@
 # Containerized Transmission — Completion Plan
 
+**History.** Done. Transmission runs in the haugene/transmission-openvpn container in a Podman VM (#78).
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Complete the remaining setup, validation, and Phase 2 cutover for the containerized Transmission stack.

@@ -1,5 +1,7 @@
 # Cloudflare DNS-01 Migration Implementation Plan
 
+**History.** Done. Caddy gets its public certificate by Let's Encrypt DNS-01 through Cloudflare. Since 2026-11-03 the public site comes in through the Cloudflare Tunnel, and the DNS-01 site is the rollback path.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Replace NoIP DUC + HTTP-01 cert renewal with Cloudflare DNS-01 challenge, eliminating

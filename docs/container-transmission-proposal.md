@@ -1,6 +1,6 @@
 # Proposal: Containerized Transmission with gluetun VPN
 
-**Status:** Active — approved for implementation 2026-03-08
+**Status:** Done on 2026-03-10 (#78), with haugene/transmission-openvpn.
 **Decision:** haugene/transmission-openvpn (not gluetun + linuxserver/transmission)
   Rationale: single container, automatic PIA port forwarding, battle-tested.
   Server uses Panama PIA endpoint (non-US = port forwarding supported with OpenVPN).

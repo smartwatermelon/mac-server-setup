@@ -1,5 +1,7 @@
 # Transmission Resilience: NFS Watchdog + Health Check
 
+**History.** Done on 2026-03-25 (#85). The VM's NFS watchdog went away with the VirtioFS revert on 2026-03-29 (#102). The container health check stays.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Auto-recover Transmission when the NFS mount goes stale *or is not mounted* or the daemon becomes unresponsive, preventing the manual restart that was needed on 2026-03-25.
