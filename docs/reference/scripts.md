@@ -21,7 +21,7 @@ This page lists every script in the repo's root, `app-setup/`, `app-setup/templa
 
 | Path | Runs on | Runs as | Purpose |
 | --- | --- | --- | --- |
-| [`scripts/docs/gen-config-reference.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/scripts/docs/gen-config-reference.sh) | Dev Mac or CI | Your user | Writes [config keys](config-keys.md) from `config/config.conf.template`. `--check` exits 1 if the page is stale. |
+| `scripts/docs/gen-config-reference.sh` | Dev Mac or CI | Your user | Writes [config keys](config-keys.md) from `config/config.conf.template`. `--check` exits 1 if the page is stale. |
 
 ## scripts/server
 
