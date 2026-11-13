@@ -18,8 +18,8 @@ Every key in `config/config.conf.template`. Copy the template to
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `OP_VAULT_ID` | `your-vault-id` | 1Password vault, by ID so a rename cannot break it (op vault list) |
-| `ONEPASSWORD_VAULT` | `${OP_VAULT_ID}` | Vault that prep-airdrop.sh reads the items below from |
+| `OP_VAULT_ID` | `your-vault-id` | Required. 1Password vault, by ID so a rename cannot break it (op vault list) |
+| `ONEPASSWORD_VAULT` | `${OP_VAULT_ID}` | Required. Vault that prep-airdrop.sh reads the items below from<br>There is no default: prep-airdrop.sh stops if it is empty |
 | `ONEPASSWORD_OPERATOR_ITEM` | `Mac Mini operator` | Login item: operator password (created if missing) |
 | `ONEPASSWORD_TIMEMACHINE_ITEM` | `TimeMachine NAS` | Login item: Time Machine share credentials (URL in the item) |
 | `ONEPASSWORD_PLEX_NAS_ITEM` | `Plex NAS` | Login item: media NAS credentials |

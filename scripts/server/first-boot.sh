@@ -119,9 +119,6 @@ else
   # Set fallback defaults
   SERVER_NAME="MACMINI"
   OPERATOR_USERNAME="operator"
-  # 1Password vault "Private", by ID so a rename cannot break it.
-  OP_VAULT_ID="bg5mciyy25cearfepehuh6nwmi"
-  ONEPASSWORD_VAULT="${OP_VAULT_ID}"
   ONEPASSWORD_OPERATOR_ITEM="operator"
 fi
 
@@ -1067,8 +1064,14 @@ else
     exit 1
   fi
 
-  # Store reference to 1Password (don't store actual password)
-  echo "Operator account password is stored in 1Password: op://${ONEPASSWORD_VAULT}/${ONEPASSWORD_OPERATOR_ITEM}/password" >"/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
+  # Store reference to 1Password (don't store actual password).
+  # No vault default (#265); this note is its only use, so only warn.
+  if [[ -n "${ONEPASSWORD_VAULT:-}" ]]; then
+    echo "Operator account password is stored in 1Password: op://${ONEPASSWORD_VAULT}/${ONEPASSWORD_OPERATOR_ITEM}/password" >"/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
+  else
+    collect_warning "ONEPASSWORD_VAULT is not set in ${CONFIG_FILE}; the operator password note names the item only"
+    echo "Operator account password is stored in 1Password, item: ${ONEPASSWORD_OPERATOR_ITEM} (vault not set in config.conf)" >"/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
+  fi
   chmod 600 "/Users/${ADMIN_USERNAME}/Documents/operator_password_reference.txt"
 
   show_log "Operator account created successfully"
