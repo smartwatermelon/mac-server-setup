@@ -64,7 +64,7 @@ ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"  # 1Password item for NAS credentials
 ## Prerequisites
 
 - Setup completed via first-boot.sh (includes credential import via keychain)
-- NAS credentials will be embedded into mount scripts during setup (see [Credential Management](../keychain-credential-management.md))
+- No NAS credentials go into the mount scripts: the NFS mount uses host-based authentication (see [Credential chain](../explanation/credential-chain.md))
 - For migration: Plex config files in `~/plex-migration/Plex Media Server/`
 
 ## Architecture

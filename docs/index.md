@@ -8,7 +8,7 @@ a failure.
 The server runs Plex for a NAS full of media. Around it, you can add a
 download pipeline behind a VPN, a web dashboard with remote access, and
 watchdogs that email you when something breaks. Each of those parts is
-optional, and the [stack matrix](stack-matrix.md) says what you can leave
+optional, and the [stack matrix](reference/stack-matrix.md) says what you can leave
 out or replace.
 
 [Start here: the get-started tutorial](get-started/index.md){ .md-button .md-button--primary }
@@ -63,5 +63,5 @@ flowchart TB
   pages from a spare Mac mini to the first play in Plex.
 - Every config key: the [configuration key reference](reference/config-keys.md).
 - Why it is built this way: the [explanation pages](explanation/index.md).
-- Which parts you need: the [stack matrix](stack-matrix.md).
+- Which parts you need: the [stack matrix](reference/stack-matrix.md).
 - The code: [smartwatermelon/mac-server-setup](https://github.com/smartwatermelon/mac-server-setup).

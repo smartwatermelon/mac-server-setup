@@ -23,9 +23,9 @@ Automated setup for an Apple Silicon Mac Mini as a home server. Plex, Transmissi
 
 **Result**: Server at `your-server-name.local`, everything running.
 
-More detail in [Prerequisites](docs/prerequisites.md) and [Configuration Keys](docs/reference/config-keys.md).
+More detail in [Prerequisites](docs/get-started/02-prerequisites.md) and [Configuration Keys](docs/reference/config-keys.md).
 
-Adapting this to your own setup? The [stack matrix](docs/stack-matrix.md) lists which parts are required, optional or replaceable.
+Adapting this to your own setup? The [stack matrix](docs/reference/stack-matrix.md) lists which parts are required, optional or replaceable.
 
 ## What's running
 
@@ -118,7 +118,7 @@ Every script is idempotent (safe to re-run). Errors display immediately during s
   - `jq` and `openssl` (both pre-installed on macOS)
   - `config/config.conf` created from the template
 
-See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
+See [Configure](docs/get-started/03-configure.md) for commands that check `config/config.conf` and the 1Password items.
 
 > Tested on macOS 15.x, Apple Silicon only. Might work on Intel or older macOS but I haven't tried.
 
@@ -320,13 +320,13 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 
 | Topic | Link |
 |-------|------|
-| What you need before starting | [Prerequisites](docs/prerequisites.md) |
+| What you need before starting | [Prerequisites](docs/get-started/02-prerequisites.md) |
 | Configuration options | [Configuration Keys](docs/reference/config-keys.md) |
 | Customizing parameters | [Configure](docs/get-started/03-configure.md) |
 | Building the deployment package | [Prep-AirDrop](docs/get-started/prep-airdrop.md) |
 | Running system provisioning | [First Boot](docs/get-started/first-boot.md) |
-| Post-reboot setup | [Operator Setup](docs/operator.md) |
-| How credentials move between machines | [Keychain Management](docs/keychain-credential-management.md) |
+| Post-reboot setup | [Log in as operator](docs/get-started/07-operator-login.md) |
+| How credentials move between machines | [Credential chain](docs/explanation/credential-chain.md) |
 | Plex settings watchdog | [Plex Watchdog](docs/components/plex-watchdog.md) |
 | Caddy reverse proxy | [Caddy README](docs/components/caddy.md) |
 | Home VPN (Synology NAS + Tunnelblick) | [Home VPN](docs/components/home-vpn.md) |

@@ -66,7 +66,7 @@ These scripts are copied into the setup package. `first-boot.sh` calls the `setu
 
 | Path | Runs on | Runs as | Purpose |
 | --- | --- | --- | --- |
-| [`run-app-setup.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/app-setup/run-app-setup.sh) | Server | admin | Runs the app-setup scripts in dependency order. `--only SCRIPT` runs one. |
+| [`run-app-setup.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/app-setup/run-app-setup.sh) | Server | admin | Runs the app-setup scripts in dependency order. `--only SCRIPT` runs one. `--force` passes `--force` to each script, which skips its prompts. |
 | [`rclone-setup.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/app-setup/rclone-setup.sh) | Server | admin | Installs the rclone config for operator and the Dropbox sync LaunchAgent |
 | [`podman-transmission-setup.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/app-setup/podman-transmission-setup.sh) | Server | admin | Installs Podman, creates the `transmission-vm` machine, deploys the Transmission and PIA VPN container, the trigger watcher, the cleanup timer and the watchdogs |
 | [`filebot-setup.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/app-setup/filebot-setup.sh) | Server | admin | Installs FileBot, applies the license, and sets the rename formats and OpenSubtitles login |

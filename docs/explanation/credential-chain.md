@@ -103,4 +103,4 @@ See [PIA VPN](../components/pia-vpn.md).
 
 A rotation must go through every stage that holds a copy, in order. For a package-chain secret: change it at the provider, update 1Password, update the `admin` keychain item on the server, then run the setup script again so that it rewrites the service file. For the PIA account, the container must then be recreated. [PIA VPN](../components/pia-vpn.md) gives the full procedure. For a System keychain token, replace the keychain item and restart the daemon that reads it.
 
-For the older description of the keychain format and service names, see [Keychain credential management](../keychain-credential-management.md).
+For the older description of the keychain format and service names, see [Keychain credential management](../archive/keychain-credential-management.md).

@@ -294,7 +294,7 @@ The watchdog tracks which drifts have been emailed in `state.json`. It only emai
 
 ## Credential management
 
-Credentials are embedded in config files with restrictive permissions (mode 600, owned by operator) rather than stored in macOS Keychain. This is because the operator keychain cannot be unlocked from non-interactive contexts like LaunchAgents. See [Keychain Management](../keychain-credential-management.md) for details on this project-wide pattern.
+Credentials are embedded in config files with restrictive permissions (mode 600, owned by operator) rather than stored in macOS Keychain. This is because the operator keychain cannot be unlocked from non-interactive contexts like LaunchAgents. See [Credential chain](../explanation/credential-chain.md) for this project-wide pattern.
 
 | Credential | Location | Protection |
 | ----------- | ---------- | ------------ |

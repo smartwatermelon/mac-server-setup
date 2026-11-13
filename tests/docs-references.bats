@@ -59,7 +59,7 @@ sources() {
 
 @test "known bad: a reference to a missing doc is reported" {
   cd "${REPO_DIR}"
-  printf '# See docs/no-such-page.md and docs/stack-matrix.md\n' >"${BATS_TEST_TMPDIR}/s.sh"
+  printf '# See docs/no-such-page.md and docs/reference/config-keys.md\n' >"${BATS_TEST_TMPDIR}/s.sh"
   run missing_refs "${BATS_TEST_TMPDIR}/s.sh"
   [ "${output}" = "${BATS_TEST_TMPDIR}/s.sh: docs/no-such-page.md" ]
 }
