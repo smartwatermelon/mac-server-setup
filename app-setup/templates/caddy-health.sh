@@ -42,23 +42,18 @@ else
   echo -e "${RED}✗ FAILED (${TRANSMISSION_CODE})${NC}"
 fi
 
-# Test 4: Romano Synology proxy
-echo -n "Romano proxy (/romano/)... "
-ROMANO_CODE=$(curl -L -k -s -o /dev/null -w "%{http_code}" "${BASE_URL}/romano/")
-if echo "${ROMANO_CODE}" | grep -q -E "200|401|302"; then
-  echo -e "${GREEN}✓ OK (${ROMANO_CODE})${NC}"
-else
-  echo -e "${RED}✗ FAILED (${ROMANO_CODE})${NC}"
-fi
-
-# Test 4b: Berkswell Synology proxy
-echo -n "Berkswell proxy (/berkswell/)... "
-BERKSWELL_CODE=$(curl -L -k -s -o /dev/null -w "%{http_code}" "${BASE_URL}/berkswell/")
-if echo "${BERKSWELL_CODE}" | grep -q -E "200|401|302"; then
-  echo -e "${GREEN}✓ OK (${BERKSWELL_CODE})${NC}"
-else
-  echo -e "${RED}✗ FAILED (${BERKSWELL_CODE})${NC}"
-fi
+# Test 4: optional dashboard links (HOME_LINK*_PATH; empty when none are set)
+HOME_LINK_PATHS="__HOME_LINK_PATHS__"
+read -r -a LINK_PATHS <<<"${HOME_LINK_PATHS}"
+for LINK_PATH in "${LINK_PATHS[@]}"; do
+  echo -n "Dashboard link (/${LINK_PATH}/)... "
+  LINK_CODE=$(curl -L -k -s -o /dev/null -w "%{http_code}" "${BASE_URL}/${LINK_PATH}/")
+  if echo "${LINK_CODE}" | grep -q -E "200|401|302"; then
+    echo -e "${GREEN}✓ OK (${LINK_CODE})${NC}"
+  else
+    echo -e "${RED}✗ FAILED (${LINK_CODE})${NC}"
+  fi
+done
 
 # Test 5: CA certificate download
 echo -n "CA certificate download... "

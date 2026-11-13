@@ -67,7 +67,7 @@ Scripts are listed in the order `run-app-setup.sh` runs them.
 | Cloudflare DDNS | Optional | `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_RECORD_ID`, `DDNS_RECORD_NAME` | Keeps one DNS record on your home IP. Needed only for the home VPN. | [Cloudflare DDNS](../components/cloudflare-ddns.md) |
 | Cloudflare Tunnel + Access | Optional | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_ACCESS_*`, `ACCESS_ALLOWED_EMAIL`, `TUNNEL_METRICS_PORT` | Lets you reach the server from outside without opening a port. Its watchdogs need msmtp. | [Cloudflare Tunnel](../components/cloudflare-tunnel.md) |
 | Home VPN | Optional | (none in this repo) | Runs on the NAS (Synology VPN Server), not on the Mac Mini. It needs Cloudflare DDNS to keep its hostname on your home IP. | [Home VPN](../components/home-vpn.md) |
-| Synology QuickConnect links | Optional | `QUICKCONNECT_ROMANO`, `QUICKCONNECT_BERKSWELL` | Dashboard links to two named NAS units on the original server. Leave them empty. | [Caddy](../components/caddy.md) |
+| Dashboard links | Optional | `HOME_LINKS_TITLE`, `HOME_LINK1_*`, `HOME_LINK2_*` | Up to two optional links on the dashboard, such as your NAS admin pages. A link with an empty URL is left out. | [Caddy](../components/caddy.md#dashboard-links) |
 
 ## Monitoring and extras
 
@@ -85,8 +85,7 @@ Scripts are listed in the order `run-app-setup.sh` runs them.
 `config/config.conf.template` has some values from the original server. Change
 these before your first run:
 
-- `OP_VAULT_ID`: the original owner's 1Password vault ID. Use your own vault ID
-  or vault name.
+- `OP_VAULT_ID`: a placeholder. Set your own vault ID or vault name.
+  `prep-airdrop.sh` stops when the vault is empty.
 - `PIA_VPN_REGION`: picked for a server in the Pacific Northwest. Choose a
   region near you that supports port forwarding.
-- `QUICKCONNECT_ROMANO`, `QUICKCONNECT_BERKSWELL`: leave empty.

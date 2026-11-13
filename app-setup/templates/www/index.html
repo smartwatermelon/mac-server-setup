@@ -190,13 +190,19 @@
                 </ul>
             </div>
 
+            <!-- @@BEGIN_HOME_LINKS@@ Optional links (HOME_LINK* in config.conf) -->
             <div class="service-section">
-                <h3>NAS</h3>
+                <h3>__HOME_LINKS_TITLE__</h3>
                 <ul class="service-links">
-                    <li><a href="/romano" target="romano">Romano</a></li>
-                    <li><a href="/berkswell" target="berkswell">Berkswell</a></li>
+                    <!-- @@BEGIN_HOME_LINK1@@ -->
+                    <li><a href="/__HOME_LINK1_PATH__" target="__HOME_LINK1_PATH__">__HOME_LINK1_NAME__</a></li>
+                    <!-- @@END_HOME_LINK1@@ -->
+                    <!-- @@BEGIN_HOME_LINK2@@ -->
+                    <li><a href="/__HOME_LINK2_PATH__" target="__HOME_LINK2_PATH__">__HOME_LINK2_NAME__</a></li>
+                    <!-- @@END_HOME_LINK2@@ -->
                 </ul>
             </div>
+            <!-- @@END_HOME_LINKS@@ -->
 
             <div class="service-section">
                 <h3>Local-only Services</h3>

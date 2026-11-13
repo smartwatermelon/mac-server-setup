@@ -80,7 +80,7 @@
 	@media_noslash path /media
 	redir @media_noslash /media/ 301
 
-	# Landing page, Transmission, QuickConnect, and the access log.
+	# Landing page, Transmission, dashboard links, and the access log.
 	import site_routes
 	import access_log
 }
@@ -106,11 +106,16 @@
 	@transmission_noslash path /transmission
 	redir @transmission_noslash /transmission/ 301
 
-	# NAS access via Synology QuickConnect (external tunnel)
-	redir /romano __QUICKCONNECT_ROMANO__ 302
-	redir /romano/ __QUICKCONNECT_ROMANO__ 302
-	redir /berkswell __QUICKCONNECT_BERKSWELL__ 302
-	redir /berkswell/ __QUICKCONNECT_BERKSWELL__ 302
+	# Optional dashboard links, such as your NAS admin pages (HOME_LINK*).
+	# caddy-setup.sh drops a slot whose URL is empty, and the marker lines.
+	# @@BEGIN_HOME_LINK1@@
+	redir /__HOME_LINK1_PATH__ __HOME_LINK1_URL__ 302
+	redir /__HOME_LINK1_PATH__/ __HOME_LINK1_URL__ 302
+	# @@END_HOME_LINK1@@
+	# @@BEGIN_HOME_LINK2@@
+	redir /__HOME_LINK2_PATH__ __HOME_LINK2_URL__ 302
+	redir /__HOME_LINK2_PATH__/ __HOME_LINK2_URL__ 302
+	# @@END_HOME_LINK2@@
 }
 
 # Standard access logging. Separate from site_routes because log is a

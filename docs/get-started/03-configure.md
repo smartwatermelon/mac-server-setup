@@ -56,7 +56,7 @@ Do all steps on the dev Mac, in the root of your clone.
     ```
 
 8. If you want Transmission later, create a PIA Login item and set `ONEPASSWORD_PIA_ITEM` to its title. Set `PIA_VPN_REGION` to a region near you that supports port forwarding. `prep-airdrop.sh` copies the PIA credentials only when this key is set, and `podman-transmission-setup.sh` stops without them.
-9. Leave the remote access keys empty for now: the Cloudflare keys, `EXTERNAL_HOSTNAME`, `BASICAUTH_*` and `QUICKCONNECT_*`.
+9. Leave the remote access keys empty for now: the Cloudflare keys, `EXTERNAL_HOSTNAME`, `BASICAUTH_*` and `HOME_LINK*`.
 10. Optional: edit the Homebrew lists, `config/formulae.txt` and `config/casks.txt`. Put one formula or cask on each line. `setup-package-installation.sh` skips blank lines and lines that start with `#`. Do not remove an entry that a component needs. For example, `podman-transmission-setup.sh` needs `timeout` from `coreutils`.
 
 The [configuration keys reference](../reference/config-keys.md) describes every key.

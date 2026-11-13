@@ -109,8 +109,17 @@ TVMAZE_SCROBBLE_PORT="32599"       # Webhook listener, on 127.0.0.1 only
 SERVER_LAN_IP=""                   # Server's static LAN IP (e.g. 192.168.21.10)
 BASICAUTH_USERNAME=""              # Basic auth username for external access
 BASICAUTH_HASH=""                  # bcrypt hash of password (generate with: caddy hash-password)
-QUICKCONNECT_ROMANO=""             # QuickConnect URL for Romano NAS (e.g. https://quickconnect.to/user123)
-QUICKCONNECT_BERKSWELL=""          # QuickConnect URL for Berkswell NAS
+
+# Optional dashboard links, such as your NAS admin pages
+# Each link is a redirect from /PATH on this server to its URL, and a link on the dashboard.
+# A link with an empty URL is left out. caddy-setup.sh stops on a bad value.
+HOME_LINKS_TITLE="Links"           # Dashboard heading over the links
+HOME_LINK1_NAME=""                 # Link 1 label: letters, digits, spaces, '.', '_' and '-'
+HOME_LINK1_PATH=""                 # Link 1 path on the server: letters, digits and '-' (e.g. nas)
+HOME_LINK1_URL=""                  # Link 1 target, https only (e.g. https://nas.example.com:5001)
+HOME_LINK2_NAME=""                 # Link 2 label
+HOME_LINK2_PATH=""                 # Link 2 path; not the same as link 1, not transmission or media
+HOME_LINK2_URL=""                  # Link 2 target, https only
 
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME

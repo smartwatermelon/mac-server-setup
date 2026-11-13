@@ -80,7 +80,7 @@ http://:8080 {
   auth. Its `/media` handler would also be reachable: the `@not_local` guard
   is keyed on `remote_ip`, and every tunnel request is local.
 - `(site_routes)` holds the landing page, `/transmission/` and the
-  QuickConnect redirects. It has no `/media` handler, so `/media` on the
+  dashboard link redirects. It has no `/media` handler, so `/media` on the
   tunnel site falls through to `file_server` and returns 404.
 - The routes sit inside `handle`, not at site level. Caddy sorts `redir`
   and `reverse_proxy` ahead of `handle`, so a route at site level would run
