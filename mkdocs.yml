@@ -50,6 +50,14 @@ theme:
 
 plugins:
   - search
+  # Writes llms.txt for LLM tools (#205).
+  - llmstxt:
+      sections:
+        Get started:
+          - get-started/*.md
+        Reference:
+          - reference/*.md
+          - stack-matrix.md
 
 markdown_extensions:
   - admonition
