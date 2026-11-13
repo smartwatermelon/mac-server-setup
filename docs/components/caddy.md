@@ -9,8 +9,8 @@ dashboard, and media file server components.
 ## Project Overview
 
 Caddy web server configuration for the home server (Mac Mini). Serves a dashboard
-landing page and reverse-proxies local services (Transmission, Romano Synology DSM,
-Berkswell Synology DSM), with split internal/external access control.
+landing page and reverse-proxies local services (Transmission and the Synology DSM pages
+of your NAS units), with split internal/external access control.
 
 ## Key Commands
 

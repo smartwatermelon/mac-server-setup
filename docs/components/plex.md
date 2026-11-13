@@ -95,7 +95,7 @@ ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"  # 1Password item for NAS credentials
   entry is a link to the Plex data. It must never be a real directory: Plex
   started by the LaunchAgent would run an empty server from it.
 - **Mount script**: `~/.local/bin/mount-nas-media.sh`
-- **LaunchAgent**: `~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist`
+- **LaunchAgent**: `~/Library/LaunchAgents/com.${HOSTNAME_LOWER}.plexmediaserver.plist`
 - **Media mount**: `~/.local/mnt/${NAS_SHARE_NAME}`
 
 ### Log Locations
@@ -315,12 +315,11 @@ sudo tail -5 "/Users/operator/Library/Application Support/Plex Media Server/upda
 
 ```bash
 # Check Plex status
-launchctl list | grep com.plexapp.plexmediaserver
+launchctl print gui/$(id -u)/com.${HOSTNAME_LOWER}.plexmediaserver
 ps aux | grep "Plex Media Server"
 
-# Start/stop Plex
-launchctl start com.plexapp.plexmediaserver
-launchctl stop com.plexapp.plexmediaserver
+# Restart Plex
+launchctl kickstart -kp gui/$(id -u)/com.${HOSTNAME_LOWER}.plexmediaserver
 
 # View logs
 tail -f ~/.local/state/${HOSTNAME_LOWER}-apps.log
@@ -384,9 +383,9 @@ op whoami
 **NAS Mount Failures**:
 
 ```bash
-# Test connectivity and credentials
+# Test connectivity and the NFS export (NFS uses no credentials)
 ping ${NAS_HOSTNAME}
-op item get ${ONEPASSWORD_NAS_ITEM}
+showmount -e ${NAS_HOSTNAME}
 
 # Manual NFS mount test
 sudo mount_nfs -o resvport,rw,soft your-nas.local:/volume1/Media ~/.local/mnt/${NAS_SHARE_NAME}
@@ -412,11 +411,11 @@ sudo dseditgroup -o edit -a ${OPERATOR_USERNAME} -t user staff
 
 ```bash
 # Reload LaunchAgent
-launchctl unload ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist
-launchctl load ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist
+launchctl bootout gui/$(id -u)/com.${HOSTNAME_LOWER}.plexmediaserver
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.${HOSTNAME_LOWER}.plexmediaserver.plist
 
 # Check LaunchAgent file
-cat ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist
+cat ~/Library/LaunchAgents/com.${HOSTNAME_LOWER}.plexmediaserver.plist
 ```
 
 ### Reset and Reinstall
@@ -425,7 +424,7 @@ cat ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist
 # Clean reinstall
 sudo rm -rf "/Applications/Plex Media Server.app"
 sudo rm -rf /Users/Shared/PlexMediaServer
-rm -f ~/Library/LaunchAgents/com.plexapp.plexmediaserver.plist
+rm -f ~/Library/LaunchAgents/com.${HOSTNAME_LOWER}.plexmediaserver.plist
 
 # Re-run setup
 ./app-setup/plex-setup.sh
