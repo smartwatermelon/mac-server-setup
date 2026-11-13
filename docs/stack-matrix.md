@@ -42,7 +42,7 @@ on the new Mac Mini.
 | Time Machine backup | Optional | `ONEPASSWORD_TIMEMACHINE_ITEM` | If the 1Password item is missing, prep prints a warning and skips it. | [Prerequisites](prerequisites.md) |
 | Apple ID | Optional | `ONEPASSWORD_APPLEID_ITEM` | Prep looks for the item among 1Password favorites. | [Prerequisites](prerequisites.md) |
 | Terminal profile, iTerm2 | Optional | `TERMINAL_PROFILE_FILE`, `USE_ITERM2` | Leave both empty or `false` to skip. | No doc yet |
-| Homebrew packages | Required | `config/formulae.txt`, `config/casks.txt` | Edit the lists to add or remove packages. | [Configuration](configuration.md) |
+| Homebrew packages | Required | `config/formulae.txt`, `config/casks.txt` | Edit the lists to add or remove packages. | [Configure](get-started/03-configure.md) |
 
 ## Media apps
 

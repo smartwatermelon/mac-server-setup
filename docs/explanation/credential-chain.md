@@ -39,6 +39,24 @@ The package keychain's password is the dev Mac's hardware UUID. `prep-airdrop.sh
 
 The hardware fingerprint has a second use. `first-boot.sh` refuses to run on the machine that built the package, which stops a mistaken run on the dev Mac.
 
+### Package keychain services
+
+Each service name ends in the lowercased `SERVER_NAME`, and the account name is that same lowercased name. `HOSTNAME_OVERRIDE` does not change them.
+
+| Service | Holds | Present when |
+| --- | --- | --- |
+| `operator-<server name>` | The `operator` account password | Always; `prep-airdrop.sh` creates the 1Password item if it is missing |
+| `plex-nas-<server name>` | Media NAS `username:password` | The `ONEPASSWORD_PLEX_NAS_ITEM` item exists |
+| `timemachine-<server name>` | Time Machine share `username:password` | The `ONEPASSWORD_TIMEMACHINE_ITEM` item exists |
+| `wifi-<server name>` | The Wi-Fi password | You choose the script-based Wi-Fi setup |
+| `opensubtitles-<server name>` | OpenSubtitles `username:password` | The `ONEPASSWORD_OPENSUBTITLES_ITEM` item exists |
+| `pia-account-<server name>` | PIA `username:password` | `ONEPASSWORD_PIA_ITEM` is set |
+
+### What else the package carries
+
+- **SSH keys.** `prep-airdrop.sh` copies both halves of the dev Mac's `~/.ssh/id_ed25519` key pair into `ssh_keys/`. `setup-ssh-access.sh` installs the private and public key in the `admin` account's `~/.ssh`, and the public key as `authorized_keys` for both `admin` and `operator`. The private key is one more reason to treat the whole package as a secret.
+- **The Apple Account password.** It is not in the keychain. `prep-airdrop.sh` makes a view-once 1Password share link for the `ONEPASSWORD_APPLEID_ITEM` item and writes it to `config/apple_id_password.url`. The link works once.
+
 ## The System keychain chain
 
 Root daemons read the Cloudflare tokens from the System keychain each time they start. The pattern is the same for each one: a small wrapper reads the token, exports it to an environment variable, and uses `exec` to start the real program.

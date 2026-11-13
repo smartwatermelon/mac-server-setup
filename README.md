@@ -23,7 +23,7 @@ Automated setup for an Apple Silicon Mac Mini as a home server. Plex, Transmissi
 
 **Result**: Server at `your-server-name.local`, everything running.
 
-More detail in [Prerequisites](docs/prerequisites.md) and [Environment Variables](docs/environment-variables.md).
+More detail in [Prerequisites](docs/prerequisites.md) and [Configuration Keys](docs/reference/config-keys.md).
 
 Adapting this to your own setup? The [stack matrix](docs/stack-matrix.md) lists which parts are required, optional or replaceable.
 
@@ -321,8 +321,8 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 | Topic | Link |
 |-------|------|
 | What you need before starting | [Prerequisites](docs/prerequisites.md) |
-| Configuration options | [Environment Variables](docs/environment-variables.md) |
-| Customizing parameters | [Configuration Reference](docs/configuration.md) |
+| Configuration options | [Configuration Keys](docs/reference/config-keys.md) |
+| Customizing parameters | [Configure](docs/get-started/03-configure.md) |
 | Building the deployment package | [Prep-AirDrop](docs/get-started/prep-airdrop.md) |
 | Running system provisioning | [First Boot](docs/get-started/first-boot.md) |
 | Post-reboot setup | [Operator Setup](docs/operator.md) |
