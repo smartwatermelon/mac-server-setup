@@ -22,7 +22,7 @@ The `plex-setup.sh` script automates native Plex Media Server deployment on macO
 - `--force`: Skip all confirmation prompts
 - `--skip-migration`: Skip Plex configuration migration
 - `--skip-mount`: Skip NFS mount setup
-- `--server-name NAME`: Set Plex server name (default: hostname)
+- `--server-name NAME`: Set Plex server name (default: `PLEX_SERVER_NAME_OVERRIDE` from `config.conf` if set, else the hostname)
 - `--migrate-from HOST`: Source hostname for Plex migration
 - `--custom-port PORT`: Set custom port for fresh installations (prevents conflicts)
 - `--password PASSWORD`: Provide administrator password for keychain operations

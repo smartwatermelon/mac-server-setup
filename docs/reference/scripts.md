@@ -11,6 +11,8 @@ This page lists every script in the repo's root, `app-setup/`, `app-setup/templa
 | [`prep-airdrop.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/prep-airdrop.sh) | Dev Mac | Your user | Builds the setup package: gets credentials from 1Password, writes the hardware fingerprint, Wi-Fi strategy and manifest, and copies the scripts to `~/<hostname>-setup` |
 | [`run_tests.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/run_tests.sh) | Dev Mac | Your user | Runs the BATS unit and integration tests |
 
+`prep-airdrop.sh [output_path] [script_path]` takes two optional arguments. `output_path` is the package folder, `~/<server name>-setup` by default, with the server name lowercased. `script_path` is the folder that holds the scripts to copy, the current folder by default.
+
 ## scripts/airdrop
 
 | Path | Runs on | Runs as | Purpose |
@@ -26,6 +28,13 @@ This page lists every script in the repo's root, `app-setup/`, `app-setup/templa
 ## scripts/server
 
 These scripts are copied into the setup package. `first-boot.sh` calls the `setup-*.sh` modules in order. You can run a module again by itself.
+
+`first-boot.sh` options:
+
+- `--force` skips the confirmation prompts. Do not use it on a first run; see [Run first boot](../get-started/05-first-boot.md).
+- `--skip-homebrew` skips the Homebrew install and configuration.
+- `--skip-packages` skips the formulae and casks in `config/formulae.txt` and `config/casks.txt`.
+- `--skip-update` is accepted but changes nothing. The script always skips macOS software updates, because they are unreliable during setup.
 
 | Path | Runs on | Runs as | Purpose |
 | --- | --- | --- | --- |
