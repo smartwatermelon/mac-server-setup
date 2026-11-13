@@ -1,12 +1,6 @@
 # PIA macOS Proxy Consent Bug — NE Signature Lost After Reboot
 
-> **⚠️ OBSOLETE (2026-04-15)** — This bug applied only to the host-level PIA
-> Desktop + split-tunnel stack, which was retired when Transmission moved
-> inside the haugene/transmission-openvpn container. PIA Desktop is no longer
-> installed on TILSIT; the `pia-proxy-consent` LaunchAgent, its helper script,
-> and the associated workaround have been removed. VPN now runs entirely inside
-> the Transmission container via OpenVPN (no macOS NE proxy involved). This
-> document is retained as a historical reference only.
+**History.** Obsolete since 2026-04-15 (#121). This bug applied only to the host-level PIA Desktop and split-tunnel stack. That stack was retired when Transmission moved into the haugene/transmission-openvpn container (#78, 2026-03-10). PIA Desktop is no longer installed, and the `pia-proxy-consent` LaunchAgent, its helper script and the workaround were removed. The VPN now runs inside the Transmission container through OpenVPN, with no macOS Network Extension proxy. For the current VPN setup see [PIA VPN](../components/pia-vpn.md). This page is kept for history only.
 
 ## Summary
 

@@ -1,6 +1,8 @@
 # Plex → TVmaze watched sync (issue #167)
 
-Date: 2026-11-05. Status: approved design, implemented (reconcile added the same day).
+**History.** Done on 2026-11-05 (#240), including the hourly reconcile. #167 was closed on 2026-11-12. For the current setup see [TVmaze scrobble](../components/tvmaze-scrobble.md).
+
+Date: 2026-11-05.
 
 ## Goal
 

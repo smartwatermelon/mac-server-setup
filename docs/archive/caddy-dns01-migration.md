@@ -1,5 +1,7 @@
 # Migrate External TLS to DNS-01 Challenge (Cloudflare)
 
+**History.** Done. This migration was carried out in the separate `tilsit-caddy` repository in 2026-02, and #106 (2026-04-03) imported it into this repo as a completed migration. Caddy now gets its public certificate by DNS-01 through Cloudflare (`dns cloudflare` in `app-setup/templates/Caddyfile`). The No-IP hostname and the forwarded port 24443 described below are gone. Since the Cloudflare Tunnel cutover (#230, 2026-11-03), the public site comes in through the tunnel. For the current design see [TLS strategy](../explanation/tls-strategy.md) and [Caddy](../components/caddy.md).
+
 ## Why This Is Needed
 
 The current setup uses Let's Encrypt with TLS-ALPN-01 / HTTP-01 challenges, which

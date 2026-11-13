@@ -1,21 +1,15 @@
 # PIA macOS Split Tunnel Bug — Transparent Proxy Failure
 
-> **⚠️ OBSOLETE (2026-04-15)** — This bug only affected the host-level PIA
-> Desktop split-tunnel stack, which was retired when Transmission moved inside
-> the haugene/transmission-openvpn container. The `plex-vpn-bypass` LaunchDaemon
-> and its PF-anchor workaround have been removed from TILSIT; PIA Desktop is
-> no longer installed. The container runs OpenVPN at the kernel namespace level
-> with no bypass needed. This document is retained as a historical reference
-> only.
->
-> **Known residue:** the PIA split-tunnel system extension
-> (`com.privateinternetaccess.vpn.splittunnel`, team `5357M5NW9W`) remains
-> registered as `activated enabled` in `systemextensionsctl list` on TILSIT.
-> `systemextensionsctl uninstall` requires SIP disabled; the extension is
-> inert (no running proxy host process, parent app is uninstalled) and macOS
-> generally garbage-collects orphaned system extensions after reboots. Not
-> worth disabling SIP to chase. If a future operator sees this entry and
-> wonders why — this is the reason.
+**History.** Obsolete since 2026-04-15 (#121). This bug affected only the host-level PIA Desktop split-tunnel stack. That stack was retired when Transmission moved into the haugene/transmission-openvpn container (#78, 2026-03-10). The `plex-vpn-bypass` LaunchDaemon and its PF-anchor workaround were removed, and PIA Desktop is no longer installed. The container runs OpenVPN in its own network namespace and needs no bypass. For the current VPN setup see [PIA VPN](../components/pia-vpn.md). This page is kept for history only.
+
+**Known residue (2026-04-15):** the PIA split-tunnel system extension
+(`com.privateinternetaccess.vpn.splittunnel`, team `5357M5NW9W`) remained
+registered as `activated enabled` in `systemextensionsctl list` on TILSIT.
+`systemextensionsctl uninstall` requires SIP disabled; the extension is
+inert (no running proxy host process, parent app is uninstalled) and macOS
+generally garbage-collects orphaned system extensions after reboots. Not
+worth disabling SIP to chase. If a future operator sees this entry and
+wonders why — this is the reason.
 
 ## Summary
 

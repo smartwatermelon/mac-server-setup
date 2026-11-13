@@ -1,5 +1,7 @@
 # Code Review: plex-setup.sh (Post-1.0 Improvement Plan)
 
+**History.** A point-in-time review of `app-setup/plex-setup.sh` from 2025-09-12. It was not carried out as a plan: its main refactor did not happen, and `main()` is still one function of about 300 lines. The line numbers and some function names below are out of date. For example, the SMB mount it reviews is now an NFS mount (`setup_persistent_nfs_mount`). For the current script see [Plex](../components/plex.md).
+
 **Date:** 2025-09-12  
 **Script:** `app-setup/plex-setup.sh`  
 **Lines of Code:** 1,654  
