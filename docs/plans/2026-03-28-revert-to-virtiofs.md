@@ -1,5 +1,7 @@
 # Revert to VirtioFS with Deferred Cleanup
 
+**History.** Done on 2026-03-29 (#102). This is the current storage design.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Switch the Transmission container's data volume back to VirtioFS (host NFS mount) for reliable connectivity, and prevent `.nfs.*` silly-rename issues by deferring file deletion until VirtioFS has released its file descriptors.

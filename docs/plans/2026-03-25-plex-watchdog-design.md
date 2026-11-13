@@ -1,5 +1,7 @@
 # Plex Settings Watchdog
 
+**History.** Done on 2026-03-25 (#90).
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Monitor Plex server preferences against a curated "golden" configuration. Alert via email when settings drift. Provide a CLI tool to accept or revert changes.

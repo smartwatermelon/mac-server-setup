@@ -1,6 +1,6 @@
 # tilsit.vip Routing and Authenticated Gateway: Design
 
-**Status:** proposal, not implemented. Needs a decision before any Caddy change.
+**Status:** superseded. #210 and #209 are closed. The gateway became the Cloudflare Tunnel and Access plan (`2026-10-22-g2-tunnel-access-implementation.md`), cut over on 2026-11-03. The second front door was dropped on 2026-11-05.
 **Date:** 2026-10-22
 **Issues:** #210 (internal vs external routing), #209 (authenticated gateway).
 **Affects:** #130 and `2026-04-19-caddy-forms-auth.md` (see "Consequence for #130").

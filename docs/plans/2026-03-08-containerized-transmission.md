@@ -1,5 +1,7 @@
 # Containerized Transmission (haugene + Podman) Implementation Plan
 
+**History.** Done on 2026-03-10 (#78). Transmission runs in the haugene/transmission-openvpn container in a Podman VM.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Replace PIA Desktop + split tunnel + shell script monitoring stack with a single

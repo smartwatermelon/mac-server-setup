@@ -1,5 +1,7 @@
 # Torrent Auto-Remove After FileBot Processing
 
+**History.** Done on 2026-03-27 (#100).
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Automatically remove completed torrents from Transmission after FileBot successfully processes and moves their content to Plex.
