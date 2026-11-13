@@ -15,3 +15,15 @@ updates:
     ignore:
       # Interim (dev-env#229): our -vX.Y.Z tags let Dependabot propose an older tag.
       - dependency-name: "smartwatermelon/github-workflows*"
+  # Docs site build pins (requirements-docs.txt, issue #205).
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: "chore"
+    groups:
+      docs-site:
+        patterns: ["*"]

@@ -295,7 +295,7 @@ After successful first boot setup:
 
 1. **Reboot the system** (recommended)
 2. **Login as operator** (automatic after reboot)
-3. **Follow [Operator Setup Instructions](operator.md)**
+3. **Follow [Operator Setup Instructions](../operator.md)**
 4. **Run application setup scripts** in `~/app-setup/`
 
 The Mac Mini is now ready for native application deployment and service configuration.

@@ -1,0 +1,75 @@
+# Zensical docs site (#205); Material for MkDocs is the fallback.
+# Build: zensical build --strict --clean
+site_name: mac-server-setup
+site_description: Provision a Mac Mini as a self-hosted media server.
+site_url: https://smartwatermelon.github.io/mac-server-setup/
+repo_url: https://github.com/smartwatermelon/mac-server-setup
+repo_name: smartwatermelon/mac-server-setup
+edit_uri: edit/main/docs/
+docs_dir: docs
+site_dir: site
+
+# Fail the build on any broken internal link or anchor. CI depends on this.
+strict: true
+validation:
+  invalid_links: true
+  invalid_link_anchors: true
+  # Deprecated checks in Zensical.
+  unresolved_references: false
+  unresolved_footnotes: false
+  unused_definitions: false
+  unused_footnotes: false
+  shadowed_definitions: false
+  shadowed_footnotes: false
+
+# Not site pages. firstboot-README.md is copied into the package.
+exclude_docs: |
+  /setup/firstboot-README.md
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true

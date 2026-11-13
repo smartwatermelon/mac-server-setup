@@ -1,0 +1,72 @@
+name: Docs
+
+# Docs site checks (#205). standards-check already runs markdownlint.
+
+on:
+  # No branch filter: stacked PRs target a phase branch, not main.
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly external-link sweep; it only warns (see the links job).
+    - cron: "17 14 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-docs.txt
+
+      - name: Install Zensical
+        run: pip install -r requirements-docs.txt
+
+      - name: Strict build
+        run: zensical build --strict --clean
+
+  links:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Restore lychee cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .lycheecache
+          key: lychee-${{ github.sha }}
+          restore-keys: lychee-
+
+      - name: Check links
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: --config lychee.toml --no-progress docs README.md
+          # A scheduled sweep only warns: a remote site going down must not
+          # turn main red. On a PR a broken link fails the check.
+          fail: ${{ github.event_name != 'schedule' }}
+
+  deploy:
+    # OFF until the scrub (Phase 2) merges; nothing reaches Pages before.
+    if: false
+    needs: [build, links]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Pages deploy is disabled until the docs scrub merges."
