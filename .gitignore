@@ -100,6 +100,9 @@ plan.md
 # Agent context files are not project content (smartwatermelon/dev-env#155).
 AGENTS.md
 
+# Server-specific values kept out of the public docs (#205)
+local/
+
 # Docs site build output and lychee cache
 site/
 .lycheecache

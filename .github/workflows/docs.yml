@@ -1,7 +1,6 @@
 name: Docs
 
-# Docs site checks (#205). standards-check already runs markdownlint.
-# No Pages deploy job until the scrub (Phase 2) merges.
+# Docs site checks and Pages deploy (#205). standards-check runs markdownlint.
 
 on:
   # No branch filter: stacked PRs target a phase branch, not main.
@@ -63,3 +62,52 @@ jobs:
           # A scheduled sweep only warns: a remote site going down must not
           # turn main red. On a PR a broken link fails the check.
           fail: ${{ github.event_name != 'schedule' }}
+
+  # Publishes main to Pages; off until repo variable DOCS_DEPLOY is "true".
+  deploy:
+    if: >-
+      github.ref == 'refs/heads/main'
+      && github.event_name != 'pull_request'
+      && github.event_name != 'schedule'
+      && vars.DOCS_DEPLOY == 'true'
+    needs: [build, links]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: docs-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Same check as tests/docs-sensitive.bats, before anything publishes.
+      - name: Check for sensitive values
+        run: |
+          git ls-files -z 'docs/*.md' README.md \
+            | xargs -0 scripts/docs/check-sensitive.sh \
+              --allowlist tests/fixtures/docs-sensitive/allowlist.tsv
+
+      # No pip cache: a PR-written cache must not feed a deploy.
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Build
+        run: |
+          pip install -r requirements-docs.txt
+          zensical build --strict --clean
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
