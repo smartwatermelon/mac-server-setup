@@ -17,7 +17,7 @@ A public CA cannot prove that a requester controls `your-server.local`, because 
 
 The cost is trust. Each client must install the root certificate once. The repo ships it as [`caddy-root-ca.crt`](https://github.com/smartwatermelon/mac-server-setup/blob/main/app-setup/templates/caddy-root-ca.crt). The global options set `intermediate_lifetime 90d`, so the intermediate certificate changes less often than Caddy's default.
 
-The CA's keys live in Caddy's data directory, under `pki/authorities/local/`. Deleting that directory creates a new root, and every client then needs the new root. The Caddy page warns about this. See [Caddy](../apps/caddy-README.md).
+The CA's keys live in Caddy's data directory, under `pki/authorities/local/`. Deleting that directory creates a new root, and every client then needs the new root. The Caddy page warns about this. See [Caddy](../components/caddy.md).
 
 ## The public name: DNS-01 at Cloudflare
 
@@ -39,7 +39,7 @@ Since the move to the Cloudflare Tunnel, browsers reach `example.com` through Cl
 
 DNS-01 needs a DNS provider module. The Homebrew Caddy binary does not include `caddy-dns/cloudflare`. The documented method downloads a binary that includes the module from Caddy's download API, replaces the Homebrew binary with it, and pins the formula with `brew pin caddy` so that `brew upgrade` does not put the stock binary back.
 
-This is a manual step. `caddy-setup.sh` installs the stock Homebrew Caddy if no binary is present. It does not download the custom build or pin the formula. The procedure is in [Caddy](../apps/caddy-README.md).
+This is a manual step. `caddy-setup.sh` installs the stock Homebrew Caddy if no binary is present. It does not download the custom build or pin the formula. The procedure is in [Caddy](../components/caddy.md).
 
 ## How CF_API_TOKEN reaches Caddy
 

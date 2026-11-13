@@ -5,7 +5,7 @@ credentials live, how to rotate them, how port forwarding is supposed to work,
 and how to diagnose it when it stops.
 
 For the media-processing pipeline that runs after a download completes, see
-[transmission-filebot-README.md](transmission-filebot-README.md).
+[transmission-filebot.md](transmission-filebot.md).
 
 ## Architecture
 
@@ -437,5 +437,5 @@ link failed to resolve.
 
 - Issue #159 — dynamic VPN endpoint selection, including PF verification as a
   gating criterion
-- [transmission-filebot-README.md](transmission-filebot-README.md) — the
+- [transmission-filebot.md](transmission-filebot.md) — the
   post-download processing pipeline

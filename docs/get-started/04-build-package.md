@@ -40,7 +40,7 @@ Goal: run `prep-airdrop.sh` on the dev Mac to build the folder that you copy to 
 !!! note
     The script also removes `macmini.local` from your `~/.ssh/known_hosts`, because the new server will have a new host key.
 
-For details of each file in the package, see [AirDrop prep](../setup/prep-airdrop.md).
+For details of each file in the package, see [AirDrop prep](prep-airdrop.md).
 
 ## Check
 

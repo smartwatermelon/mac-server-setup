@@ -4,7 +4,7 @@ Goal: copy the package to the Mac mini and run `first-boot.sh` as `admin`, at th
 
 ## Steps
 
-1. Turn on the Mac mini and complete Apple's Setup Assistant. Create the `admin` account. Do not turn on FileVault: it blocks the operator's automatic login. The [Apple first-boot dialog guide](../setup/apple-first-boot-dialogs.md) covers each dialog.
+1. Turn on the Mac mini and complete Apple's Setup Assistant. Create the `admin` account. Do not turn on FileVault: it blocks the operator's automatic login. The [Apple first-boot dialog guide](apple-first-boot-dialogs.md) covers each dialog.
 2. On the Mac mini, open AirDrop in Finder (Shift-Command-R) and set "Allow me to be discovered by" to Everyone.
 3. On the dev Mac, AirDrop the `~/macmini-setup` folder to the Mac mini. It arrives in `~/Downloads/macmini-setup`.
 4. On the Mac mini, open Terminal and go to the package:
@@ -47,7 +47,7 @@ Goal: copy the package to the Mac mini and run `first-boot.sh` as `admin`, at th
 !!! warning
     Do not use `--force` on a first run. It skips the password prompt, and the keychain import needs that password.
 
-For the prompts, options and errors in detail, see [First boot](../setup/first-boot.md).
+For the prompts, options and errors in detail, see [First boot](first-boot.md).
 
 ## Check
 

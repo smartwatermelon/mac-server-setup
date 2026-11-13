@@ -48,7 +48,7 @@ The Caddyfile uses four site blocks and three snippets:
 1. **Catch-all `:443`** — Rejects direct IP access or unrecognized hostnames (403)
 2. **Internal block** (`{$HOSTNAME}.local localhost <server LAN IP>` (`__SERVER_LAN_IP__`, currently 192.168.21.10)) — Uses `tls internal` (Caddy's built-in CA). Imports `common_config`
 3. **External block** (`example.com`) — Uses Let's Encrypt DNS-01 via Cloudflare for public TLS. Imports `common_config`. Kept as the rollback path after the move to the Cloudflare Tunnel
-4. **Tunnel block** (`http://:8080`, `bind 127.0.0.1`) — The Cloudflare Tunnel origin. Imports `site_routes` behind an email-header check, and `access_log`. See below and `cloudflare-tunnel-README.md`
+4. **Tunnel block** (`http://:8080`, `bind 127.0.0.1`) — The Cloudflare Tunnel origin. Imports `site_routes` behind an email-header check, and `access_log`. See below and `cloudflare-tunnel.md`
 
 The `(common_config)` snippet holds the LAN/WAN access control, and imports `(site_routes)` and `(access_log)`:
 

@@ -30,7 +30,7 @@ Tunnelblick on a Mac
 | OpenVPN server | YOUR_NAS, DSM **VPN Server** package. Generated config: `/usr/syno/etc/packages/VPNCenter/openvpn/openvpn.conf` | TCP port 34443, subnet `10.8.0.0/24`, pushes `route 192.168.20.0 255.255.252.0`, `auth SHA512`, tls-auth. Change settings in the DSM UI, not the file. |
 | DNS for `.local` | YOUR_NAS, DSM **DNS Server** package, zone `local` | Answers `.local` names for VPN clients, which cannot use mDNS over the tunnel. |
 | Public hostname | Cloudflare zone `example.com`, record `vpn.example.com` | **A record, DNS only (grey cloud).** Proxied breaks it: Cloudflare does not carry port 34443. |
-| Hostname updater | YOUR_SERVER, `com.<hostname>.cloudflare-ddns` | Deployed by this repo. See `cloudflare-ddns-README.md`. |
+| Hostname updater | YOUR_SERVER, `com.<hostname>.cloudflare-ddns` | Deployed by this repo. See `cloudflare-ddns.md`. |
 | Client config | Each Mac: `~/Library/Application Support/Tunnelblick/Configurations/VPNConfig.tblk` | `remote vpn.example.com 34443`, `proto tcp-client`, split tunnel (no `redirect-gateway`). Edit it through Tunnelblick (VPN Details → gear → Edit OpenVPN Configuration File); Tunnelblick keeps a protected copy. |
 | `.local` resolver | Same `.tblk`: `connected.sh`, `disconnected.sh` | On connect, writes `/etc/resolver/local` with `nameserver 192.168.21.20`. On disconnect, deletes it. |
 

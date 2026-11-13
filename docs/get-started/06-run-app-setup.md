@@ -40,9 +40,9 @@ Run app setup as `admin`, not as `operator`, and before the restart in step 7. T
     A plain `./run-app-setup.sh` runs every `*-setup.sh` script in the folder and stops at the first error. The first script is `rclone-setup.sh`, which stops when Dropbox is not configured. To run everything and skip past the failures, use `./run-app-setup.sh --continue-on-error`.
 
 !!! note
-    `run-app-setup.sh` adds `sudo` only for `caddy-setup.sh` and `cloudflare-ddns-setup.sh`. The scripts that are not in step 3 or step 8 run after the others, without `sudo`. Some of them, such as `cloudflared-setup.sh` and `tvmaze-scrobble-setup.sh`, must run as root. Run those by hand with `sudo`, as their pages describe: [Cloudflare Tunnel](../apps/cloudflare-tunnel-README.md), [TVmaze scrobble](../apps/tvmaze-scrobble-README.md) and [Monitoring](../apps/monitoring-README.md). Some of them also need `operator` to be logged in, so run them after step 7.
+    `run-app-setup.sh` adds `sudo` only for `caddy-setup.sh` and `cloudflare-ddns-setup.sh`. The scripts that are not in step 3 or step 8 run after the others, without `sudo`. Some of them, such as `cloudflared-setup.sh` and `tvmaze-scrobble-setup.sh`, must run as root. Run those by hand with `sudo`, as their pages describe: [Cloudflare Tunnel](../components/cloudflare-tunnel.md), [TVmaze scrobble](../components/tvmaze-scrobble.md) and [Monitoring](../components/monitoring.md). Some of them also need `operator` to be logged in, so run them after step 7.
 
-For Plex options, see [Plex setup](../apps/plex-setup-README.md). For the download pipeline, see [Transmission and FileBot](../apps/transmission-filebot-README.md) and [PIA VPN](../apps/pia-vpn-README.md).
+For Plex options, see [Plex setup](../components/plex.md). For the download pipeline, see [Transmission and FileBot](../components/transmission-filebot.md) and [PIA VPN](../components/pia-vpn.md).
 
 ## Check
 

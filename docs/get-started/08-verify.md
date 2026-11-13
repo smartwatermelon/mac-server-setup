@@ -37,7 +37,7 @@ Do steps 1 to 3 in Terminal or iTerm as `operator` on the Mac mini, or over SSH 
 !!! note
     Steps 4 to 8 happen in the Plex web app, not in this project's scripts. The Plex screens can change between Plex versions.
 
-For Plex settings, library paths and troubleshooting, see [Plex setup](../apps/plex-setup-README.md).
+For Plex settings, library paths and troubleshooting, see [Plex setup](../components/plex.md).
 
 ## Check
 

@@ -40,7 +40,7 @@ These ports are used inside the Transmission container, through the PIA VPN tunn
 
 ## Related pages
 
-- [Caddy](../apps/caddy-README.md): the sites on 443, 80 and 8080.
-- [Cloudflare Tunnel](../apps/cloudflare-tunnel-README.md): why the tunnel origin is on loopback.
-- [PIA VPN](../apps/pia-vpn-README.md): port forwarding.
+- [Caddy](../components/caddy.md): the sites on 443, 80 and 8080.
+- [Cloudflare Tunnel](../components/cloudflare-tunnel.md): why the tunnel origin is on loopback.
+- [PIA VPN](../components/pia-vpn.md): port forwarding.
 - [Config keys](config-keys.md): every key in `config.conf.template`.

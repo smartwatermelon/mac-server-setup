@@ -50,34 +50,34 @@ Scripts are listed in the order `run-app-setup.sh` runs them.
 
 | Part | Status | Config keys | Notes | Docs |
 | --- | --- | --- | --- | --- |
-| NAS with an NFS share | Required | `NAS_HOSTNAME`, `NAS_USERNAME`, `NAS_SHARE_NAME`, `NAS_VOLUME`, `ONEPASSWORD_PLEX_NAS_ITEM` | Plex and Transmission both use the share. The mount path is `<NAS_HOSTNAME>:/<NAS_VOLUME>/<NAS_SHARE_NAME>`, which is how Synology exports a share. Another NAS works if its export path fits that shape. | [Plex setup](apps/plex-setup-README.md) |
-| rclone + Dropbox | Optional | `DROPBOX_SYNC_FOLDER`, `DROPBOX_LOCAL_PATH`, `DROPBOX_SYNC_INTERVAL` | Syncs `.torrent` files to the watch folder. Not needed when Catch uses magnet links (`CATCH_USE_MAGNETS="true"`). `rclone-setup.sh` exits with an error when `DROPBOX_SYNC_FOLDER` is empty. | [rclone setup](apps/rclone-setup-README.md) |
-| Transmission in Podman | Required for downloads | `LAN_SUBNET`, `TRANSMISSION_HOST_PORT` | Runs the `haugene/transmission-openvpn` container in a Podman VM. | [Transmission + FileBot](apps/transmission-filebot-README.md) |
-| PIA VPN | Replaceable, with work | `ONEPASSWORD_PIA_ITEM`, `PIA_VPN_REGION` | `OPENVPN_PROVIDER=PIA` is fixed in `podman-transmission-setup.sh`. The port-forwarding probe, guard and watchdog work with PIA only. The container supports other providers, but this project does not set them up. | [PIA VPN](apps/pia-vpn-README.md) |
-| FileBot | Required for library sorting | `FILEBOT_LICENSE_FILE`, `ONEPASSWORD_OPENSUBTITLES_ITEM` | Renames finished downloads and moves them into the Plex library. FileBot needs a paid license. If the license file is missing, setup only warns. OpenSubtitles login is skipped when its credentials are missing. | [Transmission + FileBot](apps/transmission-filebot-README.md) |
+| NAS with an NFS share | Required | `NAS_HOSTNAME`, `NAS_USERNAME`, `NAS_SHARE_NAME`, `NAS_VOLUME`, `ONEPASSWORD_PLEX_NAS_ITEM` | Plex and Transmission both use the share. The mount path is `<NAS_HOSTNAME>:/<NAS_VOLUME>/<NAS_SHARE_NAME>`, which is how Synology exports a share. Another NAS works if its export path fits that shape. | [Plex setup](components/plex.md) |
+| rclone + Dropbox | Optional | `DROPBOX_SYNC_FOLDER`, `DROPBOX_LOCAL_PATH`, `DROPBOX_SYNC_INTERVAL` | Syncs `.torrent` files to the watch folder. Not needed when Catch uses magnet links (`CATCH_USE_MAGNETS="true"`). `rclone-setup.sh` exits with an error when `DROPBOX_SYNC_FOLDER` is empty. | [rclone setup](components/rclone.md) |
+| Transmission in Podman | Required for downloads | `LAN_SUBNET`, `TRANSMISSION_HOST_PORT` | Runs the `haugene/transmission-openvpn` container in a Podman VM. | [Transmission + FileBot](components/transmission-filebot.md) |
+| PIA VPN | Replaceable, with work | `ONEPASSWORD_PIA_ITEM`, `PIA_VPN_REGION` | `OPENVPN_PROVIDER=PIA` is fixed in `podman-transmission-setup.sh`. The port-forwarding probe, guard and watchdog work with PIA only. The container supports other providers, but this project does not set them up. | [PIA VPN](components/pia-vpn.md) |
+| FileBot | Required for library sorting | `FILEBOT_LICENSE_FILE`, `ONEPASSWORD_OPENSUBTITLES_ITEM` | Renames finished downloads and moves them into the Plex library. FileBot needs a paid license. If the license file is missing, setup only warns. OpenSubtitles login is skipped when its credentials are missing. | [Transmission + FileBot](components/transmission-filebot.md) |
 | Catch (RSS) | Optional | `CATCH_FEEDS_URL`, `CATCH_HISTORY_CUTOFF_DAYS`, `CATCH_USE_MAGNETS` | Gets new episodes from a feed such as ShowRSS. With no feed URL, Catch installs and starts with no feeds. | No doc yet |
-| Plex Media Server | Required | `NAS_*`, `PLEX_MIGRATE_FROM` | `PLEX_MIGRATE_FROM` is optional. It copies an existing Plex server's data. | [Plex setup](apps/plex-setup-README.md) |
+| Plex Media Server | Required | `NAS_*`, `PLEX_MIGRATE_FROM` | `PLEX_MIGRATE_FROM` is optional. It copies an existing Plex server's data. | [Plex setup](components/plex.md) |
 
 ## Remote access
 
 | Part | Status | Config keys | Notes | Docs |
 | --- | --- | --- | --- | --- |
-| Caddy reverse proxy | Optional | `EXTERNAL_HOSTNAME`, `SERVER_LAN_IP`, `BASICAUTH_USERNAME`, `BASICAUTH_HASH` | Gives HTTPS on the LAN and a dashboard. `caddy-setup.sh` exits with an error when any of these four keys is empty. It also needs a Cloudflare API token in the keychain for DNS-01 certificates. | [Caddy](apps/caddy-README.md) |
-| Cloudflare domain | Required by Caddy, DDNS and Tunnel | `EXTERNAL_HOSTNAME`, `CLOUDFLARE_ZONE_ID` | A domain whose DNS is on Cloudflare. | [Caddy](apps/caddy-README.md) |
-| Cloudflare DDNS | Optional | `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_RECORD_ID`, `DDNS_RECORD_NAME` | Keeps one DNS record on your home IP. Needed only for the home VPN. | [Cloudflare DDNS](apps/cloudflare-ddns-README.md) |
-| Cloudflare Tunnel + Access | Optional | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_ACCESS_*`, `ACCESS_ALLOWED_EMAIL`, `TUNNEL_METRICS_PORT` | Lets you reach the server from outside without opening a port. Its watchdogs need msmtp. | [Cloudflare Tunnel](apps/cloudflare-tunnel-README.md) |
-| Home VPN | Optional | (none in this repo) | Runs on the NAS (Synology VPN Server), not on the Mac Mini. It needs Cloudflare DDNS to keep its hostname on your home IP. | [Home VPN](apps/home-vpn-README.md) |
-| Synology QuickConnect links | Optional | `QUICKCONNECT_ROMANO`, `QUICKCONNECT_BERKSWELL` | Dashboard links to two named NAS units on the original server. Leave them empty. | [Caddy](apps/caddy-README.md) |
+| Caddy reverse proxy | Optional | `EXTERNAL_HOSTNAME`, `SERVER_LAN_IP`, `BASICAUTH_USERNAME`, `BASICAUTH_HASH` | Gives HTTPS on the LAN and a dashboard. `caddy-setup.sh` exits with an error when any of these four keys is empty. It also needs a Cloudflare API token in the keychain for DNS-01 certificates. | [Caddy](components/caddy.md) |
+| Cloudflare domain | Required by Caddy, DDNS and Tunnel | `EXTERNAL_HOSTNAME`, `CLOUDFLARE_ZONE_ID` | A domain whose DNS is on Cloudflare. | [Caddy](components/caddy.md) |
+| Cloudflare DDNS | Optional | `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_RECORD_ID`, `DDNS_RECORD_NAME` | Keeps one DNS record on your home IP. Needed only for the home VPN. | [Cloudflare DDNS](components/cloudflare-ddns.md) |
+| Cloudflare Tunnel + Access | Optional | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_ACCESS_*`, `ACCESS_ALLOWED_EMAIL`, `TUNNEL_METRICS_PORT` | Lets you reach the server from outside without opening a port. Its watchdogs need msmtp. | [Cloudflare Tunnel](components/cloudflare-tunnel.md) |
+| Home VPN | Optional | (none in this repo) | Runs on the NAS (Synology VPN Server), not on the Mac Mini. It needs Cloudflare DDNS to keep its hostname on your home IP. | [Home VPN](components/home-vpn.md) |
+| Synology QuickConnect links | Optional | `QUICKCONNECT_ROMANO`, `QUICKCONNECT_BERKSWELL` | Dashboard links to two named NAS units on the original server. Leave them empty. | [Caddy](components/caddy.md) |
 
 ## Monitoring and extras
 
 | Part | Status | Config keys | Notes | Docs |
 | --- | --- | --- | --- | --- |
-| msmtp alert email | Optional, but the watchdogs need it | `MONITORING_EMAIL` | Sends through Gmail (`smtp.gmail.com`) with a Gmail App Password. For another mail provider, edit `msmtp-setup.sh`. | [Monitoring](apps/monitoring-README.md) |
-| Plex watchdog | Optional | `MONITORING_EMAIL` | Needs msmtp. | [Plex watchdog](apps/plex-watchdog-README.md) |
-| Transmission watchdogs | Installed with Transmission | (none) | The PIA port watchdog and the stall watchdog. They need msmtp to send email. | [Monitoring](apps/monitoring-README.md) |
-| Stable signing | Installed with auto-updates | (none) | Keeps macOS privacy grants for Homebrew binaries after each upgrade. | [Stable signing](apps/stable-signing-README.md) |
-| TVmaze scrobble | Optional | `TVMAZE_USERNAME`, `PLEX_ACCOUNT_TITLE`, `PLEX_ACCOUNT_ID`, `TVMAZE_SCROBBLE_PORT` | Marks Plex plays as watched on TVmaze. `tvmaze-scrobble-setup.sh` exits with an error when the username keys are empty. | [TVmaze scrobble](apps/tvmaze-scrobble-README.md) |
+| msmtp alert email | Optional, but the watchdogs need it | `MONITORING_EMAIL` | Sends through Gmail (`smtp.gmail.com`) with a Gmail App Password. For another mail provider, edit `msmtp-setup.sh`. | [Monitoring](components/monitoring.md) |
+| Plex watchdog | Optional | `MONITORING_EMAIL` | Needs msmtp. | [Plex watchdog](components/plex-watchdog.md) |
+| Transmission watchdogs | Installed with Transmission | (none) | The PIA port watchdog and the stall watchdog. They need msmtp to send email. | [Monitoring](components/monitoring.md) |
+| Stable signing | Installed with auto-updates | (none) | Keeps macOS privacy grants for Homebrew binaries after each upgrade. | [Stable signing](components/stable-signing.md) |
+| TVmaze scrobble | Optional | `TVMAZE_USERNAME`, `PLEX_ACCOUNT_TITLE`, `PLEX_ACCOUNT_ID`, `TVMAZE_SCROBBLE_PORT` | Marks Plex plays as watched on TVmaze. `tvmaze-scrobble-setup.sh` exits with an error when the username keys are empty. | [TVmaze scrobble](components/tvmaze-scrobble.md) |
 | Backblaze | Optional | (none) | Installed as a Homebrew cask. You sign in by hand. | No doc yet |
 
 ## Values to change in the template

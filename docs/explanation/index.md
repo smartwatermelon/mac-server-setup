@@ -1,6 +1,6 @@
 # Explanation
 
-These pages say why the server is built the way it is. They describe the design decisions, the trade-offs, and the constraints from macOS, Homebrew and Cloudflare that shaped them. They do not give steps. For steps, use the [get-started tutorial](../get-started/index.md) and the component pages under `docs/apps/`.
+These pages say why the server is built the way it is. They describe the design decisions, the trade-offs, and the constraints from macOS, Homebrew and Cloudflare that shaped them. They do not give steps. For steps, use the [get-started tutorial](../get-started/index.md) and the component pages under `docs/components/`.
 
 ## Pages
 

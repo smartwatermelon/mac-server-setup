@@ -2,7 +2,7 @@
 
 This page covers the `transmission-vm` Podman machine, the `transmission-vpn` container, the PIA VPN tunnel, port forwarding, and the container's access to the NAS through VirtioFS. Run the checks as `admin` on the server. The Podman machine belongs to `operator`, so every `podman` command runs through `sudo -iu operator`.
 
-For how these parts work, see [Transmission and FileBot](../apps/transmission-filebot-README.md), [PIA VPN](../apps/pia-vpn-README.md), [Storage and VirtioFS](../explanation/storage-virtiofs.md) and [Stable signing](../apps/stable-signing-README.md).
+For how these parts work, see [Transmission and FileBot](../components/transmission-filebot.md), [PIA VPN](../components/pia-vpn.md), [Storage and VirtioFS](../explanation/storage-virtiofs.md) and [Stable signing](../components/stable-signing.md).
 
 How the stack is supervised: the LaunchAgent `com.<hostname>.podman-transmission-vm` runs `~/.local/bin/podman-machine-start.sh` in the `operator` account. The script never exits. It waits up to 120 seconds for the NAS mount, starts the VM, creates the container, and then checks both every 300 seconds. If the container is not running, it removes it and runs it again. If `/data/` in the container cannot be read 3 times in a row, it stops the container and the VM and starts both again. The host NAS mount is not touched.
 

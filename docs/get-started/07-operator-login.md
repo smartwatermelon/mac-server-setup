@@ -13,7 +13,7 @@ At login, the operator's LaunchAgents from step 6 start Plex and mount the NAS s
     ```
 
 2. Wait. The Mac mini logs in as `operator` without a password prompt.
-3. Answer Apple's first-login dialogs for `operator`. The [operator account first login](../setup/apple-first-boot-dialogs.md#operator-account-first-login) section covers each one.
+3. Answer Apple's first-login dialogs for `operator`. The [operator account first login](apple-first-boot-dialogs.md#operator-account-first-login) section covers each one.
 4. Wait for the first-login script to finish. It can show a progress window. It removes Mail, Messages and other apps from the Dock, and adds iTerm, Plex Media Server and Passwords.
 5. Do not worry if the Dock has no media folder. The script adds the `Media` folder inside the NAS share only if the share is already mounted when the script reaches that step. It does not wait for the mount.
 

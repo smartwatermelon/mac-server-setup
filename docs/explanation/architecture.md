@@ -54,7 +54,7 @@ launchd runs every long-running part. The choice between an agent and a daemon f
 
 A part is a **daemon** when it must start at boot as root, for example to read the System keychain, and does not need a GUI session. Caddy and the Cloudflare DDNS updater read the Cloudflare API token from the System keychain. cloudflared reads the tunnel token from the same keychain. The media file server is a daemon that runs as `operator` (`UserName` in its plist): the Caddy daemon runs as root, and root got `EPERM` from the NFS mount, so Caddy proxies `/media/` to this separate process.
 
-A part is an **agent** when it needs the `operator` session. Plex is a GUI application. The Podman VM and its file sharing depend on privacy grants that macOS keeps per user. The watchdogs send mail with msmtp, and msmtp refuses a config file with a password in it unless the invoking user owns that file. A root daemon could read the tokens but could not send the alert, so the watchdogs run as `operator` agents. See [Monitoring](../apps/monitoring-README.md).
+A part is an **agent** when it needs the `operator` session. Plex is a GUI application. The Podman VM and its file sharing depend on privacy grants that macOS keeps per user. The watchdogs send mail with msmtp, and msmtp refuses a config file with a password in it unless the invoking user owns that file. A root daemon could read the tokens but could not send the alert, so the watchdogs run as `operator` agents. See [Monitoring](../components/monitoring.md).
 
 Two launchd behaviors shape the scripts:
 
@@ -74,7 +74,7 @@ The current design moves the boundary into a Linux network namespace:
 - The Transmission web UI publishes on `127.0.0.1:9091` only. Caddy proxies it.
 - Plex, FileBot and the rest stay on the host and use the normal network.
 
-The container cannot run macOS programs, so a trigger file connects it to FileBot. When a download completes, the container writes a file into a shared directory. The trigger watcher, an `operator` agent on the host, finds it, maps the container path to the host path, and runs `transmission-done`, which runs FileBot and asks Plex to scan. See [Transmission and FileBot](../apps/transmission-filebot-README.md) and [PIA VPN](../apps/pia-vpn-README.md).
+The container cannot run macOS programs, so a trigger file connects it to FileBot. When a download completes, the container writes a file into a shared directory. The trigger watcher, an `operator` agent on the host, finds it, maps the container path to the host path, and runs `transmission-done`, which runs FileBot and asks Plex to scan. See [Transmission and FileBot](../components/transmission-filebot.md) and [PIA VPN](../components/pia-vpn.md).
 
 The container uses PIA's port forwarding through its own manager, not the image's updater. The image's updater sets Transmission's listen port to 0 when port forwarding fails, which stops all downloads. The repo's manager refuses a bad port and keeps the old one.
 
@@ -111,6 +111,6 @@ flowchart TB
 - The host mounts the NAS once, over NFS. Plex, FileBot and the media file server read it there. The container sees the same mount through VirtioFS. See [Storage and VirtioFS](storage-virtiofs.md).
 - Caddy serves the dashboard and proxies Transmission and the media file server. On the LAN it uses its own CA. See [TLS strategy](tls-strategy.md).
 - Remote access goes through Cloudflare Access and a tunnel to a loopback-only Caddy site. No inbound port is open. See [Tunnel security layers](tunnel-security-layers.md).
-- The watchdogs poll Plex, port forwarding, the tunnel, the Access policy and stalled privacy prompts, and send email on a change of state. See [Monitoring](../apps/monitoring-README.md).
+- The watchdogs poll Plex, port forwarding, the tunnel, the Access policy and stalled privacy prompts, and send email on a change of state. See [Monitoring](../components/monitoring.md).
 
 Which parts you install is your choice. The [stack matrix](../stack-matrix.md) lists what each part depends on.

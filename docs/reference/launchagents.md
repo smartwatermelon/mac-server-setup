@@ -50,6 +50,6 @@ The repo does not write these plists. It runs `brew services start logrotate`, a
 
 ## Related pages
 
-- [Monitoring](../apps/monitoring-README.md): the watchdogs and their alert email.
-- [Caddy](../apps/caddy-README.md) and [Cloudflare Tunnel](../apps/cloudflare-tunnel-README.md): the web front end daemons.
+- [Monitoring](../components/monitoring.md): the watchdogs and their alert email.
+- [Caddy](../components/caddy.md) and [Cloudflare Tunnel](../components/cloudflare-tunnel.md): the web front end daemons.
 - [Logs](logs.md): every log file, including the logs that scripts write themselves.

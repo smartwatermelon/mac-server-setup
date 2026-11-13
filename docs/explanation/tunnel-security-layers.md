@@ -85,4 +85,4 @@ The general rule: any check keyed on the source IP means nothing behind a local 
 - **A new hostname is routed to `:8080` without Access.** Layer 3 still requires the header with the allowed email. Without Access in front, the repository has not tested whether Cloudflare removes a header that the client sends, so do not rely on layer 3 alone in this case. Layer 4 sends email.
 - **cloudflared stops.** Visitors see a Cloudflare error page. The tunnel health watchdog reports it after three failed checks. The LAN site does not change.
 
-For the Cloudflare objects, the token chain, revocation and rollback, see [Cloudflare Tunnel](../apps/cloudflare-tunnel-README.md).
+For the Cloudflare objects, the token chain, revocation and rollback, see [Cloudflare Tunnel](../components/cloudflare-tunnel.md).

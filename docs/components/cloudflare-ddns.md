@@ -12,7 +12,7 @@ The record it updates is now **`vpn.example.com`**, not `example.com`.
 - That broke the home VPN. Tunnelblick connected to `example.com:34443`, which
   then resolved to Cloudflare, and Cloudflare does not proxy port 34443.
 - The fix: a separate **DNS-only** record, `vpn.example.com`, which this daemon
-  keeps pointed at the home IP. See `docs/apps/home-vpn-README.md`.
+  keeps pointed at the home IP. See `docs/components/home-vpn.md`.
 
 Rules that follow from this:
 

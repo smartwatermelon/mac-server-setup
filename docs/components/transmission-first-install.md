@@ -1,6 +1,6 @@
 # Transmission first install
 
-Transmission runs in a container behind a PIA VPN tunnel. [`app-setup/podman-transmission-setup.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/app-setup/podman-transmission-setup.sh) creates a Podman virtual machine named `transmission-vm` for the `operator` account, starts the `transmission-vpn` container from the `haugene/transmission-openvpn` image, and adds the LaunchAgents that keep both running. All container traffic goes through the OpenVPN tunnel to PIA. This page covers the first install. For credentials, port forwarding and regions after that, see [PIA VPN](../apps/pia-vpn-README.md).
+Transmission runs in a container behind a PIA VPN tunnel. [`app-setup/podman-transmission-setup.sh`](https://github.com/smartwatermelon/mac-server-setup/blob/main/app-setup/podman-transmission-setup.sh) creates a Podman virtual machine named `transmission-vm` for the `operator` account, starts the `transmission-vpn` container from the `haugene/transmission-openvpn` image, and adds the LaunchAgents that keep both running. All container traffic goes through the OpenVPN tunnel to PIA. This page covers the first install. For credentials, port forwarding and regions after that, see [PIA VPN](pia-vpn.md).
 
 ## Before you start
 
@@ -30,7 +30,7 @@ Transmission runs in a container behind a PIA VPN tunnel. [`app-setup/podman-tra
     ~/Downloads/macmini-setup/scripts/setup-auto-updates.sh
     ```
 
-    `first-boot.sh` does not run this script. It installs `/usr/local/bin/<hostname>-stable-sign.sh`, creates a local code signing identity, and makes signed copies of Homebrew's `podman`, `coreutils` and `bash` under `/usr/local/stable/`. It also sets up the daily Homebrew upgrade, which signs the copies again after each upgrade. See [Stable signing](../apps/stable-signing-README.md) for why this is needed.
+    `first-boot.sh` does not run this script. It installs `/usr/local/bin/<hostname>-stable-sign.sh`, creates a local code signing identity, and makes signed copies of Homebrew's `podman`, `coreutils` and `bash` under `/usr/local/stable/`. It also sets up the daily Homebrew upgrade, which signs the copies again after each upgrade. See [Stable signing](stable-signing.md) for why this is needed.
 
 2. As `admin`, go to the app setup folder and run the Transmission script:
 
@@ -97,7 +97,7 @@ Run these checks as `admin`, after `operator` has logged in.
     sudo -iu operator podman exec transmission-vpn transmission-remote localhost:9091 -si | grep -i 'listen port'
     ```
 
-    A port number other than 0 means port forwarding works. `Listen port: 0` means it failed. See [Diagnosing "torrents won't start"](../apps/pia-vpn-README.md#diagnosing-torrents-wont-start).
+    A port number other than 0 means port forwarding works. `Listen port: 0` means it failed. See [Diagnosing "torrents won't start"](pia-vpn.md#diagnosing-torrents-wont-start).
 
 4. The PIA credentials were not rejected. A wrong password shows up as `AUTH_FAILED` in the container log, so this command must print nothing. An empty result does not prove the tunnel is up; check 3 does that:
 
@@ -123,10 +123,10 @@ Replace `macmini` with your server name in lower case. The setup script's own lo
 
 ## Related
 
-- [PIA VPN](../apps/pia-vpn-README.md): the credential chain, password rotation, port forwarding and region choice.
-- [Stable signing](../apps/stable-signing-README.md): the network-volume privacy grant and the `/usr/local/stable` copies.
-- [Transmission and FileBot](../apps/transmission-filebot-README.md): what happens after a download finishes.
-- [Monitoring](../apps/monitoring-README.md): the PIA port watchdog and the stall watchdog.
+- [PIA VPN](pia-vpn.md): the credential chain, password rotation, port forwarding and region choice.
+- [Stable signing](stable-signing.md): the network-volume privacy grant and the `/usr/local/stable` copies.
+- [Transmission and FileBot](transmission-filebot.md): what happens after a download finishes.
+- [Monitoring](monitoring.md): the PIA port watchdog and the stall watchdog.
 - [Alert email with msmtp](msmtp-alert-email.md)
 - [Catch](catch.md)
 - [Storage and VirtioFS](../explanation/storage-virtiofs.md)

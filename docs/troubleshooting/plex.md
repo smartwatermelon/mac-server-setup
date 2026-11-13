@@ -2,7 +2,7 @@
 
 This page covers Plex Media Server, the NAS mount that Plex reads, the Plex watchdog, and the Plex to TVmaze sync. Run the checks as `admin` on the server unless a step says otherwise.
 
-For how these parts work, see [Plex setup](../apps/plex-setup-README.md), [Plex watchdog](../apps/plex-watchdog-README.md) and [TVmaze scrobble](../apps/tvmaze-scrobble-README.md).
+For how these parts work, see [Plex setup](../components/plex.md), [Plex watchdog](../components/plex-watchdog.md) and [TVmaze scrobble](../components/tvmaze-scrobble.md).
 
 ## Plex does not answer on port 32400
 
@@ -120,7 +120,7 @@ sudo tail -20 /Users/operator/.local/state/<hostname>-mount.log
 
     The script returns at once when the share is already mounted. It does not unmount a working mount.
 
-3. If the mount still fails, check the NFS export on the NAS. It must allow the server's address, read and write access, and non-privileged ports. See [NAS storage configuration](../apps/transmission-filebot-README.md#nas-storage-configuration).
+3. If the mount still fails, check the NFS export on the NAS. It must allow the server's address, read and write access, and non-privileged ports. See [NAS storage configuration](../components/transmission-filebot.md#nas-storage-configuration).
 4. If a privacy prompt is open, click Allow.
 
 Do not unmount the share on the host to "refresh" it. Plex reads from it, and the Transmission container sees it through VirtioFS.

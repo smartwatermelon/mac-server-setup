@@ -352,7 +352,7 @@ Nothing public changes yet: DNS still points at the home IP.
    Tunnelblick on the Macs) also connected through `tilsit.vip`, on port
    34443. After the cutover that name resolved to Cloudflare, and the VPN
    stopped connecting. The daemon now keeps a DNS-only `vpn.tilsit.vip`
-   record current instead. See `docs/apps/home-vpn-README.md`. The follow-up
+   record current instead. See `docs/components/home-vpn.md`. The follow-up
    still removes the `tilsit.vip` Caddy site block.
 
 ### Task 8: Monitoring and docs
