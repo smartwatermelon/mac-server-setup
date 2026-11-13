@@ -20,7 +20,12 @@ At login, the operator's LaunchAgents from step 6 start Plex and mount the NAS s
 !!! note
     The first-login script runs once. At the end it moves its LaunchAgent to `~/.config/operator/`. To run it again, run `~/.local/bin/operator-first-login.sh` as `operator`.
 
-For more about the operator account, see [Operator](../operator.md).
+## About the operator account
+
+- The operator password is in 1Password, in the item that `ONEPASSWORD_OPERATOR_ITEM` names.
+- `first-boot.sh` adds `operator` to the `admin` group, so `sudo` works with the operator password. Touch ID does not work for `operator`, because macOS does not allow Touch ID with automatic login. See [Setup problems](../troubleshooting/setup.md).
+- `admin` and `operator` accept the same SSH key: the dev Mac's `~/.ssh/id_ed25519.pub`.
+- The menu bar shows the Fast User Switching menu, with the name of the current user. Use it, or `ssh admin@macmini.local` from the dev Mac, to work as `admin`. Run app setup and `brew` commands as `admin`, because `admin` owns Homebrew.
 
 ## Check
 

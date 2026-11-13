@@ -1,5 +1,7 @@
 # Keychain-Based Credential Management System
 
+**History.** Replaced by [Credential chain](../explanation/credential-chain.md), which describes how credentials move today. This is the older description of the keychain format and service names. It has not been updated since, so some details can be out of date.
+
 ## Overview
 
 The Mac Server Setup framework uses macOS Keychain Services for secure credential storage and transfer. The system replaces plaintext credential files with encrypted keychain storage, transferring credentials from development machine to target server through external keychain files.

@@ -95,4 +95,4 @@ Run these checks as `admin`.
 - [Configuration keys](../reference/config-keys.md)
 - [LaunchAgents](../reference/launchagents.md)
 - [Logs](../reference/logs.md)
-- [Stack matrix](../stack-matrix.md)
+- [Stack matrix](../reference/stack-matrix.md)

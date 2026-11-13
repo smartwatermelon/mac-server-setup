@@ -29,7 +29,7 @@ ssh-keygen -t ed25519 -C "your-email@example.com"
 
 ### Required 1Password Items
 
-The system uses 1Password for initial credential retrieval during setup preparation, then securely transfers credentials via macOS Keychain Services. See [Keychain-Based Credential Management](../keychain-credential-management.md) for complete details.
+The system uses 1Password for initial credential retrieval during setup preparation, then securely transfers credentials via macOS Keychain Services. See [Credential chain](../explanation/credential-chain.md) for complete details.
 
 Create these Login items in your 1Password vault before running the prep script:
 
@@ -146,7 +146,7 @@ macmini-setup/
 
 **Development Machine Fingerprint**: Prevents accidental execution of setup scripts on your development Mac.
 
-**Keychain-Based Security**: Credentials stored in encrypted external keychain file for secure transfer (see [Credential Management](../keychain-credential-management.md)).
+**Keychain-Based Security**: Credentials stored in encrypted external keychain file for secure transfer (see [Credential chain](../explanation/credential-chain.md)).
 
 **One-time URLs**: Apple ID password uses 1Password's view-once sharing feature.
 

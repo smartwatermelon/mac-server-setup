@@ -113,4 +113,4 @@ flowchart TB
 - Remote access goes through Cloudflare Access and a tunnel to a loopback-only Caddy site. No inbound port is open. See [Tunnel security layers](tunnel-security-layers.md).
 - The watchdogs poll Plex, port forwarding, the tunnel, the Access policy and stalled privacy prompts, and send email on a change of state. See [Monitoring](../components/monitoring.md).
 
-Which parts you install is your choice. The [stack matrix](../stack-matrix.md) lists what each part depends on.
+Which parts you install is your choice. The [stack matrix](../reference/stack-matrix.md) lists what each part depends on.

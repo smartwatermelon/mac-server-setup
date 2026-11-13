@@ -5,7 +5,7 @@ Goal: have the hardware, network, accounts and tools that setup needs, before yo
 ## Steps
 
 1. Get an Apple Silicon Mac mini that you can erase. Connect a display, a keyboard and a network cable. `first-boot.sh` must run in a local desktop session, not over SSH.
-2. Get a dev Mac with an administrator account. You run `prep-airdrop.sh` there.
+2. Get a dev Mac with an administrator account. You run `prep-airdrop.sh` there. If you choose script-based Wi-Fi setup, the script reads the current Wi-Fi password from the System keychain, and macOS asks for an administrator password.
 3. Make sure that the dev Mac has [Homebrew](https://brew.sh). The next steps use `brew install`.
 4. On the dev Mac, install the 1Password CLI:
 
@@ -18,6 +18,8 @@ Goal: have the hardware, network, accounts and tools that setup needs, before yo
     ```bash
     command -v jq
     ```
+
+    `openssl` comes with macOS. `prep-airdrop.sh` uses it to make a random operator password when the operator item is not in 1Password yet.
 
 6. Make sure that the dev Mac has an Ed25519 SSH key. `prep-airdrop.sh` reads only `~/.ssh/id_ed25519` and `~/.ssh/id_ed25519.pub`. If the key does not exist, create it:
 
@@ -46,7 +48,12 @@ Goal: have the hardware, network, accounts and tools that setup needs, before yo
 1. `op --version` prints a version number on the dev Mac.
 2. `showmount -e nas.local` on the dev Mac lists your share. Replace `nas.local` with your NAS hostname.
 3. The movie file is on the share.
+4. The SSH files exist on the dev Mac:
 
-For more detail, see [Prerequisites](../prerequisites.md) and the [stack matrix](../stack-matrix.md).
+    ```bash
+    ls ~/.ssh/id_ed25519 ~/.ssh/id_ed25519.pub ~/.ssh/known_hosts
+    ```
+
+To see which parts you need, read the [stack matrix](../reference/stack-matrix.md). You check `config/config.conf` and the 1Password items in [Configure](03-configure.md).
 
 Next: [Configure](03-configure.md)

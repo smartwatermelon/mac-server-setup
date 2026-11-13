@@ -34,7 +34,7 @@ Run app setup as `admin`, not as `operator`, and before the restart in step 7. T
     ./run-app-setup.sh --only cloudflare-ddns-setup.sh
     ```
 
-    Before you run a script, read its row in the [stack matrix](../stack-matrix.md). Most of these scripts stop with an error when their config keys or credentials are missing.
+    Before you run a script, read its row in the [stack matrix](../reference/stack-matrix.md). Most of these scripts stop with an error when their config keys or credentials are missing.
 
 !!! warning
     A plain `./run-app-setup.sh` runs every `*-setup.sh` script in the folder and stops at the first error. The first script is `rclone-setup.sh`, which stops when Dropbox is not configured. To run everything and skip past the failures, use `./run-app-setup.sh --continue-on-error`.

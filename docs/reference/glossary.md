@@ -54,7 +54,7 @@ msmtp
 :   A small SMTP client. All the watchdogs send their alert email through it, with the config that `msmtp-setup.sh` writes for operator. See [Monitoring](../components/monitoring.md).
 
 operator account
-:   The standard (non-admin) macOS account that runs the media services. It logs in automatically at boot, so its LaunchAgents start without anyone at the keyboard. See [Operator](../operator.md).
+:   The macOS service account that runs the media services. It logs in automatically at boot, so its LaunchAgents start without anyone at the keyboard. `first-boot.sh` adds it to the `admin` group, so it can use `sudo` with its password. See [Log in as operator](../get-started/07-operator-login.md).
 
 pending-move
 :   The folder where Transmission puts completed downloads. FileBot processes them from there, and `pending-move-cleanup.sh` removes processed folders later.

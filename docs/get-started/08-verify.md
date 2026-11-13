@@ -45,4 +45,4 @@ The movie plays. You can also open `http://macmini.local:32400/web` from another
 
 You have finished the tutorial. To add more parts, go back to step 8 of [Run app setup](06-run-app-setup.md).
 
-Next: [Stack matrix](../stack-matrix.md)
+Next: [Stack matrix](../reference/stack-matrix.md)

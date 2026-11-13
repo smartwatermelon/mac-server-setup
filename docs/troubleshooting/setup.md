@@ -129,7 +129,7 @@ fdesetup status
 **Fix**
 
 1. At the script's offer to turn FileVault off, press Control-C to stop the script. Do not accept the offer: it records an error even when it works, and it can repeat while the disk is still decrypting. Answering `N` continues setup with FileVault on, and automatic login then fails.
-2. Turn FileVault off in System Settings > Privacy & Security > FileVault.
+2. Turn FileVault off in System Settings > Privacy & Security > FileVault, or run `sudo fdesetup disable`.
 3. Wait until `fdesetup status` prints `FileVault is Off.` This can take an hour or more.
 4. Run `first-boot.sh` again. See [step 5 of the tutorial](../get-started/05-first-boot.md).
 
@@ -139,6 +139,9 @@ fdesetup status
 
 1. Remote Login is off.
 2. The SSH keys were not in the package, so `authorized_keys` was not installed.
+3. The application firewall blocks `sshd`. `first-boot.sh` turns the firewall on and allows `/usr/sbin/sshd`.
+
+Setup does not turn off SSH password login. A password prompt means that the server did not accept your key.
 
 **Check**
 
@@ -147,9 +150,10 @@ On the server:
 ```bash
 sudo systemsetup -getremotelogin
 ls -l ~/.ssh/authorized_keys
+sudo /usr/libexec/ApplicationFirewall/socketfilterfw --listapps
 ```
 
-`Remote Login: Off` means SSH is off. `No such file or directory` means no key was installed for this account.
+`Remote Login: Off` means SSH is off. `No such file or directory` means no key was installed for this account. If `/usr/sbin/sshd` is not in the firewall list, or the list shows it as blocked, the firewall stops SSH.
 
 **Fix**
 
@@ -268,6 +272,6 @@ The first file names the script that failed. The second file shows the error fro
     ./run-app-setup.sh --continue-on-error
     ```
 
-3. Before you run a script, read its row in the [stack matrix](../stack-matrix.md) and set the keys it needs.
+3. Before you run a script, read its row in the [stack matrix](../reference/stack-matrix.md) and set the keys it needs.
 
 See [Run app setup](../get-started/06-run-app-setup.md).
