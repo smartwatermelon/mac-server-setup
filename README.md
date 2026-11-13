@@ -17,8 +17,9 @@ Automated setup for an Apple Silicon Mac Mini as a home server. Plex, Transmissi
 
 1. **On dev Mac**: `./prep-airdrop.sh` (builds deployment package)
 2. **AirDrop** the generated folder to your Mac Mini
-3. **On Mac Mini desktop** (not SSH): `cd ~/Downloads/MACMINI-setup && ./first-boot.sh`
-4. **Reboot** and log in as operator for automatic final setup
+3. **On Mac Mini desktop** (not SSH): `cd ~/Downloads/macmini-setup && ./first-boot.sh`
+4. **Run app setup**: when `first-boot.sh` finishes it opens a Terminal window in `~/app-setup`. Run `./run-app-setup.sh` there, as the admin user. It doesn't run by itself.
+5. **Reboot**. The Mac logs in as operator, and a one-time LaunchAgent finishes the operator account.
 
 **Result**: Server at `your-server-name.local`, everything running.
 
@@ -139,13 +140,15 @@ See [Prerequisites Guide](docs/prerequisites.md) for validation commands.
 3. **Run first-boot** on the Mac Mini (local desktop session, not SSH):
 
    ```bash
-   cd ~/Downloads/MACMINI-setup  # default name
+   cd ~/Downloads/macmini-setup  # <server name, lowercase>-setup
    ./first-boot.sh
    ```
 
    > This needs the local desktop for System Settings dialogs and FileVault management. It will not work over SSH.
 
-4. **Reboot and log in as operator.** The rest happens automatically via LaunchAgent.
+4. **Run the app setup by hand.** When `first-boot.sh` finishes, it opens a Terminal window in `~/app-setup`. Run `./run-app-setup.sh` there, as the admin user. Add `--continue-on-error` to keep going past a failed script, or `--only <script>` to run one script.
+
+5. **Reboot.** The Mac logs in as operator automatically. A one-time LaunchAgent (`operator-first-login.sh`) finishes the operator account. It doesn't install apps.
 
 ## File structure
 
@@ -313,9 +316,9 @@ Errors block setup. Warnings are optional stuff that wasn't available (SSH keys 
 
 **1Password items not found**: Vault name and item titles in `config.conf` have to match exactly.
 
-**Transmission container not starting**: Check `podman machine list` and `podman logs transmission-vpn`. If the VPN can't connect, verify PIA credentials in the keychain. The container has a health check that auto-restarts it after 3 minutes of unresponsiveness, and an NFS watchdog inside the VM auto-remounts NFS every 2 minutes (handles both stale mounts and failed mount units). Check recovery logs with `sudo -u operator -i bash -c 'podman machine ssh transmission-vm -- journalctl -u nfs-watchdog.service --no-pager -n 20'` and health status with `sudo -u operator -i bash -c 'podman inspect transmission-vpn --format "{{.State.Health.Status}}"'`.
+**Transmission container not starting**: Check `podman machine list` and `podman logs transmission-vpn`. If the VPN can't connect, verify PIA credentials in the keychain. The container has a health check that restarts it after 3 minutes of unresponsiveness. The supervisor LaunchAgent (`podman-machine-start.sh`) checks the VM and container every 5 minutes. Its log is `~/.local/state/<hostname>-podman-vm-stdout.log` in the operator account, and its last result is in `~/.local/state/<hostname>-supervisor-status.json`. Check health status with `sudo -u operator -i bash -c 'podman inspect transmission-vpn --format "{{.State.Health.Status}}"'`.
 
-**Transmission "Permission denied" adding torrents**: This usually means the NFS mount inside the Podman VM has failed. Check with `sudo -u operator -i bash -c 'podman machine ssh transmission-vm -- mountpoint /var/mnt/DSMedia'`. If not mounted, the NFS watchdog should recover it within 2 minutes. If the watchdog can't remount (NAS unreachable from VM), check vzNAT connectivity: `sudo -u operator -i bash -c 'podman machine ssh transmission-vm -- "timeout 3 bash -c \"echo > /dev/tcp/<NAS_IP>/2049\" && echo OK || echo BLOCKED"'`. If ping works but TCP is refused, restart the Podman machine: `sudo -u operator -i bash -c 'podman machine stop transmission-vm && podman machine start transmission-vm'`.
+**Transmission "Permission denied" adding torrents**: The container's `/data` usually can't reach the NAS. `/data` is the host's NFS mount, passed into the Podman VM over VirtioFS. There's no NFS mount inside the VM. Check the host mount first, with `mount | grep /Users/operator/.local/mnt`. The mount log is `~/.local/state/<hostname>-mount.log` in the operator account. Next, check the container with `sudo -u operator -i bash -c 'podman exec transmission-vpn ls /data/'`. The supervisor runs the same check. After 3 failures in a row it cycles the VM to refresh the VirtioFS handles. Let the supervisor do that rather than starting the VM from a shell. [Monitoring](docs/apps/monitoring-README.md) covers the supervisor. Never unmount the host NFS share: Plex reads from it.
 
 **Plex watchdog not running**: The LaunchAgent only runs in GUI sessions. Verify with `sudo launchctl print gui/$(id -u operator)/com.<hostname>.plex-watchdog`. Check status with `sudo -iu operator plex-watchdog-ctl status`. If it's not loaded, bootstrap it: `sudo launchctl bootstrap gui/$(id -u operator) /Users/operator/Library/LaunchAgents/com.<hostname>.plex-watchdog.plist`.
 
