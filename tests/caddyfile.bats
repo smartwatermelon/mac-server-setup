@@ -272,6 +272,14 @@ RUN
   : >"${dir}/ha.log"
   python3 "${REPO_DIR}/tests/fixtures/home-assistant/upstream-stub.py" "${ha_port}" "${dir}/ha.log" &
   STUB_PID=$!
+  local up=""
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    up=$(curl -s "http://127.0.0.1:${ha_port}/ready" || true)
+    [[ "${up}" == "ha-upstream" ]] && break
+    sleep 0.3
+  done
+  [ "${up}" = "ha-upstream" ]
+  : >"${dir}/ha.log"
   render_caddyfile "${dir}" HOME_LINK1_NAME=Files HOME_LINK1_PATH=files HOME_LINK1_URL=https://qc.example/ \
     HOME_ASSISTANT_HOSTNAME=ha.example.com HOME_ASSISTANT_UPSTREAM="127.0.0.1:${ha_port}"
   local rendered="${dir}/Caddyfile"

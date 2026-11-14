@@ -17,6 +17,8 @@
 #      argument list.
 #   5. The tunnel ingress is exactly one Access-protected hostname plus the
 #      404 catch-all, with private-network (WARP) routing off.
+#   6. With HOME_ASSISTANT_HOSTNAME set, exactly two: the main host, then
+#      the HA host, both on the one Access application. Unset, today's rule.
 #
 # The watchdog runs end to end against a curl mock in a fake Homebrew prefix
 # (the pattern from pia-port-watchdog.bats). Fixtures:
@@ -80,6 +82,7 @@ render_template() {
     -e 's|__CLOUDFLARE_TUNNEL_ID__|tun-0123|g' \
     -e 's|__CLOUDFLARE_ACCESS_TEAM_NAME__|test-team|g' \
     -e 's|__CLOUDFLARE_ACCESS_AUD_TAG__|aud0123|g' \
+    -e "s|__HOME_ASSISTANT_HOSTNAME__|${HA_HOST:-}|g" \
     -e "s|HOMEBREW_PREFIX=\"[^\"]*\"|HOMEBREW_PREFIX=\"${FAKE_BREW}\"|" \
     "${TEMPLATE}" >"${WATCHDOG}"
   chmod +x "${WATCHDOG}"
@@ -406,6 +409,127 @@ assert_drift_alert() {
     grep -qF "s|${ph}|" "${REPO_DIR}/app-setup/access-policy-watchdog-setup.sh" \
       || { echo "not substituted: ${ph}"; return 1; }
   done < <(grep -o '__[A-Z_]*__' "${TEMPLATE}" | sort -u || true)
+}
+
+# ---------------------------------------------------------------------------
+# Optional Home Assistant host (HOME_ASSISTANT_HOSTNAME)
+# ---------------------------------------------------------------------------
+
+# Render the watchdog with the HA host set, and the matching API answers.
+ha_on() {
+  HA_HOST=ha.test.example render_template
+  set_app app-ha.json 200
+  set_tunnel tunnel-ha.json 200
+}
+
+@test "ha off: today's application response, with destinations, passes" {
+  set_app app-destinations.json 200
+  run run_check
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == OK:* ]]
+}
+
+@test "ha off: an extra HA ingress rule alerts" {
+  set_tunnel tunnel-ha.json 200
+  assert_drift_alert
+  grep -qF 'ha.test.example' "${MAIL_LOG}"
+}
+
+@test "ha off: an extra HA destination on the application alerts" {
+  set_app app-ha.json 200
+  assert_drift_alert
+  grep -qF 'destinations' "${MAIL_LOG}"
+}
+
+@test "ha off: a non-public destination alerts" {
+  set_app "$(fixture_variant app-destinations.json '.result.destinations[0].type = "private"' || true)" 200
+  assert_drift_alert
+}
+
+@test "ha on: the matching application and ingress pass" {
+  ha_on
+  run run_check
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == OK:* ]]
+  run run_cycle
+  [ "$(mail_count || true)" -eq 0 ]
+}
+
+@test "ha on: destinations compare without order or case" {
+  ha_on
+  set_app "$(fixture_variant app-ha.json '.result.destinations |= (reverse | .[0].uri = "HA.Test.Example") | .result.self_hosted_domains |= reverse' || true)" 200
+  run run_check
+  [ "${status}" -eq 0 ]
+}
+
+@test "ha on: an ingress without the HA rule alerts" {
+  ha_on
+  set_tunnel tunnel-ok.json 200
+  assert_drift_alert
+  grep -qF 'Tunnel ingress' "${MAIL_LOG}"
+  grep -qF 'ha.test.example (both on this one application)' "${MAIL_LOG}"
+}
+
+@test "ha on: the HA rule without access.required alerts" {
+  ha_on
+  set_tunnel "$(fixture_variant tunnel-ha.json '.result.config.ingress[1].originRequest.access.required = false' || true)" 200
+  assert_drift_alert
+}
+
+@test "ha on: the HA rule without the access block alerts" {
+  ha_on
+  set_tunnel "$(fixture_variant tunnel-ha.json 'del(.result.config.ingress[1].originRequest)' || true)" 200
+  assert_drift_alert
+}
+
+@test "ha on: the HA rule to another service alerts" {
+  ha_on
+  set_tunnel "$(fixture_variant tunnel-ha.json '.result.config.ingress[1].service = "http://192.168.1.20:8123"' || true)" 200
+  assert_drift_alert
+}
+
+@test "ha on: the HA rule ahead of the main rule alerts" {
+  ha_on
+  set_tunnel "$(fixture_variant tunnel-ha.json '.result.config.ingress |= [.[1], .[0], .[2]]' || true)" 200
+  assert_drift_alert
+}
+
+@test "ha on: a third hostname alerts" {
+  ha_on
+  set_tunnel "$(fixture_variant tunnel-ha.json '.result.config.ingress |= .[0:2] + [(.[1] | .hostname = "x.test.example")] + .[2:]' || true)" 200
+  assert_drift_alert
+}
+
+@test "ha on: an application without the HA destination alerts" {
+  ha_on
+  set_app app-destinations.json 200
+  assert_drift_alert
+  grep -qF 'destinations' "${MAIL_LOG}"
+}
+
+@test "ha on: an application response with no destinations alerts" {
+  ha_on
+  set_app app-ok.json 200
+  assert_drift_alert
+}
+
+@test "ha on: self_hosted_domains without the HA host alerts" {
+  ha_on
+  set_app "$(fixture_variant app-ha.json '.result.self_hosted_domains = ["test.example"]' || true)" 200
+  assert_drift_alert
+  grep -qF 'self_hosted_domains' "${MAIL_LOG}"
+}
+
+@test "ha on: a third destination alerts" {
+  ha_on
+  set_app "$(fixture_variant app-ha.json '.result.destinations += [{"type": "public", "uri": "x.test.example"}]' || true)" 200
+  assert_drift_alert
+}
+
+@test "ha on: the main domain still has to be the application domain" {
+  ha_on
+  set_app "$(fixture_variant app-ha.json '.result.domain = "ha.test.example"' || true)" 200
+  assert_drift_alert
 }
 
 # ---------------------------------------------------------------------------

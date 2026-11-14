@@ -30,6 +30,9 @@ export PATH="${HOMEBREW_PREFIX}/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 HOSTNAME_LABEL="__HOSTNAME__"
 export MONITORING_EMAIL="__MONITORING_EMAIL__" # read by alert-lib.sh
 APP_DOMAIN="__EXTERNAL_HOSTNAME__"
+# Optional second host of the same Access app and tunnel (Home Assistant).
+# Empty: the app and the tunnel serve APP_DOMAIN only.
+HA_DOMAIN="__HOME_ASSISTANT_HOSTNAME__"
 ACCOUNT_ID="__CLOUDFLARE_ACCOUNT_ID__"
 APP_ID="__CLOUDFLARE_ACCESS_APP_ID__"
 POLICY_ID="__CLOUDFLARE_ACCESS_POLICY_ID__"
@@ -149,6 +152,7 @@ evaluate_rule() {
     --slurpfile p "${policy_file}" \
     --slurpfile t "${tunnel_file}" \
     --arg domain "${APP_DOMAIN}" \
+    --arg ha "${HA_DOMAIN}" \
     --arg idp "${IDP_ID}" \
     --arg policy "${POLICY_ID}" \
     --arg email "${ALLOWED_EMAIL}" \
@@ -170,17 +174,41 @@ evaluate_rule() {
       if type == "object" and (.hostname | type) == "string"
       then .hostname |= lc else . end;
 
+    # A destination reduced to the two fields compared.
+    def norm_dest:
+      if type == "object" then {type: .type, uri: ((.uri // "") | tostring | lc)} else . end;
+
     ($a[0].result // {}) as $app
     | ($p[0].result // {}) as $pol
     | ($t[0].result.config // {}) as $cfg
+    # The main host first, then the optional HA host.
+    | ([$domain | lc] + (if $ha == "" then [] else [$ha | lc] end)) as $hosts
+    | ($hosts | sort) as $want_hosts
+    | ($want_hosts | map({type: "public", uri: .})) as $want_dests
     # Exact shape, not a list of bad rules: a second hostname, a path rule,
     # access.required off, or a catch-all that serves anything all differ.
-    | [ {hostname: ($domain | lc), service: $origin,
-         originRequest: {access: {required: true, teamName: $team, audTag: [$aud]}}},
-        {service: "http_status:404"} ] as $want_ingress
+    | ([ $hosts[] | {hostname: ., service: $origin,
+         originRequest: {access: {required: true, teamName: $team, audTag: [$aud]}}} ]
+       + [ {service: "http_status:404"} ]) as $want_ingress
     | [
         (if (($app.domain // "") | tostring | lc) != ($domain | lc)
          then "Application domain is \($app.domain | tojson), expected \($domain | tojson)."
+         else empty end),
+
+        # The app hostnames. Off, an absent field is not drift (the old
+        # check read domain only); on, destinations is required.
+        (if ($app | has("destinations")) or $ha != "" then
+           (($app.destinations // []) | map(norm_dest) | sort) as $d
+           | if $d != $want_dests
+             then "Application destinations are \($app.destinations | tojson), expected \($want_dests | tojson)."
+             else empty end
+         else empty end),
+
+        (if $app | has("self_hosted_domains") then
+           (($app.self_hosted_domains // []) | map(tostring | lc) | sort) as $s
+           | if $s != $want_hosts
+             then "Application self_hosted_domains are \($app.self_hosted_domains | tojson), expected \($want_hosts | tojson)."
+             else empty end
          else empty end),
 
         (($app.allowed_idps // []) as $i
@@ -343,14 +371,19 @@ handle_drift() {
 "
   done <<<"${diffs}"
 
+  local expected_hosts="${APP_DOMAIN}"
+  if [[ -n "${HA_DOMAIN}" ]]; then
+    expected_hosts="${APP_DOMAIN} and then ${HA_DOMAIN} (both on this one application)"
+  fi
+
   local body
   body="The Cloudflare Access rule or tunnel ingress for ${APP_DOMAIN} differs
 from the expected rule:
 
 ${listed}
 Expected: allow only ${ALLOWED_EMAIL}, through the Google identity provider
-only, with this one policy attached. The tunnel routes only ${APP_DOMAIN}, to
-${TUNNEL_ORIGIN_SERVICE} with access.required on, then a 404 catch-all, and
+only, with this one policy attached. The tunnel routes only ${expected_hosts},
+to ${TUNNEL_ORIGIN_SERVICE} with access.required on, then a 404 catch-all, and
 private-network (WARP) routing is off.
 
 Through the tunnel there is no other login in front of Transmission. If you

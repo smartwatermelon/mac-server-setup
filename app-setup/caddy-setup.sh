@@ -188,7 +188,7 @@ resolve_home_assistant() {
         return 1
       fi
     done
-  elif [[ ! "${addr}" =~ ${name_re} ]]; then
+  elif [[ ! "${addr}" =~ ${name_re} || "${addr}" =~ ^[0-9.]+$ ]]; then
     echo "❌ HOME_ASSISTANT_UPSTREAM must be IPv4:port or hostname:port (letters, digits, '.' and '-')" >&2
     return 1
   fi

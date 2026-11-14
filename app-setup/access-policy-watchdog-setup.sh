@@ -46,6 +46,7 @@ ACCESS_ALLOWED_EMAIL="${ACCESS_ALLOWED_EMAIL:-}"
 CLOUDFLARE_TUNNEL_ID="${CLOUDFLARE_TUNNEL_ID:-}"
 CLOUDFLARE_ACCESS_TEAM_NAME="${CLOUDFLARE_ACCESS_TEAM_NAME:-}"
 CLOUDFLARE_ACCESS_AUD_TAG="${CLOUDFLARE_ACCESS_AUD_TAG:-}"
+HOME_ASSISTANT_HOSTNAME="${HOME_ASSISTANT_HOSTNAME:-}"
 
 # Every value below is substituted into the watchdog with sed, using | as the
 # delimiter, so each is checked against a strict pattern first.
@@ -69,6 +70,14 @@ check_value ACCESS_ALLOWED_EMAIL '^[^@|[:space:]]+@[^@|[:space:]]+$'
 check_value CLOUDFLARE_TUNNEL_ID "${ID_PATTERN}"
 check_value CLOUDFLARE_ACCESS_TEAM_NAME "${ID_PATTERN}"
 check_value CLOUDFLARE_ACCESS_AUD_TAG '^[0-9a-f]+$'
+# Optional. When set, the watchdog expects a second host on the same
+# Access application and tunnel. caddy-setup.sh checks it the same way.
+if [[ -n "${HOME_ASSISTANT_HOSTNAME}" ]]; then
+  check_value HOME_ASSISTANT_HOSTNAME '^[a-z0-9.-]+$'
+  if [[ "${HOME_ASSISTANT_HOSTNAME}" != *".${EXTERNAL_HOSTNAME}" ]]; then
+    missing+=("HOME_ASSISTANT_HOSTNAME (must be a subdomain of EXTERNAL_HOSTNAME: '${HOME_ASSISTANT_HOSTNAME}')")
+  fi
+fi
 if [[ ${#missing[@]} -gt 0 ]]; then
   echo "❌ Fix these values in ${CONFIG_FILE}:"
   for m in "${missing[@]}"; do
@@ -157,6 +166,7 @@ sed \
   -e "s|__CLOUDFLARE_TUNNEL_ID__|${CLOUDFLARE_TUNNEL_ID}|g" \
   -e "s|__CLOUDFLARE_ACCESS_TEAM_NAME__|${CLOUDFLARE_ACCESS_TEAM_NAME}|g" \
   -e "s|__CLOUDFLARE_ACCESS_AUD_TAG__|${CLOUDFLARE_ACCESS_AUD_TAG}|g" \
+  -e "s|__HOME_ASSISTANT_HOSTNAME__|${HOME_ASSISTANT_HOSTNAME}|g" \
   "${TEMPLATE_DIR}/access-policy-watchdog.sh" >"${WATCHDOG_DEST}"
 chown "${OPERATOR_USERNAME}:staff" "${WATCHDOG_DEST}"
 chmod 700 "${WATCHDOG_DEST}"
