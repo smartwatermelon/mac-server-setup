@@ -87,6 +87,11 @@ from loopback, so:
   `file_server` (first in `site_routes`) would then answer every path.
 - Cloudflare Access, the cloudflared JWT check, the loopback bind and the
   policy-drift watchdog are the other layers.
+- Optional: with `HOME_ASSISTANT_HOSTNAME` and `HOME_ASSISTANT_UPSTREAM`
+  set, a second hostname on this site goes to Home Assistant, inside the
+  same email check. That host serves only HA, and the main host never
+  reaches it. With the keys empty, the render does not change. See
+  [Home Assistant](cloudflare-tunnel.md#home-assistant).
 
 `tests/caddyfile.bats` pins all of this. `caddy validate` opens the access
 log, so run it as root, or on a copy with the log path pointed somewhere

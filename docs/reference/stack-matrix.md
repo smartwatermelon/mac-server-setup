@@ -67,6 +67,7 @@ Scripts are listed in the order `run-app-setup.sh` runs them.
 | Cloudflare DDNS | Optional | `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_RECORD_ID`, `DDNS_RECORD_NAME` | Keeps one DNS record on your home IP. Needed only for the home VPN. | [Cloudflare DDNS](../components/cloudflare-ddns.md) |
 | Cloudflare Tunnel + Access | Optional | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_TUNNEL_ID`, `CLOUDFLARE_ACCESS_*`, `ACCESS_ALLOWED_EMAIL`, `TUNNEL_METRICS_PORT` | Lets you reach the server from outside without opening a port. Its watchdogs need msmtp. | [Cloudflare Tunnel](../components/cloudflare-tunnel.md) |
 | Home VPN | Optional | (none in this repo) | Runs on the NAS (Synology VPN Server), not on the Mac Mini. It needs Cloudflare DDNS to keep its hostname on your home IP. | [Home VPN](../components/home-vpn.md) |
+| Home Assistant through the tunnel | Optional | `HOME_ASSISTANT_HOSTNAME`, `HOME_ASSISTANT_UPSTREAM` | Gives Home Assistant its own hostname behind the same Access application. Browser only. Needs Cloudflare Tunnel + Access. | [Cloudflare Tunnel](../components/cloudflare-tunnel.md#home-assistant) |
 | Dashboard links | Optional | `HOME_LINKS_TITLE`, `HOME_LINK1_*`, `HOME_LINK2_*` | Up to two optional links on the dashboard, such as your NAS admin pages. A link with an empty URL is left out. | [Caddy](../components/caddy.md#dashboard-links) |
 
 ## Monitoring and extras
