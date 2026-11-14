@@ -20,9 +20,10 @@ auth_matcher_block() {
 }
 
 # Print the body of a top-level block (snippet or site) whose opening line
-# is exactly "$1 {". Top-level blocks start in column 0 and close with "}".
+# is exactly "$1 {", from file $2 (default CADDYFILE). Top-level blocks start
+# in column 0 and close with "}".
 top_block() {
-  awk -v open="$1 {" '$0 == open {flag=1; next} flag && /^\}$/ {flag=0} flag {print}' "${CADDYFILE}"
+  awk -v open="$1 {" '$0 == open {flag=1; next} flag && /^\}$/ {flag=0} flag {print}' "${2:-${CADDYFILE}}"
 }
 
 # Comment lines removed (stdin to stdout), so a comment that names /media or
@@ -154,14 +155,24 @@ teardown() {
   LIVE_DIR="${dir}"
   port=$((20000 + RANDOM % 20000))
   mkdir -p "${dir}/www" && echo landing >"${dir}/www/index.html"
+  # Render with caddy-setup.sh's own code: dashboard link 1 on, link 2 off.
+  {
+    awk '/^# BEGIN home links$/{f=1} f{print} /^# END home links$/{exit}' "${REPO_DIR}/app-setup/caddy-setup.sh"
+    cat <<'RUN'
+resolve_home_links || exit 1
+substitute_template "$1" "$2"
+RUN
+  } >"${dir}/render.sh"
+  env -i PATH="${PATH}" ACCESS_ALLOWED_EMAIL=allowed@example.com \
+    HOME_LINK1_NAME=Files HOME_LINK1_PATH=files HOME_LINK1_URL=https://qc.example/ \
+    /bin/bash "${dir}/render.sh" "${CADDYFILE}" "${dir}/rendered"
+  local rendered="${dir}/rendered"
   {
     printf '{\n\tadmin off\n}\n'
-    { top_block '(site_routes)' || true; } | sed '1s/^/(site_routes) {\n/;$s/$/\n}/' || true
-    { top_block '(access_log)' || true; } | sed '1s/^/(access_log) {\n/;$s/$/\n}/' || true
-    { top_block 'http://:8080' || true; } | sed "1s/^/http:\/\/:${port} {\n/;\$s/\$/\n}/" || true
-  } | sed -e "s|__ACCESS_ALLOWED_EMAIL__|allowed@example.com|" \
-    -e "s|__QUICKCONNECT_[A-Z]*__|https://qc.example/|" \
-    -e "s|127.0.0.1:9091|127.0.0.1:9|" \
+    { top_block '(site_routes)' "${rendered}" || true; } | sed '1s/^/(site_routes) {\n/;$s/$/\n}/' || true
+    { top_block '(access_log)' "${rendered}" || true; } | sed '1s/^/(access_log) {\n/;$s/$/\n}/' || true
+    { top_block 'http://:8080' "${rendered}" || true; } | sed "1s/^/http:\/\/:${port} {\n/;\$s/\$/\n}/" || true
+  } | sed -e "s|127.0.0.1:9091|127.0.0.1:9|" \
     -e "s|/usr/local/var/log/caddy/|${dir}/|" \
     -e "s|/usr/local/var/www|${dir}/www|" >"${dir}/Caddyfile"
   caddy run --config "${dir}/Caddyfile" --adapter caddyfile >"${dir}/caddy.out" 2>&1 &
@@ -174,7 +185,7 @@ teardown() {
   local ok=(-H 'Cf-Access-Authenticated-User-Email: allowed@example.com')
   local bad=(-H 'Cf-Access-Authenticated-User-Email: other@example.com')
   local results=""
-  for path in / /transmission /transmission/web/ /romano /media/; do
+  for path in / /transmission /transmission/web/ /files /files/ /other /media/; do
     results+="${path} none=$(probe "http://127.0.0.1:${port}${path}")"
     results+=" bad=$(probe "${bad[@]}" "http://127.0.0.1:${port}${path}")"
     results+=" ok=$(probe "${ok[@]}" "http://127.0.0.1:${port}${path}")"$'\n'
@@ -185,7 +196,9 @@ teardown() {
     '/ none=403 bad=403 ok=200' \
     '/transmission none=403 bad=403 ok=301' \
     '/transmission/web/ none=403 bad=403 ok=502' \
-    '/romano none=403 bad=403 ok=302' \
+    '/files none=403 bad=403 ok=302' \
+    '/files/ none=403 bad=403 ok=302' \
+    '/other none=403 bad=403 ok=404' \
     '/media/ none=403 bad=403 ok=404')" ]
 }
 

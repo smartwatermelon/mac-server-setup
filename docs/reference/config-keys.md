@@ -18,8 +18,8 @@ Every key in `config/config.conf.template`. Copy the template to
 
 | Key | Default | Description |
 | --- | --- | --- |
-| `OP_VAULT_ID` | `your-vault-id` | 1Password vault, by ID so a rename cannot break it (op vault list) |
-| `ONEPASSWORD_VAULT` | `${OP_VAULT_ID}` | Vault that prep-airdrop.sh reads the items below from |
+| `OP_VAULT_ID` | `your-vault-id` | Required. 1Password vault, by ID so a rename cannot break it (op vault list) |
+| `ONEPASSWORD_VAULT` | `${OP_VAULT_ID}` | Required. Vault that prep-airdrop.sh reads the items below from<br>There is no default: prep-airdrop.sh stops if it is empty |
 | `ONEPASSWORD_OPERATOR_ITEM` | `Mac Mini operator` | Login item: operator password (created if missing) |
 | `ONEPASSWORD_TIMEMACHINE_ITEM` | `TimeMachine NAS` | Login item: Time Machine share credentials (URL in the item) |
 | `ONEPASSWORD_PLEX_NAS_ITEM` | `Plex NAS` | Login item: media NAS credentials |
@@ -144,8 +144,20 @@ The API key is not here: it is read from the admin keychain (service tvmaze-&lt;
 | `SERVER_LAN_IP` | (empty) | Server's static LAN IP (e.g. 192.168.21.10) |
 | `BASICAUTH_USERNAME` | (empty) | Basic auth username for external access |
 | `BASICAUTH_HASH` | (empty) | bcrypt hash of password (generate with: caddy hash-password) |
-| `QUICKCONNECT_ROMANO` | (empty) | QuickConnect URL for Romano NAS (e.g. `https://quickconnect.to/user123`) |
-| `QUICKCONNECT_BERKSWELL` | (empty) | QuickConnect URL for Berkswell NAS |
+
+## Optional dashboard links, such as your NAS admin pages
+
+Each link is a redirect from /PATH on this server to its URL, and a link on the dashboard.<br>A link with an empty URL is left out. caddy-setup.sh stops on a bad value.
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `HOME_LINKS_TITLE` | `Links` | Dashboard heading over the links |
+| `HOME_LINK1_NAME` | (empty) | Link 1 label: letters, digits, spaces, '.', '_' and '-' |
+| `HOME_LINK1_PATH` | (empty) | Link 1 path on the server: letters, digits and '-' (e.g. nas) |
+| `HOME_LINK1_URL` | (empty) | Link 1 target, https only (e.g. `https://nas.example.com:5001`) |
+| `HOME_LINK2_NAME` | (empty) | Link 2 label |
+| `HOME_LINK2_PATH` | (empty) | Link 2 path; not the same as link 1, not transmission or media |
+| `HOME_LINK2_URL` | (empty) | Link 2 target, https only |
 
 ## Optional overrides (leave empty to use defaults)
 

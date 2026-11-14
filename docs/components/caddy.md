@@ -9,8 +9,9 @@ dashboard, and media file server components.
 ## Project Overview
 
 Caddy web server configuration for the home server (Mac Mini). Serves a dashboard
-landing page and reverse-proxies local services (Transmission and the Synology DSM pages
-of your NAS units), with split internal/external access control.
+landing page, reverse-proxies local services (Transmission), and holds optional
+links on the dashboard, such as your NAS admin pages. It has split
+internal/external access control.
 
 ## Key Commands
 
@@ -60,7 +61,8 @@ The `(site_routes)` snippet holds the routes every site serves:
 
 - **Reverse proxies**: `/transmission/*` to `127.0.0.1:9091` (Transmission publishes 9091 on loopback only)
 - **Static files**: Served from `/usr/local/var/www`
-- **QuickConnect redirects**: `/romano`, `/berkswell`
+- **Dashboard link redirects**: optional links on the dashboard, such as your
+  NAS admin pages. See [Dashboard links](#dashboard-links)
 
 The `(access_log)` snippet holds the JSON access log (`/usr/local/var/log/caddy/access.log`). It is separate from `site_routes` because `log` is site-level only, and the tunnel site imports `site_routes` inside a `handle`.
 
@@ -89,6 +91,34 @@ from loopback, so:
 `tests/caddyfile.bats` pins all of this. `caddy validate` opens the access
 log, so run it as root, or on a copy with the log path pointed somewhere
 writable.
+
+### Dashboard links
+
+The dashboard can show up to two optional links, such as your NAS admin
+pages. Each link has three keys in `config.conf`:
+
+- `HOME_LINKn_NAME`: the label on the dashboard.
+- `HOME_LINKn_PATH`: the path on this server. `/<path>` and `/<path>/`
+  redirect (302) to the URL. Letters, digits and `-` only.
+- `HOME_LINKn_URL`: the target. It must start with `https://`.
+
+`n` is 1 or 2. `HOME_LINKS_TITLE` sets the heading (default `Links`). A link
+with an empty URL is left out of the Caddyfile, the dashboard and
+`caddy-health.sh`. With no links, the dashboard has no links section.
+
+The redirects are in `(site_routes)`, so on the tunnel site they sit behind
+the allowed-email check like every other route.
+
+`caddy-setup.sh` checks the keys before it writes anything, and stops on a
+label, path or URL that could break the Caddyfile or the page. It also stops
+on a path that is already a route (`transmission`, `media`) or that both
+links use.
+
+The old `QUICKCONNECT_*` keys are deprecated. If one is set and its link has
+no `HOME_LINKn_NAME` or `HOME_LINKn_PATH`, `caddy-setup.sh` stops and prints
+the lines to add. This keeps a deploy from changing the dashboard labels or
+link paths without notice. When the new keys are set too, it uses them and
+prints a deprecation warning. Remove the old keys after you move the values.
 
 ### Environment Variables
 

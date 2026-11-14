@@ -30,7 +30,8 @@
 # - Existing directory overwrite confirmation
 # - 1Password credential retrieval (if missing)
 #
-# ENVIRONMENT VARIABLES (Optional):
+# OPTIONAL CONFIG.CONF KEYS (set them in config/config.conf, which this script
+# sources; exporting them in the shell has no effect):
 # - FILEBOT_LICENSE_FILE: Path to FileBot license file for inclusion
 # - USE_ITERM2: Set to "true" to export iTerm2 preferences
 # - TERMINAL_PROFILE_FILE: Terminal profile filename to include
@@ -74,9 +75,6 @@ else
   echo "Using default values - you may want to create config.conf"
   # Set fallback defaults
   SERVER_NAME="MACMINI"
-  # 1Password vault "Private", by ID so a rename cannot break it.
-  OP_VAULT_ID="bg5mciyy25cearfepehuh6nwmi"
-  ONEPASSWORD_VAULT="${OP_VAULT_ID}"
   ONEPASSWORD_OPERATOR_ITEM="operator"
   ONEPASSWORD_TIMEMACHINE_ITEM="TimeMachine"
   ONEPASSWORD_PLEX_NAS_ITEM="Plex NAS"
@@ -99,6 +97,18 @@ if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
   echo "The prepared directory can be AirDropped to your Mac Mini for setup."
   exit 0
 fi
+
+# The vault has no default: it is specific to each 1Password account, and a
+# real vault id does not belong in the repo (#265).
+require_onepassword_vault() {
+  if [[ -z "${ONEPASSWORD_VAULT:-}" || "${ONEPASSWORD_VAULT}" == "your-vault-id" ]]; then
+    echo "ERROR: ONEPASSWORD_VAULT is not set (empty, or still the template's your-vault-id)." >&2
+    echo "Set OP_VAULT_ID (and ONEPASSWORD_VAULT) in ${CONFIG_FILE}." >&2
+    echo "Copy config/config.conf.template if the file does not exist; 'op vault list' shows vault ids." >&2
+    return 1
+  fi
+}
+require_onepassword_vault || exit 1
 
 # Guard: this script requires interactive 1Password authentication to access
 # the Personal vault. The service account token (set in ~/.config/bash/1password.sh)

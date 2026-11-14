@@ -69,6 +69,8 @@ fi
 # Derive configuration variables
 HOSTNAME="${HOSTNAME_OVERRIDE:-${SERVER_NAME}}"
 HOSTNAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${HOSTNAME}")"
+# Keychain items use SERVER_NAME_LOWER, as prep-airdrop.sh stores them.
+SERVER_NAME_LOWER="$(tr '[:upper:]' '[:lower:]' <<<"${SERVER_NAME}")"
 
 # Operator home directory (for path construction)
 OPERATOR_HOME="/Users/${OPERATOR_USERNAME}"
@@ -538,8 +540,9 @@ configure_opensubtitles_login() {
     return 1
   fi
 
+  # first-boot.sh imports it under SERVER_NAME_LOWER, not HOSTNAME_LOWER (#265).
   local opensubtitles_credentials
-  if opensubtitles_credentials=$(security find-generic-password -s "opensubtitles-${HOSTNAME_LOWER}" -a "${HOSTNAME_LOWER}" -w 2>/dev/null); then
+  if opensubtitles_credentials=$(security find-generic-password -s "opensubtitles-${SERVER_NAME_LOWER}" -a "${SERVER_NAME_LOWER}" -w 2>/dev/null); then
     echo "✅ Found OpenSubtitles credentials in keychain"
     log "Retrieved OpenSubtitles credentials from login keychain"
 
