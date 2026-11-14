@@ -31,6 +31,8 @@ HOME_LINK2_PATH="${HOME_LINK2_PATH:-}"
 HOME_LINK2_URL="${HOME_LINK2_URL:-}"
 NAS_SHARE_NAME="${NAS_SHARE_NAME:-Media}"
 ACCESS_ALLOWED_EMAIL="${ACCESS_ALLOWED_EMAIL:-}"
+HOME_ASSISTANT_HOSTNAME="${HOME_ASSISTANT_HOSTNAME:-}"
+HOME_ASSISTANT_UPSTREAM="${HOME_ASSISTANT_UPSTREAM:-}"
 
 # Validate required variables — empty values produce invalid Caddyfile syntax
 if [[ -z "${EXTERNAL_HOSTNAME}" ]]; then
@@ -144,6 +146,61 @@ resolve_home_links() {
   HOME_LINK_SED+=(-e "/@@(BEGIN|END)_HOME_LINKS?[0-9]*@@/d")
 }
 
+# Validate HOME_ASSISTANT_*; add to HOME_LINK_SED (run after
+# resolve_home_links). See docs/components/cloudflare-tunnel.md.
+resolve_home_assistant() {
+  local host="${HOME_ASSISTANT_HOSTNAME:-}" upstream="${HOME_ASSISTANT_UPSTREAM:-}"
+  local main addr port octet
+  local label='[a-z0-9]([a-z0-9-]*[a-z0-9])?'
+  local host_re="^(${label}\.)+${label}\$"
+  local ipv4_re='^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
+  local name_re='^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$'
+  # Both values go into the Caddyfile unquoted, so these patterns are strict.
+  if [[ -z "${host}" && -z "${upstream}" ]]; then
+    HOME_LINK_SED+=(-e "/@@BEGIN_HOME_ASSISTANT@@/,/@@END_HOME_ASSISTANT@@/d")
+    return 0
+  fi
+  if [[ -z "${host}" || -z "${upstream}" ]]; then
+    echo "❌ Set both HOME_ASSISTANT_HOSTNAME and HOME_ASSISTANT_UPSTREAM, or neither" >&2
+    return 1
+  fi
+  main="$(tr '[:upper:]' '[:lower:]' <<<"${EXTERNAL_HOSTNAME}")"
+  if [[ ! "${host}" =~ ${host_re} ]]; then
+    echo "❌ HOME_ASSISTANT_HOSTNAME must be a lower-case DNS name (e.g. ha.${main})" >&2
+    return 1
+  fi
+  # A subdomain of EXTERNAL_HOSTNAME: same Cloudflare zone and Access team.
+  if [[ "${host}" != *".${main}" ]]; then
+    echo "❌ HOME_ASSISTANT_HOSTNAME must be a subdomain of ${main} (e.g. ha.${main})" >&2
+    return 1
+  fi
+  addr="${upstream%:*}"
+  port="${upstream##*:}"
+  if [[ "${addr}" == "${upstream}" || ! "${port}" =~ ^[0-9]{1,5}$ ]] \
+    || ((10#${port} < 1 || 10#${port} > 65535)); then
+    echo "❌ HOME_ASSISTANT_UPSTREAM must be host:port, such as 192.168.21.20:8123 (no scheme, no path)" >&2
+    return 1
+  fi
+  if [[ "${addr}" =~ ${ipv4_re} ]]; then
+    for octet in ${addr//./ }; do
+      if ((10#${octet} > 255)); then
+        echo "❌ HOME_ASSISTANT_UPSTREAM has a bad IPv4 address: ${addr}" >&2
+        return 1
+      fi
+    done
+  elif [[ ! "${addr}" =~ ${name_re} || "${addr}" =~ ^[0-9.]+$ ]]; then
+    echo "❌ HOME_ASSISTANT_UPSTREAM must be IPv4:port or hostname:port (letters, digits, '.' and '-')" >&2
+    return 1
+  fi
+  case "$(tr '[:upper:]' '[:lower:]' <<<"${addr}")" in
+    *.local)
+      echo "⚠ HOME_ASSISTANT_UPSTREAM uses a .local name. Its mDNS lookup can take seconds; an IP address is faster." >&2
+      ;;
+    *) ;;
+  esac
+  HOME_LINK_SED+=(-e "/@@(BEGIN|END)_HOME_ASSISTANT@@/d")
+}
+
 # Template substitution helper — replaces __PLACEHOLDER__ tokens in a file.
 # Uses | as sed delimiter (safe: bcrypt hashes don't contain |).
 substitute_template() {
@@ -166,12 +223,16 @@ substitute_template() {
     -e "s|__HOME_LINK_PATHS__|${HOME_LINK_PATHS}|g" \
     -e "s|__NAS_SHARE_NAME__|${NAS_SHARE_NAME}|g" \
     -e "s|__ACCESS_ALLOWED_EMAIL__|${ACCESS_ALLOWED_EMAIL}|g" \
+    -e "s|__HOME_ASSISTANT_HOSTNAME__|${HOME_ASSISTANT_HOSTNAME}|g" \
+    -e "s|__HOME_ASSISTANT_UPSTREAM__|${HOME_ASSISTANT_UPSTREAM}|g" \
     "${src}" >"${dst}"
 }
 # END home links
 
-# Stop here on a bad or deprecated HOME_LINK* setting: nothing is written yet.
+# Stop here on a bad or deprecated HOME_LINK* or a bad HOME_ASSISTANT_*
+# setting: nothing is written yet.
 resolve_home_links || exit 1
+resolve_home_assistant || exit 1
 
 DEPLOY_CONFIG_DIR="/Users/${OPERATOR_USERNAME}/.config/caddy"
 DEPLOY_WEB_ROOT="/usr/local/var/www"

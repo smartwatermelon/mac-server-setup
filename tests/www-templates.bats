@@ -51,3 +51,10 @@ CADDYFILE="${REPO_DIR}/app-setup/templates/Caddyfile"
   [ "$(grep -c '@@BEGIN_HOME_LINKS@@' "${WWW_DIR}/index.html" || true)" -eq 1 ]
   [ "$(grep -c '@@END_HOME_LINKS@@' "${WWW_DIR}/index.html" || true)" -eq 1 ]
 }
+
+@test "Home Assistant link: one marked line that points to the HA hostname" {
+  [ "$(grep -c '@@BEGIN_HOME_ASSISTANT@@' "${WWW_DIR}/index.html" || true)" -eq 1 ]
+  [ "$(grep -c '@@END_HOME_ASSISTANT@@' "${WWW_DIR}/index.html" || true)" -eq 1 ]
+  [ "$(awk '/@@BEGIN_HOME_ASSISTANT@@/{f=1; next} /@@END_HOME_ASSISTANT@@/{f=0} f' "${WWW_DIR}/index.html" || true)" = \
+    '                    <li><a href="https://__HOME_ASSISTANT_HOSTNAME__/" target="home-assistant">Home Assistant</a></li>' ]
+}

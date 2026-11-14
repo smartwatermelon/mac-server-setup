@@ -20,6 +20,10 @@ Browser (anywhere, including LAN)
   → Caddy http://127.0.0.1:8080  (tunnel-only site, loopback bind)
   → / landing page, /transmission/ → 127.0.0.1:9091
 
+Optional, when HOME_ASSISTANT_* is set (see "Home Assistant" below):
+  ha.example.com → the same Access application, tunnel and Caddy site
+  → Caddy hands the whole host to Home Assistant (192.168.21.20:8123)
+
 LAN only, unchanged:
   your-server.local → Caddy :443 (tls internal) → no auth from LAN
 ```
@@ -172,7 +176,8 @@ logs to stderr), `~operator/.local/state/access-policy-watchdog.log`,
 `CLOUDFLARE_ACCESS_POLICY_ID`, `CLOUDFLARE_ACCESS_IDP_ID`,
 `ACCESS_ALLOWED_EMAIL`, `CLOUDFLARE_TUNNEL_ID`,
 `CLOUDFLARE_ACCESS_TEAM_NAME`, `CLOUDFLARE_ACCESS_AUD_TAG`,
-`MONITORING_EMAIL`.
+`MONITORING_EMAIL`. Optional: `HOME_ASSISTANT_HOSTNAME`,
+`HOME_ASSISTANT_UPSTREAM` (see [Home Assistant](#home-assistant)).
 
 ## Tunnel daemon
 
@@ -210,12 +215,14 @@ counts as drift.
 | Check | Expected |
 | --- | --- |
 | Application `domain` | `example.com` |
+| Application `destinations` | exactly `[{type: public, uri: example.com}]`, plus `ha.example.com` when `HOME_ASSISTANT_HOSTNAME` is set (compared without order or case). With the key empty, an absent field is not drift. With it set, the field is required. |
+| Application `self_hosted_domains` | when present, the same hostnames as `destinations` |
 | Application `allowed_idps` | exactly `[<Google IdP id>]` (an empty list allows every IdP, including one-time PIN) |
 | Application `policies[].id` | exactly `[<policy id>]`: no second policy, ours not detached |
 | Policy `decision` | `allow` |
 | Policy `include` | exactly `[{"email": {"email": "<allowed email>"}}]` (email compared without case) |
 | Policy `require`, `exclude` | empty |
-| Tunnel `config.ingress` | exactly two rules: `example.com` (hostname compared without case) → `http://127.0.0.1:8080` with `originRequest` exactly `{access: {required: true, teamName: <team>, audTag: [<AUD>]}}`; then `http_status:404`. A second hostname, a path rule, or a catch-all that serves anything is drift. |
+| Tunnel `config.ingress` | exactly two rules: `example.com` (hostname compared without case) → `http://127.0.0.1:8080` with `originRequest` exactly `{access: {required: true, teamName: <team>, audTag: [<AUD>]}}`; then `http_status:404`. A second hostname, a path rule, or a catch-all that serves anything is drift. With `HOME_ASSISTANT_HOSTNAME` set, exactly three: the `example.com` rule, then the same rule for `ha.example.com`, then `http_status:404`. |
 | Tunnel `config["warp-routing"].enabled` | `false` or absent. When on, the tunnel routes private networks (the LAN) past Access and Caddy. |
 | Tunnel `config`, other keys | none (for example, a global `originRequest`) |
 
@@ -314,6 +321,161 @@ The setup script uses the same `TUNNEL_METRICS_PORT` default and check as
 `cloudflared-setup.sh` (a test keeps the defaults equal). It loads the agent
 only if `--check` passes (exit 0 ready, 1 not ready; no mail, no state).
 
+## Home Assistant
+
+Optional. Home Assistant (HA) gets its own hostname, such as
+`ha.example.com`, behind the same Access application, the same tunnel and
+the same Caddy tunnel site. HA cannot run under a URL path, so it needs its
+own hostname at `/`. The feature is off until both config keys are set:
+
+- `HOME_ASSISTANT_HOSTNAME`: the full hostname. It must be a lower-case
+  subdomain of `EXTERNAL_HOSTNAME`, so the same Cloudflare zone and Access
+  team cover it.
+- `HOME_ASSISTANT_UPSTREAM`: HA as `host:port`, such as
+  `192.168.21.20:8123`. Use an IP address. A `.local` name works, but its
+  mDNS lookup can take about 5 s from the server, and `caddy-setup.sh`
+  warns about it. IPv6 addresses are not accepted.
+
+`caddy-setup.sh` and `access-policy-watchdog-setup.sh` stop on a bad value
+before they write anything. With both keys empty, the rendered Caddyfile and
+landing page are byte for byte the same as before the feature existed
+(`tests/caddy-home-assistant.bats` checks this).
+
+**Browser only.** The HA phone app and inbound webhooks cannot pass the
+Google sign-in at Cloudflare Access, so they do not work through
+`ha.example.com`. At home, use the LAN URL, such as
+`http://192.168.21.20:8123`.
+
+### What protects the HA path
+
+The same layers as the main host, plus HA's own login:
+
+1. Cloudflare Access: the same application, policy and allowed email.
+2. cloudflared JWT check: the HA ingress rule has the same
+   `access.required`, team name and AUD tag. The drift watchdog alerts if it
+   does not.
+3. Caddy email check: the HA route is inside `handle @access_user`, so a
+   request without the allowed email gets 403 before HA sees it.
+4. Drift watchdog: with the key set, it expects exactly the two hostnames on
+   the application and exactly the two ingress rules (plus the catch-all).
+5. Loopback bind: unchanged.
+
+Inside `handle @access_user` the tunnel site has two mutually exclusive
+`handle` blocks:
+
+```caddyfile
+@home_assistant host ha.example.com
+handle @home_assistant {
+    reverse_proxy 192.168.21.20:8123 {
+        header_up X-Forwarded-For {http.request.header.Cf-Connecting-IP}
+        header_up X-Forwarded-Proto https
+        header_up -Cf-Access-Jwt-Assertion
+        header_up Cookie "(^|;\s*)CF_Authorization=[^;]*" ""
+        header_up Cookie "^;\s*" ""
+    }
+}
+handle {
+    import site_routes
+}
+```
+
+- The HA host serves only HA: no landing page, no `/transmission/`, no
+  dashboard-link redirects. A plain `import site_routes` next to the HA
+  handle would not do: Caddy sorts `redir` ahead of `handle`, so
+  `/transmission` and the link redirects would run on the HA host first.
+- The main host never reaches HA. Every other host goes to `site_routes`,
+  as before.
+- The HA route exists only on the loopback tunnel site. The `:443` sites,
+  the catch-all and `(common_config)` do not have it, so
+  `ha.example.com` on the LAN listener is not proxied to HA.
+- `X-Forwarded-For`: every request reaches Caddy from cloudflared on
+  loopback. By default Caddy would send `127.0.0.1` for every visitor, and
+  an HA login ban would then lock out everyone. The route sets it to
+  `Cf-Connecting-IP`, the visitor's address, which Cloudflare sets at the
+  edge. The listener is loopback-only, so only cloudflared can send it.
+  This uses `header_up` and not the global `trusted_proxies` and
+  `client_ip_headers` options: those would change every site, and the
+  off-state Caddyfile.
+- `X-Forwarded-Proto https`: the hop from cloudflared is plain http, so
+  Caddy would send `http`. The visitor used https at Cloudflare.
+- The Access token is not passed to HA: the route drops
+  `Cf-Access-Jwt-Assertion` and the `CF_Authorization` cookie, and keeps
+  the other cookies. Both hostnames share one application and one AUD tag,
+  so the token may also be accepted for `example.com` (not tested). HA does
+  not need it.
+- `Host` and `X-Forwarded-Host` stay `ha.example.com` (Caddy's defaults).
+  Websockets work without extra settings.
+
+The host matcher depends on cloudflared passing the visitor's `Host`
+header to Caddy, which is its default. Step 8 below checks it: if the
+`Host` were rewritten, `ha.example.com` would show the landing page.
+This is not yet tested through the live tunnel.
+
+### Turn it on
+
+Do these steps in order. Steps 1 to 3 are in Cloudflare. The deployed
+watchdog does not expect the new hostname yet, so it sends a drift email
+after step 1 (a watchdog from before this feature, after step 2). Step 5
+resolves it.
+
+Between step 3 and step 6, the deployed Caddy does not know the HA
+hostname yet, so `ha.example.com` shows the main site. It is behind the
+same Access policy and email check as `example.com`, so nothing new is
+exposed, but do not leave it in this state.
+
+1. **Access application.** In Zero Trust, open the `example.com`
+   application. Add `ha.example.com` as a second public hostname
+   (destination). Keep `example.com` first. Do not add a policy: the
+   existing policy, identity provider and AUD tag cover both hostnames.
+2. **Tunnel route.** In the tunnel's published application routes, add
+   `ha.example.com` → `http://127.0.0.1:8080`. Turn on Access protection
+   with the same team name and AUD tag as the `example.com` route. Make sure
+   it is before the `http_status:404` catch-all.
+3. **DNS.** A proxied CNAME `ha` → `<tunnel id>.cfargotunnel.com`, the same
+   target as `example.com`. The dashboard can create it with the route.
+4. **Config keys.** Set `HOME_ASSISTANT_HOSTNAME` and
+   `HOME_ASSISTANT_UPSTREAM` in `config.conf` on the server.
+5. **Watchdog.** `sudo ./access-policy-watchdog-setup.sh`. It reads the
+   keys from `config.conf`. Its `--check` must pass. If it does not, the
+   output names the difference. The script has already written the new
+   watchdog file by then and only skips the reload, so an agent that is
+   already loaded runs the new file on its next run and keeps alerting
+   until you fix it. The check that reads `destinations` with two hostnames
+   is **not yet confirmed against the live API**; the tests use fixtures.
+6. **Caddy.** Deploy it as for any Caddyfile change
+   (`./run-app-setup.sh --only caddy-setup.sh`). `caddy-setup.sh` reads the
+   keys from its environment, not from `config.conf`. Before the restart,
+   check that the keys arrived:
+   `sudo grep -c '@home_assistant' /Users/operator/.config/caddy/Caddyfile`
+   must print 2. If it prints 0, the deploy rendered the off state, and
+   `ha.example.com` would keep showing the main site. Then
+   `sudo launchctl kickstart -k system/com.caddyserver.caddy`.
+7. **Home Assistant.** HA rejects a request that carries
+   `X-Forwarded-For` from a proxy it does not trust, and logs the proxy's
+   address. In HA's network settings (since 2026.8 they are in the UI, not
+   in YAML), turn on "Trust X-Forwarded-For" and add this server's LAN IP to
+   "Trusted proxies". Take the address from that log line. Make this change
+   from the LAN URL.
+8. **Check.** In a browser that is signed in to Access:
+   - `https://ha.example.com/` shows the HA login.
+   - `https://ha.example.com/transmission/` is an HA page, not
+     Transmission.
+   - `https://example.com/` is the dashboard, with a "Home Assistant" link.
+   - In HA, the login log shows your public address, not `127.0.0.1` and
+     not the server's LAN IP.
+
+### Turn it off
+
+1. Delete the `ha.example.com` tunnel route. This cuts off the hostname at
+   once.
+2. Delete the `ha` CNAME and remove `ha.example.com` from the Access
+   application.
+3. Empty both `HOME_ASSISTANT_*` keys. Run
+   `sudo ./access-policy-watchdog-setup.sh`, then deploy Caddy again and
+   kickstart it. With the keys empty, the Caddyfile is the same as before
+   the feature.
+4. Optional: remove the trusted proxy in HA.
+
 ## Revocation
 
 - Remove the email from the Access policy, or revoke active sessions in Zero
@@ -340,7 +502,8 @@ Stopping only the tunnel daemon makes Cloudflare show an error page for
 ## Tests
 
 ```bash
-bats tests/caddyfile.bats              # tunnel site and site_routes
+bats tests/caddyfile.bats              # tunnel site and site_routes; HA routing (live)
+bats tests/caddy-home-assistant.bats   # HA keys, off-state render, HA only on :8080
 bats tests/cloudflared-wrapper.bats    # token via env only; keychain miss
 bats tests/access-policy-watchdog.bats # expected rule and ingress, widenings, 404, API errors
 bats tests/tunnel-watchdog.bats        # /ready 200, 503, no answer; failure streak; recovery

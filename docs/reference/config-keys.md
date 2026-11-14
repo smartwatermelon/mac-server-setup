@@ -159,6 +159,15 @@ Each link is a redirect from /PATH on this server to its URL, and a link on the 
 | `HOME_LINK2_PATH` | (empty) | Link 2 path; not the same as link 1, not transmission or media |
 | `HOME_LINK2_URL` | (empty) | Link 2 target, https only |
 
+## Optional Home Assistant through the tunnel (docs/components/cloudflare-tunnel.md)
+
+Its own hostname behind the same Access application. Set both keys, or leave both empty (off). caddy-setup.sh and access-policy-watchdog-setup.sh stop on a bad value.
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `HOME_ASSISTANT_HOSTNAME` | (empty) | A subdomain of EXTERNAL_HOSTNAME, lower case (e.g. ha.example.com) |
+| `HOME_ASSISTANT_UPSTREAM` | (empty) | Home Assistant as host:port; an IP is fastest (e.g. 192.168.21.20:8123) |
+
 ## Optional overrides (leave empty to use defaults)
 
 | Key | Default | Description |
