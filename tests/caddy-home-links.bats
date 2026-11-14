@@ -34,6 +34,7 @@ BASICAUTH_HASH="hash"
 NAS_SHARE_NAME="Media"
 ACCESS_ALLOWED_EMAIL="allowed@example.com"
 resolve_home_links || exit 1
+resolve_home_assistant || exit 1
 mkdir -p "$1"
 substitute_template "${TEMPLATES}/Caddyfile" "$1/Caddyfile"
 substitute_template "${TEMPLATES}/www/index.html" "$1/index.html"
@@ -56,7 +57,7 @@ render() {
 
 # No marker line and no __PLACEHOLDER__ may survive a render.
 assert_clean_render() {
-  run grep -nE '@@(BEGIN|END)_HOME_LINK|__[A-Z0-9_]+__' "${OUT}/Caddyfile" "${OUT}/index.html" "${OUT}/caddy-health.sh"
+  run grep -nE '@@(BEGIN|END)_HOME_|__[A-Z0-9_]+__' "${OUT}/Caddyfile" "${OUT}/index.html" "${OUT}/caddy-health.sh"
   echo "${output}"
   [ "${status}" -eq 1 ]
 }

@@ -171,7 +171,34 @@ http://:8080 {
 
 	@access_user header Cf-Access-Authenticated-User-Email __ACCESS_ALLOWED_EMAIL__
 	handle @access_user {
+		# @@BEGIN_HOME_ASSISTANT@@
+		# Optional Home Assistant host (HOME_ASSISTANT_*). caddy-setup.sh
+		# drops both marked parts when the keys are empty. The two handles
+		# are mutually exclusive: the HA host serves only HA, and the other
+		# hosts never reach it. See "Home Assistant" in cloudflare-tunnel.md.
+		@home_assistant host __HOME_ASSISTANT_HOSTNAME__
+		handle @home_assistant {
+			reverse_proxy __HOME_ASSISTANT_UPSTREAM__ {
+				# Every request comes from cloudflared on loopback. Pass the
+				# visitor's IP (set by Cloudflare), so an HA login ban hits
+				# that visitor, not everyone.
+				header_up X-Forwarded-For {http.request.header.Cf-Connecting-IP}
+				# The visitor used https at Cloudflare; this hop is plain http.
+				header_up X-Forwarded-Proto https
+				# The Access token is valid for every host of this Access
+				# app. HA does not need it, so it never gets it: drop the
+				# header and the CF_Authorization cookie, keep other cookies.
+				header_up -Cf-Access-Jwt-Assertion
+				header_up Cookie "(^|;\s*)CF_Authorization=[^;]*" ""
+				header_up Cookie "^;\s*" ""
+			}
+		}
+		handle {
+		# @@END_HOME_ASSISTANT@@
 		import site_routes
+		# @@BEGIN_HOME_ASSISTANT@@
+		}
+		# @@END_HOME_ASSISTANT@@
 	}
 	handle {
 		respond 403
