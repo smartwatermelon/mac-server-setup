@@ -400,20 +400,28 @@ handle {
   Caddy would send `http`. The visitor used https at Cloudflare.
 - The Access token is not passed to HA: the route drops
   `Cf-Access-Jwt-Assertion` and the `CF_Authorization` cookie, and keeps
-  the other cookies. The token is valid for every hostname of the Access
-  application, and HA does not need it.
+  the other cookies. Both hostnames share one application and one AUD tag,
+  so the token may also be accepted for `example.com` (not tested). HA does
+  not need it.
 - `Host` and `X-Forwarded-Host` stay `ha.example.com` (Caddy's defaults).
   Websockets work without extra settings.
 
 The host matcher depends on cloudflared passing the visitor's `Host`
-header to Caddy, which is its default. Step 7 below checks it: if the
+header to Caddy, which is its default. Step 8 below checks it: if the
 `Host` were rewritten, `ha.example.com` would show the landing page.
+This is not yet tested through the live tunnel.
 
 ### Turn it on
 
-Do these steps in order. Steps 1 to 3 are in Cloudflare. After step 2,
-the deployed watchdog does not expect the new rule yet, so it sends one drift
-email. Step 5 resolves it.
+Do these steps in order. Steps 1 to 3 are in Cloudflare. The deployed
+watchdog does not expect the new hostname yet, so it sends a drift email
+after step 1 (a watchdog from before this feature, after step 2). Step 5
+resolves it.
+
+Between step 3 and step 6, the deployed Caddy does not know the HA
+hostname yet, so `ha.example.com` shows the main site. It is behind the
+same Access policy and email check as `example.com`, so nothing new is
+exposed, but do not leave it in this state.
 
 1. **Access application.** In Zero Trust, open the `example.com`
    application. Add `ha.example.com` as a second public hostname
@@ -427,13 +435,20 @@ email. Step 5 resolves it.
    target as `example.com`. The dashboard can create it with the route.
 4. **Config keys.** Set `HOME_ASSISTANT_HOSTNAME` and
    `HOME_ASSISTANT_UPSTREAM` in `config.conf` on the server.
-5. **Watchdog.** `sudo ./access-policy-watchdog-setup.sh`. Its `--check`
-   must pass. If it does not, the output names the difference, and the
-   agent is not loaded. The check that reads `destinations` with two
-   hostnames is **not yet confirmed against the live API**; the tests use
-   fixtures.
+5. **Watchdog.** `sudo ./access-policy-watchdog-setup.sh`. It reads the
+   keys from `config.conf`. Its `--check` must pass. If it does not, the
+   output names the difference. The script has already written the new
+   watchdog file by then and only skips the reload, so an agent that is
+   already loaded runs the new file on its next run and keeps alerting
+   until you fix it. The check that reads `destinations` with two hostnames
+   is **not yet confirmed against the live API**; the tests use fixtures.
 6. **Caddy.** Deploy it as for any Caddyfile change
-   (`./run-app-setup.sh --only caddy-setup.sh`), then
+   (`./run-app-setup.sh --only caddy-setup.sh`). `caddy-setup.sh` reads the
+   keys from its environment, not from `config.conf`. Before the restart,
+   check that the keys arrived:
+   `sudo grep -c '@home_assistant' /Users/operator/.config/caddy/Caddyfile`
+   must print 2. If it prints 0, the deploy rendered the off state, and
+   `ha.example.com` would keep showing the main site. Then
    `sudo launchctl kickstart -k system/com.caddyserver.caddy`.
 7. **Home Assistant.** HA rejects a request that carries
    `X-Forwarded-For` from a proxy it does not trust, and logs the proxy's
