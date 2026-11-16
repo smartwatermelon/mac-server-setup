@@ -1359,11 +1359,13 @@ if [[ -f "${clt_script}" ]]; then
     log "✅ Command Line Tools installation completed successfully"
   else
     collect_error "Command Line Tools installation failed"
+    show_collected_issues
     exit 1
   fi
 else
   collect_error "CLT installation script not found: ${clt_script}"
   log "Please ensure setup-command-line-tools.sh is present in the scripts directory"
+  show_collected_issues
   exit 1
 fi
 

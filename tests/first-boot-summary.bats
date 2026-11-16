@@ -158,7 +158,7 @@ summary() {
     fn="${TEST_TMPDIR}/mod.sh"
     {
       echo 'set -euo pipefail'
-      echo 'show_log() { :; }'
+      echo 'show_log() { :; }; log() { :; }; SCRIPT_NAME=module.sh'
       extract "${m}" collect_error
       echo 'collect_error "boom from module"'
     } >"${fn}"
@@ -173,7 +173,35 @@ summary() {
       return 1
     }
   done
-  [ "${count}" -ge 15 ]
+  [ "${count}" -ge 18 ]
+}
+
+@test "every module first-boot.sh runs defines collect_error (#274)" {
+  local m name names count=0
+  names=$(awk '{ while (match($0, /scripts\/setup-[a-z-]+\.sh/)) { n = substr($0, RSTART + 8, RLENGTH - 8); if (!(n in seen)) { seen[n] = 1; print n }; $0 = substr($0, RSTART + RLENGTH) } }' "${FIRST_BOOT}")
+  while IFS= read -r name; do
+    m="${SERVER_DIR}/${name}"
+    [ -f "${m}" ] || {
+      echo "first-boot.sh runs ${name}, which is missing"
+      return 1
+    }
+    count=$((count + 1))
+    grep -q '^collect_error() {$' "${m}" || {
+      echo "${name} has no collect_error"
+      return 1
+    }
+  done <<<"${names}"
+  [ "${count}" -ge 18 ]
+}
+
+@test "first-boot.sh prints the summary before each Command Line Tools exit (#274)" {
+  local block
+  block=$(sed -n '/^if \[\[ -f .*clt_script.* \]\]; then$/,/^fi$/p' "${FIRST_BOOT}")
+  [ -n "${block}" ]
+  exits=$(grep -c 'exit 1' <<<"${block}" || true)
+  pairs=$(grep -A1 '^ *show_collected_issues$' <<<"${block}" | grep -c 'exit 1' || true)
+  [ "${exits}" -ge 2 ]
+  [ "${pairs}" -eq "${exits}" ]
 }
 
 @test "every module that collects warnings appends them to SETUP_WARNINGS_FILE" {
@@ -183,7 +211,7 @@ summary() {
     fn="${TEST_TMPDIR}/mod.sh"
     {
       echo 'set -euo pipefail'
-      echo 'show_log() { :; }'
+      echo 'show_log() { :; }; log() { :; }; SCRIPT_NAME=module.sh'
       extract "${m}" collect_warning
       echo 'collect_warning "warn from module"'
     } >"${fn}"

@@ -14,6 +14,21 @@ log() {
   echo "${LOG_PREFIX} $*" >&2
 }
 
+# first-boot.sh reads these files for its summary (#274).
+collect_error() {
+  log "❌ $1"
+  if [[ -n "${SETUP_ERRORS_FILE:-}" ]]; then
+    echo "[${SCRIPT_NAME}] $1" >>"${SETUP_ERRORS_FILE}"
+  fi
+}
+
+collect_warning() {
+  log "⚠️  $1"
+  if [[ -n "${SETUP_WARNINGS_FILE:-}" ]]; then
+    echo "[${SCRIPT_NAME}] $1" >>"${SETUP_WARNINGS_FILE}"
+  fi
+}
+
 # Show usage information
 show_usage() {
   cat <<EOF
@@ -83,14 +98,14 @@ disable_remote_management() {
   log ""
   log "Verifying Remote Management is off..."
   if pgrep -f "ARDAgent" >/dev/null 2>&1; then
-    log "⚠️  ARDAgent processes still running"
+    collect_warning "ARDAgent processes still running"
     pgrep -fl "ARDAgent"
   else
     log "✅ No ARDAgent processes running"
   fi
 
   if launchctl list | grep -q "RemoteManagementAgent"; then
-    log "⚠️  RemoteManagementAgent service still loaded"
+    collect_warning "RemoteManagementAgent service still loaded"
   else
     log "✅ No RemoteManagementAgent service loaded"
   fi
@@ -120,14 +135,14 @@ disable_screen_sharing() {
   log ""
   log "Verifying Screen Sharing is off..."
   if launchctl list | grep -q "screensharing"; then
-    log "⚠️  Screen sharing services still loaded:"
+    collect_warning "Screen sharing services still loaded:"
     launchctl list | grep screensharing
   else
     log "✅ No screen sharing services loaded"
   fi
 
   if pgrep -f "screensharing" >/dev/null 2>&1; then
-    log "⚠️  Screen sharing processes still running"
+    collect_warning "Screen sharing processes still running"
     pgrep -fl "screensharing"
   else
     log "✅ No screen sharing processes running"

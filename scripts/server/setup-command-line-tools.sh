@@ -22,6 +22,21 @@ show_log() {
   echo "${LOG_PREFIX} $*" >&2
 }
 
+# first-boot.sh reads these files for its summary (#274).
+collect_error() {
+  log "❌ $1"
+  if [[ -n "${SETUP_ERRORS_FILE:-}" ]]; then
+    echo "[${SCRIPT_NAME}] $1" >>"${SETUP_ERRORS_FILE}"
+  fi
+}
+
+collect_warning() {
+  log "⚠️  $1"
+  if [[ -n "${SETUP_WARNINGS_FILE:-}" ]]; then
+    echo "[${SCRIPT_NAME}] $1" >>"${SETUP_WARNINGS_FILE}"
+  fi
+}
+
 # Show usage information
 show_usage() {
   cat <<EOF
@@ -399,7 +414,7 @@ main() {
     if install_clt_with_enhanced_monitoring "${clt_package}" "${install_timeout}"; then
       log "✅ Enhanced CLT installation completed successfully"
     else
-      log "Enhanced CLT installation failed - falling back to interactive method"
+      collect_warning "Enhanced CLT installation failed - falling back to interactive method"
 
       # Clean up flag for interactive method
       sudo rm -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
@@ -407,12 +422,12 @@ main() {
       if interactive_clt_installation "${force}"; then
         log "✅ Interactive CLT installation completed successfully"
       else
-        log "❌ All CLT installation methods failed"
+        collect_error "All CLT installation methods failed"
         exit 1
       fi
     fi
   else
-    show_log "⚠️  Could not determine CLT package via softwareupdate"
+    collect_warning "Could not determine CLT package via softwareupdate"
     show_log "Falling back to interactive xcode-select installation"
 
     # Clean up the flag since we're switching methods
@@ -421,7 +436,7 @@ main() {
     if interactive_clt_installation "${force}"; then
       log "✅ Interactive CLT installation completed successfully"
     else
-      log "❌ Interactive CLT installation failed"
+      collect_error "Interactive CLT installation failed"
       exit 1
     fi
   fi
