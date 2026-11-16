@@ -128,7 +128,7 @@ fdesetup status
 
 **Fix**
 
-1. At the script's offer to turn FileVault off, press Control-C to stop the script. Do not accept the offer: it records an error even when it works, and it can repeat while the disk is still decrypting. Answering `N` continues setup with FileVault on, and automatic login then fails.
+1. At the script's offer to turn FileVault off, press Control-C to stop the script. Turning FileVault off before you run the script is the tested path. Answering `N` continues setup with FileVault on, and automatic login then fails.
 2. Turn FileVault off in System Settings > Privacy & Security > FileVault, or run `sudo fdesetup disable`.
 3. Wait until `fdesetup status` prints `FileVault is Off.` This can take an hour or more.
 4. Run `first-boot.sh` again. See [step 5 of the tutorial](../get-started/05-first-boot.md).

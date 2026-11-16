@@ -19,7 +19,7 @@ Goal: copy the package to the Mac mini and run `first-boot.sh` as `admin`, at th
     fdesetup status
     ```
 
-    The output must be `FileVault is Off.` If FileVault is on, turn it off in System Settings > Privacy & Security > FileVault. Wait until `fdesetup status` prints `FileVault is Off.`, which can take an hour or more. Do not use the script's own offer to turn off FileVault: it records an error, and it can loop while decryption is still running.
+    The output must be `FileVault is Off.` If FileVault is on, turn it off in System Settings > Privacy & Security > FileVault. Wait until `fdesetup status` prints `FileVault is Off.`, which can take an hour or more. The script also offers to turn FileVault off, but turning it off before you run the script is the tested path.
 
 6. Run the script. Do not run it over SSH: it stops unless it runs in a desktop session.
 
@@ -51,7 +51,7 @@ For the prompts, options and errors in detail, see [First boot](first-boot.md).
 
 ## Check
 
-1. The summary says `Setup completed successfully with no errors or warnings!`, or it lists only warnings that you understand. The summary does not count errors from the setup modules, so also search the full log:
+1. The summary says `Setup completed successfully with no errors or warnings!`, or it lists only warnings that you understand. Some steps, such as the Command Line Tools install, log a problem without adding it to the summary, so also search the full log:
 
     ```bash
     grep -E '❌|⚠️' ~/.local/state/macmini-setup.log

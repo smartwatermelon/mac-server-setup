@@ -205,6 +205,11 @@ COLLECTED_ERRORS=()
 COLLECTED_WARNINGS=()
 CURRENT_SCRIPT_SECTION=""
 
+# Child-process modules append here; show_collected_issues reads it (#251).
+SETUP_ERRORS_FILE="$(mktemp "${TMPDIR:-/tmp}/first-boot-errors.XXXXXX")"
+SETUP_WARNINGS_FILE="$(mktemp "${TMPDIR:-/tmp}/first-boot-warnings.XXXXXX")"
+export SETUP_ERRORS_FILE SETUP_WARNINGS_FILE
+
 # Function to set current script section for context
 set_section() {
   CURRENT_SCRIPT_SECTION="$1"
@@ -245,8 +250,29 @@ collect_warning() {
 
 # Function to show collected errors and warnings at end
 show_collected_issues() {
-  local error_count=${#COLLECTED_ERRORS[@]}
-  local warning_count=${#COLLECTED_WARNINGS[@]}
+  local errors=() warnings=() line
+  if [[ ${#COLLECTED_ERRORS[@]} -gt 0 ]]; then
+    errors=("${COLLECTED_ERRORS[@]}")
+  fi
+  if [[ ${#COLLECTED_WARNINGS[@]} -gt 0 ]]; then
+    warnings=("${COLLECTED_WARNINGS[@]}")
+  fi
+  if [[ -n "${SETUP_ERRORS_FILE:-}" && -f "${SETUP_ERRORS_FILE}" ]]; then
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+      if [[ -n "${line}" ]]; then
+        errors+=("${line}")
+      fi
+    done <"${SETUP_ERRORS_FILE}"
+  fi
+  if [[ -n "${SETUP_WARNINGS_FILE:-}" && -f "${SETUP_WARNINGS_FILE}" ]]; then
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+      if [[ -n "${line}" ]]; then
+        warnings+=("${line}")
+      fi
+    done <"${SETUP_WARNINGS_FILE}"
+  fi
+  local error_count=${#errors[@]}
+  local warning_count=${#warnings[@]}
 
   if [[ ${error_count} -eq 0 && ${warning_count} -eq 0 ]]; then
     show_log "✅ Setup completed successfully with no errors or warnings!"
@@ -260,7 +286,7 @@ show_collected_issues() {
 
   if [[ ${error_count} -gt 0 ]]; then
     show_log "ERRORS:"
-    for error in "${COLLECTED_ERRORS[@]}"; do
+    for error in "${errors[@]}"; do
       show_log "  ${error}"
     done
     show_log ""
@@ -268,7 +294,7 @@ show_collected_issues() {
 
   if [[ ${warning_count} -gt 0 ]]; then
     show_log "WARNINGS:"
-    for warning in "${COLLECTED_WARNINGS[@]}"; do
+    for warning in "${warnings[@]}"; do
       show_log "  ${warning}"
     done
     show_log ""
@@ -623,146 +649,174 @@ log "Current machine: ${CURRENT_FINGERPRINT}"
 # CRITICAL CHECK: FileVault compatibility for auto-login functionality
 set_section "FileVault Compatibility Check"
 
-log "Checking FileVault status (critical for auto-login functionality)..."
+# Classify `fdesetup status` output. "Decryption in progress" counts as
+# off: the disable worked (#251).
+filevault_state() {
+  case "$1" in
+    *"Decryption in progress"*) echo decrypting ;;
+    *"FileVault is On"*) echo on ;;
+    *"Deferred"*) echo deferred ;;
+    *"FileVault is Off"*) echo off ;;
+    *) echo unknown ;;
+  esac
+}
 
-if ! command -v fdesetup >/dev/null 2>&1; then
-  collect_warning "fdesetup not available, skipping FileVault check"
-else
-  filevault_status=$(fdesetup status 2>/dev/null || echo "unknown")
+# Wrapper so tests can stub the real disable.
+disable_filevault() {
+  sudo -p "[FileVault] Enter password to disable FileVault: " fdesetup disable -user "${USER}" -verbose
+}
 
-  if [[ "${filevault_status}" == *"FileVault is On"* ]]; then
-    echo ""
-    echo "=================================================================="
-    echo "                    ⚠️  CRITICAL ISSUE DETECTED  ⚠️"
-    echo "=================================================================="
-    echo ""
-    echo "FileVault disk encryption is ENABLED on this system."
-    echo ""
-    echo "This is incompatible with automatic login functionality,"
-    echo "which is required for the operator account setup."
-    echo ""
-    echo "RESOLUTION OPTIONS:"
-    echo "1. Try disabling FileVault via command line (fastest):"
-    echo "   • Run: sudo fdesetup disable"
-    echo "   • This requires decryption which may take several hours"
-    echo "   • Then re-run this setup script"
-    echo ""
-    echo "2. Try disabling FileVault in System Settings:"
-    echo "   • Open System Settings > Privacy & Security > FileVault"
-    echo "   • Click 'Turn Off...' and follow the prompts"
-    echo "   • This requires decryption which may take several hours"
-    echo "   • Then re-run this setup script"
-    echo ""
-    echo "3. If FileVault cannot be disabled:"
-    echo "   • Wipe this Mac completely and start over"
-    echo "   • During macOS setup, DO NOT enable FileVault"
-    echo "   • Ensure automatic login is enabled for admin account"
-    echo ""
-    echo "FileVault prevents automatic login for security reasons."
-    echo "This Mac Mini server setup requires auto-login for the"
-    echo "operator account to work properly."
-    echo ""
-    echo "=================================================================="
-    echo ""
+check_filevault_compatibility() {
+  log "Checking FileVault status (critical for auto-login functionality)..."
 
-    collect_error "FileVault is enabled - incompatible with auto-login setup"
+  if ! command -v fdesetup >/dev/null 2>&1; then
+    collect_warning "fdesetup not available, skipping FileVault check"
+  else
+    local filevault_status state
+    filevault_status=$(fdesetup status 2>/dev/null || echo "unknown")
+    state=$(filevault_state "${filevault_status}")
 
-    if [[ "${FORCE}" != "true" ]]; then
-      # Loop until FileVault is disabled or user chooses to proceed with it enabled
-      while true; do
-        read -p "Would you like to disable FileVault now? (y/N): " -n 1 -r response
-        echo
-        case ${response} in
-          [yY])
-            show_log "Disabling FileVault - this may take 30-60+ minutes..."
-            if sudo -p "[FileVault] Enter password to disable FileVault: " fdesetup disable -user "${USER}" -verbose; then
-              # Re-check FileVault status to verify it was actually disabled
-              log "Verifying FileVault disable operation..."
-              new_filevault_status=$(fdesetup status 2>/dev/null || echo "unknown")
-              if [[ "${new_filevault_status}" == *"FileVault is Off"* ]]; then
-                show_log "✅ FileVault disabled successfully"
-                show_log "Auto-login should now work properly"
-                break # Success - exit the retry loop
+    if [[ "${state}" == "on" ]]; then
+      echo ""
+      echo "=================================================================="
+      echo "                    ⚠️  CRITICAL ISSUE DETECTED  ⚠️"
+      echo "=================================================================="
+      echo ""
+      echo "FileVault disk encryption is ENABLED on this system."
+      echo ""
+      echo "This is incompatible with automatic login functionality,"
+      echo "which is required for the operator account setup."
+      echo ""
+      echo "RESOLUTION OPTIONS:"
+      echo "1. Try disabling FileVault via command line (fastest):"
+      echo "   • Run: sudo fdesetup disable"
+      echo "   • This requires decryption which may take several hours"
+      echo "   • Then re-run this setup script"
+      echo ""
+      echo "2. Try disabling FileVault in System Settings:"
+      echo "   • Open System Settings > Privacy & Security > FileVault"
+      echo "   • Click 'Turn Off...' and follow the prompts"
+      echo "   • This requires decryption which may take several hours"
+      echo "   • Then re-run this setup script"
+      echo ""
+      echo "3. If FileVault cannot be disabled:"
+      echo "   • Wipe this Mac completely and start over"
+      echo "   • During macOS setup, DO NOT enable FileVault"
+      echo "   • Ensure automatic login is enabled for admin account"
+      echo ""
+      echo "FileVault prevents automatic login for security reasons."
+      echo "This Mac Mini server setup requires auto-login for the"
+      echo "operator account to work properly."
+      echo ""
+      echo "=================================================================="
+      echo ""
+
+      if [[ "${FORCE}" != "true" ]]; then
+        # Loop until FileVault is disabled or user chooses to proceed with it enabled
+        while true; do
+          read -p "Would you like to disable FileVault now? (y/N): " -n 1 -r response
+          echo
+          case ${response} in
+            [yY])
+              show_log "Disabling FileVault - this may take 30-60+ minutes..."
+              if disable_filevault; then
+                # Re-check FileVault status to verify it was actually disabled
+                log "Verifying FileVault disable operation..."
+                local new_filevault_status new_state
+                new_filevault_status=$(fdesetup status 2>/dev/null || echo "unknown")
+                new_state=$(filevault_state "${new_filevault_status}")
+                if [[ "${new_state}" == "off" || "${new_state}" == "decrypting" ]]; then
+                  show_log "✅ FileVault disabled successfully"
+                  show_log "Auto-login should now work properly"
+                  break # Success - exit the retry loop
+                else
+                  # One failed attempt is not the outcome; the loop asks again.
+                  show_log "❌ FileVault disable command succeeded but FileVault is still enabled"
+                  show_log "❌ FileVault disable failed - this usually means the wrong password was entered"
+                  show_log ""
+                  # Continue the loop to try again
+                fi
               else
-                collect_error "FileVault disable command succeeded but FileVault is still enabled"
-                show_log "❌ FileVault disable failed - this usually means the wrong password was entered"
+                show_log "❌ FileVault disable command failed"
                 show_log ""
                 # Continue the loop to try again
               fi
-            else
-              collect_error "Failed to disable FileVault"
-              show_log "❌ FileVault disable command failed"
-              show_log ""
-              # Continue the loop to try again
-            fi
+              ;;
+            *)
+              show_log "FileVault remains enabled - setup will continue but auto-login may not work"
+              collect_error "FileVault is enabled - incompatible with auto-login setup"
+              collect_warning "User chose to continue with FileVault enabled"
+              break # User chose to proceed - exit the retry loop
+              ;;
+          esac
+        done
+        show_log ""
+        show_log "ALTERNATIVE OPTIONS (if auto-login fails):"
+        show_log "1. Disable via System Settings:"
+        show_log "   • Open System Settings > Privacy & Security > FileVault"
+        show_log "   • Click 'Turn Off...' and follow the prompts"
+        show_log ""
+        show_log "2. Disable via command line:"
+        show_log "   • Run: sudo fdesetup disable"
+        show_log ""
+        show_log "3. If FileVault cannot be disabled:"
+        show_log "   • Wipe this Mac completely and start over"
+        show_log "   • During macOS setup, DO NOT enable FileVault"
+      else
+        collect_error "FileVault is enabled - incompatible with auto-login setup"
+        collect_warning "Force mode - continuing despite FileVault being enabled"
+        show_log "Auto-login functionality will NOT work with FileVault enabled"
+      fi
+
+    elif [[ "${state}" == "decrypting" ]]; then
+      show_log "✅ FileVault decryption is in progress - automatic login will work when it finishes"
+
+    elif [[ "${state}" == "deferred" ]]; then
+      echo ""
+      echo "=================================================================="
+      echo "                    ⚠️  POTENTIAL ISSUE DETECTED  ⚠️"
+      echo "=================================================================="
+      echo ""
+      echo "FileVault has DEFERRED ENABLEMENT scheduled."
+      echo "This means it will be enabled after the next reboot."
+      echo ""
+      echo "This will disable automatic login functionality required"
+      echo "for the operator account."
+      echo ""
+      echo "RECOMMENDATION:"
+      echo "Cancel FileVault enablement before it takes effect:"
+      echo "  sudo fdesetup disable"
+      echo ""
+      echo "=================================================================="
+      echo ""
+
+      collect_warning "FileVault deferred enablement detected - will disable auto-login after reboot"
+
+      if [[ "${FORCE}" != "true" ]]; then
+        read -p "Continue with setup? (Y/n): " -n 1 -r response
+        echo
+        case ${response} in
+          [nN])
+            show_log "Setup cancelled to resolve FileVault deferred enablement"
+            exit 1
             ;;
           *)
-            show_log "FileVault remains enabled - setup will continue but auto-login may not work"
-            collect_warning "User chose to continue with FileVault enabled"
-            break # User chose to proceed - exit the retry loop
+            show_log "Continuing setup - recommend disabling FileVault deferred enablement"
             ;;
         esac
-      done
-      show_log ""
-      show_log "ALTERNATIVE OPTIONS (if auto-login fails):"
-      show_log "1. Disable via System Settings:"
-      show_log "   • Open System Settings > Privacy & Security > FileVault"
-      show_log "   • Click 'Turn Off...' and follow the prompts"
-      show_log ""
-      show_log "2. Disable via command line:"
-      show_log "   • Run: sudo fdesetup disable"
-      show_log ""
-      show_log "3. If FileVault cannot be disabled:"
-      show_log "   • Wipe this Mac completely and start over"
-      show_log "   • During macOS setup, DO NOT enable FileVault"
+      fi
+
+    elif [[ "${state}" == "off" ]]; then
+      show_log "✅ FileVault is disabled - automatic login will work properly"
+
     else
-      collect_warning "Force mode - continuing despite FileVault being enabled"
-      show_log "Auto-login functionality will NOT work with FileVault enabled"
+      collect_warning "FileVault status unclear: ${filevault_status}"
+      show_log "Manual verification recommended for auto-login compatibility"
     fi
-
-  elif [[ "${filevault_status}" == *"Deferred"* ]]; then
-    echo ""
-    echo "=================================================================="
-    echo "                    ⚠️  POTENTIAL ISSUE DETECTED  ⚠️"
-    echo "=================================================================="
-    echo ""
-    echo "FileVault has DEFERRED ENABLEMENT scheduled."
-    echo "This means it will be enabled after the next reboot."
-    echo ""
-    echo "This will disable automatic login functionality required"
-    echo "for the operator account."
-    echo ""
-    echo "RECOMMENDATION:"
-    echo "Cancel FileVault enablement before it takes effect:"
-    echo "  sudo fdesetup disable"
-    echo ""
-    echo "=================================================================="
-    echo ""
-
-    collect_warning "FileVault deferred enablement detected - will disable auto-login after reboot"
-
-    if [[ "${FORCE}" != "true" ]]; then
-      read -p "Continue with setup? (Y/n): " -n 1 -r response
-      echo
-      case ${response} in
-        [nN])
-          show_log "Setup cancelled to resolve FileVault deferred enablement"
-          exit 1
-          ;;
-        *)
-          show_log "Continuing setup - recommend disabling FileVault deferred enablement"
-          ;;
-      esac
-    fi
-
-  elif [[ "${filevault_status}" == *"FileVault is Off"* ]]; then
-    show_log "✅ FileVault is disabled - automatic login will work properly"
-
-  else
-    collect_warning "FileVault status unclear: ${filevault_status}"
-    show_log "Manual verification recommended for auto-login compatibility"
   fi
-fi
+}
+
+check_filevault_compatibility
 
 # Create log file if it doesn't exist, rotate if it exists
 if [[ -f "${LOG_FILE}" ]]; then
@@ -1195,11 +1249,15 @@ if operator_password=$(get_keychain_credential "${KEYCHAIN_OPERATOR_SERVICE}" "$
     # Test 3: FileVault compatibility check (if not already done)
     local filevault_status
     filevault_status=$(fdesetup status 2>/dev/null || echo "unknown")
-    if [[ "${filevault_status}" == *"FileVault is On"* ]]; then
+    local filevault_now
+    filevault_now=$(filevault_state "${filevault_status}")
+    if [[ "${filevault_now}" == "on" ]]; then
       collect_error "FileVault is enabled - this will prevent auto-login from working"
       verification_failed=true
-    elif [[ "${filevault_status}" == *"FileVault is Off"* ]]; then
+    elif [[ "${filevault_now}" == "off" ]]; then
       log "✓ FileVault is disabled - auto-login compatibility confirmed"
+    elif [[ "${filevault_now}" == "decrypting" ]]; then
+      log "✓ FileVault decryption in progress - auto-login will work when it finishes"
     else
       collect_warning "FileVault status unclear for auto-login: ${filevault_status}"
     fi
