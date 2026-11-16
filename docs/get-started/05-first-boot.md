@@ -51,7 +51,7 @@ For the prompts, options and errors in detail, see [First boot](first-boot.md).
 
 ## Check
 
-1. The summary says `Setup completed successfully with no errors or warnings!`, or it lists only warnings that you understand. Some steps, such as the Command Line Tools install, log a problem without adding it to the summary, so also search the full log:
+1. The summary says `Setup completed successfully with no errors or warnings!`, or it lists only warnings that you understand. Some steps log a problem without adding it to the summary, so also search the full log:
 
     ```bash
     grep -E '❌|⚠️' ~/.local/state/macmini-setup.log
