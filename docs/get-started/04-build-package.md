@@ -30,15 +30,14 @@ Goal: run `prep-airdrop.sh` on the dev Mac to build the folder that you copy to 
     ```
 
 5. If `~/macmini-setup` exists from an earlier run, the script asks whether to remove it. Type `y`.
-6. At the Wi-Fi question, type `Y`. No Wi-Fi credentials go into the package. On the Mac mini, use Migration Assistant's iPhone or iPad option, or the wired network.
-
-    !!! warning
-        Do not type `n`. The script-based Wi-Fi option stops `prep-airdrop.sh` with an error at this time, because it stores the password before the package keychain exists.
+6. At the Wi-Fi question, choose one:
+    - Type `Y` to use Migration Assistant's iPhone or iPad option, or the wired network, on the Mac mini. No Wi-Fi credentials go into the package.
+    - Type `n` to put the dev Mac's current Wi-Fi network in the package. macOS asks for an administrator password to read the Wi-Fi password from the System keychain. If the script cannot read it, the summary lists an error and the package has no Wi-Fi credentials.
 7. Approve each 1Password prompt. The script reads each item and puts the credentials in an encrypted keychain file in the package.
 8. Read the summary at the end. The script opens the package folder in Finder.
 
 !!! note
-    The script also removes `macmini.local` from your `~/.ssh/known_hosts`, because the new server will have a new host key.
+    If `~/.ssh/known_hosts` exists, the script removes `macmini.local` from it, because the new server will have a new host key.
 
 For details of each file in the package, see [AirDrop prep](prep-airdrop.md).
 
