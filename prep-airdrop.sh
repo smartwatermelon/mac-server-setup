@@ -390,8 +390,11 @@ else
   exit 1
 fi
 
-# Remove existing server host key if any
-ssh-keygen -R "${SERVER_NAME_LOWER}".local
+# Remove existing server host key if any. ssh-keygen -R exits 255 when
+# known_hosts does not exist, which would stop the script (#249).
+if [[ -f "${HOME}/.ssh/known_hosts" ]]; then
+  ssh-keygen -R "${SERVER_NAME_LOWER}".local
+fi
 
 # Copy SSH keys
 set_section "Copying SSH Keys"
@@ -407,60 +410,6 @@ copy_with_manifest "${SSH_PRIVATE_KEY_PATH}" "ssh_keys/id_ed25519" "REQUIRED"
 # Set correct permissions on private key if it was copied
 if [[ -f "${OUTPUT_PATH}/ssh_keys/id_ed25519" ]]; then
   chmod 600 "${OUTPUT_PATH}/ssh_keys/id_ed25519"
-fi
-
-# WiFi Configuration Strategy Selection
-set_section "WiFi Network Configuration Strategy"
-echo "Choose your WiFi setup method:"
-echo "1. Migration Assistant iPhone/iPad option (recommended - handles WiFi automatically)"
-echo "2. Script-based WiFi configuration (retrieves current network credentials)"
-echo ""
-read -p "Will you use Migration Assistant's iPhone/iPad option for WiFi? (Y/n) " -n 1 -r WIFI_STRATEGY
-echo ""
-
-if [[ ${WIFI_STRATEGY} =~ ^[Nn]$ ]]; then
-  echo "Selected: Script-based WiFi configuration"
-  echo "Getting current WiFi network information..."
-  CURRENT_SSID=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}' 2>/dev/null || echo "")
-
-  if [[ -n "${CURRENT_SSID}" ]]; then
-    echo "Current WiFi network SSID: ${CURRENT_SSID}"
-
-    echo "Retrieving WiFi password..."
-    echo "You'll be prompted for your administrator password to access the keychain."
-    WIFI_PASSWORD=$(security find-generic-password -a "${CURRENT_SSID}" -w "/Library/Keychains/System.keychain")
-
-    if [[ -n "${WIFI_PASSWORD}" ]]; then
-      echo "WiFi password retrieved successfully."
-
-      # Store WiFi credentials in external keychain
-      store_external_keychain_credential \
-        "wifi-${SERVER_NAME_LOWER}" \
-        "${SERVER_NAME_LOWER}" \
-        "${CURRENT_SSID}:${WIFI_PASSWORD}" \
-        "Mac Server Setup - WiFi Credentials"
-
-      # Create basic SSID config file (non-sensitive)
-      cat >"${OUTPUT_PATH}/config/wifi_network.conf" <<EOF
-WIFI_SSID="${CURRENT_SSID}"
-EOF
-      chmod 644 "${OUTPUT_PATH}/config/wifi_network.conf"
-
-      # Clear password from memory
-      unset WIFI_PASSWORD
-      echo "WiFi credentials stored in Keychain and SSID saved to config"
-    else
-      collect_error "Could not retrieve WiFi password"
-      echo "WiFi network configuration will not be automated."
-    fi
-  else
-    collect_warning "Could not detect current WiFi network"
-    echo "WiFi network configuration will not be automated."
-  fi
-else
-  echo "Selected: Migration Assistant WiFi configuration"
-  echo "✅ Migration Assistant will handle WiFi network setup automatically"
-  echo "No WiFi credentials will be transferred to the setup package"
 fi
 
 # External keychain credential management functions
@@ -589,11 +538,75 @@ EOF
   echo "✅ Keychain manifest created"
 }
 
-# Set up operator account credentials using 1Password
-set_section "Setting up operator account credentials"
+# Store the current Wi-Fi credentials in the external keychain.
+# Errors are collected, not fatal.
+store_wifi_credentials() {
+  echo "Getting current WiFi network information..."
+  local current_ssid wifi_password
+  current_ssid=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d \":\"";exit}' 2>/dev/null || echo "")
 
-# Initialize external keychain for credential storage
+  if [[ -z "${current_ssid}" ]]; then
+    collect_warning "Could not detect current WiFi network"
+    echo "WiFi network configuration will not be automated."
+    return 0
+  fi
+  echo "Current WiFi network SSID: ${current_ssid}"
+
+  echo "Retrieving WiFi password..."
+  echo "You'll be prompted for your administrator password to access the keychain."
+  # A failed lookup must not stop the script under set -e (#249).
+  if ! wifi_password=$(security find-generic-password -a "${current_ssid}" -w "/Library/Keychains/System.keychain") \
+    || [[ -z "${wifi_password}" ]]; then
+    collect_error "Could not retrieve WiFi password"
+    echo "WiFi network configuration will not be automated."
+    return 0
+  fi
+  echo "WiFi password retrieved successfully."
+
+  # store_external_keychain_credential collects its own error on failure.
+  if ! store_external_keychain_credential \
+    "wifi-${SERVER_NAME_LOWER}" \
+    "${SERVER_NAME_LOWER}" \
+    "${current_ssid}:${wifi_password}" \
+    "Mac Server Setup - WiFi Credentials"; then
+    unset wifi_password
+    echo "WiFi network configuration will not be automated."
+    return 0
+  fi
+  unset wifi_password
+
+  # Create basic SSID config file (non-sensitive)
+  cat >"${OUTPUT_PATH}/config/wifi_network.conf" <<EOF
+WIFI_SSID="${current_ssid}"
+EOF
+  chmod 644 "${OUTPUT_PATH}/config/wifi_network.conf"
+  echo "WiFi credentials stored in Keychain and SSID saved to config"
+}
+
+# The external keychain must exist before the first credential is stored,
+# and the Wi-Fi block below can store one (#249).
+set_section "Initializing external keychain"
 init_external_keychain
+
+# WiFi Configuration Strategy Selection
+set_section "WiFi Network Configuration Strategy"
+echo "Choose your WiFi setup method:"
+echo "1. Migration Assistant iPhone/iPad option (recommended - handles WiFi automatically)"
+echo "2. Script-based WiFi configuration (retrieves current network credentials)"
+echo ""
+read -p "Will you use Migration Assistant's iPhone/iPad option for WiFi? (Y/n) " -n 1 -r WIFI_STRATEGY
+echo ""
+
+if [[ ${WIFI_STRATEGY} =~ ^[Nn]$ ]]; then
+  echo "Selected: Script-based WiFi configuration"
+  store_wifi_credentials
+else
+  echo "Selected: Migration Assistant WiFi configuration"
+  echo "✅ Migration Assistant will handle WiFi network setup automatically"
+  echo "No WiFi credentials will be transferred to the setup package"
+fi
+
+set_section "Setting up operator account credentials"
 
 # Check if operator credentials exist in 1Password
 if ! op item get "${ONEPASSWORD_OPERATOR_ITEM}" --vault "${ONEPASSWORD_VAULT}" >/dev/null 2>&1; then

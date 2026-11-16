@@ -27,12 +27,6 @@ Goal: have the hardware, network, accounts and tools that setup needs, before yo
     ls ~/.ssh/id_ed25519 ~/.ssh/id_ed25519.pub || ssh-keygen -t ed25519 -C "you@example.com"
     ```
 
-    Also make sure that `~/.ssh/known_hosts` exists. `prep-airdrop.sh` runs `ssh-keygen -R`, which fails when the file is missing, and the script then stops:
-
-    ```bash
-    touch ~/.ssh/known_hosts
-    ```
-
 6. Clone this repository on the dev Mac:
 
     ```bash
@@ -51,7 +45,7 @@ Goal: have the hardware, network, accounts and tools that setup needs, before yo
 4. The SSH files exist on the dev Mac:
 
     ```bash
-    ls ~/.ssh/id_ed25519 ~/.ssh/id_ed25519.pub ~/.ssh/known_hosts
+    ls ~/.ssh/id_ed25519 ~/.ssh/id_ed25519.pub
     ```
 
 To see which parts you need, read the [stack matrix](../reference/stack-matrix.md). You check `config/config.conf` and the 1Password items in [Configure](03-configure.md).
