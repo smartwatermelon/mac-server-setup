@@ -123,6 +123,10 @@ collect_error() {
 
   show_log "❌ ${clean_message}"
   COLLECTED_ERRORS+=("[${script_name}:${line_number}] ${context}: ${clean_message}")
+  # first-boot.sh reads this file for its summary (#251)
+  if [[ -n "${SETUP_ERRORS_FILE:-}" ]]; then
+    echo "[${script_name}:${line_number}] ${context}: ${clean_message}" >>"${SETUP_ERRORS_FILE}"
+  fi
 }
 
 # Function to collect a warning (with immediate display)
@@ -139,6 +143,10 @@ collect_warning() {
 
   show_log "⚠️ ${clean_message}"
   COLLECTED_WARNINGS+=("[${script_name}:${line_number}] ${context}: ${clean_message}")
+  # first-boot.sh reads this file for its summary (#251)
+  if [[ -n "${SETUP_WARNINGS_FILE:-}" ]]; then
+    echo "[${script_name}:${line_number}] ${context}: ${clean_message}" >>"${SETUP_WARNINGS_FILE}"
+  fi
 }
 
 # Function to check if a command was successful
