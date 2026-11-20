@@ -146,9 +146,38 @@ access_user_body() {
 # Any directive at site level would run outside the email check: Caddy sorts
 # redir and reverse_proxy ahead of handle. Only these lines may be there.
 @test "tunnel site: site level holds only bind, the log, the matcher and two handles" {
+  LIVE_DIR=$(mktemp -d)
+  render_caddyfile "${LIVE_DIR}" HOME_ASSISTANT_HOSTNAME=ha.example.com HOME_ASSISTANT_UPSTREAM=192.168.1.20:8123
   local top
-  top=$(tunnel_site | without_comments | grep -E $'^\t[^\t]' || true)
-  [ "${top}" = "$(printf '\tbind 127.0.0.1\n\timport access_log\n\t@access_user header Cf-Access-Authenticated-User-Email __ACCESS_ALLOWED_EMAIL__\n\thandle @access_user {\n\t}\n\thandle {\n\t}')" ]
+  top=$({ top_block 'http://:8080' "${LIVE_DIR}/Caddyfile" || true; } | without_comments | grep -E $'^\t[^\t]' || true)
+  [ "${top}" = "$(printf '\tbind 127.0.0.1\n\timport access_log\n\t@access_user header Cf-Access-Authenticated-User-Email allowed@example.com\n\thandle @access_user {\n\t}\n\thandle {\n\t}')" ]
+}
+
+# With HOME_ASSISTANT_WEBHOOK_ID set, one more matcher and handle, ahead of
+# the email check: exact host, exact path, nothing else.
+@test "tunnel site: with the webhook on, site level adds only the webhook matcher and handle" {
+  LIVE_DIR=$(mktemp -d)
+  render_caddyfile "${LIVE_DIR}" HOME_ASSISTANT_HOSTNAME=ha.example.com HOME_ASSISTANT_UPSTREAM=192.168.1.20:8123 \
+    HOME_ASSISTANT_WEBHOOK_ID=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  local site want
+  site=$({ top_block 'http://:8080' "${LIVE_DIR}/Caddyfile" || true; } | without_comments | sed '/^[[:space:]]*$/d' || true)
+  want=$(printf '%s\n' \
+    $'\tbind 127.0.0.1' \
+    $'\timport access_log' \
+    $'\t@ha_webhook {' \
+    $'\t\thost ha.example.com' \
+    $'\t\tpath /api/webhook/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef' \
+    $'\t}' \
+    $'\thandle @ha_webhook {' \
+    $'\t\treverse_proxy 192.168.1.20:8123 {' \
+    $'\t\t\theader_up X-Forwarded-For {http.request.header.Cf-Connecting-IP}' \
+    $'\t\t\theader_up X-Forwarded-Proto https' \
+    $'\t\t}' \
+    $'\t}' \
+    $'\t@access_user header Cf-Access-Authenticated-User-Email allowed@example.com')
+  [ "$(head -n 13 <<<"${site}" || true)" = "${want}" ]
+  # The rest is unchanged: the email handle, then the 403 catch-all.
+  [ "$(grep -cE $'^\thandle ' <<<"${site}" || true)" -eq 3 ]
 }
 
 @test "tunnel site: the catch-all handle responds 403" {
@@ -359,6 +388,81 @@ RUN
     -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' "${base}/api/websocket" || true)
   [ "${ws}" = "101" ]
   [ "$(jq -r '.Upgrade' <<<"$(tail -n 1 "${dir}/ha.log" || true)" || true)" = "websocket" ]
+}
+
+# Webhook on: Cloudflare lets the webhook path past Access, and its tunnel
+# rule has no access block, so Caddy's exact host and path matcher is what
+# keeps the exception to one URL. Every near miss must get 403 and never
+# reach HA. Skipped where caddy or python3 is missing.
+@test "tunnel site (live caddy): only the exact webhook URL skips the email check" {
+  command -v caddy >/dev/null || skip "caddy not installed"
+  command -v python3 >/dev/null || skip "python3 not installed"
+  local dir port ha_port id
+  id=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  dir=$(mktemp -d)
+  LIVE_DIR="${dir}"
+  port=$((20000 + RANDOM % 20000))
+  ha_port=$((port + 1))
+  mkdir -p "${dir}/www" && echo landing >"${dir}/www/index.html"
+  : >"${dir}/ha.log"
+  python3 "${REPO_DIR}/tests/fixtures/home-assistant/upstream-stub.py" "${ha_port}" "${dir}/ha.log" &
+  STUB_PID=$!
+  local up=""
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    up=$(curl -s "http://127.0.0.1:${ha_port}/ready" || true)
+    [[ "${up}" == "ha-upstream" ]] && break
+    sleep 0.3
+  done
+  [ "${up}" = "ha-upstream" ]
+  : >"${dir}/ha.log"
+  render_caddyfile "${dir}" HOME_ASSISTANT_HOSTNAME=ha.example.com \
+    HOME_ASSISTANT_UPSTREAM="127.0.0.1:${ha_port}" HOME_ASSISTANT_WEBHOOK_ID="${id}"
+  local rendered="${dir}/Caddyfile"
+  {
+    printf '{\n\tadmin off\n}\n'
+    { top_block '(site_routes)' "${rendered}" || true; } | sed '1s/^/(site_routes) {\n/;$s/$/\n}/' || true
+    { top_block '(access_log)' "${rendered}" || true; } | sed '1s/^/(access_log) {\n/;$s/$/\n}/' || true
+    { top_block 'http://:8080' "${rendered}" || true; } | sed "1s/^/http:\/\/:${port} {\n/;\$s/\$/\n}/" || true
+  } | sed -e "s|127.0.0.1:9091|127.0.0.1:9|" \
+    -e "s|/usr/local/var/log/caddy/|${dir}/|" \
+    -e "s|/usr/local/var/www|${dir}/www|" >"${dir}/live.Caddyfile"
+  caddy run --config "${dir}/live.Caddyfile" --adapter caddyfile >"${dir}/caddy.out" 2>&1 &
+  LIVE_PID=$!
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    curl -s -o /dev/null "http://127.0.0.1:${port}/" && break
+    sleep 0.3
+  done
+  local base="http://127.0.0.1:${port}"
+  local ha=(-H 'Host: ha.example.com')
+  probe() { curl -s -o /dev/null --path-as-is -w '%{http_code}' "$@"; }
+
+  # The exact URL, no Access email: reaches HA (GET and POST).
+  [ "$(curl -s "${ha[@]}" -H 'Cf-Connecting-IP: 203.0.113.7' "${base}/api/webhook/${id}" || true)" = "ha-upstream" ]
+  [ "$(curl -s "${ha[@]}" -X POST -d '{"a":1}' "${base}/api/webhook/${id}" || true)" = "ha-upstream" ]
+  [ "$(jq -r '."X-Forwarded-For"' <<<"$(tail -n 1 "${dir}/ha.log" || true)" || true)" != "null" ]
+  [ "$(wc -l <"${dir}/ha.log" || true)" -eq 2 ]
+
+  # Every near miss, no Access email: 403, and HA sees nothing more.
+  local path results=""
+  for path in "/api/webhook/${id}/" "/api/webhook/${id}/x" "/api/webhook/${id}x" \
+    "/api/webhook/${id}/../states" "/api/webhook/${id}/..%2fstates" "/x/api/webhook/${id}" \
+    "/api/webhook/${id:0:63}" "/api/webhook/" "/api/webhook/other" \
+    "/api/states" "/"; do
+    results+="${path} $(probe "${ha[@]}" "${base}${path}")"$'\n'
+    results+="POST ${path} $(probe "${ha[@]}" -X POST -d x "${base}${path}")"$'\n'
+  done
+  echo "${results}"
+  [ -z "$(grep -vE ' 403$' <<<"${results%$'\n'}" || true)" ]
+  [ "$(wc -l <"${dir}/ha.log" || true)" -eq 2 ]
+
+  # Caddy merges repeated slashes before it matches a path, so "//" passes.
+  # It names the same webhook with the same id: no wider access.
+  [ "$(probe "${ha[@]}" "${base}/api/webhook//${id}" || true)" = "200" ]
+  [ "$(wc -l <"${dir}/ha.log" || true)" -eq 3 ]
+
+  # The webhook path on the main host is not an exception either.
+  [ "$(probe -H 'Host: example.com' "${base}/api/webhook/${id}" || true)" = "403" ]
+  [ "$(wc -l <"${dir}/ha.log" || true)" -eq 3 ]
 }
 
 @test "site_routes: imported by common_config and by the tunnel site only" {

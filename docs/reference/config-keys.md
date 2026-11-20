@@ -167,6 +167,7 @@ Its own hostname behind the same Access application. Set both keys, or leave bot
 | --- | --- | --- |
 | `HOME_ASSISTANT_HOSTNAME` | (empty) | A subdomain of EXTERNAL_HOSTNAME, lower case (e.g. ha.example.com) |
 | `HOME_ASSISTANT_UPSTREAM` | (empty) | Home Assistant as host:port; an IP is fastest (e.g. 192.168.21.20:8123) |
+| `HOME_ASSISTANT_WEBHOOK_ID` | (empty) | Optional: one HA webhook (such as IFTTT's) that skips the Access sign-in. Needs both keys above.<br>The id is a secret: anyone with the URL can call the webhook. See "Webhook exception" in the doc.<br>The id from /api/webhook/&lt;id&gt;; 32 to 128 letters, digits, '_' or '-' |
 
 ## Optional overrides (leave empty to use defaults)
 

@@ -212,3 +212,53 @@ adapt() {
   [[ "${output}" == *".local name"* ]]
   grep -qxF $'\t\t\treverse_proxy homeassistant.local:8123 {' "${OUT}/Caddyfile"
 }
+
+# HOME_ASSISTANT_WEBHOOK_ID: optional, needs the HA keys, and goes unquoted
+# into a Caddyfile path, so only letters, digits, '_' and '-'.
+TEST_WEBHOOK=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+@test "webhook on: clean render, the exact path, ahead of the email check" {
+  render "${HA_ON[@]}" HOME_ASSISTANT_WEBHOOK_ID="${TEST_WEBHOOK}"
+  [ "${status}" -eq 0 ]
+  assert_clean_render
+  grep -qxF $'\t\tpath /api/webhook/'"${TEST_WEBHOOK}" "${OUT}/Caddyfile"
+  local hook email
+  hook=$(grep -nF $'\thandle @ha_webhook {' "${OUT}/Caddyfile" | cut -d: -f1)
+  email=$(grep -nF $'\thandle @access_user {' "${OUT}/Caddyfile" | cut -d: -f1)
+  [ -n "${hook}" ] && [ "${hook}" -lt "${email}" ]
+}
+
+@test "webhook off with HA on: no webhook route in the render" {
+  render "${HA_ON[@]}"
+  [ "${status}" -eq 0 ]
+  assert_clean_render
+  run grep -F 'webhook' "${OUT}/Caddyfile"
+  [ "${status}" -eq 1 ]
+}
+
+@test "webhook on: caddy adapt accepts the render, only on the 127.0.0.1:8080 server" {
+  command -v caddy >/dev/null || skip "caddy not installed"
+  render "${HA_ON[@]}" HOME_ASSISTANT_WEBHOOK_ID="${TEST_WEBHOOK}"
+  [ "${status}" -eq 0 ]
+  local json
+  json=$(adapt)
+  [ "$(jq -c '[.apps.http.servers[] | select(tostring | contains("/api/webhook/")) | .listen]' <<<"${json}" || true)" = '[["127.0.0.1:8080"]]' ]
+}
+
+@test "a webhook id without the HA keys is refused before writing" {
+  render HOME_ASSISTANT_WEBHOOK_ID="${TEST_WEBHOOK}"
+  assert_refused
+  [[ "${output}" == *"HOME_ASSISTANT_WEBHOOK_ID needs"* ]]
+}
+
+@test "bad webhook ids are refused before writing, without printing them" {
+  local bad
+  for bad in 'short' "${TEST_WEBHOOK:0:31}" "${TEST_WEBHOOK}${TEST_WEBHOOK}${TEST_WEBHOOK}" \
+    "${TEST_WEBHOOK}/x" "${TEST_WEBHOOK}*" "${TEST_WEBHOOK} x" "${TEST_WEBHOOK}}" \
+    "${TEST_WEBHOOK}|x" "${TEST_WEBHOOK}.x" "${TEST_WEBHOOK}"$'\nrespond 200' "../${TEST_WEBHOOK}"; do
+    render "${HA_ON[@]}" HOME_ASSISTANT_WEBHOOK_ID="${bad}"
+    assert_refused
+    [[ "${output}" == *"HOME_ASSISTANT_WEBHOOK_ID must be"* ]]
+    [[ "${output}" != *"${TEST_WEBHOOK:0:20}"* ]]
+  done
+}

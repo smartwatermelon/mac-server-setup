@@ -169,6 +169,25 @@ http://:8080 {
 	bind 127.0.0.1
 	import access_log
 
+	# @@BEGIN_HOME_ASSISTANT_WEBHOOK@@
+	# Optional public exception (HOME_ASSISTANT_WEBHOOK_ID) for one Home
+	# Assistant webhook, such as IFTTT's, which cannot sign in at Access.
+	# The random webhook id is the credential. Exact host and exact path:
+	# any other path on the HA host still needs the Access email below.
+	# caddy-setup.sh drops this part when the key is empty. See "Webhook
+	# exception" in cloudflare-tunnel.md.
+	@ha_webhook {
+		host __HOME_ASSISTANT_HOSTNAME__
+		path /api/webhook/__HOME_ASSISTANT_WEBHOOK_ID__
+	}
+	handle @ha_webhook {
+		reverse_proxy __HOME_ASSISTANT_UPSTREAM__ {
+			header_up X-Forwarded-For {http.request.header.Cf-Connecting-IP}
+			header_up X-Forwarded-Proto https
+		}
+	}
+
+	# @@END_HOME_ASSISTANT_WEBHOOK@@
 	@access_user header Cf-Access-Authenticated-User-Email __ACCESS_ALLOWED_EMAIL__
 	handle @access_user {
 		# @@BEGIN_HOME_ASSISTANT@@

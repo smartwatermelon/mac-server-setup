@@ -33,6 +33,7 @@ NAS_SHARE_NAME="${NAS_SHARE_NAME:-Media}"
 ACCESS_ALLOWED_EMAIL="${ACCESS_ALLOWED_EMAIL:-}"
 HOME_ASSISTANT_HOSTNAME="${HOME_ASSISTANT_HOSTNAME:-}"
 HOME_ASSISTANT_UPSTREAM="${HOME_ASSISTANT_UPSTREAM:-}"
+HOME_ASSISTANT_WEBHOOK_ID="${HOME_ASSISTANT_WEBHOOK_ID:-}"
 
 # Validate required variables — empty values produce invalid Caddyfile syntax
 if [[ -z "${EXTERNAL_HOSTNAME}" ]]; then
@@ -150,6 +151,7 @@ resolve_home_links() {
 # resolve_home_links). See docs/components/cloudflare-tunnel.md.
 resolve_home_assistant() {
   local host="${HOME_ASSISTANT_HOSTNAME:-}" upstream="${HOME_ASSISTANT_UPSTREAM:-}"
+  local webhook="${HOME_ASSISTANT_WEBHOOK_ID:-}"
   local main addr port octet
   local label='[a-z0-9]([a-z0-9-]*[a-z0-9])?'
   local host_re="^(${label}\.)+${label}\$"
@@ -157,7 +159,12 @@ resolve_home_assistant() {
   local name_re='^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$'
   # Both values go into the Caddyfile unquoted, so these patterns are strict.
   if [[ -z "${host}" && -z "${upstream}" ]]; then
+    if [[ -n "${webhook}" ]]; then
+      echo "❌ HOME_ASSISTANT_WEBHOOK_ID needs HOME_ASSISTANT_HOSTNAME and HOME_ASSISTANT_UPSTREAM" >&2
+      return 1
+    fi
     HOME_LINK_SED+=(-e "/@@BEGIN_HOME_ASSISTANT@@/,/@@END_HOME_ASSISTANT@@/d")
+    HOME_LINK_SED+=(-e "/@@BEGIN_HOME_ASSISTANT_WEBHOOK@@/,/@@END_HOME_ASSISTANT_WEBHOOK@@/d")
     return 0
   fi
   if [[ -z "${host}" || -z "${upstream}" ]]; then
@@ -198,6 +205,16 @@ resolve_home_assistant() {
       ;;
     *) ;;
   esac
+  # Unquoted in a Caddyfile path and a tunnel regex: [A-Za-z0-9_-] only.
+  # At least 32, so it stays a secret.
+  if [[ -z "${webhook}" ]]; then
+    HOME_LINK_SED+=(-e "/@@BEGIN_HOME_ASSISTANT_WEBHOOK@@/,/@@END_HOME_ASSISTANT_WEBHOOK@@/d")
+  elif [[ "${webhook}" =~ ^[A-Za-z0-9_-]{32,128}$ ]]; then
+    HOME_LINK_SED+=(-e "/@@(BEGIN|END)_HOME_ASSISTANT_WEBHOOK@@/d")
+  else
+    echo "❌ HOME_ASSISTANT_WEBHOOK_ID must be 32 to 128 letters, digits, '_' or '-'" >&2
+    return 1
+  fi
   HOME_LINK_SED+=(-e "/@@(BEGIN|END)_HOME_ASSISTANT@@/d")
 }
 
@@ -225,6 +242,7 @@ substitute_template() {
     -e "s|__ACCESS_ALLOWED_EMAIL__|${ACCESS_ALLOWED_EMAIL}|g" \
     -e "s|__HOME_ASSISTANT_HOSTNAME__|${HOME_ASSISTANT_HOSTNAME}|g" \
     -e "s|__HOME_ASSISTANT_UPSTREAM__|${HOME_ASSISTANT_UPSTREAM}|g" \
+    -e "s|__HOME_ASSISTANT_WEBHOOK_ID__|${HOME_ASSISTANT_WEBHOOK_ID:-}|g" \
     "${src}" >"${dst}"
 }
 # END home links

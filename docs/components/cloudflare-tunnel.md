@@ -222,7 +222,7 @@ counts as drift.
 | Policy `decision` | `allow` |
 | Policy `include` | exactly `[{"email": {"email": "<allowed email>"}}]` (email compared without case) |
 | Policy `require`, `exclude` | empty |
-| Tunnel `config.ingress` | exactly two rules: `example.com` (hostname compared without case) → `http://127.0.0.1:8080` with `originRequest` exactly `{access: {required: true, teamName: <team>, audTag: [<AUD>]}}`; then `http_status:404`. A second hostname, a path rule, or a catch-all that serves anything is drift. With `HOME_ASSISTANT_HOSTNAME` set, exactly three: the `example.com` rule, then the same rule for `ha.example.com`, then `http_status:404`. |
+| Tunnel `config.ingress` | exactly two rules: `example.com` (hostname compared without case) → `http://127.0.0.1:8080` with `originRequest` exactly `{access: {required: true, teamName: <team>, audTag: [<AUD>]}}`; then `http_status:404`. A second hostname, a path rule, or a catch-all that serves anything is drift. With `HOME_ASSISTANT_HOSTNAME` set, exactly three: the `example.com` rule, then the same rule for `ha.example.com`, then `http_status:404`. With `HOME_ASSISTANT_WEBHOOK_ID` set too, exactly four: first `ha.example.com` with `path` exactly `^/api/webhook/<id>$` and `originRequest` exactly `{}`, then the three above ([Webhook exception](#webhook-exception)). |
 | Tunnel `config["warp-routing"].enabled` | `false` or absent. When on, the tunnel routes private networks (the LAN) past Access and Caddy. |
 | Tunnel `config`, other keys | none (for example, a global `originRequest`) |
 
@@ -344,7 +344,8 @@ landing page are byte for byte the same as before the feature existed
 **Browser only.** The HA phone app and inbound webhooks cannot pass the
 Google sign-in at Cloudflare Access, so they do not work through
 `ha.example.com`. At home, use the LAN URL, such as
-`http://192.168.21.20:8123`.
+`http://192.168.21.20:8123`. The one exception is a single webhook URL, for
+a service such as IFTTT: see [Webhook exception](#webhook-exception).
 
 ### What protects the HA path
 
@@ -357,7 +358,9 @@ The same layers as the main host, plus HA's own login:
 3. Caddy email check: the HA route is inside `handle @access_user`, so a
    request without the allowed email gets 403 before HA sees it.
 4. Drift watchdog: with the key set, it expects exactly the two hostnames on
-   the application and exactly the two ingress rules (plus the catch-all).
+   the application and exactly the two ingress rules (plus the catch-all),
+   and the anchored webhook rule first when `HOME_ASSISTANT_WEBHOOK_ID` is
+   set.
 5. Loopback bind: unchanged.
 
 Inside `handle @access_user` the tunnel site has two mutually exclusive
@@ -476,6 +479,61 @@ exposed, but do not leave it in this state.
    the feature.
 4. Optional: remove the trusted proxy in HA.
 
+### Webhook exception
+
+Optional, and off until `HOME_ASSISTANT_WEBHOOK_ID` is set (it needs both
+`HOME_ASSISTANT_*` keys). It lets one HA webhook URL,
+`https://ha.example.com/api/webhook/<id>`, skip the Google sign-in, so a
+service such as IFTTT can call it. Every other URL on `ha.example.com` still
+needs Access and the email check.
+
+The webhook id is the credential: anyone who has the URL can trigger the
+automation. Keep it only in `config.conf` and the operator notes, never in
+the repo, an issue or a log you share. HA makes a 64-digit hex id; the setup
+scripts accept 32 to 128 letters, digits, `_` and `-`.
+
+Three settings make the exception, and all three are exact:
+
+| Layer | Setting | Why it must be exact |
+| --- | --- | --- |
+| Access | A second self-hosted application, `ha.example.com/api/webhook/<id>`, with one `bypass` policy (include everyone). The more specific path wins over the main application. | Access matches an application path as a prefix, so longer URLs under it also skip sign-in. The other two layers stop them. |
+| Tunnel | The first ingress rule: `ha.example.com`, `path` `^/api/webhook/<id>$`, `http://127.0.0.1:8080`, no `access` block. | cloudflared reads `path` as an unanchored regular expression. Without `^` and `$`, any URL that contains the webhook path would skip the JWT check. The drift watchdog alerts on any other form. |
+| Caddy | `@ha_webhook` (host and path) and its `handle`, ahead of `handle @access_user`. | Caddy's `path` matcher with no `*` is exact. A longer, shorter or changed path falls through to the email check and gets 403 (`tests/caddyfile.bats`, live). |
+
+Caddy merges repeated slashes before it matches, so `/api/webhook//<id>`
+also reaches HA. It is the same webhook with the same id, so access is no
+wider. Caddy's path match also ignores case; the anchored tunnel rule does
+not, so a changed-case URL meets the Access check at cloudflared.
+
+The drift watchdog does not read the bypass application. If it is widened
+(for example, to the whole host), the tunnel rule for `ha.example.com`
+still requires the Access JWT, and Caddy still checks the email.
+
+**Turn it on:**
+
+1. In HA, add the webhook (for IFTTT: the IFTTT integration). Copy the id.
+2. **Access.** Add a self-hosted application for
+   `ha.example.com/api/webhook/<id>` with one policy: action Bypass,
+   include Everyone.
+3. **Tunnel route.** Add a route for `ha.example.com`, path
+   `^/api/webhook/<id>$`, service `http://127.0.0.1:8080`, Access
+   protection off. Move it above the `ha.example.com` route.
+4. **Config key.** Set `HOME_ASSISTANT_WEBHOOK_ID` in `config.conf`.
+5. **Watchdog.** `sudo ./access-policy-watchdog-setup.sh`. Its `--check`
+   must pass.
+6. **Caddy.** Deploy and kickstart it as in step 6 above, with the key in
+   the environment.
+   `sudo grep -c '@ha_webhook' /Users/operator/.config/caddy/Caddyfile`
+   must print 2.
+7. **Check.** From outside the LAN, with no Access session:
+   `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://ha.example.com/api/webhook/<id>`
+   prints 200, and the same URL with `/x` added prints 403, or 302 to the
+   Access login.
+
+**Turn it off:** delete the tunnel route, then the bypass application, then
+the webhook in HA. Empty the key, run
+`sudo ./access-policy-watchdog-setup.sh`, then deploy Caddy again.
+
 ## Revocation
 
 - Remove the email from the Access policy, or revoke active sessions in Zero
@@ -502,7 +560,7 @@ Stopping only the tunnel daemon makes Cloudflare show an error page for
 ## Tests
 
 ```bash
-bats tests/caddyfile.bats              # tunnel site and site_routes; HA routing (live)
+bats tests/caddyfile.bats              # tunnel site and site_routes; HA and webhook routing (live)
 bats tests/caddy-home-assistant.bats   # HA keys, off-state render, HA only on :8080
 bats tests/cloudflared-wrapper.bats    # token via env only; keychain miss
 bats tests/access-policy-watchdog.bats # expected rule and ingress, widenings, 404, API errors

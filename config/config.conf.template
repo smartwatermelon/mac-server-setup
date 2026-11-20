@@ -126,6 +126,9 @@ HOME_LINK2_URL=""                  # Link 2 target, https only
 # caddy-setup.sh and access-policy-watchdog-setup.sh stop on a bad value.
 HOME_ASSISTANT_HOSTNAME=""         # A subdomain of EXTERNAL_HOSTNAME, lower case (e.g. ha.example.com)
 HOME_ASSISTANT_UPSTREAM=""         # Home Assistant as host:port; an IP is fastest (e.g. 192.168.21.20:8123)
+# Optional: one HA webhook (such as IFTTT's) that skips the Access sign-in. Needs both keys above.
+# The id is a secret: anyone with the URL can call the webhook. See "Webhook exception" in the doc.
+HOME_ASSISTANT_WEBHOOK_ID=""       # The id from /api/webhook/<id>; 32 to 128 letters, digits, '_' or '-'
 
 # Optional overrides (leave empty to use defaults)
 HOSTNAME_OVERRIDE=""  # If different from SERVER_NAME
