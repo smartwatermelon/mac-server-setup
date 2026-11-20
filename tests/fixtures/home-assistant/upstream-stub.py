@@ -3,6 +3,7 @@
 
 Usage: upstream-stub.py PORT LOG_FILE. Logs each request's path and headers
 as a JSON line, then answers 200 "ha-upstream", or 101 to a websocket upgrade.
+POST (a webhook) is answered the same way as GET, after its body is read.
 """
 
 import base64
@@ -22,6 +23,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, *args):
         pass
+
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        self.do_GET()
 
     def do_GET(self):
         record = {"path": self.path}

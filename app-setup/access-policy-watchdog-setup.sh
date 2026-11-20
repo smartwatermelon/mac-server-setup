@@ -47,6 +47,7 @@ CLOUDFLARE_TUNNEL_ID="${CLOUDFLARE_TUNNEL_ID:-}"
 CLOUDFLARE_ACCESS_TEAM_NAME="${CLOUDFLARE_ACCESS_TEAM_NAME:-}"
 CLOUDFLARE_ACCESS_AUD_TAG="${CLOUDFLARE_ACCESS_AUD_TAG:-}"
 HOME_ASSISTANT_HOSTNAME="${HOME_ASSISTANT_HOSTNAME:-}"
+HOME_ASSISTANT_WEBHOOK_ID="${HOME_ASSISTANT_WEBHOOK_ID:-}"
 
 # Every value below is substituted into the watchdog with sed, using | as the
 # delimiter, so each is checked against a strict pattern first.
@@ -76,6 +77,15 @@ if [[ -n "${HOME_ASSISTANT_HOSTNAME}" ]]; then
   check_value HOME_ASSISTANT_HOSTNAME '^[a-z0-9.-]+$'
   if [[ "${HOME_ASSISTANT_HOSTNAME}" != *".${EXTERNAL_HOSTNAME}" ]]; then
     missing+=("HOME_ASSISTANT_HOSTNAME (must be a subdomain of EXTERNAL_HOSTNAME: '${HOME_ASSISTANT_HOSTNAME}')")
+  fi
+fi
+# Optional webhook id (needs the HA host). Same check as caddy-setup.sh.
+if [[ -n "${HOME_ASSISTANT_WEBHOOK_ID}" ]]; then
+  if [[ -z "${HOME_ASSISTANT_HOSTNAME}" ]]; then
+    missing+=("HOME_ASSISTANT_WEBHOOK_ID (needs HOME_ASSISTANT_HOSTNAME)")
+  elif [[ ! "${HOME_ASSISTANT_WEBHOOK_ID}" =~ ^[A-Za-z0-9_-]{32,128}$ ]]; then
+    # The id is a credential: do not print it.
+    missing+=("HOME_ASSISTANT_WEBHOOK_ID (must be 32 to 128 letters, digits, '_' or '-')")
   fi
 fi
 if [[ ${#missing[@]} -gt 0 ]]; then
@@ -167,6 +177,7 @@ sed \
   -e "s|__CLOUDFLARE_ACCESS_TEAM_NAME__|${CLOUDFLARE_ACCESS_TEAM_NAME}|g" \
   -e "s|__CLOUDFLARE_ACCESS_AUD_TAG__|${CLOUDFLARE_ACCESS_AUD_TAG}|g" \
   -e "s|__HOME_ASSISTANT_HOSTNAME__|${HOME_ASSISTANT_HOSTNAME}|g" \
+  -e "s|__HOME_ASSISTANT_WEBHOOK_ID__|${HOME_ASSISTANT_WEBHOOK_ID}|g" \
   "${TEMPLATE_DIR}/access-policy-watchdog.sh" >"${WATCHDOG_DEST}"
 chown "${OPERATOR_USERNAME}:staff" "${WATCHDOG_DEST}"
 chmod 700 "${WATCHDOG_DEST}"

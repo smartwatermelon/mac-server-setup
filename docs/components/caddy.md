@@ -92,6 +92,10 @@ from loopback, so:
   same email check. That host serves only HA, and the main host never
   reaches it. With the keys empty, the render does not change. See
   [Home Assistant](cloudflare-tunnel.md#home-assistant).
+- Optional: with `HOME_ASSISTANT_WEBHOOK_ID` set too, one exact host and
+  path, `ha.example.com/api/webhook/<id>`, goes to HA ahead of the email
+  check. Any other path still needs it. See
+  [Webhook exception](cloudflare-tunnel.md#webhook-exception).
 
 `tests/caddyfile.bats` pins all of this. `caddy validate` opens the access
 log, so run it as root, or on a copy with the log path pointed somewhere

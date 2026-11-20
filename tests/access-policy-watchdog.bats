@@ -83,6 +83,7 @@ render_template() {
     -e 's|__CLOUDFLARE_ACCESS_TEAM_NAME__|test-team|g' \
     -e 's|__CLOUDFLARE_ACCESS_AUD_TAG__|aud0123|g' \
     -e "s|__HOME_ASSISTANT_HOSTNAME__|${HA_HOST:-}|g" \
+    -e "s|__HOME_ASSISTANT_WEBHOOK_ID__|${HA_WEBHOOK:-}|g" \
     -e "s|HOMEBREW_PREFIX=\"[^\"]*\"|HOMEBREW_PREFIX=\"${FAKE_BREW}\"|" \
     "${TEMPLATE}" >"${WATCHDOG}"
   chmod +x "${WATCHDOG}"
@@ -530,6 +531,106 @@ ha_on() {
   ha_on
   set_app "$(fixture_variant app-ha.json '.result.domain = "ha.test.example"' || true)" 200
   assert_drift_alert
+}
+
+# ---------------------------------------------------------------------------
+# Optional HA webhook path (HOME_ASSISTANT_WEBHOOK_ID)
+# ---------------------------------------------------------------------------
+
+# A fake id, never a real one: the id is a credential.
+TEST_WEBHOOK=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+# Render with the HA host and the webhook id set, and the matching answers.
+webhook_on() {
+  HA_HOST=ha.test.example HA_WEBHOOK="${TEST_WEBHOOK}" render_template
+  set_app app-ha.json 200
+  set_tunnel tunnel-ha-webhook.json 200
+}
+
+@test "webhook on: the webhook rule first, then the HA rules, passes" {
+  webhook_on
+  run run_check
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == OK:* ]]
+  run run_cycle
+  [ "$(mail_count || true)" -eq 0 ]
+}
+
+@test "webhook off: a webhook rule on the HA host alerts" {
+  ha_on
+  set_tunnel tunnel-ha-webhook.json 200
+  assert_drift_alert
+  grep -qF '/api/webhook/' "${MAIL_LOG}"
+}
+
+@test "webhook on: an ingress without the webhook rule alerts, naming the exception" {
+  webhook_on
+  set_tunnel tunnel-ha.json 200
+  assert_drift_alert
+  grep -qF 'path ^/api/webhook/<id>$' "${MAIL_LOG}"
+}
+
+# cloudflared reads path as an unanchored regex: the plain path, or one
+# anchored at one end only, matches longer URLs without the JWT check.
+@test "webhook on: a wider, unanchored or different path alerts" {
+  local path
+  for path in '/api/webhook/' '/api/webhook/.*' '/api/' '' '.*' \
+    "/api/webhook/${TEST_WEBHOOK}" "^/api/webhook/${TEST_WEBHOOK}" "/api/webhook/${TEST_WEBHOOK}$" \
+    "^/api/webhook/${TEST_WEBHOOK}.*$" "^/api/webhook/${TEST_WEBHOOK}/?$" \
+    '^/api/webhook/ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff$'; do
+    webhook_on
+    rm -f "${CONFIG_DIR}/state.json" "${MAIL_LOG}"
+    set_tunnel "$(fixture_variant tunnel-ha-webhook.json ".result.config.ingress[0].path = \"${path}\"" || true)" 200
+    assert_drift_alert
+  done
+}
+
+@test "webhook on: the webhook rule without a path alerts" {
+  webhook_on
+  set_tunnel "$(fixture_variant tunnel-ha-webhook.json 'del(.result.config.ingress[0].path)' || true)" 200
+  assert_drift_alert
+}
+
+@test "webhook on: the webhook path on the main host alerts" {
+  webhook_on
+  set_tunnel "$(fixture_variant tunnel-ha-webhook.json '.result.config.ingress[0].hostname = "test.example"' || true)" 200
+  assert_drift_alert
+}
+
+@test "webhook on: the webhook rule after the HA rule alerts" {
+  webhook_on
+  set_tunnel "$(fixture_variant tunnel-ha-webhook.json '.result.config.ingress |= [.[1], .[2], .[0], .[3]]' || true)" 200
+  assert_drift_alert
+}
+
+@test "webhook on: the webhook rule to another service alerts" {
+  webhook_on
+  set_tunnel "$(fixture_variant tunnel-ha-webhook.json '.result.config.ingress[0].service = "http://192.168.1.20:8123"' || true)" 200
+  assert_drift_alert
+}
+
+@test "webhook on: originRequest settings on the webhook rule alert" {
+  webhook_on
+  set_tunnel "$(fixture_variant tunnel-ha-webhook.json '.result.config.ingress[0].originRequest = {"noTLSVerify": true}' || true)" 200
+  assert_drift_alert
+}
+
+@test "webhook on: a second path rule alerts" {
+  webhook_on
+  set_tunnel "$(fixture_variant tunnel-ha-webhook.json '.result.config.ingress |= [.[0]] + [(.[0] | .path = "/api/webhook/other")] + .[1:]' || true)" 200
+  assert_drift_alert
+}
+
+@test "webhook on: the HA rules still need access.required" {
+  webhook_on
+  set_tunnel "$(fixture_variant tunnel-ha-webhook.json '.result.config.ingress[2].originRequest.access.required = false' || true)" 200
+  assert_drift_alert
+}
+
+@test "webhook id without the HA host: no webhook rule is expected" {
+  HA_WEBHOOK="${TEST_WEBHOOK}" render_template
+  run run_check
+  [ "${status}" -eq 0 ]
 }
 
 # ---------------------------------------------------------------------------

@@ -33,6 +33,9 @@ APP_DOMAIN="__EXTERNAL_HOSTNAME__"
 # Optional second host of the same Access app and tunnel (Home Assistant).
 # Empty: the app and the tunnel serve APP_DOMAIN only.
 HA_DOMAIN="__HOME_ASSISTANT_HOSTNAME__"
+# Optional HA webhook id. Set: expect a first rule, path ^/api/webhook/<id>$,
+# no access block. A credential.
+HA_WEBHOOK_ID="__HOME_ASSISTANT_WEBHOOK_ID__"
 ACCOUNT_ID="__CLOUDFLARE_ACCOUNT_ID__"
 APP_ID="__CLOUDFLARE_ACCESS_APP_ID__"
 POLICY_ID="__CLOUDFLARE_ACCESS_POLICY_ID__"
@@ -153,6 +156,7 @@ evaluate_rule() {
     --slurpfile t "${tunnel_file}" \
     --arg domain "${APP_DOMAIN}" \
     --arg ha "${HA_DOMAIN}" \
+    --arg webhook "${HA_WEBHOOK_ID}" \
     --arg idp "${IDP_ID}" \
     --arg policy "${POLICY_ID}" \
     --arg email "${ALLOWED_EMAIL}" \
@@ -187,7 +191,12 @@ evaluate_rule() {
     | ($want_hosts | map({type: "public", uri: .})) as $want_dests
     # Exact shape, not a list of bad rules: a second hostname, a path rule,
     # access.required off, or a catch-all that serves anything all differ.
-    | ([ $hosts[] | {hostname: ., service: $origin,
+    # The webhook rule comes first. Path is an unanchored regex: no ^...$
+    # lets any URL containing it skip the JWT check.
+    | ((if $webhook == "" or $ha == "" then []
+        else [ {hostname: ($ha | lc), path: "^/api/webhook/\($webhook)$",
+                service: $origin, originRequest: {}} ] end)
+       + [ $hosts[] | {hostname: ., service: $origin,
          originRequest: {access: {required: true, teamName: $team, audTag: [$aud]}}} ]
        + [ {service: "http_status:404"} ]) as $want_ingress
     | [
@@ -375,6 +384,12 @@ handle_drift() {
   if [[ -n "${HA_DOMAIN}" ]]; then
     expected_hosts="${APP_DOMAIN} and then ${HA_DOMAIN} (both on this one application)"
   fi
+  local webhook_note=""
+  if [[ -n "${HA_DOMAIN}" && -n "${HA_WEBHOOK_ID}" ]]; then
+    webhook_note="
+The one exception, placed first: ${HA_DOMAIN} path ^/api/webhook/<id>$ (the
+Home Assistant webhook, anchored at both ends), with no access block."
+  fi
 
   local body
   body="The Cloudflare Access rule or tunnel ingress for ${APP_DOMAIN} differs
@@ -384,7 +399,7 @@ ${listed}
 Expected: allow only ${ALLOWED_EMAIL}, through the Google identity provider
 only, with this one policy attached. The tunnel routes only ${expected_hosts},
 to ${TUNNEL_ORIGIN_SERVICE} with access.required on, then a 404 catch-all, and
-private-network (WARP) routing is off.
+private-network (WARP) routing is off.${webhook_note}
 
 Through the tunnel there is no other login in front of Transmission. If you
 did not make this change, put the policy back and revoke active sessions.
