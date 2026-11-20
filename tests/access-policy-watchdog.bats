@@ -627,6 +627,47 @@ webhook_on() {
   assert_drift_alert
 }
 
+# The id is a credential: never in the log, the email or --check output.
+@test "webhook drift: the id is masked in the log, the email and --check" {
+  webhook_on
+  set_tunnel "$(fixture_variant tunnel-ha-webhook.json '.result.config.ingress[0].path |= ltrimstr("^")' || true)" 200
+  run run_check
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *'/api/webhook/<id>'* ]]
+  [[ "${output}" != *"${TEST_WEBHOOK}"* ]]
+  run_cycle
+  [ "$(mail_count || true)" -eq 1 ]
+  grep -qF '/api/webhook/<id>' "${MAIL_LOG}"
+  grep -qF '/api/webhook/<id>' "${HOME}/.local/state/access-policy-watchdog.log"
+  run grep -rF "${TEST_WEBHOOK}" "${MAIL_LOG}" "${HOME}/.local/state/access-policy-watchdog.log"
+  [ "${status}" -eq 1 ]
+}
+
+@test "webhook drift: another id is masked too, and still shows as a difference" {
+  local other=fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
+  webhook_on
+  set_tunnel "$(fixture_variant tunnel-ha-webhook.json ".result.config.ingress[0].path = \"^/api/webhook/${other}\$\"" || true)" 200
+  run run_check
+  [ "${status}" -eq 1 ]
+  [[ "${output}" == *'/api/webhook/<other id>$'* ]]
+  [[ "${output}" == *'/api/webhook/<id>$'* ]]
+  [[ "${output}" != *"${other}"* ]]
+  run_cycle
+  run grep -rF "${other}" "${MAIL_LOG}" "${HOME}/.local/state/access-policy-watchdog.log"
+  [ "${status}" -eq 1 ]
+}
+
+@test "webhook drift: a change between two other ids still sends changed again" {
+  webhook_on
+  set_tunnel "$(fixture_variant tunnel-ha-webhook.json '.result.config.ingress[0].path = "^/api/webhook/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa$"' || true)" 200
+  run_cycle
+  [ "$(mail_count || true)" -eq 1 ]
+  set_tunnel "$(fixture_variant tunnel-ha-webhook.json '.result.config.ingress[0].path = "^/api/webhook/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb$"' || true)" 200
+  run_cycle
+  [ "$(mail_count || true)" -eq 2 ]
+  grep -q "changed again" "${MAIL_LOG}"
+}
+
 @test "webhook id without the HA host: no webhook rule is expected" {
   HA_WEBHOOK="${TEST_WEBHOOK}" render_template
   run run_check

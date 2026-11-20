@@ -360,6 +360,15 @@ Log: ${LOG_FILE}" \
     "The Access application, policy and tunnel for ${APP_DOMAIN} can be read again." || true
 }
 
+# Webhook ids are secrets. Ours prints as <id>, any other as <other id>.
+redact_webhook_ids() {
+  local text="$1"
+  if [[ -n "${HA_WEBHOOK_ID}" ]]; then
+    text="${text//"${HA_WEBHOOK_ID}"/<id>}"
+  fi
+  printf '%s\n' "${text}" | sed -E 's#/api/webhook/[A-Za-z0-9_-]{8,}#/api/webhook/<other id>#g'
+}
+
 handle_drift() {
   local diffs="$1"
   local is_bad=false
@@ -371,7 +380,9 @@ handle_drift() {
   was_alerted=$(alert_state_get 'transitions.policy_drift.alerted' false)
   old_fp=$(alert_state_get drift_fingerprint "")
   if [[ "${is_bad}" == "true" ]]; then
+    # From the raw text, so a change between two masked ids still counts.
     new_fp=$(printf '%s' "${diffs}" | shasum -a 256 | cut -d' ' -f1)
+    diffs=$(redact_webhook_ids "${diffs}")
   fi
 
   local listed="" line
@@ -520,7 +531,7 @@ main() {
       exit 2
     elif [[ -n "${diffs}" ]]; then
       echo "DRIFT:"
-      printf '%s\n' "${diffs}" | sed 's/^/  - /'
+      redact_webhook_ids "${diffs}" | sed 's/^/  - /'
       exit 1
     fi
     echo "OK: ${APP_DOMAIN} Access application, policy and tunnel ingress match the expected rule"
