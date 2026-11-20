@@ -489,7 +489,9 @@ needs Access and the email check.
 
 The webhook id is the credential: anyone who has the URL can trigger the
 automation. Keep it only in `config.conf` and the operator notes, never in
-the repo, an issue or a log you share. HA makes a 64-digit hex id; the setup
+the repo, an issue or a log you share. The drift watchdog masks it as `<id>` in its
+log, its email and `--check` output; any other webhook id shows as
+`<other id>`. HA makes a 64-digit hex id; the setup
 scripts accept 32 to 128 letters, digits, `_` and `-`.
 
 Three settings make the exception, and all three are exact:
