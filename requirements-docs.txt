@@ -4,7 +4,7 @@
 # Local setup:
 #   python3 -m venv ~/.cache/zensical-venv
 #   ~/.cache/zensical-venv/bin/pip install -r requirements-docs.txt
-zensical==0.1.1
+zensical==0.1.2
 zensical-ui==0.0.42
 click==8.5.1
 Jinja2==3.1.6
