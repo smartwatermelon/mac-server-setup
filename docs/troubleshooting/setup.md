@@ -116,7 +116,7 @@ Each line names one missing file.
 
 **Cause**
 
-FileVault was turned on during macOS setup. FileVault prevents automatic login, and the `operator` account needs automatic login to start its services after a reboot.
+FileVault blocks unattended GUI login. The operator’s LaunchAgents start at GUI login. With FileVault enabled, provide a boot credential and sign in as the operator to load those agents. The steps below apply if you choose the tutorial’s unattended startup path.
 
 **Check**
 
@@ -160,23 +160,13 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --listapps
 1. On the dev Mac, make sure that `~/.ssh/id_ed25519` and `~/.ssh/id_ed25519.pub` exist before you run `prep-airdrop.sh`.
 2. Build the package again and run `first-boot.sh` again. It turns on Remote Login, installs the keys for `admin` and `operator`, and runs `setup-firewall.sh`, which allows `/usr/sbin/sshd` through the firewall.
 
-## Touch ID does not work for operator
+## Touch ID or Apple Watch unlock is unavailable
 
-**Cause**
+Touch ID does not require FileVault. It requires compatible hardware and a fingerprint enrolled for the current user. Apple Watch unlock requires the same Apple Account with two-factor authentication on the Mac and Watch, Wi-Fi and Bluetooth, and a Watch passcode. These features unlock eligible sessions after startup sign-in. See [Touch ID settings](https://support.apple.com/guide/mac-help/mchl319754b3/mac) and [Apple Watch unlock](https://support.apple.com/en-us/102442).
 
-This is by design. On macOS, Touch ID and automatic login cannot be used together. The `admin` account has Touch ID. The `operator` account has automatic login.
+The tutorial configures Touch ID for `sudo` in the admin session separately from operator GUI login. For the unattended operator path, keep the local password available. Apple documents a password requirement at startup for Touch ID and Apple Watch, so this guide does not assume either can unlock the operator’s session immediately after automatic login.
 
-**Check**
-
-```bash
-defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser
-```
-
-The output is `operator` when automatic login is set for that account.
-
-**Fix**
-
-1. Use the `operator` password, or work as `admin` and use `sudo -iu operator`.
+For a manually signed-in operator, check the unlock switches in System Settings > Touch ID & Password, then lock the desktop and verify each unlock method separately.
 
 ## Passwords app rejects the operator password after a reboot
 

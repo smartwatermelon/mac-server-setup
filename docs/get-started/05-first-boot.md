@@ -4,7 +4,7 @@ Goal: copy the package to the Mac mini and run `first-boot.sh` as `admin`, at th
 
 ## Steps
 
-1. Turn on the Mac mini and complete Apple's Setup Assistant. Create the `admin` account. Do not turn on FileVault: it blocks the operator's automatic login. The [Apple first-boot dialog guide](apple-first-boot-dialogs.md) covers each dialog.
+1. Turn on the Mac mini and complete Apple's Setup Assistant. Create the `admin` account. For this tutorial's unattended startup path, leave FileVault off. Keeping FileVault on requires an authorized boot unlock before the operator's GUI services can start. The [Apple first-boot dialog guide](apple-first-boot-dialogs.md) covers each dialog.
 2. On the Mac mini, open AirDrop in Finder (Shift-Command-R) and set "Allow me to be discovered by" to Everyone.
 3. On the dev Mac, AirDrop the `~/macmini-setup` folder to the Mac mini. It arrives in `~/Downloads/macmini-setup`.
 4. On the Mac mini, open Terminal and go to the package:
@@ -13,13 +13,13 @@ Goal: copy the package to the Mac mini and run `first-boot.sh` as `admin`, at th
     cd ~/Downloads/macmini-setup
     ```
 
-5. Make sure that FileVault is off and the disk is fully decrypted:
+5. Check FileVault status for the unattended startup path:
 
     ```bash
     fdesetup status
     ```
 
-    The output must be `FileVault is Off.` If FileVault is on, turn it off in System Settings > Privacy & Security > FileVault. Wait until `fdesetup status` prints `FileVault is Off.`, which can take an hour or more. The script also offers to turn FileVault off, but turning it off before you run the script is the tested path.
+    For automatic login, the output must be `FileVault is Off.` Turning FileVault off removes its requirement for a user credential to unlock the startup volume. Apple silicon still uses hardware-backed storage encryption. If FileVault is on, turn it off in System Settings > Privacy & Security > FileVault. Wait until `fdesetup status` prints `FileVault is Off.`, which can take an hour or more. The script also offers to turn FileVault off, but turning it off before you run the script is the tested path.
 
 6. Run the script. Do not run it over SSH: it stops unless it runs in a desktop session.
 
@@ -39,7 +39,7 @@ Goal: copy the package to the Mac mini and run `first-boot.sh` as `admin`, at th
         cd ~/Downloads/macmini-setup && ./first-boot.sh
         ```
 
-11. Turn on Screen Sharing when the script opens System Settings. Then sign in to the Apple Account. The script opens a one-time 1Password link to the password.
+11. Turn on Screen Sharing when the script opens System Settings. Then sign in to the Apple Account in the admin session. Keep the operator’s local login password separate from the Apple Account password. Apple lists using an Apple Account password for Mac login as a separate reason [automatic login may be unavailable](https://support.apple.com/en-us/102316). The script opens a one-time 1Password link to the password.
 
 12. Wait while the script installs the Command Line Tools, Homebrew and the packages. This part takes the longest.
 13. At the end, a "Server Setup Complete" dialog opens. Click OK. A new Terminal window opens in `~/app-setup`. Keep it open. You run app setup in it in [tutorial step 6](06-run-app-setup.md), before any restart.
@@ -58,14 +58,14 @@ For the prompts, options and errors in detail, see [First boot](first-boot.md).
     ```
 
     Read each line that it prints. No output means no module reported a problem.
-2. The `operator` account exists and logs in automatically:
+2. The `operator` account exists and is selected for automatic login:
 
     ```bash
     dscl . -read /Users/operator UserShell
     defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser
     ```
 
-    The second command prints `operator`.
+    The second command prints `operator`. This checks the preference. [Step 7](07-operator-login.md) checks actual startup behavior.
 
 3. The app setup folder exists:
 

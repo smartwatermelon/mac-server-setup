@@ -2,7 +2,7 @@
 
 Goal: restart the Mac mini, let `operator` log in automatically, and let Plex, the NAS mount and the one-time first-login script start.
 
-At login, the operator's LaunchAgents from step 6 start Plex and mount the NAS share. The first-login script runs once. It sets up the operator's Dock, Terminal and iTerm2 preferences, and the `logrotate` service. It does not install or configure any apps.
+At login, the operator's LaunchAgents from step 6 start Plex and mount the NAS share. The first-login script runs once. It sets up the operator's Dock, Terminal and iTerm2 preferences, and the `logrotate` service. It does not install or configure any apps. The tutorial leaves screen locking to macOS settings or the operator. The first-login script does not lock the desktop.
 
 ## Steps
 
@@ -23,7 +23,7 @@ At login, the operator's LaunchAgents from step 6 start Plex and mount the NAS s
 ## About the operator account
 
 - The operator password is in 1Password, in the item that `ONEPASSWORD_OPERATOR_ITEM` names.
-- `first-boot.sh` adds `operator` to the `admin` group, so `sudo` works with the operator password. Touch ID does not work for `operator`, because macOS does not allow Touch ID with automatic login. See [Setup problems](../troubleshooting/setup.md).
+- `first-boot.sh` adds `operator` to the `admin` group, so `sudo` works with the operator password. The unattended startup path assumes password access to the operator session after it locks. See [Touch ID or Apple Watch unlock is unavailable](../troubleshooting/setup.md#touch-id-or-apple-watch-unlock-is-unavailable).
 - `admin` and `operator` accept the same SSH key: the dev Mac's `~/.ssh/id_ed25519.pub`.
 - The menu bar shows the Fast User Switching menu, with the name of the current user. Use it, or `ssh admin@macmini.local` from the dev Mac, to work as `admin`. Run app setup and `brew` commands as `admin`, because `admin` owns Homebrew.
 

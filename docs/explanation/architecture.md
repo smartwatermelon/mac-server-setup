@@ -39,7 +39,7 @@ The split keeps secrets and network access to 1Password on the dev Mac, keeps th
 The reasons for the split:
 
 - **The apps need a logged-in user.** Plex, the Podman VM and the macOS privacy (TCC) grants all belong to a GUI session. After a power cut the server must come back without a person at the keyboard, so one account logs in automatically. That account is `operator`, and the services' LaunchAgents belong to it.
-- **Automatic login has a cost.** It needs FileVault off, and `first-boot.sh` checks for that. Touch ID does not work with automatic login, so `admin` keeps Touch ID for `sudo` and `operator` keeps automatic login.
+- **Automatic login has a cost.** The unattended operator path requires FileVault off, and `first-boot.sh` checks for that. With FileVault on, boot requires authorized unlock and the operator’s LaunchAgents need a GUI session. Touch ID for `sudo` in the admin session is a separate setup step. See [setup troubleshooting](../troubleshooting/setup.md#touch-id-or-apple-watch-unlock-is-unavailable).
 - **The imported secrets stay with `admin`.** First boot imports the credentials from the setup package into the `admin` login keychain. Setup scripts read them there and give each `operator` service only the file it needs. See [Credential chain](credential-chain.md).
 - **Homebrew belongs to one user.** Homebrew refuses to run as root and expects one owner. `admin` owns it. Setup scripts that run as root drop to the invoking user for `brew install`.
 
