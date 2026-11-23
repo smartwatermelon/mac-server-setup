@@ -74,9 +74,8 @@ When setting up the Mac Mini for the first time, you'll encounter these Apple di
 ##### 7.2.5 FileVault Disk Encryption
 
 - **Action**: Choose whether to enable FileVault
-- **⚠️ CRITICAL**: **Turn OFF FileVault!**
-- **Reason**: FileVault prevents automatic login for the operator account
-- **Note**: This is essential for proper server operation
+- **Unattended startup**: Leave FileVault off only if you choose the tutorial’s automatic-login path.
+- **FileVault protected startup**: Keep FileVault on if you can provide a boot credential before signing in to start the operator’s GUI services.
 
 ##### 7.2.6 Touch ID
 
@@ -151,7 +150,7 @@ When the operator account logs in for the first time, they'll encounter a simpli
 
 - **Action**: Set up Touch ID
 - **⚠️ RECOMMENDATION**: **Cancel/Skip this step**
-- **Reason**: Operator account uses automatic login, Touch ID not typically needed
+- **Reason**: The unattended startup path assumes password access after locking. Touch ID setup is optional for a manually signed-in operator.
 
 ### 8. Choose Your Look
 
@@ -173,7 +172,7 @@ When the operator account logs in for the first time, they'll encounter a simpli
 
 ### FileVault Warning
 
-**CRITICAL**: Ensure FileVault is disabled during admin account setup. FileVault encryption prevents the automatic login functionality required for proper server operation.
+FileVault applies to startup, regardless of which account enabled it. The [first-boot tutorial](05-first-boot.md) documents the unattended startup path and its FileVault trade-off.
 
 ### Account Purpose
 
